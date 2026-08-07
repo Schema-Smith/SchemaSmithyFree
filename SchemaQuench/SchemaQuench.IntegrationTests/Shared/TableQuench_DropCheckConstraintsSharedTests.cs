@@ -15,6 +15,8 @@ public abstract class TableQuench_DropCheckConstraintsSharedTests : BaseTableQue
     [Test]
     public void TableQuench_ShouldSuppressCheckDropWhenTableFlagIsFalse()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
         conn.Open();
         conn.ChangeDatabase(_mainDb);

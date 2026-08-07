@@ -7,7 +7,9 @@
 -- remainder is a usable predicate. Either form then works on any component gate (#282). A non-SELECT
 -- expression is returned unchanged; the match requires SELECT followed by whitespace so identifiers
 -- like SELECTED are not mistaken for the keyword.
-CREATE OR ALTER FUNCTION SchemaSmith.fn_StripLeadingSelect(@p_Input NVARCHAR(MAX))
+IF OBJECT_ID('SchemaSmith.fn_StripLeadingSelect') IS NOT NULL DROP FUNCTION SchemaSmith.fn_StripLeadingSelect
+GO
+CREATE FUNCTION SchemaSmith.fn_StripLeadingSelect(@p_Input NVARCHAR(MAX))
   RETURNS NVARCHAR(MAX)
 AS
 BEGIN

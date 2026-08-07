@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE SchemaSmith.IndexOnlyQuench
+IF OBJECT_ID('SchemaSmith.IndexOnlyQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.IndexOnlyQuench
+GO
+CREATE PROCEDURE SchemaSmith.IndexOnlyQuench
   @ProductName NVARCHAR(50),
   @TableDefinitions NVARCHAR(MAX),
   @WhatIf BIT = 0,

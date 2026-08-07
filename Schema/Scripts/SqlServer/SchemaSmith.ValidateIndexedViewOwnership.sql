@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE [SchemaSmith].[ValidateIndexedViewOwnership]
+IF OBJECT_ID('[SchemaSmith].[ValidateIndexedViewOwnership]', 'P') IS NOT NULL DROP PROCEDURE [SchemaSmith].[ValidateIndexedViewOwnership]
+GO
+CREATE PROCEDURE [SchemaSmith].[ValidateIndexedViewOwnership]
     @ProductName NVARCHAR(200)
 AS
 BEGIN

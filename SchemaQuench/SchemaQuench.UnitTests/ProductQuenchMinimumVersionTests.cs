@@ -160,7 +160,7 @@ namespace SchemaQuench.UnitTests
                 try
                 {
                     ConfigureProduct("SqlServer", minimumVersion: "");   // no declared floor at all
-                    var quench = new StubDetectProductQuench("11");        // SQL Server 2012, below floor 14
+                    var quench = new StubDetectProductQuench("9");         // SQL Server 2005, below floor 10
 
                     var ex = Assert.Throws<Exception>(() => quench.ValidateServerVersionFloor());
                     Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
@@ -179,7 +179,7 @@ namespace SchemaQuench.UnitTests
                 try
                 {
                     ConfigureProduct("SqlServer", minimumVersion: "");
-                    var quench = new StubDetectProductQuench("14");   // SQL Server 2017 == floor
+                    var quench = new StubDetectProductQuench("10");   // SQL Server 2008 == floor
 
                     Assert.DoesNotThrow(() => quench.ValidateServerVersionFloor());
                 }

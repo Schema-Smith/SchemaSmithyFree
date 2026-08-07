@@ -73,4 +73,16 @@ SELECT CASE WHEN c.domain_name IS NOT NULL
     AND column_name = '{columnName}'";
         return cmd.ExecuteScalar()?.ToString()?.ToUpper() ?? "UNKNOWN";
     }
+
+    /// <summary>Detected PostgreSQL major (e.g. 12, 16) of the configured target — for gating tests of
+    /// version-specific features (a test that exercises a PG14 feature Assert.Ignore's below 14).</summary>
+    protected int PgServerMajor()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
 }

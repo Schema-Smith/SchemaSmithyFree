@@ -37,6 +37,23 @@ BEGIN
     DECLARE v_IndexPrimaryKey TINYINT;
     DECLARE v_IndexColumns LONGTEXT;
     DECLARE v_HasPkColumn INT;
+    DECLARE v_AcCnt INT;
+    DECLARE v_AcIdx INT;
+    DECLARE v_AcClauses LONGTEXT;
+    DECLARE v_AcColName VARCHAR(128);
+    DECLARE v_AcDataType VARCHAR(200);
+    DECLARE v_AcNullable TINYINT;
+    DECLARE v_AcDefault LONGTEXT;
+    DECLARE v_AcAutoIncrement TINYINT;
+    DECLARE v_ColExists INT;
+    DECLARE v_AiCnt INT;
+    DECLARE v_AiIdx INT;
+    DECLARE v_AiClauses LONGTEXT;
+    DECLARE v_AiIndexName VARCHAR(128);
+    DECLARE v_AiUnique TINYINT;
+    DECLARE v_AiPrimaryKey TINYINT;
+    DECLARE v_AiIndexColumns LONGTEXT;
+    DECLARE v_IdxExists INT;
 
     SET SESSION group_concat_max_len = 1000000;
 
@@ -130,27 +147,38 @@ BEGIN
     CREATE TEMPORARY TABLE _SchemaSmith_BootstrapAddColStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
         ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_BootstrapAddColStmts (Stmt)
-    SELECT CONCAT('ALTER TABLE `', v_TableName, '` ',
-                  GROUP_CONCAT(
-                      CONCAT('ADD COLUMN `', jc.ColumnName, '` ', jc.DataType,
-                          CASE WHEN jc.Nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END,
-                          CASE WHEN jc.DefaultVal IS NOT NULL AND TRIM(jc.DefaultVal) <> '' THEN CONCAT(' DEFAULT ', jc.DefaultVal) ELSE '' END)
-                      ORDER BY jc.ColumnOrdinal SEPARATOR ', '))
-    FROM JSON_TABLE(p_TableDefinitions, '$.Columns[*]' COLUMNS (
-            ColumnOrdinal FOR ORDINALITY,
-            ColumnName VARCHAR(128) PATH '$.Name',
-            DataType VARCHAR(200) PATH '$.DataType',
-            Nullable TINYINT PATH '$.Nullable',
-            DefaultVal LONGTEXT PATH '$.Default',
-            AutoIncrement TINYINT PATH '$.AutoIncrement'
-         )) AS jc
-    WHERE COALESCE(jc.AutoIncrement, 0) = 0
-      AND NOT EXISTS (
-          SELECT 1 FROM _SchemaSmith_BootstrapExistingCols ec
-          WHERE BINARY ec.ColumnName = BINARY jc.ColumnName
-      )
-    GROUP BY v_TableName;
+    -- Version-agnostic replacement for a JSON_TABLE('$.Columns[*]') aggregation (JSON_TABLE is
+    -- 8.0.4+/10.6+ only): walk the Columns array by index, accumulating one clause per missing,
+    -- non-auto-increment column in array order (the loop index stands in for FOR ORDINALITY +
+    -- ORDER BY), then emit a single ALTER only if at least one clause was accumulated (mirrors
+    -- the original GROUP BY, which produced zero rows when nothing matched).
+    SET v_AcCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, '$.Columns')), 0);
+    SET v_AcIdx = 0;
+    SET v_AcClauses = '';
+    WHILE v_AcIdx < v_AcCnt DO
+        SET v_AcColName = SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_AcIdx, '].Name')));
+        SET v_AcDataType = SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_AcIdx, '].DataType')));
+        SET v_AcNullable = SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_AcIdx, '].Nullable')));
+        SET v_AcDefault = SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_AcIdx, '].Default')));
+        SET v_AcAutoIncrement = SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Columns[', v_AcIdx, '].AutoIncrement')));
+
+        SET v_ColExists = 0;
+        SELECT COUNT(*) INTO v_ColExists FROM _SchemaSmith_BootstrapExistingCols ec
+        WHERE BINARY ec.ColumnName = BINARY v_AcColName;
+
+        IF COALESCE(v_AcAutoIncrement, 0) = 0 AND v_ColExists = 0 THEN
+            SET v_AcClauses = CONCAT(v_AcClauses, IF(v_AcClauses = '', '', ', '),
+                'ADD COLUMN `', v_AcColName, '` ', v_AcDataType,
+                CASE WHEN v_AcNullable = 1 THEN ' NULL' ELSE ' NOT NULL' END,
+                CASE WHEN v_AcDefault IS NOT NULL AND TRIM(v_AcDefault) <> '' THEN CONCAT(' DEFAULT ', v_AcDefault) ELSE '' END);
+        END IF;
+        SET v_AcIdx = v_AcIdx + 1;
+    END WHILE;
+
+    IF v_AcClauses <> '' THEN
+        INSERT INTO _SchemaSmith_BootstrapAddColStmts (Stmt)
+        VALUES (CONCAT('ALTER TABLE `', v_TableName, '` ', v_AcClauses));
+    END IF;
 
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_BootstrapExistingCols;
 
@@ -180,25 +208,36 @@ BEGIN
     CREATE TEMPORARY TABLE _SchemaSmith_BootstrapAddIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
         ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    INSERT INTO _SchemaSmith_BootstrapAddIdxStmts (Stmt)
-    SELECT CONCAT('ALTER TABLE `', v_TableName, '` ',
-                  GROUP_CONCAT(
-                      CONCAT('ADD ', CASE WHEN ji.IndexUnique = 1 THEN 'UNIQUE ' ELSE '' END,
-                          'INDEX `', ji.IndexName, '` (', ji.IndexColumns, ')')
-                      ORDER BY ji.IdxOrdinal SEPARATOR ', '))
-    FROM JSON_TABLE(p_TableDefinitions, '$.Indexes[*]' COLUMNS (
-            IdxOrdinal FOR ORDINALITY,
-            IndexName VARCHAR(128) PATH '$.Name',
-            IndexUnique TINYINT PATH '$.Unique',
-            IndexPrimaryKeyFlag TINYINT PATH '$.PrimaryKey',
-            IndexColumns LONGTEXT PATH '$.IndexColumns'
-         )) AS ji
-    WHERE COALESCE(ji.IndexPrimaryKeyFlag, 0) = 0
-      AND NOT EXISTS (
-          SELECT 1 FROM _SchemaSmith_BootstrapExistingIdxs ei
-          WHERE BINARY ei.IndexName = BINARY ji.IndexName
-      )
-    GROUP BY v_TableName;
+    -- Version-agnostic replacement for a JSON_TABLE('$.Indexes[*]') aggregation (JSON_TABLE is
+    -- 8.0.4+/10.6+ only): walk the Indexes array by index, accumulating one clause per missing,
+    -- non-PK index in array order (the loop index stands in for FOR ORDINALITY + ORDER BY), then
+    -- emit a single ALTER only if at least one clause was accumulated (mirrors the original
+    -- GROUP BY, which produced zero rows when nothing matched).
+    SET v_AiCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, '$.Indexes')), 0);
+    SET v_AiIdx = 0;
+    SET v_AiClauses = '';
+    WHILE v_AiIdx < v_AiCnt DO
+        SET v_AiIndexName = SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Indexes[', v_AiIdx, '].Name')));
+        SET v_AiUnique = SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Indexes[', v_AiIdx, '].Unique')));
+        SET v_AiPrimaryKey = SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Indexes[', v_AiIdx, '].PrimaryKey')));
+        SET v_AiIndexColumns = SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$.Indexes[', v_AiIdx, '].IndexColumns')));
+
+        SET v_IdxExists = 0;
+        SELECT COUNT(*) INTO v_IdxExists FROM _SchemaSmith_BootstrapExistingIdxs ei
+        WHERE BINARY ei.IndexName = BINARY v_AiIndexName;
+
+        IF COALESCE(v_AiPrimaryKey, 0) = 0 AND v_IdxExists = 0 THEN
+            SET v_AiClauses = CONCAT(v_AiClauses, IF(v_AiClauses = '', '', ', '),
+                'ADD ', CASE WHEN v_AiUnique = 1 THEN 'UNIQUE ' ELSE '' END,
+                'INDEX `', v_AiIndexName, '` (', v_AiIndexColumns, ')');
+        END IF;
+        SET v_AiIdx = v_AiIdx + 1;
+    END WHILE;
+
+    IF v_AiClauses <> '' THEN
+        INSERT INTO _SchemaSmith_BootstrapAddIdxStmts (Stmt)
+        VALUES (CONCAT('ALTER TABLE `', v_TableName, '` ', v_AiClauses));
+    END IF;
 
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_BootstrapExistingIdxs;
 

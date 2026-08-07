@@ -12,6 +12,10 @@ namespace Schema.UnitTests.Utility
         [TestCase("2017", Platform.SqlServer, 14)]
         [TestCase("2019", Platform.SqlServer, 15)]
         [TestCase("2022", Platform.SqlServer, 16)]
+        [TestCase("2008", Platform.SqlServer, 10)]   // floor lowered to 2008 — years 2008-2016 declarable again
+        [TestCase("2012", Platform.SqlServer, 11)]
+        [TestCase("2014", Platform.SqlServer, 12)]
+        [TestCase("2016", Platform.SqlServer, 13)]
         [TestCase("15", Platform.SqlServer, 15)]   // already-a-major declaration
         [TestCase("16", Platform.PostgreSQL, 16)]
         [TestCase("15.3", Platform.PostgreSQL, 15)]
@@ -44,6 +48,8 @@ namespace Schema.UnitTests.Utility
         [TestCase("8.0.36", Platform.MySQL, 800)]
         [TestCase("8.4.1", Platform.MySQL, 804)]
         [TestCase("16", Platform.SqlServer, 16)]
+        [TestCase("10.50.4000.0", Platform.SqlServer, 10)] // SERVERPROPERTY('ProductVersion') on 2008 R2 -> major 10
+        [TestCase("16.0.1000.6", Platform.SqlServer, 16)]  // ProductVersion on 2022 -> major 16
         [TestCase("10.6.27-MariaDB", Platform.MariaDb, 1006)]
         [TestCase("11.4.2-MariaDB-1:11.4.2+maria~ubu2404", Platform.MariaDb, 1104)]
         public void ParseDetectedVersion_NormalizesToComparable(string raw, Platform platform, int expected)
@@ -59,33 +65,35 @@ namespace Schema.UnitTests.Utility
             Assert.That(VersionHelper.IsAtLeast(detected, required), Is.EqualTo(expected));
         }
 
-        // 2016 (and older) is no longer a declarable SQL Server version — the real floor is 2017.
-        [TestCase("2016", Platform.SqlServer)]
-        [TestCase("2014", Platform.SqlServer)]
+        // Years below 2008 (not in the year map) are not declarable — the floor is 2008.
+        [TestCase("2005", Platform.SqlServer)]
+        [TestCase("2000", Platform.SqlServer)]
         public void ParseDeclaredVersion_BelowFloorYear_ReturnsNull(string version, Platform platform)
         {
             Assert.That(VersionHelper.ParseDeclaredVersion(version, platform), Is.Null);
         }
 
-        [TestCase(Platform.SqlServer, 11, true)]    // SQL Server 2012
-        [TestCase(Platform.SqlServer, 13, true)]    // SQL Server 2016
-        [TestCase(Platform.SqlServer, 14, false)]   // 2017 floor
+        [TestCase(Platform.SqlServer, 9, true)]     // SQL Server 2005 — below the 2008 floor
+        [TestCase(Platform.SqlServer, 10, false)]   // 2008 floor
+        [TestCase(Platform.SqlServer, 13, false)]   // SQL Server 2016 — now supported
         [TestCase(Platform.SqlServer, 16, false)]
-        [TestCase(Platform.PostgreSQL, 13, true)]
-        [TestCase(Platform.PostgreSQL, 14, false)]  // floor
-        [TestCase(Platform.MySQL, 507, true)]       // MySQL 5.7
-        [TestCase(Platform.MySQL, 800, false)]      // 8.0 floor
-        [TestCase(Platform.MariaDb, 1005, true)]    // MariaDB 10.5
-        [TestCase(Platform.MariaDb, 1006, false)]   // 10.6 floor
+        [TestCase(Platform.PostgreSQL, 11, true)]   // PostgreSQL 11 (below floor)
+        [TestCase(Platform.PostgreSQL, 12, false)]  // 12 floor
+        [TestCase(Platform.MySQL, 506, true)]       // MySQL 5.6 — below the 5.7 floor (no JSON)
+        [TestCase(Platform.MySQL, 507, false)]      // 5.7 floor
+        [TestCase(Platform.MySQL, 800, false)]      // 8.0 — above floor
+        [TestCase(Platform.MariaDb, 1001, true)]    // MariaDB 10.1 — below the 10.2 floor (no JSON)
+        [TestCase(Platform.MariaDb, 1002, false)]   // 10.2 floor
+        [TestCase(Platform.MariaDb, 1006, false)]   // 10.6 — above floor
         public void IsBelowFloor_ComparesAgainstEngineFloor(Platform platform, int comparable, bool expected)
         {
             Assert.That(VersionHelper.IsBelowFloor(platform, comparable), Is.EqualTo(expected));
         }
 
-        [TestCase(Platform.SqlServer, "2017 (major 14)")]
-        [TestCase(Platform.PostgreSQL, "14")]
-        [TestCase(Platform.MySQL, "8.0")]
-        [TestCase(Platform.MariaDb, "10.6")]
+        [TestCase(Platform.SqlServer, "2008 (major 10)")]
+        [TestCase(Platform.PostgreSQL, "12")]
+        [TestCase(Platform.MySQL, "5.7")]
+        [TestCase(Platform.MariaDb, "10.2")]
         public void HardFloorDisplay_MatchesSupportedFloorsTable(Platform platform, string expected)
         {
             Assert.That(VersionHelper.HardFloorDisplay(platform), Is.EqualTo(expected));

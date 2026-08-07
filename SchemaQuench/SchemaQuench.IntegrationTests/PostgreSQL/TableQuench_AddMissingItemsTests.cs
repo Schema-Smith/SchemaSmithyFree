@@ -104,6 +104,7 @@ public class TableQuench_AddMissingItemsTests : BaseTableQuenchTests
     [Test]
     public void TableQuench_ShouldAddMissingStatistics()
     {
+        if (PgServerMajor() < 14) Assert.Ignore("Expression statistics (CREATE STATISTICS on an expression) require PostgreSQL 14+.");
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
         conn.Open();
         conn.ChangeDatabase(_mainDb);

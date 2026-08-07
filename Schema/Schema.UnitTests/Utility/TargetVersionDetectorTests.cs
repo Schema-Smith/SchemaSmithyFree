@@ -111,6 +111,49 @@ namespace Schema.UnitTests.Utility
             Assert.That(info.CompatibilityLevel, Is.Null);
         }
 
+        [TestCase(Platform.PostgreSQL, "160004", 16)]
+        [TestCase(Platform.SqlServer, "16", 16)]
+        [TestCase(Platform.MariaDb, "10.6.27-MariaDB", 1006)]
+        public void TryDetect_ParsesScalar_ToComparable(Platform platform, string raw, int expected)
+        {
+            var info = TargetVersionDetector.TryDetect(CommandReturning(raw), platform);
+
+            Assert.That(info, Is.Not.Null);
+            Assert.That(info!.ServerComparable, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void TryDetect_ReturnsNull_WhenScalarNull()
+        {
+            Assert.That(TargetVersionDetector.TryDetect(CommandReturning(null), Platform.SqlServer), Is.Null);
+        }
+
+        [Test]
+        public void TryDetect_ReturnsNull_WhenScalarUnparseable()
+        {
+            Assert.That(TargetVersionDetector.TryDetect(CommandReturning("garbage"), Platform.SqlServer), Is.Null);
+        }
+
+        [Test]
+        public void TryDetect_ReturnsNull_WhenEngineAmbiguous()
+        {
+            // MariaDB platform but a non-MariaDB server string — Detect throws, TryDetect returns null.
+            Assert.That(TargetVersionDetector.TryDetect(CommandReturning("8.0.36"), Platform.MariaDb), Is.Null);
+        }
+
+        [Test]
+        public void TryDetect_SqlServer_WithDatabaseName_CapturesCompatibilityLevel()
+        {
+            var cmd = Substitute.For<IDbCommand>();
+            cmd.ExecuteScalar().Returns("10", 100);   // version query -> 10, compat query -> 100
+
+            var info = TargetVersionDetector.TryDetect(cmd, Platform.SqlServer, "MyDb");
+
+            Assert.That(info, Is.Not.Null);
+            Assert.That(info!.ServerComparable, Is.EqualTo(10));
+            Assert.That(info.CompatibilityLevel, Is.EqualTo(100));
+        }
+
         [Test]
         public void GetVersionQuery_Throws_OnUnknownPlatform()
         {
@@ -120,7 +163,7 @@ namespace Schema.UnitTests.Utility
         [Test]
         public void GetVersionQuery_IsPlatformSpecific()
         {
-            Assert.That(TargetVersionDetector.GetVersionQuery(Platform.SqlServer), Does.Contain("ProductMajorVersion"));
+            Assert.That(TargetVersionDetector.GetVersionQuery(Platform.SqlServer), Does.Contain("ProductVersion"));
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.PostgreSQL), Does.Contain("server_version_num"));
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.MySQL), Does.Contain("VERSION()"));
             Assert.That(TargetVersionDetector.GetVersionQuery(Platform.MariaDb), Does.Contain("VERSION()"));

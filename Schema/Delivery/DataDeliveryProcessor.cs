@@ -51,6 +51,22 @@ public class DataDeliveryProcessor : IDataDelivery
             .ToList();
 
         if (tablesToDeliver.Count == 0) return;
+
+        // Automatic data delivery below MySQL 8.0 is unsupported: 5.7 has neither JSON_TABLE nor recursive
+        // CTEs, so the JSON-array shred cannot be generated. Skip it with a clear message (warn, the default)
+        // or abort (fail) per Target:UnsupportedFeaturePolicy. The supported path on such targets is manual
+        // data scripts. MariaDB (>= 1000) always proceeds -- 10.2-10.5 use the recursive-CTE fallback.
+        if (context.MySqlServerVersionNum is > 0 and < 800)
+        {
+            var msg = $"Automatic data delivery requires MySQL 8.0+ (JSON_TABLE); the target is MySQL " +
+                      $"{context.MySqlServerVersionNum / 100}.{context.MySqlServerVersionNum % 100}. " +
+                      "Deliver data on this target with manual data scripts.";
+            if (string.Equals(context.UnsupportedFeaturePolicy, "fail", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException(msg);
+            log($"  [SKIPPED - unsupported below MySQL 8.0] {msg}");
+            return;
+        }
+
         log("  Delivering table data");
 
         var mergeTypeErrors = ValidateMergeTypes(tablesToDeliver);
@@ -267,7 +283,7 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
                     tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
-                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum);
+                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum, context.MySqlServerVersionNum);
 
                 if (!context.WhatIf)
                 {
@@ -368,7 +384,7 @@ public class DataDeliveryProcessor : IDataDelivery
                 var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
                 var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
                     tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
-                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum);
+                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum, context.MySqlServerVersionNum);
 
                 try
                 {

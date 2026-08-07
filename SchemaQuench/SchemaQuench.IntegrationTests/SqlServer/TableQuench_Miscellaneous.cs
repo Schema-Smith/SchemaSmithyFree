@@ -615,11 +615,12 @@ INSERT dbo.RemoveIdentityFromColumn (Column2) VALUES ('Row1'), ('Row2')
         conn.Close();
     }
 
-    // Floor coverage: SchemaSmith supports SQL Server databases at compatibility_level 130 (the OPENJSON
-    // JSON ingest parses at 130, STRING_AGG executes at 130 on a 2017+ server). Kindles a dedicated
-    // compat-130 database and deploys a package that exercises the JSON ingest (OPENJSON) plus a
-    // computed column and index (the FOR JSON / STRING_AGG convergence paths), proving the floor works
-    // end to end — not just that the pre-flight guard permits it. Empirically established 2026-07-27.
+    // JSON-ingest coverage at the OPENJSON cliff: compat 130 (SQL Server 2016) is where the JSON/OPENJSON
+    // ingest path parses — at or above it SchemaSmith uses JSON, below it the XML encoding (the support
+    // floor is now compat 100; the compat-100 XML path has its own coverage). Kindles a dedicated compat-130
+    // database and deploys a package exercising the JSON ingest (OPENJSON) plus a computed column and index
+    // (the FOR JSON / STRING_AGG convergence paths), proving the JSON path works end to end at the cliff —
+    // not just that the pre-flight guard permits it. Empirically established 2026-07-27.
     [Test]
     public void ShouldDeployAgainstCompatibilityLevel130Database()
     {

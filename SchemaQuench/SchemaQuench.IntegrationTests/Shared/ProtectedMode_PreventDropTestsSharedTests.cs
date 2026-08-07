@@ -190,6 +190,8 @@ public abstract class ProtectedMode_PreventDropTestsSharedTests
     [Test]
     public void ProtectedMode_RemovedCheckConstraint_NotDropped_ManifestLists_Exit0()
     {
+        if (!TestVersionGates.SupportsCheckConstraints(Platform, _connectionString))
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_Chk_{Guid.NewGuid():N}");
 
         lock (FactoryContainer.SharedLockObject)
@@ -349,6 +351,8 @@ public abstract class ProtectedMode_PreventDropTestsSharedTests
     [Test]
     public void ProtectedMode_ModifiedCheckConstraint_IsRecreated_NotInManifest()
     {
+        if (!TestVersionGates.SupportsCheckConstraints(Platform, _connectionString))
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         var tempDir = Path.Join(Path.GetTempPath(), $"ProtMode_ChkMod_{Guid.NewGuid():N}");
         lock (FactoryContainer.SharedLockObject)
         {

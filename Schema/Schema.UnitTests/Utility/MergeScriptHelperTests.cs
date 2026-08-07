@@ -621,7 +621,9 @@ public class MergeScriptHelperTests
         // (utf8mb4_uca1400_ai_ci) and a JSON_TABLE-extracted value (utf8mb4_general_ci) don't raise
         // "Illegal mix of collations" (1267).
         Assert.That(result, Does.Contain("Target.`id` = jt.`id`"));
-        Assert.That(result, Does.Contain("Target.`code` COLLATE utf8mb4_unicode_ci = jt.`code` COLLATE utf8mb4_unicode_ci"));
+        // String keys transcode both sides to utf8mb4 before collating so the forced collation is valid for a
+        // non-utf8mb4 key column (latin1 / utf8mb3) — see BuildKeyMatchMySql / CHANGELOG #359.
+        Assert.That(result, Does.Contain("CONVERT(Target.`code` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(jt.`code` USING utf8mb4) COLLATE utf8mb4_unicode_ci"));
     }
 
     [Test]

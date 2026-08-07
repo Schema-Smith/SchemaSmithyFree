@@ -231,6 +231,179 @@ public class TemplateTargetsHappyPathTests
     }
 
     [Test]
+    public void DeployWithLegacyCompatEncoding_KindlesXmlHelpersAndAppliesSchema()
+    {
+        // B3: Target:CompatEncoding=legacy forces the XML model-ingest encoding on a modern-compat DB (the CI
+        // backbone tier — exercises the XML kindle + XML-ingest apply path without needing the supported floor
+        // lowered). Deploy the Shared template into a TRANSIENT DB (so the legacy re-kindle never touches the
+        // JSON-kindled shared MainDb) and assert the XML twin helpers were kindled (GenerateTableXml, an
+        // Xml-only twin) and the schema applied end-to-end (dbo.Lookup) through the XML ingest path.
+        var transientDb = MakeTransientDbName("ttdb_legacy");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(transientDb);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:Databases:0"] = transientDb;
+            config["Target:TemplateTargets:Shared:CreateIfMissing"] = "true";
+            config["Target:CompatEncoding"] = "legacy";
+
+            try
+            {
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // The legacy encoding kindled the XML twin helpers, not the JSON generate proc — proving the
+                // detected encoding was threaded to KindleTheForge.
+                Assert.That(ObjectExistsInDb(transientDb, "SchemaSmith.GenerateTableXml", "P"), Is.True,
+                    "Target:CompatEncoding=legacy must kindle the XML compare twin (encoding threaded to KindleTheForge).");
+                Assert.That(ObjectExistsInDb(transientDb, "SchemaSmith.GenerateTableJSON", "P"), Is.False,
+                    "The JSON generate proc must NOT be kindled on the legacy encoding.");
+
+                // The schema applied end-to-end through the XML ingest apply path.
+                Assert.That(TableExistsInDb(transientDb, "dbo", "Lookup"), Is.True,
+                    "The Shared template must deploy dbo.Lookup via the XML ingest apply path.");
+            }
+            finally
+            {
+                config["Target:CompatEncoding"] = null;
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(transientDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void LegacyVsModernCompatEncoding_ProduceIdenticalSchema()
+    {
+        // The kindle+apply equivalence gate: deploy the SAME product under the XML (legacy) and JSON (modern)
+        // model-ingest encodings to two transient DBs and assert the materialized user schema is identical.
+        // Proves the XML ingest apply path converges the same schema as the JSON path end-to-end through
+        // DatabaseQuench (table + column + index + constraint create), not just that it runs.
+        var legacyDb = MakeTransientDbName("ttdb_eqL");
+        var modernDb = MakeTransientDbName("ttdb_eqM");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(legacyDb);
+            DropTransientDb(modernDb);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:CreateIfMissing"] = "true";
+
+            try
+            {
+                // Legacy (XML) deploy.
+                config["Target:TemplateTargets:Shared:Databases:0"] = legacyDb;
+                config["Target:CompatEncoding"] = "legacy";
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Modern (JSON) deploy of the same product.
+                ClearCheckpointsForProduct();
+                config["Target:TemplateTargets:Shared:Databases:0"] = modernDb;
+                config["Target:CompatEncoding"] = "modern";
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                var legacySig = CaptureUserSchemaSignature(legacyDb);
+                var modernSig = CaptureUserSchemaSignature(modernDb);
+                Assert.That(legacySig, Is.Not.Empty, "Signature capture must find the deployed user tables.");
+                Assert.That(legacySig, Is.EqualTo(modernSig),
+                    "The legacy (XML) ingest apply path must converge a schema identical to the modern (JSON) path.");
+            }
+            finally
+            {
+                config["Target:CompatEncoding"] = null;
+                config["Target:TemplateTargets:Shared:CreateIfMissing"] = null;
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(legacyDb);
+                DropTransientDb(modernDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void RealCompat100Database_AutoSelectsXmlAndDeploys_MatchingModern()
+    {
+        // F2 floor proof: a REAL compat-100 database (NOT the Target:CompatEncoding override) now clears
+        // pre-flight (the floor is compat 100, F1) and the ingest encoding auto-selects XML from the detected
+        // compat, deploying a schema identical to a modern (compat-default, JSON) deploy of the same product.
+        // Exercises the whole floor chain end to end: detect compat 100 → pass pre-flight → auto-select XML →
+        // kindle XML helpers → apply. This is the compat-100 integration coverage inside the existing SQL
+        // Server context (no new CI leg / status-check name). Before F1 the compat-100 target aborted pre-flight.
+        var compat100Db = MakeTransientDbName("ttdb_c100");
+        var modernDb = MakeTransientDbName("ttdb_c100M");
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ClearCheckpointsForProduct();
+            DropTransientDb(compat100Db);
+            DropTransientDb(modernDb);
+            CreateDatabaseAtCompatLevel(compat100Db, 100);   // real compat 100 — no CompatEncoding override
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+            ClearTargetFilters(config);
+            ClearTemplateTargets(config);
+            config["Target:Templates:0"] = "Shared";
+            config["Target:TemplateTargets:Shared:CreateIfMissing"] = "true";
+
+            try
+            {
+                // Real compat-100 deploy — NO CompatEncoding override; the encoding auto-selects from detected compat.
+                config["Target:TemplateTargets:Shared:Databases:0"] = compat100Db;
+                config["Target:CompatEncoding"] = null;
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Modern (compat-default → JSON) deploy of the same product.
+                ClearCheckpointsForProduct();
+                config["Target:TemplateTargets:Shared:Databases:0"] = modernDb;
+                RunSchemaQuenchWithKindling();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                Assert.That(GetCompatLevel(compat100Db), Is.EqualTo(100),
+                    "Target database must remain at compatibility level 100 (guards against a silent reset).");
+                var c100Sig = CaptureUserSchemaSignature(compat100Db);
+                var modernSig = CaptureUserSchemaSignature(modernDb);
+                Assert.That(c100Sig, Is.Not.Empty, "Signature capture must find the deployed user tables.");
+                Assert.That(c100Sig, Is.EqualTo(modernSig),
+                    "A real compat-100 deploy (auto-selected XML ingest) must converge a schema identical to the modern (JSON) deploy.");
+            }
+            finally
+            {
+                config["Target:CompatEncoding"] = null;
+                config["Target:TemplateTargets:Shared:CreateIfMissing"] = null;
+                ClearTemplateTargets(config);
+                ClearTargetFilters(config);
+                DropTransientDb(compat100Db);
+                DropTransientDb(modernDb);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
     public void DatabaseOverrideWithoutCreateIfMissing_SkipsMissingDbWithInfoLog()
     {
         // CreateIfMissing: false (default) → missing DBs are SKIPPED with an info log; no
@@ -545,6 +718,77 @@ IF SCHEMA_ID('{tenant}') IS NOT NULL EXEC('DROP SCHEMA [{tenant}]');";
         var result = cmd.ExecuteScalar();
         conn.Close();
         return Convert.ToInt32(result) > 0;
+    }
+
+    // A deterministic signature of the deployed USER schema (columns + indexes), excluding SchemaSmith's own
+    // helper objects. Used to assert the XML and JSON ingest apply paths converge an identical schema.
+    private string CaptureUserSchemaSignature(string databaseName)
+    {
+        if (!DatabaseExists(databaseName)) return "";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(databaseName);
+        using var cmd = conn.CreateCommand();
+        // COLLATE DATABASE_DEFAULT on every string operand: INFORMATION_SCHEMA/sys expose catalog-collation
+        // sysname columns that otherwise conflict with DB-collation literals in the per-row concatenation.
+        // The rows are aggregated in C# (sort + join) rather than STRING_AGG so the capture also works
+        // against a compat-100 database (STRING_AGG ... WITHIN GROUP is compat-130-gated).
+        cmd.CommandText = @"
+SELECT 'COL|' + TABLE_SCHEMA COLLATE DATABASE_DEFAULT + '.' + TABLE_NAME COLLATE DATABASE_DEFAULT + '|' +
+       COLUMN_NAME COLLATE DATABASE_DEFAULT + '|' + DATA_TYPE COLLATE DATABASE_DEFAULT + '|' +
+       ISNULL(CONVERT(VARCHAR(20), CHARACTER_MAXIMUM_LENGTH), '') + '|' + IS_NULLABLE COLLATE DATABASE_DEFAULT AS sig
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA <> 'SchemaSmith' AND TABLE_NAME NOT LIKE 'SchemaSmith[_]%'
+UNION ALL
+SELECT 'IDX|' + s.name COLLATE DATABASE_DEFAULT + '.' + t.name COLLATE DATABASE_DEFAULT + '|' +
+       i.name COLLATE DATABASE_DEFAULT + '|' + CONVERT(CHAR(1), i.is_unique) + '|' +
+       CONVERT(CHAR(1), i.is_primary_key) + '|' + i.type_desc COLLATE DATABASE_DEFAULT AS sig
+  FROM sys.indexes i
+  JOIN sys.tables t ON i.object_id = t.object_id
+  JOIN sys.schemas s ON t.schema_id = s.schema_id
+  WHERE i.index_id > 0 AND s.name <> 'SchemaSmith'";
+        var sigs = new List<string>();
+        using (var reader = cmd.ExecuteReader())
+            while (reader.Read())
+                sigs.Add(reader.GetString(0));
+        conn.Close();
+        sigs.Sort(StringComparer.Ordinal);
+        return string.Join("\n", sigs);
+    }
+
+    private bool ObjectExistsInDb(string databaseName, string objectName, string type)
+    {
+        if (!DatabaseExists(databaseName)) return false;
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(databaseName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT CASE WHEN OBJECT_ID('{objectName}', '{type}') IS NULL THEN 0 ELSE 1 END";
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result) == 1;
+    }
+
+    private void CreateDatabaseAtCompatLevel(string databaseName, int compatLevel)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 0;
+        cmd.CommandText = $"CREATE DATABASE [{databaseName}]; ALTER DATABASE [{databaseName}] SET COMPATIBILITY_LEVEL = {compatLevel};";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    private int GetCompatLevel(string databaseName)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT compatibility_level FROM sys.databases WHERE name = '{databaseName.Replace("'", "''")}'";
+        var result = cmd.ExecuteScalar();
+        conn.Close();
+        return Convert.ToInt32(result);
     }
 
     private void DropTransientDb(string databaseName)

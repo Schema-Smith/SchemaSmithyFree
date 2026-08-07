@@ -307,6 +307,26 @@ BEGIN
       WHERE COALESCE("NewCluster", '') != COALESCE("OldCluster", '');
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
+  -- Unsupported-feature policy: expression statistics require PostgreSQL 14 (see MissingIndexesAndConstraintsQuench).
+  IF "SchemaSmith"."ServerVersionNum"() < 14 THEN
+    IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+       AND EXISTS (SELECT 1 FROM temp_statistics WHERE "StatisticsColumns" LIKE '%(%') THEN
+      RAISE EXCEPTION 'Expression statistics require PostgreSQL 14 (detected major %); statistic(s): %',
+        "SchemaSmith"."ServerVersionNum"(),
+        (SELECT STRING_AGG("TableSchema" || '.' || "TableName" || '.' || "Name", ', ')
+           FROM temp_statistics WHERE "StatisticsColumns" LIKE '%(%');
+    ELSE
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'expression statistics (PG14)',
+               ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name", 'downgraded'
+          FROM temp_statistics ts
+          WHERE ts."StatisticsColumns" LIKE '%(%'
+            AND NOT EXISTS (SELECT 1 FROM pg_statistic_ext ste JOIN pg_class rel ON rel.oid = ste.stxrelid
+                              JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace AND nsp.nspname = ts."TableSchema" AND rel.relname = ts."TableName"
+                              WHERE ste.stxname = ts."Name");
+    END IF;
+  END IF;
+
   RAISE NOTICE 'Add Missing Statistics';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing statistics ' || ts."TableSchema" || '.' || ts."TableName" || '.' || ts."Name" || CASE WHEN COALESCE(ts."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(ts."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'CREATE STATISTICS "' || ts."TableSchema" || '"."' || ts."Name" || '"' ||
@@ -321,7 +341,8 @@ BEGIN
                         JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
                                              AND nsp.nspname = ts."TableSchema"
                                              AND rel.relname = ts."TableName"
-                        WHERE ste.stxname = ts."Name");
+                        WHERE ste.stxname = ts."Name")
+      AND NOT ("SchemaSmith"."ServerVersionNum"() < 14 AND ts."StatisticsColumns" LIKE '%(%');
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
 END $$;

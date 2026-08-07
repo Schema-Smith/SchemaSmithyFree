@@ -49,6 +49,11 @@ public abstract class TableQuench_IndexVisibilitySharedTests : BaseTableQuenchTe
     [OneTimeSetUp]
     public void Setup()
     {
+        // Invisible/ignored indexes need MySQL 8.0 (IS_VISIBLE) / MariaDB 10.6 (IGNORED); below the floor
+        // the INVISIBLE syntax in this fixture's setup is a parse error, so skip the whole fixture there.
+        if (!TargetSupportsInvisibleIndexes())
+            Assert.Ignore("Invisible indexes require MySQL 8.0 / MariaDB 10.6; skipped below the floor.");
+
         using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();

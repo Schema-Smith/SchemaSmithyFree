@@ -13,33 +13,33 @@ namespace Schema.UnitTests.Utility
         [Test]
         public void CheckOrThrow_BelowServerFloor_Throws_WithClearMessage()
         {
-            var info = new TargetVersionInfo(Platform.SqlServer, "11", 11);   // SQL Server 2012
+            var info = new TargetVersionInfo(Platform.SqlServer, "9", 9);   // SQL Server 2005 — below the 2008 floor
 
             var ex = Assert.Throws<Exception>(() =>
-                PreFlightVersionGuard.CheckOrThrow(info, "SQL2K12\\SC2K12", "Chinook"));
+                PreFlightVersionGuard.CheckOrThrow(info, "SQL2K5\\SC2K5", "Chinook"));
 
             Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
-            Assert.That(ex.Message, Does.Contain("SQL2K12"));
+            Assert.That(ex.Message, Does.Contain("SQL2K5"));
         }
 
         [Test]
-        public void CheckOrThrow_CompatBelow130_Throws_DistinctMessage()
+        public void CheckOrThrow_CompatBelow100_Throws_DistinctMessage()
         {
-            var info = new TargetVersionInfo(Platform.SqlServer, "14", 14, 120);   // SQL Server 2014 compat
+            var info = new TargetVersionInfo(Platform.SqlServer, "10", 10, 90);   // 2008 binary, compat-90 DB
 
             var ex = Assert.Throws<Exception>(() =>
                 PreFlightVersionGuard.CheckOrThrow(info, "srv", "OldDb"));
 
-            Assert.That(ex!.Message, Does.Contain("compatibility level 120"));
+            Assert.That(ex!.Message, Does.Contain("compatibility level 90"));
             Assert.That(ex.Message, Does.Contain("OldDb"));
         }
 
         [Test]
-        public void CheckOrThrow_CompatAtFloor130_DoesNotThrow()
+        public void CheckOrThrow_CompatAtFloor100_DoesNotThrow()
         {
-            // compat 130 (SQL Server 2016) is the real floor: OPENJSON parses at 130 and STRING_AGG
-            // executes at 130 on a 2017+ server (empirically verified — floor-lowering spike 2026-07-27).
-            var info = new TargetVersionInfo(Platform.SqlServer, "14", 14, 130);
+            // compat 100 (SQL Server 2008) is the floor: below compat 130 the model is ingested/compared
+            // as XML (OPENJSON's JSON-path parse-errors below 130), so a compat-100 DB is supported.
+            var info = new TargetVersionInfo(Platform.SqlServer, "10", 10, 100);
 
             Assert.DoesNotThrow(() => PreFlightVersionGuard.CheckOrThrow(info, "srv", "Db"));
         }
@@ -63,7 +63,7 @@ namespace Schema.UnitTests.Utility
         [Test]
         public void CheckOrThrow_PostgresBelowFloor_Throws()
         {
-            var info = new TargetVersionInfo(Platform.PostgreSQL, "130006", 13);
+            var info = new TargetVersionInfo(Platform.PostgreSQL, "110006", 11);   // PostgreSQL 11 — below the 12 floor
 
             var ex = Assert.Throws<Exception>(() => PreFlightVersionGuard.CheckOrThrow(info, "pg"));
             Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
@@ -72,9 +72,35 @@ namespace Schema.UnitTests.Utility
         [Test]
         public void CheckOrThrow_MariaDbAtFloor_DoesNotThrow()
         {
-            var info = new TargetVersionInfo(Platform.MariaDb, "10.6.27-MariaDB", 1006);
+            var info = new TargetVersionInfo(Platform.MariaDb, "10.2.44-MariaDB", 1002);   // 10.2 floor
 
             Assert.DoesNotThrow(() => PreFlightVersionGuard.CheckOrThrow(info, "maria"));
+        }
+
+        [Test]
+        public void CheckOrThrow_MariaDbBelowFloor_Throws()
+        {
+            var info = new TargetVersionInfo(Platform.MariaDb, "10.1.48-MariaDB", 1001);   // 10.1 — below the 10.2 floor (no JSON)
+
+            var ex = Assert.Throws<Exception>(() => PreFlightVersionGuard.CheckOrThrow(info, "maria"));
+            Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
+        }
+
+        [Test]
+        public void CheckOrThrow_MySqlAtFloor_DoesNotThrow()
+        {
+            var info = new TargetVersionInfo(Platform.MySQL, "5.7.44", 507);   // 5.7 floor
+
+            Assert.DoesNotThrow(() => PreFlightVersionGuard.CheckOrThrow(info, "mysql"));
+        }
+
+        [Test]
+        public void CheckOrThrow_MySqlBelowFloor_Throws()
+        {
+            var info = new TargetVersionInfo(Platform.MySQL, "5.6.51", 506);   // 5.6 — below the 5.7 floor (no JSON)
+
+            var ex = Assert.Throws<Exception>(() => PreFlightVersionGuard.CheckOrThrow(info, "mysql"));
+            Assert.That(ex!.Message, Does.Contain("below the minimum supported"));
         }
     }
 }

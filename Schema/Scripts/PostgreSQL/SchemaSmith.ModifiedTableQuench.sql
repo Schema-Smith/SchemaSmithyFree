@@ -203,10 +203,7 @@ BEGIN
                   WHEN 'e' THEN 'EXTERNAL'
                   WHEN 'x' THEN 'EXTENDED'
                   ELSE 'DEFAULT' END AS "Storage",
-             CASE a.attcompression 
-                  WHEN 'p' THEN 'pglz' 
-                  WHEN 'l' THEN 'lz4' 
-                  ELSE 'DEFAULT' END AS "Compression",
+             "SchemaSmith"."ColumnCompression"(a.attrelid, a.attnum) AS "Compression",
              '' AS "OldName"
         FROM temp_tables t
         JOIN information_schema.columns c ON c.table_schema = t."Schema"
@@ -288,15 +285,12 @@ BEGIN
              se.stxname AS "StatisticsName",
              COALESCE((SELECT STRING_AGG(CASE k WHEN 'd' THEN 'NDISTINCT' WHEN 'f' THEN 'DEPENDENCIES' WHEN 'm' THEN 'MCV' WHEN 'e' THEN 'EXPRESSIONS' ELSE k::text END, ',')
                        FROM UNNEST(se.stxkind) AS k), '') AS "Kind",
-             COALESCE(ARRAY_TO_STRING(ARRAY_CAT(COALESCE((SELECT ARRAY_AGG(a.attname)
+             COALESCE(ARRAY_TO_STRING(ARRAY_CAT(COALESCE((SELECT ARRAY_AGG(a.attname::text)
                                                             FROM UNNEST(se.stxkeys) WITH ORDINALITY AS t(attnum, ord)
                                                             JOIN pg_attribute a ON a.attrelid = se.stxrelid AND a.attnum = t.attnum
                                                             WHERE a.attnum > 0),
                                                          ARRAY[]::text[]),
-                                                COALESCE((SELECT ARRAY_AGG(exp.expr)
-                                                            FROM pg_stats_ext_exprs exp
-                                                            WHERE exp.schemaname = t."Schema" AND exp.statistics_name = se.stxname),
-                                                         ARRAY[]::text[])), ','), '') AS "StatisticsColumns"
+                                                "SchemaSmith"."StatisticsExpressionColumns"(t."Schema", se.stxname)), ','), '') AS "StatisticsColumns"
       FROM temp_tables t
       JOIN  pg_statistic_ext se ON se.stxrelid = to_regclass('"' || t."Schema" || '"."' || t."Name" || '"');
 
@@ -905,7 +899,7 @@ BEGIN
                         CASE WHEN COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != 'DEFAULT'
                              THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET STORAGE ' || c."Storage" || ';'
                              ELSE '' END ||
-                        CASE WHEN COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != 'DEFAULT'
+                        CASE WHEN COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != 'DEFAULT' AND "SchemaSmith"."ServerVersionNum"() >= 14
                              THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET COMPRESSION ' || c."Compression" || ';'
                              ELSE '' END, CHR(10))
         INTO sql_script
@@ -923,6 +917,54 @@ BEGIN
                           AND ic.table_name = c."TableName"
                           AND ic.column_name = c."Name");
       CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+    END IF;
+
+    -- Un-generate a column (target is no longer GENERATED) on PostgreSQL < 13, which lacks
+    -- ALTER COLUMN ... DROP EXPRESSION. Drop and re-add the column as a plain column (decision: Paul,
+    -- 2026-07-30 — achieve the un-generation on old PG; the previously-computed values are NOT preserved,
+    -- unlike PG13+ in-place DROP EXPRESSION). Runs before the "Alter Modified Columns" pass, which excludes
+    -- these columns (the re-add carries the full target definition — type/collation/nullability/default).
+    IF "SchemaSmith"."ServerVersionNum"() < 13 THEN
+      SELECT STRING_AGG('RAISE NOTICE ''  Un-generating column ' || c."TableSchema" || '.' || c."TableName" || '.' || c."Name" || ' (drop+re-add as plain; PG < 13 has no DROP EXPRESSION)'';' || CHR(10) ||
+                        'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" DROP COLUMN IF EXISTS "' || c."Name" || '" CASCADE;' || CHR(10) ||
+                        'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ADD "' || c."Name" || '" ' || c."DataType" ||
+                        CASE WHEN COALESCE(c."Collation", '') != '' THEN ' COLLATE "' || c."Collation" || '"' ELSE '' END ||
+                        CASE WHEN c."Nullable" THEN '' ELSE ' NOT NULL' END ||
+                        CASE WHEN COALESCE(c."Default", '') != '' THEN ' DEFAULT ' || c."Default" ELSE '' END || ';' ||
+                        CASE WHEN COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != 'DEFAULT'
+                             THEN CHR(10) || 'ALTER TABLE "' || c."TableSchema" || '"."' || c."TableName" || '" ALTER COLUMN "' || c."Name" || '" SET STORAGE ' || c."Storage" || ';'
+                             ELSE '' END, CHR(10))
+        INTO sql_script
+        FROM temp_columns c
+        JOIN temp_existing_columns ec ON ec."TableSchema" = c."TableSchema"
+                                     AND ec."TableName" = c."TableName"
+                                     AND ec."ColumnName" = c."Name"
+        WHERE (COALESCE(c."Generated", 'NEVER') = 'NEVER' OR COALESCE(c."GenerationExpression", '') = '')  -- target no longer generated
+          AND COALESCE(ec."GenerationExpression", '') != ''                                                -- but it currently is a generated column
+          AND EXISTS (SELECT 1
+                        FROM information_schema.columns ic
+                        WHERE ic.table_schema = c."TableSchema"
+                          AND ic.table_name = c."TableName"
+                          AND ic.column_name = c."Name");
+      CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+    END IF;
+
+    -- Unsupported-feature policy: per-column compression (SET COMPRESSION) requires PostgreSQL 14. The emit
+    -- below is gated off under 14; 'fail' aborts, 'warn' (default) records a downgrade manifest per column
+    -- that declared a non-default compression. Same routing spine as NULLS NOT DISTINCT / expression stats.
+    IF "SchemaSmith"."ServerVersionNum"() < 14 THEN
+      IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+         AND EXISTS (SELECT 1 FROM temp_columns WHERE COALESCE("Compression", '') NOT IN ('', 'DEFAULT')) THEN
+        RAISE EXCEPTION 'Per-column compression requires PostgreSQL 14 (detected major %); column(s): %',
+          "SchemaSmith"."ServerVersionNum"(),
+          (SELECT STRING_AGG("TableSchema" || '.' || "TableName" || '.' || "Name", ', ')
+             FROM temp_columns WHERE COALESCE("Compression", '') NOT IN ('', 'DEFAULT'));
+      ELSE
+        INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+          SELECT pg_backend_pid(), 'per-column compression (PG14)',
+                 "TableSchema" || '.' || "TableName" || '.' || "Name", 'downgraded'
+            FROM temp_columns WHERE COALESCE("Compression", '') NOT IN ('', 'DEFAULT');
+      END IF;
     END IF;
 
     RAISE NOTICE 'Alter Modified Columns';
@@ -958,7 +1000,9 @@ BEGIN
                            ELSE '' END ||
                       CASE WHEN COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
                            THEN CASE WHEN (COALESCE(c."Generated", 'NEVER') = 'NEVER' OR COALESCE(c."GenerationExpression", '') = '')
-                                     THEN ' ALTER COLUMN "' || c."Name" || '" DROP EXPRESSION,'
+                                     THEN CASE WHEN "SchemaSmith"."ServerVersionNum"() >= 13
+                                               THEN ' ALTER COLUMN "' || c."Name" || '" DROP EXPRESSION,'
+                                               ELSE '' END  -- PG < 13: handled by the un-generate drop-and-re-add pass above
                                      WHEN "SchemaSmith"."ServerVersionNum"() >= 17
                                      THEN ' ALTER COLUMN "' || c."Name" || '" SET EXPRESSION AS (' || COALESCE(c."GenerationExpression", '') || '),'
                                      ELSE '' END  -- PG < 17: expression change is handled by the drop-and-re-add pass below
@@ -980,7 +1024,7 @@ BEGIN
                       CASE WHEN COALESCE(c."Storage", '') != COALESCE(ec."Storage", '') AND COALESCE(c."Storage", '') != ''
                            THEN ' ALTER COLUMN "' || c."Name" || '" SET STORAGE ' || COALESCE(c."Storage", '') || ','
                            ELSE '' END ||
-                      CASE WHEN COALESCE(c."Compression", '') != COALESCE(ec."Compression", '') AND COALESCE(c."Compression", '') != ''
+                      CASE WHEN COALESCE(c."Compression", '') != COALESCE(ec."Compression", '') AND COALESCE(c."Compression", '') != '' AND "SchemaSmith"."ServerVersionNum"() >= 14
                            THEN ' ALTER COLUMN "' || c."Name" || '" SET COMPRESSION ' || COALESCE(c."Compression", '') || ','
                            ELSE '' END)), ''), ',' || CHR(10)) || ';' AS "code"
       FROM temp_columns c
@@ -1011,6 +1055,12 @@ BEGIN
                  AND COALESCE(c."GenerationExpression", '') != ''
                  AND COALESCE(c."Generated", 'NEVER') = COALESCE(ec."Generated", 'NEVER')
                  AND COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", ''))
+        AND NOT (-- PG < 13 un-generate (target no longer GENERATED, currently generated): handled SOLELY by the
+                 -- "Un-generating column" drop-and-re-add pass above (which re-adds the full plain-column
+                 -- definition). MUST match that pass's predicate — keep in lockstep.
+                 "SchemaSmith"."ServerVersionNum"() < 13
+                 AND (COALESCE(c."Generated", 'NEVER') = 'NEVER' OR COALESCE(c."GenerationExpression", '') = '')
+                 AND COALESCE(ec."GenerationExpression", '') != '')
        GROUP BY c."TableSchema", c."TableName") x;
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 

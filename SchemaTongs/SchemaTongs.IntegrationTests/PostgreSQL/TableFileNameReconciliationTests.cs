@@ -176,7 +176,9 @@ CREATE TABLE sales.invoice (
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DROP DATABASE IF EXISTS \"{_integrationDb}\" WITH (FORCE);";
+        cmd.CommandText = $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{_integrationDb}' AND pid <> pg_backend_pid();";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"DROP DATABASE IF EXISTS \"{_integrationDb}\";";
         cmd.ExecuteNonQuery();
         conn.Close();
     }

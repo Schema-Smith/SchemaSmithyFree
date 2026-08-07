@@ -20,7 +20,7 @@ namespace SchemaQuench.IntegrationTests.PostgreSQL
 
             var info = TargetVersionDetector.Detect(cmd, Platform.PostgreSQL);
 
-            Assert.That(info.ServerComparable, Is.GreaterThanOrEqualTo(14)); // PostgreSQL 14 floor
+            Assert.That(info.ServerComparable, Is.GreaterThanOrEqualTo(12)); // PostgreSQL 12 floor
         }
     }
 }

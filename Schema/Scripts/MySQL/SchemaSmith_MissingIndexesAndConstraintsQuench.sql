@@ -100,6 +100,27 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- STEP 0.5: Degrade descending index key parts below MySQL 8.0 / MariaDB 10.8
+    -- =========================================================================
+    -- These engines parse-and-ignore a DESC key part (silently storing it ascending). There is no
+    -- equivalent, so a declared DESC index is stored + compared as ascending (SchemaSmith_NormalizeIndexColumns
+    -- drops the DESC suffix below the floor, so the create/compare steps below see an ascending index and stay
+    -- idempotent). Record one 'downgraded' manifest row + a run-log line per affected index so the downgrade is
+    -- visible, mirroring the CHECK-constraint degrade. At/above the floor this is a no-op.
+    IF SchemaSmith_SupportsDescendingIndex() = 0 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Descending index key part stored ascending (requires MySQL 8.0 / MariaDB 10.8 - downgraded): ',
+               SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+        FROM _SchemaSmith_Indexes i
+        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)',
+               CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
+        FROM _SchemaSmith_Indexes i
+        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
+    END IF;
+
+    -- =========================================================================
     -- STEP 1: Detect index renames (same columns, different name)
     -- =========================================================================
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexRenames;
@@ -158,8 +179,8 @@ BEGIN
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
-                      '` RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`')
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                      SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName))
         FROM _SchemaSmith_IndexRenames;
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
@@ -170,8 +191,8 @@ BEGIN
         INSERT INTO _SchemaSmith_RenameStmts (LogMsg, Stmt)
         SELECT
             CONCAT('  Rename index: ', TableName, '.', OldIndexName, ' -> ', NewIndexName),
-            CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName,
-                   '` RENAME INDEX `', OldIndexName, '` TO `', NewIndexName, '`')
+            CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                   SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName))
         FROM _SchemaSmith_IndexRenames;
 
         SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_RenameStmts);
@@ -398,43 +419,60 @@ BEGIN
         PRIMARY KEY (TableName, ConstraintName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    -- Table-level checks: live CHECK_CLAUSE differs from the desired _SchemaSmith_CheckConstraints.Expression
-    INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
-    SELECT
-        SchemaSmith_StripBacktickWrapping(c.TableName) AS TableName,
-        SchemaSmith_StripBacktickWrapping(c.ConstraintName) AS ConstraintName
-    FROM _SchemaSmith_CheckConstraints c
-    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-        ON BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-        AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-        AND tc.CONSTRAINT_TYPE = 'CHECK'
-    JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-        ON BINARY cc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
-        AND BINARY cc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-    WHERE BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
-        != BINARY SchemaSmith_NormalizeCheckExpression(c.Expression);
+    -- Table-level checks: live CHECK_CLAUSE differs from the desired _SchemaSmith_CheckConstraints.Expression.
+    -- INFORMATION_SCHEMA.CHECK_CONSTRAINTS does not exist on MySQL 5.7 and MySQL binds INFORMATION_SCHEMA
+    -- references at CREATE time, so both CHECK_CONSTRAINTS reads below live only inside dynamically-built
+    -- strings, gated by SchemaSmith_SupportsCheckConstraints() (see GenerateTableJson for the full rationale).
+    -- Below the floor there are no check constraints to detect as modified, so _SchemaSmith_ModifiedChecks
+    -- simply stays unpopulated by this step.
+    SET @v_mcDbName = p_DatabaseName;
+    IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+        SET @v_mcSql1 = 'INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
+SELECT
+    SchemaSmith_StripBacktickWrapping(c.TableName) AS TableName,
+    SchemaSmith_StripBacktickWrapping(c.ConstraintName) AS ConstraintName
+FROM _SchemaSmith_CheckConstraints c
+JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+    ON BINARY tc.TABLE_SCHEMA = BINARY @v_mcDbName
+    AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+    AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+    AND tc.CONSTRAINT_TYPE = ''CHECK''
+JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+    ON BINARY cc.CONSTRAINT_SCHEMA = BINARY @v_mcDbName
+    AND BINARY cc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
+WHERE BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
+    != BINARY SchemaSmith_NormalizeCheckExpression(c.Expression)';
+        PREPARE stmt FROM @v_mcSql1;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
 
     -- Column-level checks: keyed on the deterministic name CK_<table>_<column>; live CHECK_CLAUSE
     -- differs from the desired column CheckExpression. (INFORMATION_SCHEMA.CHECK_CONSTRAINTS has
-    -- no column linkage, which is exactly why column checks carry a deterministic name.)
-    INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
-    SELECT
-        SchemaSmith_StripBacktickWrapping(col.TableName) AS TableName,
-        CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)) AS ConstraintName
-    FROM _SchemaSmith_Columns col
-    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-        ON BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(col.TableName)
-        AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName))
-        AND tc.CONSTRAINT_TYPE = 'CHECK'
-    JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-        ON BINARY cc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
-        AND BINARY cc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName))
-    WHERE col.CheckExpression IS NOT NULL
-      AND TRIM(col.CheckExpression) != ''
-      AND BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
-        != BINARY SchemaSmith_NormalizeCheckExpression(col.CheckExpression);
+    -- no column linkage, which is exactly why column checks carry a deterministic name.) Same
+    -- CREATE-time binding constraint as above, so this read is also dynamic SQL under the same guard.
+    IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+        SET @v_mcSql2 = 'INSERT IGNORE INTO _SchemaSmith_ModifiedChecks (TableName, ConstraintName)
+SELECT
+    SchemaSmith_StripBacktickWrapping(col.TableName) AS TableName,
+    CONCAT(''CK_'', SchemaSmith_StripBacktickWrapping(col.TableName), ''_'', SchemaSmith_StripBacktickWrapping(col.ColumnName)) AS ConstraintName
+FROM _SchemaSmith_Columns col
+JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+    ON BINARY tc.TABLE_SCHEMA = BINARY @v_mcDbName
+    AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(col.TableName)
+    AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT(''CK_'', SchemaSmith_StripBacktickWrapping(col.TableName), ''_'', SchemaSmith_StripBacktickWrapping(col.ColumnName))
+    AND tc.CONSTRAINT_TYPE = ''CHECK''
+JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+    ON BINARY cc.CONSTRAINT_SCHEMA = BINARY @v_mcDbName
+    AND BINARY cc.CONSTRAINT_NAME = BINARY CONCAT(''CK_'', SchemaSmith_StripBacktickWrapping(col.TableName), ''_'', SchemaSmith_StripBacktickWrapping(col.ColumnName))
+WHERE col.CheckExpression IS NOT NULL
+  AND TRIM(col.CheckExpression) != ''''
+  AND BINARY SchemaSmith_NormalizeCheckExpression(CONVERT(cc.CHECK_CLAUSE USING utf8mb4))
+    != BINARY SchemaSmith_NormalizeCheckExpression(col.CheckExpression)';
+        PREPARE stmt FROM @v_mcSql2;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
 
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop modified check constraints');
@@ -586,7 +624,38 @@ BEGIN
     -- =========================================================================
     -- STEP 4: Create missing check constraints (MySQL 8.0.16+)
     -- =========================================================================
-    IF p_WhatIf = 1 THEN
+    -- CHECK constraints require MySQL 8.0.16 (INFORMATION_SCHEMA.CHECK_CONSTRAINTS + enforcement); on MySQL
+    -- 5.7 a declared CHECK is parsed-and-ignored, so it can neither be created nor detected as present -- which
+    -- would make this create pass re-emit on every deploy. Degrade via the UnsupportedFeaturePolicy spine
+    -- (mirrors the PostgreSQL NULLS-NOT-DISTINCT routing): 'fail' aborts naming the offending constraint(s);
+    -- 'warn' (default) skips the emit and records one 'downgraded' manifest row per declared check so the run
+    -- stays idempotent. MariaDB reports support at/above the 10.2 floor, so it never enters this branch.
+    IF SchemaSmith_SupportsCheckConstraints() = 0 THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail'
+           AND EXISTS (SELECT 1 FROM _SchemaSmith_CheckConstraints) THEN
+            -- Log the full offending list to the run log first (SIGNAL MESSAGE_TEXT is capped at 128 chars,
+            -- so the abort message stays concise + non-truncating and names the detail in the log instead).
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  CHECK constraint unsupported (requires MySQL 8.0.16): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName))
+            FROM _SchemaSmith_CheckConstraints c;
+            -- Keep < 128 chars: MySQL errors ("Data too long for condition item") on an over-long MESSAGE_TEXT.
+            SET @ss_msg = CONCAT('CHECK constraints require MySQL 8.0.16 (detected ',
+                                 SchemaSmith_ServerVersionNum(), '); see the deploy log for the unsupported check(s).');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            -- Surface the downgrade in the run log too (not only the ChangeAudit manifest), matching this
+            -- proc's per-object status-message convention, so a 5.7 deploy visibly reports skipped checks.
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping check constraint (requires MySQL 8.0.16 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName))
+            FROM _SchemaSmith_CheckConstraints c;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'CHECK constraint (MySQL 8.0.16)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName)), 'downgraded'
+            FROM _SchemaSmith_CheckConstraints c;
+        END IF;
+    ELSEIF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing check constraints');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
@@ -658,8 +727,38 @@ BEGIN
     -- =========================================================================
     -- A column's CheckExpression becomes a deterministically named CK_<table>_<column> check.
     -- The deterministic name lets the create/modify passes key on it (INFORMATION_SCHEMA has no
-    -- column linkage for checks). Mirrors the table-level STEP 4 idiom exactly.
-    IF p_WhatIf = 1 THEN
+    -- column linkage for checks). Mirrors the table-level STEP 4 idiom exactly -- including the
+    -- SchemaSmith_SupportsCheckConstraints() degrade for MySQL below 8.0.16 (see STEP 4).
+    IF SchemaSmith_SupportsCheckConstraints() = 0 THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail'
+           AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns WHERE CheckExpression IS NOT NULL AND TRIM(CheckExpression) != '') THEN
+            -- Log the full offending list first; keep the SIGNAL message concise (128-char cap). See STEP 4.
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column CHECK constraint unsupported (requires MySQL 8.0.16): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '';
+            -- Keep < 128 chars (see STEP 4).
+            SET @ss_msg = CONCAT('CHECK constraints require MySQL 8.0.16 (detected ',
+                                 SchemaSmith_ServerVersionNum(), '); see the deploy log for the unsupported column check(s).');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            -- Surface the downgrade in the run log (see STEP 4).
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping column check constraint (requires MySQL 8.0.16 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '';
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'CHECK constraint (MySQL 8.0.16)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.CK_',
+                          SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            WHERE c.CheckExpression IS NOT NULL AND TRIM(c.CheckExpression) != '';
+        END IF;
+    ELSEIF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing column check constraints');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,

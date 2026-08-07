@@ -29,12 +29,24 @@ public abstract class DataTongsEndToEndSharedTests
     private string _testOutputDir = null!;
     private string _testDb = null!;
 
+    // These end-to-end tests build the merge script via MergeScriptHelper with the modern JSON_TABLE row source
+    // and EXECUTE it, so they need a target with native JSON_TABLE (MySQL 8.0 / MariaDB 10.6). The recursive-CTE
+    // path for MariaDB 10.2-10.5 and the below-MySQL-8.0 skip are exercised by the SchemaQuench delivery tests.
+    private int _serverVersionNum;
+    private bool TargetHasNativeJsonTable => Platform == Platform.MySQL ? _serverVersionNum >= 800 : _serverVersionNum >= 1006;
+
     [SetUp]
     public void SetUp()
     {
         _testDb = MainDb;
         _connection = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(MainConnectionString);
         _connection.Open();
+        using (var vcmd = _connection.CreateCommand())
+        {
+            vcmd.CommandText = "SELECT VERSION()";
+            var vp = (vcmd.ExecuteScalar()?.ToString() ?? "").Split('.');
+            _serverVersionNum = vp.Length >= 2 && int.TryParse(vp[0], out var mj) && int.TryParse(vp[1], out var mn) ? mj * 100 + mn : int.MaxValue;
+        }
         _dataTongs = new global::DataTongs.DataTongs(Platform);
         _testOutputDir = Path.Combine(Path.GetTempPath(), $"DataTongsE2E_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testOutputDir);
@@ -55,6 +67,8 @@ public abstract class DataTongsEndToEndSharedTests
     [Test]
     public void EndToEnd_ExtractAndReapply_DataMatches()
     {
+        if (!TargetHasNativeJsonTable)
+            Assert.Ignore("Data delivery requires native JSON_TABLE (MySQL 8.0 / MariaDB 10.6); the CTE / gated paths are covered by the SchemaQuench delivery tests.");
         using var command = _connection.CreateCommand();
         var sourceTable = $"_e2e_source_{Guid.NewGuid():N}".Substring(0, 30);
         var targetTable = $"_e2e_target_{Guid.NewGuid():N}".Substring(0, 30);
@@ -179,6 +193,8 @@ public abstract class DataTongsEndToEndSharedTests
     [Test]
     public void EndToEnd_RoundTrip_PreservesDecimalPrecision()
     {
+        if (!TargetHasNativeJsonTable)
+            Assert.Ignore("Data delivery requires native JSON_TABLE (MySQL 8.0 / MariaDB 10.6); the CTE / gated paths are covered by the SchemaQuench delivery tests.");
         using var command = _connection.CreateCommand();
         var tableName = $"_e2e_decimal_{Guid.NewGuid():N}".Substring(0, 30);
 
@@ -273,6 +289,8 @@ public abstract class DataTongsEndToEndSharedTests
     [Test]
     public void EndToEnd_RoundTrip_HandlesNullValues()
     {
+        if (!TargetHasNativeJsonTable)
+            Assert.Ignore("Data delivery requires native JSON_TABLE (MySQL 8.0 / MariaDB 10.6); the CTE / gated paths are covered by the SchemaQuench delivery tests.");
         using var command = _connection.CreateCommand();
         var tableName = $"_e2e_null_{Guid.NewGuid():N}".Substring(0, 30);
 

@@ -134,6 +134,30 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_MySqlBelowFloor_SkipsDeliveryWithClearLog()
+    {
+        // MySQL 5.7 has neither JSON_TABLE nor recursive CTEs, so automatic data delivery is unsupported.
+        // Default policy (warn) => skip all delivery with a clear message; no merge script is executed.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Config", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "data.json" } }
+            }
+        };
+        var context = MakeContext(tables);
+        context.Platform = "MySQL";
+        context.MySqlServerVersionNum = 507; // MySQL 5.7
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts, Is.Empty, "No data may be delivered below the MySQL 8.0 floor.");
+        Assert.That(_logs, Has.Some.Contains("MySQL 8.0"), "A clear skip message naming the floor must be logged.");
+    }
+
+    [Test]
     public void DeliverTables_TwoDeliveriesOneTable_DeliversBothInOrder()
     {
         // Both deliveries carry a non-blank ShouldApplyExpression, so each is gate-evaluated

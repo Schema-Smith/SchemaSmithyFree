@@ -10,17 +10,17 @@ namespace Schema.Utility
     /// database's compatibility level — before any kindling, deployment, or extraction. This is
     /// distinct from the opt-in <c>Product.MinimumVersion</c> guardrail: the floor is structural, the
     /// version below which the engine scripts do not run at all. The SQL Server server binary must be
-    /// 2017+ (<c>STRING_AGG</c>), and the target database's compatibility level must be 130+
-    /// (<c>OPENJSON</c>'s JSON-path is a parse error below compat 130). Failing here produces a clear
-    /// "unsupported version" message instead of a raw engine error mid-run.
+    /// 2008+ and the target database's compatibility level must be 100+; below compat 130 the model is
+    /// ingested and compared as XML (<c>OPENJSON</c>'s JSON-path is a parse error below compat 130).
+    /// Failing here produces a clear "unsupported version" message instead of a raw engine error mid-run.
     /// </summary>
     public static class PreFlightVersionGuard
     {
-        // OPENJSON (the JSON ingest) is compatibility-level-gated at 130, independent of the server
-        // binary — a 2017+ server hosting a database left at compat 120 fails to parse it. STRING_AGG
-        // is server-version-gated (2017), not compat-gated, so it runs at compat 130. Both verified end
-        // to end at compat 130 on a 2019 server (floor-lowering spike 2026-07-27); 120 fails on OPENJSON.
-        private const int SqlServerCompatFloor = 130;
+        // SchemaSmith supports SQL Server down to compatibility level 100 (SQL Server 2008): at or above
+        // compat 130 it ingests the model via OPENJSON; below 130 it switches to the XML ingest/compare
+        // encoding (OPENJSON's JSON-path parse-errors below compat 130). Compat 100 is the floor — below
+        // it (SQL Server 2005 / compat 90) the engine scripts do not run.
+        private const int SqlServerCompatFloor = 100;
 
         /// <summary>
         /// Throws when <paramref name="info"/> is below the engine floor, or (SQL Server) when its
@@ -38,7 +38,7 @@ namespace Schema.Utility
                 info.CompatibilityLevel is { } compat && compat < SqlServerCompatFloor)
                 throw new Exception(
                     $"{serverLabel}: database {databaseLabel} is at compatibility level {compat}; SchemaSmith requires " +
-                    $"{SqlServerCompatFloor} (SQL Server 2016) or higher. Raise it with " +
+                    $"{SqlServerCompatFloor} (SQL Server 2008) or higher. Raise it with " +
                     $"ALTER DATABASE ... SET COMPATIBILITY_LEVEL = {SqlServerCompatFloor}.");
         }
     }

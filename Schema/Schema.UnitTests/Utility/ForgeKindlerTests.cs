@@ -176,18 +176,123 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 23 = 22 prior + 1 for Kindling_ChangeAudit_Table (object-change audit, #243 E5).
-        Assert.That(sqlServer.Length, Is.EqualTo(23));
-        // PostgreSQL: 32 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
+        // SqlServer: 25 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
+        // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine)
+        // + SchemaSmith.fn_SplitList (all-versions STRING_SPLIT replacement for the compat-100 XML path).
+        Assert.That(sqlServer.Length, Is.EqualTo(25));
+        // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
-        // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read).
-        Assert.That(postgres.Length, Is.EqualTo(32));
-        // MySQL: 27 = 22 prior + five MariaDB-compat helpers (all #351): SchemaSmith_IndexIsVisible
-        // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth (integer display width),
-        // SchemaSmith_NormalizeColumnDefault (COLUMN_DEFAULT reporting: 'NULL' marker / quoting / parens),
-        // SchemaSmith_DropCheckClause (DROP CHECK vs DROP CONSTRAINT for check-constraint drops), and
-        // SchemaSmith_IndexInvisibleClause (INVISIBLE vs IGNORED for hidden-index DDL).
-        Assert.That(mysql.Length, Is.EqualTo(27));
+        // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
+        // + SchemaSmith.ColumnCompression (PG14-adaptive attcompression read) + SchemaSmith.StatisticsExpressionColumns
+        // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade.
+        Assert.That(postgres.Length, Is.EqualTo(34));
+        // MySQL: 35 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
+        // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
+        // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor
+        // helpers: SchemaSmith_JsonScalarInt + SchemaSmith_JsonScalarStr (null-safe JSON payload reads for the
+        // version-agnostic JSON_EXTRACT parse), SchemaSmith_UnsupportedFeaturePolicy (MySQL policy spine),
+        // SchemaSmith_SupportsCheckConstraints (CHECK-availability predicate, MySQL 8.0.16 / MariaDB),
+        // SchemaSmith_SupportsRenameColumn + SchemaSmith_SupportsRenameIndex (RENAME COLUMN needs MySQL 8.0 /
+        // MariaDB 10.5.2; RENAME INDEX needs MariaDB 10.5.2 — below, emit CHANGE COLUMN / drop-recreate),
+        // SchemaSmith_BuildIndexRenameClause (the version-adaptive index-rename clause builder), and
+        // SchemaSmith_SupportsDescendingIndex (DESC key parts need MySQL 8.0 / MariaDB 10.8 — below, degrade to
+        // ascending idempotently).
+        Assert.That(mysql.Length, Is.EqualTo(35));
+    }
+
+    [Test]
+    public void GetKindlingScripts_SqlServerXmlEncoding_SwapsProcsAndDropsFormatJson()
+    {
+        var json = ForgeKindler.GetKindlingScripts(Platform.SqlServer, IngestEncoding.Json)
+            .Select(s => s.FileName).ToArray();
+        var xml = ForgeKindler.GetKindlingScripts(Platform.SqlServer, IngestEncoding.Xml)
+            .Select(s => s.FileName).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            // The five OPENJSON/FOR JSON procs are swapped for their XML twins...
+            foreach (var (jsonFile, xmlFile) in new[]
+                     {
+                         ("SchemaSmith.BootstrapTableQuench.sql", "SchemaSmith.BootstrapTableXmlQuench.sql"),
+                         ("SchemaSmith.IndexOnlyQuench.sql", "SchemaSmith.IndexOnlyXmlQuench.sql"),
+                         ("SchemaSmith.IndexedViewQuench.sql", "SchemaSmith.IndexedViewXmlQuench.sql"),
+                         ("SchemaSmith.GenerateTableJson.sql", "SchemaSmith.GenerateTableXml.sql"),
+                         ("SchemaSmith.GenerateIndexedViewJson.sql", "SchemaSmith.GenerateIndexedViewXml.sql"),
+                     })
+            {
+                Assert.That(xml, Does.Contain(xmlFile).And.Not.Contain(jsonFile), $"{jsonFile} -> {xmlFile}");
+            }
+
+            // ...fn_FormatJson (JSON-only, itself OPENJSON-based) is dropped...
+            Assert.That(json, Does.Contain("SchemaSmith.fn_FormatJson.sql"));
+            Assert.That(xml, Does.Not.Contain("SchemaSmith.fn_FormatJson.sql"));
+
+            // ...so the XML list is one shorter, and every name is unique.
+            Assert.That(xml, Has.Length.EqualTo(json.Length - 1));
+            Assert.That(xml, Is.Unique);
+
+            // The two stamps differ, so switching a database's encoding always re-kindles.
+            Assert.That(ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Xml),
+                Is.Not.EqualTo(ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json)));
+        });
+    }
+
+    [Test]
+    public void ResolveKindleScript_SqlServerXml_InlinesXmlParseAndXmlTableDef()
+    {
+        // TableQuench carries {{ParseJson}}: under Xml it inlines the .nodes()-based parse (no OPENJSON), so
+        // the proc CREATEs below the compat-130 cliff.
+        var tableQuench = ForgeKindler.ResolveKindleScript("SchemaSmith.TableQuench.sql", Platform.SqlServer,
+            replaceParseJson: true, replaceTableDef: false, IngestEncoding.Xml);
+        // No executable OPENJSON(...) — the XML parse binds via .nodes()/.value(), so TableQuench CREATEs
+        // below compat 130 (prose mentions of "OPENJSON" in comments are fine — match the call form).
+        Assert.That(tableQuench, Does.Contain("Parse Tables from Xml").And.Not.Contain("OPENJSON("));
+
+        // A _Table kindling script carries {{TableDef}}: under Xml it becomes a <Table> element the XML
+        // bootstrap can shred, not raw JSON.
+        var changeAudit = ForgeKindler.ResolveKindleScript("Kindling_ChangeAudit_Table.sql", Platform.SqlServer,
+            replaceParseJson: false, replaceTableDef: true, IngestEncoding.Xml);
+        Assert.That(changeAudit, Does.Contain("<Table>").And.Not.Contain("{{TableDef}}"));
+    }
+
+    [Test]
+    public void ResolveKindleScript_SqlServerHelpers_BakeVersionAndPolicy_DroppingSessionContext()
+    {
+        // SS-2008 floor: fn_ServerMajorVersion / UnsupportedFeaturePolicy bake the C#-detected version + the
+        // resolved policy at kindle time, so they CREATE on a genuine pre-2016 binary where SESSION_CONTEXT
+        // (the former transport) does not exist.
+        var fn = ForgeKindler.ResolveKindleScript("SchemaSmith.fn_ServerMajorVersion.sql", Platform.SqlServer,
+            replaceParseJson: false, replaceTableDef: false, IngestEncoding.Json, serverMajorVersion: 15);
+        Assert.Multiple(() =>
+        {
+            Assert.That(fn, Does.Contain("NULLIF(15, 0)"), "the detected version must be baked as a literal");
+            Assert.That(fn, Does.Not.Contain("{{ServerMajorVersion}}"), "the version token must be substituted");
+            Assert.That(fn, Does.Not.Contain("SESSION_CONTEXT("), "the 2016+ transport read must be gone");
+        });
+
+        var policyFn = ForgeKindler.ResolveKindleScript("SchemaSmith.UnsupportedFeaturePolicy.sql", Platform.SqlServer,
+            replaceParseJson: false, replaceTableDef: false, IngestEncoding.Json, policy: "fail");
+        Assert.Multiple(() =>
+        {
+            Assert.That(policyFn, Does.Contain("'fail'"), "the resolved policy must be baked");
+            Assert.That(policyFn, Does.Not.Contain("{{UnsupportedPolicy}}"), "the policy token must be substituted");
+            Assert.That(policyFn, Does.Not.Contain("SESSION_CONTEXT("), "the 2016+ transport read must be gone");
+        });
+    }
+
+    [Test]
+    public void ComputeKindleStamp_SqlServer_VariesByBakedVersionAndPolicy()
+    {
+        // Baking the version + policy into the helper bodies makes the stamp server-version + policy scoped:
+        // a different detected version or policy re-kindles (correct — the resolved helper text differs).
+        var v15Warn = ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json, serverMajorVersion: 15, policy: "warn");
+        var v10Warn = ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json, serverMajorVersion: 10, policy: "warn");
+        var v15Fail = ForgeKindler.ComputeKindleStamp(Platform.SqlServer, IngestEncoding.Json, serverMajorVersion: 15, policy: "fail");
+        Assert.Multiple(() =>
+        {
+            Assert.That(v15Warn, Is.Not.EqualTo(v10Warn), "a different detected version must change the stamp");
+            Assert.That(v15Warn, Is.Not.EqualTo(v15Fail), "a different policy must change the stamp");
+        });
     }
 
     [Test]

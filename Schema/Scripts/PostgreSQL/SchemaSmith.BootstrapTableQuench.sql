@@ -69,15 +69,23 @@ BEGIN
     v_sql := 'CREATE TABLE IF NOT EXISTS "' || v_schema || '"."' || v_name || '" (' || v_column_list || v_pk_clause || ')';
     EXECUTE v_sql;
 
-    -- Step 2: ADD COLUMN IF NOT EXISTS folded into one multi-clause ALTER (PG has native
-    -- IF NOT EXISTS support for ADD COLUMN since 9.6). Declared-column order preserved.
+    -- Step 2: ADD each genuinely-missing column, folded into one multi-clause ALTER, declared order
+    -- preserved. Missing-ness is checked explicitly against information_schema rather than relying on
+    -- ADD COLUMN IF NOT EXISTS: on PostgreSQL 12, ADD COLUMN IF NOT EXISTS "<col>" ... GENERATED AS IDENTITY
+    -- leaks an orphan owned sequence even when it skips an already-present column, leaving the column
+    -- owning two sequences and failing every later INSERT with "more than one owned sequence found". Since
+    -- Step 1 already created every column inline, on a fresh table this ADD set is empty (no leak); on an
+    -- existing table it adds only the columns that are truly absent.
     SELECT string_agg(
-             'ADD COLUMN IF NOT EXISTS "' || (col->>'Name') || '" ' || (col->>'DataType') ||
+             'ADD COLUMN "' || (col->>'Name') || '" ' || (col->>'DataType') ||
              CASE WHEN COALESCE((col->>'Nullable')::boolean, false) THEN ' NULL' ELSE ' NOT NULL' END ||
              CASE WHEN COALESCE(TRIM(col->>'Default'), '') <> '' THEN ' DEFAULT ' || (col->>'Default') ELSE '' END,
              ', ' ORDER BY ord)
       INTO v_sql
-      FROM jsonb_array_elements(v_def->'Columns') WITH ORDINALITY AS t(col, ord);
+      FROM jsonb_array_elements(v_def->'Columns') WITH ORDINALITY AS t(col, ord)
+      WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns c
+                          WHERE c.table_schema = v_schema AND c.table_name = v_name
+                            AND c.column_name = (col->>'Name'));
     IF v_sql IS NOT NULL THEN
         EXECUTE 'ALTER TABLE "' || v_schema || '"."' || v_name || '" ' || v_sql;
     END IF;

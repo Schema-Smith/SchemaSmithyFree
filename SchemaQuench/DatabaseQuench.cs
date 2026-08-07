@@ -122,6 +122,15 @@ public class DatabaseQuench
     private readonly string _databaseName;
     private readonly string _schemaName;
     private readonly bool _suppressKindling;
+    // SQL Server model-ingest encoding for this database, resolved from the detected compatibility level +
+    // Target:CompatEncoding during Execute (below the OPENJSON compat cliff, or CompatEncoding=legacy -> Xml).
+    // Defaults to Json; stays Json for PostgreSQL/MySQL and when kindling is suppressed (helpers are then
+    // presumed already kindled with the JSON encoding against a compat-130+ database).
+    private IngestEncoding _ingestEncoding = IngestEncoding.Json;
+    // SQL Server: the detected server major version (10=2008 … 16=2022; 0 until detected / non-SQL-Server).
+    // Baked into SchemaSmith.fn_ServerMajorVersion at kindle time so the version-gated helpers work on a
+    // genuine pre-2016 binary where SESSION_CONTEXT (the former transport) does not exist.
+    private int _sqlServerMajorVersion;
     private readonly string _whatIfOnly;
     private readonly bool _runScriptsTwice;
     private readonly string _dropRemovedTables;
@@ -152,6 +161,8 @@ public class DatabaseQuench
         $"Template:{_template?.Name}", LogPrefix,
         FailureContext.ResolveCapacity(FactoryContainer.Resolve<IConfigurationRoot>()));
     private int _postgreSqlServerVersionNum; // 0 until detected; only meaningful when Platform == PostgreSQL
+    private int _mySqlServerVersionNum; // 0 until detected (major*100+minor); only meaningful for MySQL/MariaDb
+    private string _unsupportedFeaturePolicy; // Target:UnsupportedFeaturePolicy; governs the MySQL data-delivery gate
 
     // Per-iteration content built by PrepareIterationContent at the start of Execute(). For schema-
     // template iterations the script collections are cloned (isolating {{SchemaName}}-substituted
@@ -280,6 +291,14 @@ public class DatabaseQuench
     // once at iteration-prepare time without losing the filter on regular templates that bypass
     // PrepareIterationContent through the constructor → QuenchIndexedViews test entry points).
     internal string IterationIndexedViewSchema => _iteration.IndexedViewSchema ?? _template.IndexedViewSchema ?? "";
+
+    // XML transports for the legacy (Xml) ingest encoding: convert the iteration's JSON model array to the
+    // ingest XML the below-cliff parse/quench procs shred. An empty/absent schema maps to an empty array so
+    // ToIngestXml produces a well-formed empty root (mirrors the JSON path tolerating an empty @TableDefinitions).
+    private string IterationTableXml =>
+        ModelXmlSerializer.ToIngestXml(string.IsNullOrWhiteSpace(IterationTableSchema) ? "[]" : IterationTableSchema, "Tables", "Table");
+    private string IterationIndexedViewXml =>
+        ModelXmlSerializer.ToIngestXml(string.IsNullOrWhiteSpace(IterationIndexedViewSchema) ? "[]" : IterationIndexedViewSchema, "IndexedViews", "IndexedView");
 
     public DatabaseQuench(string server, Product product, Template template, string databaseName,
         string schemaName, bool suppressKindling, string whatIfOnly, bool runScriptsTwice, string dropRemovedTables,
@@ -456,10 +475,21 @@ public class DatabaseQuench
                     _postgreSqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, Platform.PostgreSQL).ServerComparable;
                 }
 
-                // SQL Server: STRING_AGG in the kindling scripts needs the target *database* at
-                // compatibility level 140+, which a 2017+ server can still leave lower. Detect and
-                // guard per database (logging the compat level) before kindling, so a below-compat
-                // database fails with a clear message instead of a raw STRING_AGG error at kindle.
+                // MySQL/MariaDb: detect the server version (major*100+minor) so data delivery can pick a
+                // version-adaptive JSON-array shred — JSON_TABLE on MySQL 8.0+/MariaDB 10.6+, a recursive CTE
+                // on MariaDB 10.2-10.5, and (gated) manual scripts below MySQL 8.0.
+                if (_product.Platform.GetBasePlatform() == Platform.MySQL)
+                {
+                    using var versionCmd = connection.CreateCommand();
+                    _mySqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, _product.Platform).ServerComparable;
+                    _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"];
+                }
+
+                // SQL Server: detect the target *database* compatibility level before kindling (a modern
+                // server can host a database left at compat 100) to enforce the compat-100 floor and select
+                // the model-ingest encoding — at/above compat 130 the JSON/OPENJSON path, below 130 the XML
+                // ingest/compare path. A below-floor database fails with a clear message instead of a raw
+                // engine error at kindle.
                 if (_product.Platform.GetBasePlatform() == Platform.SqlServer && !_suppressKindling)
                 {
                     using var compatCmd = connection.CreateCommand();
@@ -467,6 +497,17 @@ public class DatabaseQuench
                     SafeProgressLog($"  [{_databaseName}] detected SQL Server version {VersionHelper.DisplayVersion(info)}" +
                                     (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
                     PreFlightVersionGuard.CheckOrThrow(info, _server, _databaseName);
+
+                    // Baked into SchemaSmith.fn_ServerMajorVersion at kindle time (below), so the version-gated
+                    // helpers resolve the real target version on a genuine pre-2016 binary where SESSION_CONTEXT
+                    // (the former transport) is unavailable.
+                    _sqlServerMajorVersion = info.ServerComparable;
+
+                    // Select the model-ingest encoding: below the OPENJSON compat cliff (compat < 130 or a
+                    // pre-2016 binary), or when Target:CompatEncoding=legacy, the model is ingested/compared as
+                    // XML. Both the kindle (below) and the runtime ingest emitters read _ingestEncoding.
+                    var compatEncodingOverride = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:CompatEncoding"];
+                    _ingestEncoding = CompatEncoding.Select(compatEncodingOverride, info.CompatibilityLevel, info.ServerComparable);
                 }
 
                 // Step: Kindle the forge
@@ -480,7 +521,13 @@ public class DatabaseQuench
                 if (!_suppressKindling)
                 {
                     SafeProgressLog("  Kindling the forge");
-                    ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle);
+                    // SQL Server bakes the detected server version + resolved unsupported-feature policy into the
+                    // helper functions at kindle time (dropping the 2016+ SESSION_CONTEXT transport). Both are
+                    // no-ops for PostgreSQL/MySQL (their scripts carry neither token; PG uses a runtime GUC).
+                    var kindlePolicy = string.Equals(FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"],
+                        "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+                    ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle, _ingestEncoding,
+                        _sqlServerMajorVersion, kindlePolicy);
                 }
 
                 // Step: Validate baseline. Resolved against per-iteration tokens (BaselineValidationScript
@@ -642,6 +689,8 @@ public class DatabaseQuench
                                 ProgressLogError = SafeProgressLogError,
                                 WhatIf = IsWhatIf,
                                 PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
+                                MySqlServerVersionNum = _mySqlServerVersionNum,
+                                UnsupportedFeaturePolicy = _unsupportedFeaturePolicy,
                                 WriteResolvedSqlArtifact = (label, sql) =>
                                 {
                                     try
@@ -751,6 +800,8 @@ public class DatabaseQuench
                             DatabaseName = _databaseName,
                             SchemaName = _schemaName,
                             PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
+                            MySqlServerVersionNum = _mySqlServerVersionNum,
+                            UnsupportedFeaturePolicy = _unsupportedFeaturePolicy,
                             TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
                             ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),
                             ReadFileContent = path => ProductFileWrapper.GetFromFactory().ReadAllText(path),
@@ -1313,7 +1364,13 @@ public class DatabaseQuench
             case Platform.SqlServer:
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
-                tableCommand.CommandText = $@"
+                tableCommand.CommandText = _ingestEncoding == IngestEncoding.Xml
+                    ? $@"
+DECLARE @TableDefinitions XML = '{EscapeSqlLiteral(IterationTableXml)}',
+        @UpdateFillFactor BIT = {updateFillFactor}
+{ForgeKindler.GetParseTableXmlScript(Platform.SqlServer)}
+EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.MissingTableAndColumnQuench @WhatIf = {_whatIfOnly}"
+                    : $@"
 DECLARE @TableDefinitions VARCHAR(MAX)= '{EscapeSqlLiteral(IterationTableSchema)}',
         @UpdateFillFactor BIT = {updateFillFactor}
 {ForgeKindler.GetParseTableJsonScript(Platform.SqlServer)}
@@ -1399,8 +1456,9 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             case Platform.SqlServer:
             {
                 var updateFillFactor = _template.UpdateFillFactor ? "1" : "0";
+                var indexOnlyTableDefs = _ingestEncoding == IngestEncoding.Xml ? IterationTableXml : IterationTableSchema;
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
-                    ? $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(IterationTableSchema)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
+                    ? $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.IndexOnlyQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @TableDefinitions = '{EscapeSqlLiteral(indexOnlyTableDefs)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @UpdateFillFactor = {updateFillFactor}, @WhatIf = {_whatIfOnly}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}"
                     : $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @WhatIf = {_whatIfOnly}";
                 break;
             }
@@ -1531,7 +1589,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // server-side (mirroring PostgreSQL materialized views), so no C# pre-filtering.
         // Route through the iteration-aware schema string so {{SchemaName}} substitution
         // (schema templates) is already applied; for regular templates it's the full set verbatim.
-        var viewSchema = IterationIndexedViewSchema;
+        var viewSchema = _ingestEncoding == IngestEncoding.Xml ? IterationIndexedViewXml : IterationIndexedViewSchema;
         var updateFillFactor = _template.UpdateFillFactor.ToString().ToLower();
         // B5 fix: thread @TemplateName + @SchemaName so the existing-views lookup in the proc
         // is scoped to the iteration's schema. Regular templates pass @SchemaName = '' and the
@@ -1637,16 +1695,26 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
         connection.Open();
 
-        // Set the unsupported-feature policy on every convergence connection (built directly to the
-        // target database, so no ChangeDatabase resets the session): version-gated emit sites read it
-        // via SchemaSmith.UnsupportedFeaturePolicy() to choose degrade-with-warning (default) vs abort.
-        // PostgreSQL now; SQL Server (SESSION_CONTEXT) and MySQL/MariaDB (user var) land with their
-        // floor-lowering phases. The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
+        // PostgreSQL: set the unsupported-feature policy on every convergence connection (built directly to
+        // the target database, so no ChangeDatabase resets the session) via a GUC that works on every PG
+        // version; version-gated emit sites read it via SchemaSmith.UnsupportedFeaturePolicy() to choose
+        // degrade-with-warning (default) vs abort. SQL Server bakes the same policy into the helper function
+        // at kindle time instead (dropping the 2016+ sp_set_session_context transport, unavailable on a
+        // genuine old binary) — see the KindleTheForge call in Execute. MySQL/MariaDB use a session
+        // variable that works on every version (mirroring @schemasmith_version_override).
+        // The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
         if (_product.Platform.GetBasePlatform() == Platform.PostgreSQL)
         {
             var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
             using var policyCmd = connection.CreateCommand();
             policyCmd.CommandText = $"SET schemasmith.unsupported_policy = '{policy}'";
+            policyCmd.ExecuteNonQuery();
+        }
+        else if (_product.Platform.GetBasePlatform() == Platform.MySQL)
+        {
+            var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+            using var policyCmd = connection.CreateCommand();
+            policyCmd.CommandText = $"SET @schemasmith_unsupported_policy = '{policy}'";
             policyCmd.ExecuteNonQuery();
         }
 

@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER PROCEDURE [SchemaSmith].[PrintWithNoWait]
+IF OBJECT_ID('[SchemaSmith].[PrintWithNoWait]', 'P') IS NOT NULL DROP PROCEDURE [SchemaSmith].[PrintWithNoWait]
+GO
+CREATE PROCEDURE [SchemaSmith].[PrintWithNoWait]
   @Message NVARCHAR(MAX)
 AS
 BEGIN

@@ -1,0 +1,107 @@
+name: CI (docs-only companion)
+
+# Companion to continuous-integration.yml. That workflow's `pull_request` trigger carries a `paths-ignore`
+# for docs/demos, so a docs-only PR never starts it — and the eight required status checks it would produce
+# stay stuck on "Expected — Waiting for status to be reported", blocking the PR from merging forever. That
+# only bites contributors WITHOUT admin bypass (an external drive-by fixing a typo); maintainers never see
+# it because the Rule 6 doc/demo carve-out pushes such content straight to `main`.
+#
+# This companion fires on EXACTLY those excluded paths and reports the SAME eight check contexts as success,
+# with no build and no containers. Do NOT delete the `paths-ignore` in the CI workflow — it exists so a prose
+# fix doesn't spin the three-engine matrix; this pairs with it rather than replacing it.
+#
+# The `paths:` list below is the exact inverse of continuous-integration.yml's `pull_request` `paths-ignore`,
+# and the job `name:` values are the exact required-check contexts from the `main` branch ruleset
+# (`required_status_checks`) — keep both character-identical, or the deadlock returns (a mismatched name
+# leaves the real context unreported). On a MIXED docs+code PR both this and the real CI run for the same
+# contexts; the real jobs finish minutes later and are the most-recent run for each context, so the real
+# result governs the merge.
+
+on:
+  pull_request:
+    branches: [main, dev/v2]
+    paths:
+      - 'docs/**'
+      - '*.md'
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'Demos/**/*.ps1'
+      - 'Demos/**/*.sh'
+      - 'Demos/**/*.sql'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-unit-tests:
+    name: Build & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no build required; satisfying the required check."
+
+  integration-tests-sqlserver:
+    name: Integration Tests (SQL Server)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-postgresql-latest:
+    name: Integration Tests (PostgreSQL latest)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-postgresql-14:
+    name: Integration Tests (PostgreSQL 14)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-postgresql-13:
+    name: Integration Tests (PostgreSQL 13)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-postgresql-12:
+    name: Integration Tests (PostgreSQL 12)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-mysql-80:
+    name: Integration Tests (MySQL 8.0)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-mysql-57:
+    name: Integration Tests (MySQL 5.7)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-mariadb-114:
+    name: Integration Tests (MariaDB 11.4)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-mariadb-106:
+    name: Integration Tests (MariaDB 10.6)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  integration-tests-mariadb-102:
+    name: Integration Tests (MariaDB 10.2)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no integration run required."
+
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only change — no coverage run required."

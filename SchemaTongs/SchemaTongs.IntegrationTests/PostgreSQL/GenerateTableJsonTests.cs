@@ -113,6 +113,8 @@ CREATE TABLE public.""TestChecks"" (
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_testConnectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT current_setting('server_version_num')::int / 10000";
+        if (Convert.ToInt32(cmd.ExecuteScalar()) < 14) Assert.Ignore("Expression statistics (CREATE STATISTICS on an expression) require PostgreSQL 14+.");
         cmd.CommandText = @"
 CREATE TABLE public.""TestStatistics"" (
     ""MyInt"" INT4 NOT NULL,
@@ -384,7 +386,9 @@ CREATE DOMAIN ""Test"".""Flag"" AS BOOLEAN NOT NULL;
 
     private static void DropOneDatabase(IDbCommand cmd, string dbName)
     {
-        cmd.CommandText = @$"DROP DATABASE IF EXISTS ""{dbName}"" WITH (FORCE);";
+        cmd.CommandText = @$"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{dbName}' AND pid <> pg_backend_pid();";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = @$"DROP DATABASE IF EXISTS ""{dbName}"";";
         cmd.ExecuteNonQuery();
     }
 }

@@ -48,10 +48,10 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -154,10 +154,10 @@ jobs:
             ALTER LOGIN [sa] WITH NAME = [$TEST_USER];
           "
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -194,12 +194,13 @@ jobs:
     name: Integration Tests (PostgreSQL ${{ matrix.pg }})
     runs-on: ubuntu-latest
     needs: build-and-unit-tests
-    # latest + the supported floor (14): the floor container is the only way to exercise the version-
-    # adaptive catalog-read branches below 15 (a physical-column-existence question no override can fake).
+    # latest + the intermediate/floor versions (14, 13, 12): the real old containers are the only way to
+    # exercise the version-adaptive branches below 15 (physical-column-existence questions no override can
+    # fake) — attcompression + expression statistics (14), DROP EXPRESSION (13), getOwnedSequence (12).
     strategy:
       fail-fast: false
       matrix:
-        pg: [latest, '14']
+        pg: [latest, '14', '13', '12']
     permissions:
       contents: read
       checks: write
@@ -248,10 +249,10 @@ jobs:
           echo "PostgreSQL max_connections=$actual"
           [ "$actual" = "2000" ] || { echo "ERROR: could not raise PostgreSQL max_connections to 2000 (got '$actual')"; exit 1; }
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -285,15 +286,26 @@ jobs:
           use-actions-summary: 'true'
 
   integration-tests-mysql:
-    name: Integration Tests (MySQL)
+    name: Integration Tests (MySQL ${{ matrix.mysql }})
     runs-on: ubuntu-latest
     needs: build-and-unit-tests
+    # Current 8.0 + the supported floor (5.7). MySQL 5.7 lacks JSON_TABLE, CHECK constraints, descending indexes,
+    # and RENAME COLUMN — the version-adaptive engine takes an equivalent path or degrades via the policy.
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['8.0', '5.7']
     permissions:
       contents: read
       checks: write
+    env:
+      # MySQL 5.7's TLS handshake is incompatible with the modern MySqlConnector's negotiation on the stock
+      # image (SSL Authentication Error / "corrupted frame"); the integration suite tests schema, not transport,
+      # so disable SSL for the 5.7 leg. 8.0 keeps the client default.
+      SmithySettings_MySQL__ConnectionProperties__SslMode: ${{ matrix.mysql == '5.7' && 'None' || 'Preferred' }}
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:${{ matrix.mysql }}
         env:
           MYSQL_ROOT_PASSWORD: ${{ env.TEST_PASSWORD }}
           MYSQL_USER: ${{ env.TEST_USER }}
@@ -308,10 +320,10 @@ jobs:
           --health-retries 10
           --health-start-period 30s
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -337,7 +349,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}
         with:
-          name: mysql-test-results
+          name: mysql-test-results-${{ matrix.mysql }}
           path: TestResults
           if-no-files-found: ignore
           retention-days: 7
@@ -346,7 +358,7 @@ jobs:
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
         if: ${{ !cancelled() && hashFiles('TestResults/*.trx') != '' }}
         with:
-          name: MySQL Integration Tests
+          name: MySQL ${{ matrix.mysql }} Integration Tests
           path: TestResults/*.trx
           reporter: dotnet-trx
           only-summary: 'true'
@@ -357,14 +369,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-unit-tests
     # Current LTS (11.4, whose new utf8mb4_uca1400_ai_ci default collation exercises the data-delivery
-    # collation fix #15) + the supported floor (10.6).
+    # collation fix #15), plus 10.6 and the supported floor (10.2). MariaDB 10.2-10.5 lacks JSON_TABLE
+    # (recursive-CTE data delivery), RENAME COLUMN/INDEX, JSON_ARRAYAGG, and invisible/descending indexes.
     strategy:
       fail-fast: false
       matrix:
-        mariadb: ['11.4', '10.6']
+        mariadb: ['11.4', '10.6', '10.2']
     permissions:
       contents: read
       checks: write
+    env:
+      # MariaDB 10.2's TLS handshake is incompatible with the modern MySqlConnector's negotiation on the stock
+      # image (same SSL Authentication Error as MySQL 5.7); disable SSL for the 10.2 leg. 10.6/11.4 keep the default.
+      SmithySettings_MariaDB__ConnectionProperties__SslMode: ${{ matrix.mariadb == '10.2' && 'None' || 'Preferred' }}
     services:
       mariadb:
         # MariaDB is a MySQL variant (GetBasePlatform() routes it to the MySQL engine + Scripts/MariaDb
@@ -377,17 +394,21 @@ jobs:
           MARIADB_DATABASE: TestMain
         ports:
           - 3317:3306
+        # 10.2's bundled healthcheck.sh --innodb_initialized runs a privileged query as root with no
+        # password and gets 'Access denied' (newer images auth via unix_socket; 10.2 requires the
+        # password), so the container never turns healthy. Use the same mysqladmin ping the MySQL leg
+        # uses for 10.2; keep healthcheck.sh for 10.6/11.4 where it works.
         options: >-
-          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-cmd "${{ matrix.mariadb == '10.2' && 'mysqladmin ping -h 127.0.0.1 -u root -p''aCa2d805-41E5@40c4!98e7#92F93zzxo176''' || 'healthcheck.sh --connect --innodb_initialized' }}"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
           --health-start-period 30s
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -433,10 +454,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-unit-tests, integration-tests-sqlserver, integration-tests-postgresql, integration-tests-mysql, integration-tests-mariadb]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 

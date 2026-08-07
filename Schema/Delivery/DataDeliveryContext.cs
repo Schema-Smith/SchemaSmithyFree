@@ -42,6 +42,19 @@ public class DataDeliveryContext
     public int PostgreSqlServerVersionNum { get; set; }
 
     /// <summary>
+    /// Detected MySQL/MariaDb server version (major*100+minor; 0 = unknown/modern). Selects the
+    /// data-delivery JSON-array shred: JSON_TABLE on MySQL 8.0+/MariaDB 10.6+, a recursive CTE on
+    /// MariaDB 10.2-10.5, and (gated) below MySQL 8.0 where automatic delivery is unsupported.
+    /// </summary>
+    public int MySqlServerVersionNum { get; set; }
+
+    /// <summary>
+    /// Target:UnsupportedFeaturePolicy ('warn' default / 'fail'). Governs how an unsupported target is
+    /// handled — e.g. automatic data delivery below MySQL 8.0: 'warn' skips with a clear log, 'fail' aborts.
+    /// </summary>
+    public string UnsupportedFeaturePolicy { get; set; }
+
+    /// <summary>
     /// Optional. Invoked when a generated data-delivery script fails, with (label, resolvedSql) so the
     /// caller can persist the SQL to a re-runnable artifact and surface its path. Null = no artifact
     /// (e.g. WhatIf). Keeps artifact directory / scrub / token concerns on the caller side.

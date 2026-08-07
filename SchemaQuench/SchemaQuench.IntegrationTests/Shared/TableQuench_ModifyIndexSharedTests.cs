@@ -118,8 +118,16 @@ public abstract class TableQuench_ModifyIndexSharedTests : BaseTableQuenchTests
         conn.Open();
         using var cmd = conn.CreateCommand();
 
-        // Check the index is now descending. MySQL 8.0+ and MariaDB 10.8+ honor DESC key parts
-        // (COLLATION='D'); MariaDB < 10.8 silently stored ascending (COLLATION='A').
+        // The index must still exist — the descending change/degrade must not drop it.
+        cmd.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{TestSchema}'
+              AND TABLE_NAME = 'ModifyIndexDescending'
+              AND INDEX_NAME = 'IDX_Descending'
+              AND SEQ_IN_INDEX = 1";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1), "IDX_Descending should still exist");
+
+        // Check the descending key part. MySQL 8.0+ and MariaDB 10.8+ store DESC key parts (COLLATION='D').
         cmd.CommandText = $@"
             SELECT COLLATION FROM INFORMATION_SCHEMA.STATISTICS
             WHERE TABLE_SCHEMA = '{TestSchema}'
@@ -127,8 +135,17 @@ public abstract class TableQuench_ModifyIndexSharedTests : BaseTableQuenchTests
               AND INDEX_NAME = 'IDX_Descending'
               AND SEQ_IN_INDEX = 1";
         var collation = cmd.ExecuteScalar()?.ToString();
-        var expectedCollation = TargetSupportsDescendingIndexes(cmd) ? "D" : "A";
-        Assert.That(collation, Is.EqualTo(expectedCollation), $"Index descending key part should report COLLATION={expectedCollation} on this target");
+        if (TargetSupportsDescendingIndexes(cmd))
+        {
+            Assert.That(collation, Is.EqualTo("D"), "Descending key part should report COLLATION=D on a target that stores DESC");
+        }
+        else
+        {
+            // MySQL 5.7 / MariaDB < 10.8 silently store the key part ascending; SchemaSmith degrades the DESC to
+            // ascending idempotently (+ a 'downgraded' manifest row). INFORMATION_SCHEMA reports 'A' — or NULL for
+            // an empty-table index on MySQL 5.7 — so assert the key part is NOT descending, not strictly 'A'.
+            Assert.That(collation, Is.Not.EqualTo("D"), "Descending key part should be degraded to ascending below the floor");
+        }
 
         conn.Close();
     }

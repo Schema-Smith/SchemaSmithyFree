@@ -53,11 +53,11 @@
     <PackageVersion Include="Spectre.Console.Testing" Version="0.54.0" />
 
     <!-- Static analysis (dev-only; PrivateAssets=all in Directory.Build.props keeps it out of the packed NuGet) -->
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.29.0.143774" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.31.0.145097" />
 
     <!-- Test infrastructure -->
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="NSubstitute" Version="6.0.0" />
     <PackageVersion Include="NUnit" Version="4.6.1" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />

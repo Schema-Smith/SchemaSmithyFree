@@ -1,0 +1,234 @@
+-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+-- Licensed for use and modification with SchemaSmith products only.
+-- Redistribution outside of SchemaSmith product usage is prohibited.
+
+-- FOR XML PATH twin of SchemaSmith.GenerateTableJSON.sql for the compare/extraction side below the
+-- FOR JSON binary floor (SQL Server pre-2016, which lacks FOR JSON/JSON_QUERY entirely). Emits the SAME
+-- object shape as the JSON proc but as XML: each array container (Columns/Indexes/XmlIndexes/ForeignKeys/
+-- Statistics/CheckConstraints) is a repeated element carrying json:Array="true" so a single-element array
+-- does not collapse to an object when C# (ModelXmlSerializer.FromIngestXml -> SerializeXNode) converts it
+-- back to JSON for PlatformDeserializer.DeserializeTable. bit values are emitted as 'true'/'false' text so
+-- Newtonsoft coerces them into the typed model. No fn_FormatJson/REPLACE wrapper is needed (FOR XML PATH
+-- emits well-formed, entity-encoded XML directly).
+--
+-- Extensions bag is DROPPED on the legacy encoding (program design non-goal); the equivalence test asserts
+-- model equality minus Extensions.
+--
+-- 2016-era catalog reads are version-gated (Slice E) so this procedure CREATEs on a genuine pre-2016 binary,
+-- where a STATIC reference to any of them is an "invalid column"/"invalid object" error at CREATE time (not
+-- runtime) and reproducible only on a real old binary, never on the modern CI container. The 2016+ reads —
+-- sys.tables.temporal_type, sys.columns.generated_always_type, sys.masked_columns.masking_function, and the
+-- Always Encrypted metadata (sys.columns.encryption_type_desc/column_encryption_key_id/
+-- encryption_algorithm_name + sys.column_encryption_keys) — are staged through a fn_ServerMajorVersion()>=13
+-- guarded DYNAMIC statement (the identifiers live only in a string, never in the compiled body). The static
+-- SELECT reads @v_IsTemporal and LEFT JOINs #ColMeta, both simply empty/0 on an older binary (which has no
+-- temporal/masking/Always-Encrypted objects anyway), so the emitted model degrades cleanly there.
+IF OBJECT_ID('SchemaSmith.GenerateTableXml', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.GenerateTableXml
+GO
+CREATE PROCEDURE SchemaSmith.GenerateTableXml
+  @p_Schema SYSNAME = 'dbo',
+  @p_Table SYSNAME
+AS
+SET NOCOUNT ON
+DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
+DECLARE @v_ObjectId INT = OBJECT_ID(@p_Schema + '.' + @p_Table)
+DECLARE @v_IsTemporal BIT = 0
+
+CREATE TABLE #ColMeta
+(
+  [column_id] INT PRIMARY KEY,
+  GeneratedAlwaysType TINYINT NOT NULL DEFAULT 0,
+  MaskingFunction NVARCHAR(4000) NULL,
+  EncryptionType NVARCHAR(64) NULL,
+  EncryptionKey NVARCHAR(388) NULL,
+  EncryptionAlgorithm NVARCHAR(128) NULL
+)
+IF SchemaSmith.fn_ServerMajorVersion() >= 13
+  EXEC sp_executesql N'
+    INSERT INTO #ColMeta ([column_id], GeneratedAlwaysType, MaskingFunction, EncryptionType, EncryptionKey, EncryptionAlgorithm)
+    SELECT sc.column_id, sc.generated_always_type, mc.masking_function, sc.encryption_type_desc,
+           (SELECT ''['' + cek.[name] + '']'' FROM sys.column_encryption_keys cek WITH (NOLOCK) WHERE cek.column_encryption_key_id = sc.column_encryption_key_id),
+           sc.encryption_algorithm_name
+      FROM sys.columns sc WITH (NOLOCK)
+      LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = sc.[object_id] AND mc.column_id = sc.column_id
+      WHERE sc.[object_id] = @p_ObjId;
+    SELECT @p_Out = CASE WHEN temporal_type = 2 THEN 1 ELSE 0 END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId;',
+    N'@p_ObjId INT, @p_Out BIT OUTPUT', @p_ObjId = @v_ObjectId, @p_Out = @v_IsTemporal OUTPUT
+
+-- sys.stats.is_temporary is a 2012 column, so a STATIC reference is a CREATE-time "invalid column" error on a
+-- pre-2012 binary. Stage the temporary-stat keys via a fn_ServerMajorVersion()>=11 guarded dynamic INSERT (empty
+-- below 2012, where temporary statistics cannot exist) and exclude them from the extracted stats list below,
+-- matching the JSON twin's `is_temporary = 0` filter (temporary stats appear on Always On readable secondaries).
+CREATE TABLE #TempStats ([object_id] INT NOT NULL, stats_id INT NOT NULL)
+IF SchemaSmith.fn_ServerMajorVersion() >= 11
+  EXEC sp_executesql N'INSERT INTO #TempStats ([object_id], stats_id) SELECT [object_id], stats_id FROM sys.stats WITH (NOLOCK) WHERE is_temporary = 1 AND [object_id] = @p_ObjId',
+    N'@p_ObjId INT', @p_ObjId = @v_ObjectId
+;WITH XMLNAMESPACES ('http://james.newtonking.com/projects/json' AS json)
+SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
+       '[' + TABLE_NAME + ']' AS [Name],
+       COALESCE((SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
+                   FROM sys.partitions AS p WITH (NOLOCK)
+                   WHERE p.[object_id] = st.[object_id]
+                     AND p.index_id < 2), 'NONE') AS [CompressionType],
+       CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
+       -- System-versioning round-trip (#369): emit IsTemporal only when true. sys.tables.temporal_type is
+       -- 2016+, so it is read into @v_IsTemporal via the version-gated dynamic pre-stage above (0 below 2016).
+       CASE WHEN @v_IsTemporal = 1 THEN 'true' END AS [IsTemporal],
+       -- Sticky drop-protection marker (only when set true). Read from the PreventDrop extended property. #270
+       CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
+                    FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
+            THEN 'true' END AS [PreventDrop],
+       '' AS [OldName],
+       '' AS [ContentFile],
+       'NONE' AS [MergeType],
+       (SELECT 'true' AS [@json:Array],
+                       '[' + c.COLUMN_NAME + ']' AS [Name],
+                       UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
+                                               THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
+                                               WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
+                                               THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
+                                               WHEN USER_TYPE = 'DATETIME2'
+                                               THEN  '(' + CONVERT(NVARCHAR(20), DATETIME_PRECISION) + ')'
+                                               WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
+                                               THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
+                                               WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
+                                               THEN  ' ROWGUIDCOL'
+                                               ELSE '' END +
+                                          CASE WHEN ic.column_id IS NOT NULL
+                                               THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ic.seed_value) + ', ' + CONVERT(NVARCHAR(20), ic.increment_value) + ')' +
+                                                    CASE WHEN ic.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
+                                               ELSE '' END AS [DataType],
+                       CASE WHEN c.IS_NULLABLE = 'Yes' THEN 'true' ELSE 'false' END AS [Nullable],
+		               NULLIF(SchemaSmith.fn_StripParenWrapping(COLUMN_DEFAULT), 'NULL') AS [Default],
+                       (SELECT SchemaSmith.fn_StripParenWrapping([definition])
+                          FROM sys.check_constraints WITH (NOLOCK)
+                          WHERE parent_object_id = st.[object_id]
+                            AND parent_column_id = sc.column_id) AS [CheckExpression],
+                       SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
+                       CASE WHEN ISNULL(cc.is_persisted, 0) = 1 THEN 'true' ELSE 'false' END AS [Persisted],
+                       CASE WHEN sc.is_sparse = 1 THEN 'true' ELSE 'false' END AS [Sparse],
+                       ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
+                       ISNULL(cm.MaskingFunction, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
+                       ISNULL(cm.EncryptionType, 'NONE') COLLATE DATABASE_DEFAULT AS EncryptionType,
+                       ISNULL(cm.EncryptionKey, '') COLLATE DATABASE_DEFAULT AS EncryptionKey,
+                       ISNULL(cm.EncryptionAlgorithm, '') COLLATE DATABASE_DEFAULT AS EncryptionAlgorithm,
+                       '' AS [OldName]
+                  FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)
+                  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = st.[object_id] AND sc.[name] = c.COLUMN_NAME
+                  JOIN (SELECT CASE WHEN SCHEMA_NAME(typ.[schema_id]) IN ('sys', 'dbo')
+                                    THEN '' ELSE SCHEMA_NAME(typ.[schema_id]) + '.' END + typ.[name] AS USER_TYPE, typ.user_type_id
+                          FROM sys.types typ WITH (NOLOCK)) ut ON ut.user_type_id = sc.user_type_id
+                  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[object_id] = st.[object_id]
+                                                                 AND cc.[name] = c.COLUMN_NAME
+                  LEFT JOIN sys.identity_columns ic WITH (NOLOCK) ON ic.[object_id] = st.[object_id]
+                                                                 AND ic.[Name] = c.COLUMN_NAME
+                  LEFT JOIN #ColMeta cm ON cm.[column_id] = sc.column_id
+                  WHERE c.TABLE_SCHEMA = t.TABLE_SCHEMA
+                    AND c.TABLE_NAME = t.TABLE_NAME
+                    -- Exclude the temporal period columns (GENERATED ALWAYS AS ROW START/END); regenerated
+                    -- from IsTemporal on apply (#369). generated_always_type is 2016+ -> staged into #ColMeta
+                    -- (0 below 2016, where no period columns exist).
+                    AND ISNULL(cm.GeneratedAlwaysType, 0) = 0
+                  ORDER BY c.COLUMN_NAME
+                  FOR XML PATH('Columns'), TYPE),
+       (SELECT 'true' AS [@json:Array],
+               '[' + [Name] + ']' AS [Name],
+               (SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
+                  FROM sys.partitions AS p WITH (NOLOCK)
+                  WHERE p.[object_id] = si.[object_id]
+                    AND p.index_id = si.index_id) AS [CompressionType],
+               CASE WHEN is_primary_key = 1 THEN 'true' ELSE 'false' END AS [PrimaryKey],
+               CASE WHEN is_unique = 1 THEN 'true' ELSE 'false' END AS [Unique],
+               CASE WHEN is_unique_constraint = 1 THEN 'true' ELSE 'false' END AS [UniqueConstraint],
+               CASE WHEN [type] IN (1, 5) THEN 'true' ELSE 'false' END AS [Clustered],
+               CASE WHEN [type] IN (5, 6) THEN 'true' ELSE 'false' END AS [ColumnStore],
+               CASE WHEN fill_factor = 100 THEN 0 ELSE fill_factor END AS [FillFactor],
+               STUFF((SELECT ',' + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
+                  FROM sys.index_columns ic WITH (NOLOCK)
+                  WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0
+                  ORDER BY key_ordinal FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [IndexColumns],
+               STUFF((SELECT ',' + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']'
+                  FROM sys.index_columns ic WITH (NOLOCK)
+                  WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1
+                  ORDER BY index_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [IncludeColumns],
+			   CASE WHEN has_filter = 1 THEN SchemaSmith.fn_StripParenWrapping(filter_definition) ELSE NULL END AS [FilterExpression]
+          FROM sys.indexes si WITH (NOLOCK)
+          WHERE si.[object_id] = st.[object_id]
+            AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WITH (NOLOCK) WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
+            AND is_hypothetical = 0
+            AND is_disabled = 0
+            AND index_id > 0
+          ORDER BY [Name]
+          FOR XML PATH('Indexes'), TYPE),
+       (SELECT 'true' AS [@json:Array],
+               '[' + i.[name] COLLATE DATABASE_DEFAULT + ']' AS [Name],
+               '[' + COL_NAME(i.[Object_id], ic.column_id) + ']' AS [Column],
+               CASE WHEN i.using_xml_index_id IS NULL THEN 'true' ELSE 'false' END AS [IsPrimary],
+               (SELECT '[' + [Name] COLLATE DATABASE_DEFAULT + ']' FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id AND i.using_xml_index_id IS NOT NULL) AS [PrimaryIndex],
+               i.secondary_type_desc COLLATE DATABASE_DEFAULT AS [SecondaryIndexType]
+          FROM sys.xml_indexes i WITH (NOLOCK)
+          JOIN sys.index_columns ic WITH (NOLOCK) ON i.[object_id] = ic.[object_id] AND i.index_id = ic.index_id
+          WHERE i.[object_id] = st.[object_id]
+          ORDER BY i.[Name]
+          FOR XML PATH('XmlIndexes'), TYPE),
+	   (SELECT 'true' AS [@json:Array],
+               '[' + [Name] + ']' AS [Name],
+               STUFF((SELECT ',' + '[' + COL_NAME(fc.[parent_object_id], fc.parent_column_id) + ']'
+                            FROM sys.foreign_key_columns fc WITH (NOLOCK)
+                            WHERE fk.[object_id] = fc.[constraint_object_id]
+                            ORDER BY fc.constraint_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
+               '[' + OBJECT_SCHEMA_NAME(referenced_object_id) + ']' AS RelatedTableSchema,
+               '[' + OBJECT_NAME(referenced_object_id) + ']' AS RelatedTable,
+               STUFF((SELECT ',' + '[' + COL_NAME(fc.[referenced_object_id], fc.referenced_column_id) + ']'
+                            FROM sys.foreign_key_columns fc WITH (NOLOCK)
+                            WHERE fk.[object_id] = fc.[constraint_object_id]
+                            ORDER BY fc.constraint_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [RelatedColumns],
+               REPLACE(fk.delete_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT AS [DeleteAction],
+               REPLACE(fk.update_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT AS [UpdateAction]
+          FROM sys.foreign_keys fk WITH (NOLOCK)
+          WHERE fk.parent_object_id = st.[object_id]
+          ORDER BY [Name]
+          FOR XML PATH('ForeignKeys'), TYPE),
+       (SELECT 'true' AS [@json:Array],
+               '[' + [Name] + ']' AS [Name],
+               STUFF((SELECT ',' + '[' + COL_NAME(sc.[object_id], sc.column_id) + ']'
+                  FROM sys.stats_columns sc WITH (NOLOCK)
+                  WHERE s.[object_id] = sc.[object_id] AND s.stats_id = sc.stats_id
+                  ORDER BY sc.stats_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
+               SchemaSmith.fn_StripParenWrapping([filter_definition]) AS FilterExpression
+          FROM sys.stats s WITH (NOLOCK)
+          WHERE [object_id] = st.[object_id]
+            AND auto_created = 0
+            AND user_created = 1
+            AND NOT EXISTS (SELECT 1 FROM #TempStats ts WITH (NOLOCK) WHERE ts.[object_id] = s.[object_id] AND ts.stats_id = s.stats_id)  -- exclude 2012+ temporary stats (staged above; empty pre-2012)
+            AND [Name] NOT LIKE 'stat[_]%'
+            AND [Name] NOT LIKE 'hind[_]%'
+          ORDER BY [Name]
+          FOR XML PATH('Statistics'), TYPE),
+       (SELECT 'true' AS [@json:Array],
+               '[' + [Name] + ']' AS [Name],
+               SchemaSmith.fn_StripParenWrapping([definition]) AS [Expression]
+          FROM sys.check_constraints cc WITH (NOLOCK)
+          WHERE parent_object_id = st.[object_id]
+            AND parent_column_id = 0
+          ORDER BY [Name]
+          FOR XML PATH('CheckConstraints'), TYPE),
+       (SELECT FullTextCatalog = '[' + (SELECT c.[name] FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',
+               KeyIndex = '[' + (SELECT i.[Name] FROM sys.indexes i WITH (NOLOCK) WHERE i.[object_id] = fi.[object_id] AND i.[index_id] = fi.[unique_index_id]) + ']',
+               ChangeTracking = change_tracking_state_desc,
+               [StopList] = '[' + (SELECT fs.[name] FROM sys.fulltext_stoplists fs WITH (NOLOCK) WHERE fs.stoplist_id = fi.stoplist_id) + ']',
+               STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
+                                       CASE WHEN fc.type_column_id IS NOT NULL
+                                            THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                            ELSE '' END
+                  FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+                  WHERE fi.[object_id] = fc.[object_id]
+                  ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns]
+          FROM sys.fulltext_indexes fi WITH (NOLOCK)
+          WHERE fi.[object_id] = st.[object_id]
+          FOR XML PATH('FullTextIndex'), TYPE)
+  FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
+  JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+  WHERE TABLE_NAME = @p_Table
+    AND TABLE_SCHEMA = @p_Schema
+  FOR XML PATH('Table')

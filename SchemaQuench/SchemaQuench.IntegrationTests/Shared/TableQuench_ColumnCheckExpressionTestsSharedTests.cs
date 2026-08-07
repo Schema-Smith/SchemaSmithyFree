@@ -23,6 +23,8 @@ public abstract class TableQuench_ColumnCheckExpressionTestsSharedTests : BaseTa
     [Test]
     public void TableQuench_ColumnCheck_IsCreatedWithDeterministicName()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         var id = Guid.NewGuid().ToString("N")[..8];
         var table = $"ColChkCreate_{id}";
 
@@ -57,6 +59,8 @@ CREATE TABLE `{_mainDb}`.`{table}` (`Id` INT NOT NULL, `Quantity` INT NULL, PRIM
     [Test]
     public void TableQuench_ColumnCheck_IsEnforced()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         var id = Guid.NewGuid().ToString("N")[..8];
         var table = $"ColChkEnforce_{id}";
 
@@ -130,6 +134,8 @@ CREATE TABLE `{_mainDb}`.`{table}` (`Id` INT NOT NULL, `Quantity` INT NULL, PRIM
     [Test]
     public void TableQuench_ColumnCheck_ModifiedIsReApplied()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         var id = Guid.NewGuid().ToString("N")[..8];
         var table = $"ColChkMod_{id}";
 
@@ -172,6 +178,8 @@ CREATE TABLE `{_mainDb}`.`{table}` (`Id` INT NOT NULL, `Quantity` INT NULL, PRIM
     [Test]
     public void TableQuench_TableLevelCheck_ModifiedIsReApplied()
     {
+        if (!TargetSupportsCheckConstraints())
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; skipped below the floor.");
         var id = Guid.NewGuid().ToString("N")[..8];
         var table = $"TblChkMod_{id}";
         var ck = $"CK_{table}_Id";

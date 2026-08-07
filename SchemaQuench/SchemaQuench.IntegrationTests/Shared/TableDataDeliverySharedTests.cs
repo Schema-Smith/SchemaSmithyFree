@@ -39,6 +39,25 @@ public abstract class TableDataDeliverySharedTests
     private IDbConnection _connection = null!;
     private string _testTableName = null!;
     private string _testDb = null!;
+    // Detected target comparable (major*100+minor, e.g. 507, 800, 1002). Threaded into BuildMergeScript so the
+    // MariaDB 10.2-10.5 recursive-CTE data-delivery path is generated instead of the modern JSON_TABLE path.
+    private int _serverVersionNum;
+
+    /// <summary>Whether SchemaSmith delivers table data on this target: MySQL needs 8.0 (5.7 has neither
+    /// JSON_TABLE nor a recursive-CTE fallback); MariaDB 10.2 works via recursive CTE.</summary>
+    private bool SupportsDataDelivery => Platform != Platform.MySQL || _serverVersionNum >= 800;
+
+    /// <summary>BuildMergeScript with the detected target version baked in, and an Assert.Ignore below the
+    /// MySQL data-delivery floor. Direct-merge tests call THIS, not MergeScriptHelper.BuildMergeScript, so the
+    /// generated SQL matches the running engine (CTE on MariaDB 10.2, JSON_TABLE on 8.0+).</summary>
+    protected string BuildMergeScript(IDbCommand command, string databaseName, string tableName, string tableData,
+        string keyColumns, bool mergeUpdate, bool mergeDelete, bool disableTriggers, bool tokenizeScripts, string mergeFilter)
+    {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0 (5.7 lacks JSON_TABLE and a recursive-CTE fallback); skipped below the floor.");
+        return MergeScriptHelper.BuildMergeScript(Platform, command, databaseName, tableName, tableData, keyColumns,
+            mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, mySqlServerVersionNum: _serverVersionNum);
+    }
 
     [SetUp]
     public void SetUp()
@@ -47,6 +66,17 @@ public abstract class TableDataDeliverySharedTests
         _connection = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(MainConnectionString);
         _connection.Open();
         _testTableName = $"_test_data_{Guid.NewGuid():N}".Substring(0, 30);
+
+        // Detect the target version (major*100+minor) so BuildMergeScript picks the version-adaptive shred.
+        using (var vcmd = _connection.CreateCommand())
+        {
+            vcmd.CommandText = "SELECT VERSION()";
+            var version = vcmd.ExecuteScalar()?.ToString() ?? "";
+            var parts = version.Split('.');
+            _serverVersionNum = parts.Length >= 2 && int.TryParse(parts[0], out var major) && int.TryParse(parts[1], out var minor)
+                ? major * 100 + minor
+                : int.MaxValue;
+        }
 
         // Create test table
         using var command = _connection.CreateCommand();
@@ -84,7 +114,7 @@ public abstract class TableDataDeliverySharedTests
         var tableData = @"[{""code"":""A001"",""name"":""Item A"",""value"":10.50,""active"":1},{""code"":""B002"",""name"":""Item B"",""value"":20.00,""active"":1}]";
 
         // Insert/Update/Delete — insert fresh rows into empty target
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, _testTableName,
+        var script = BuildMergeScript(command, _testDb,_testTableName,
             tableData, "`code`", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
@@ -106,7 +136,7 @@ public abstract class TableDataDeliverySharedTests
 
         var tableData = @"[{""code"":""A001"",""name"":""Updated"",""value"":15.00,""active"":1}]";
         // Insert/Update/Delete — upsert existing rows and delete any not in source
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, _testTableName,
+        var script = BuildMergeScript(command, _testDb,_testTableName,
             tableData, "`code`", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
@@ -131,7 +161,7 @@ public abstract class TableDataDeliverySharedTests
 
         var tableData = @"[{""code"":""A001"",""name"":""Updated"",""value"":15.00,""active"":1},{""code"":""B002"",""name"":""New Item"",""value"":25.00,""active"":1}]";
         // Insert/Update maps to INSERT ON DUPLICATE KEY UPDATE in MySQL
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, _testTableName,
+        var script = BuildMergeScript(command, _testDb,_testTableName,
             tableData, "`code`", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
@@ -156,7 +186,7 @@ public abstract class TableDataDeliverySharedTests
 
         var tableData = @"[{""code"":""A001"",""name"":""ShouldNotUpdate"",""value"":99.00,""active"":1},{""code"":""B002"",""name"":""New Item"",""value"":25.00,""active"":1}]";
         // Insert only maps to INSERT IGNORE in MySQL
-        var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, _testTableName,
+        var script = BuildMergeScript(command, _testDb,_testTableName,
             tableData, "`code`", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
@@ -218,7 +248,7 @@ public abstract class TableDataDeliverySharedTests
             var mergeType = template.Tables[0].DataDelivery[0].MergeType;
             var mergeUpdate = mergeType.Contains("Update", StringComparison.OrdinalIgnoreCase);
             var mergeDelete = mergeType.Contains("Delete", StringComparison.OrdinalIgnoreCase);
-            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, _testTableName,
+            var script = BuildMergeScript(command, _testDb,_testTableName,
                 tableData, "`code`", mergeUpdate, mergeDelete, disableTriggers: false,
                 tokenizeScripts: false, mergeFilter: null);
 
@@ -305,12 +335,12 @@ public abstract class TableDataDeliverySharedTests
             var parentData = @"[{""id"":1,""name"":""Parent A""},{""id"":2,""name"":""Parent B""}]";
             var childData = @"[{""id"":10,""parent_id"":1,""value"":""Child 1""},{""id"":20,""parent_id"":2,""value"":""Child 2""}]";
 
-            var parentScript = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, parentTable,
+            var parentScript = BuildMergeScript(command, _testDb,parentTable,
                 parentData, "`id`", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
                 tokenizeScripts: false, mergeFilter: null);
             ExecuteScript(command, parentScript);
 
-            var childScript = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, childTable,
+            var childScript = BuildMergeScript(command, _testDb,childTable,
                 childData, "`id`", mergeUpdate: true, mergeDelete: true, disableTriggers: false,
                 tokenizeScripts: false, mergeFilter: null);
             ExecuteScript(command, childScript);
@@ -359,7 +389,7 @@ public abstract class TableDataDeliverySharedTests
 
             // Insert/Update (ON DUPLICATE KEY UPDATE) surfaces FK errors.
             // Insert-only would use INSERT IGNORE which swallows FK violations.
-            var childScript = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, childTable,
+            var childScript = BuildMergeScript(command, _testDb,childTable,
                 childData, "`id`", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
                 tokenizeScripts: false, mergeFilter: null);
 
@@ -377,6 +407,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_OrdersByFKDependencies()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         // End-to-end: DatabaseQuench should order tables by FK and deliver successfully
         // even when child table is listed BEFORE parent in the template.
         lock (FactoryContainer.SharedLockObject)
@@ -493,6 +525,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_HandlesErrorAndContinues()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         // A failing table shouldn't prevent other tables from being delivered.
         lock (FactoryContainer.SharedLockObject)
         {
@@ -581,6 +615,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_FailedDelivery_FailsTheQuench_MySql()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         // #334: a DataDelivery that errors at execution on MySQL must fail the quench (exit 2),
         // consistent with SQL Server / PostgreSQL — not exit 0 with the failure only logged.
         lock (FactoryContainer.SharedLockObject)
@@ -640,6 +676,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_HandlesCircularFKDependencies()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         // Simulates store<->staff circular dependency: store.manager_id->staff, staff.store_id->store.
         // Two-pass approach: required edge first, deferred nullable edge filled in pass 2.
         lock (FactoryContainer.SharedLockObject)
@@ -800,6 +838,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_FailsFastOnReplaceCascade()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         // A table using MergeType=Insert/Update/Delete that is referenced by an ON DELETE CASCADE FK
         // should fail pre-flight validation before any data is delivered.
         lock (FactoryContainer.SharedLockObject)
@@ -897,6 +937,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_GatedDelivery_AppliesWhenTrue()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         lock (FactoryContainer.SharedLockObject)
         {
             var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -954,6 +996,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_GatedDelivery_SkippedWhenFalse_LogsSkip()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         lock (FactoryContainer.SharedLockObject)
         {
             var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -1017,6 +1061,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_TwoVariants_OnlyActiveVariantApplies()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         lock (FactoryContainer.SharedLockObject)
         {
             var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -1090,6 +1136,8 @@ public abstract class TableDataDeliverySharedTests
     [Test]
     public void DeliverTableData_ViaQuench_DisjointMergeFilters_EachDeliveryDeletesOnlyOwnSlice()
     {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
         lock (FactoryContainer.SharedLockObject)
         {
             var tempDir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

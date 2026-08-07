@@ -194,6 +194,14 @@ public class DataTongs
             ? TargetVersionDetector.Detect(cmd, Platform.PostgreSQL).ServerComparable
             : 0;
 
+        // MySQL/MariaDB data delivery is version-adaptive the same way: JSON_TABLE at MySQL 8.0 / MariaDB 10.6,
+        // a recursive-CTE shred on MariaDB 10.2-10.5, and unsupported below MySQL 8.0 (5.7 has neither). Detect
+        // the source version (the proxy for the target) so the generated Populate script matches; below the MySQL
+        // floor the merge builder throws, and delivery is skipped per table with a clear warning.
+        var mySqlServerVersionNum = _platform.GetBasePlatform() == Platform.MySQL
+            ? TargetVersionDetector.Detect(cmd, _platform).ServerComparable
+            : 0;
+
         var tablesProcessed = 0;
         var errors = 0;
 
@@ -312,10 +320,18 @@ public class DataTongs
 
                 if (!outputScripts) { tablesProcessed++; continue; }
 
+                if (mySqlServerVersionNum is > 0 and < 800)
+                {
+                    _progressLog.Warn($"    Skipping data delivery script for {tableName}: automatic data delivery requires MySQL 8.0 " +
+                                      $"(detected {mySqlServerVersionNum / 100}.{mySqlServerVersionNum % 100}); use manual data scripts.");
+                    tablesProcessed++;
+                    continue;
+                }
+
                 var destSchemaOverride = schemaTemplateMode ? "{{SchemaName}}" : null;
                 var mergeSQL = MergeScriptHelper.BuildMergeScript(_platform, cmd, querySchema, tableName, tableData,
                     keyColumns, mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, table.Filter,
-                    disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum);
+                    disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum, mySqlServerVersionNum);
 
                 var scriptFilePath = Path.Combine(scriptPath, $"Populate {encodedDisplayName}.sql");
                 _progressLog.Info($"    Writing merge script to : {scriptFilePath}");
@@ -655,18 +671,50 @@ SELECT JSON_AGG(ROW_TO_JSON(tbl))
         var jsonObjectClause = string.Join(",\n            ", jsonObjectArgs);
         var whereClause = string.IsNullOrWhiteSpace(filter) ? "" : $"WHERE {filter}";
 
+        var qualifiedTable = $"`{Identifier.EscapeDelimited(databaseName, Platform.MySQL)}`.`{Identifier.EscapeDelimited(tableName, Platform.MySQL)}`";
+
+        // JSON_ARRAYAGG is MySQL 5.7.22+ / MariaDB 10.5+. On MariaDB 10.2-10.4 it does not exist, so aggregate the
+        // rows with GROUP_CONCAT(JSON_OBJECT(...)) wrapped in brackets instead (empty table -> '[]'). GROUP_CONCAT
+        // silently truncates at group_concat_max_len (which would corrupt a large table's extracted JSON), so
+        // raise it to the max_allowed_packet ceiling first — the same effective limit JSON_ARRAYAGG has.
+        if (!SupportsJsonArrayAgg(cmd))
+        {
+            cmd.CommandText = "SET SESSION group_concat_max_len = 1073741824";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = $@"
+SELECT COALESCE(CONCAT('[', GROUP_CONCAT(
+        JSON_OBJECT(
+            {jsonObjectClause}
+        ) ORDER BY {orderColumns} SEPARATOR ','), ']'), '[]') AS json_data
+FROM {qualifiedTable}
+{whereClause};";
+            return cmd.ExecuteScalar()?.ToString() ?? "[]";
+        }
+
         cmd.CommandText = $@"
 SELECT JSON_ARRAYAGG(
         JSON_OBJECT(
             {jsonObjectClause}
         )
     ) AS json_data
-FROM `{Identifier.EscapeDelimited(databaseName, Platform.MySQL)}`.`{Identifier.EscapeDelimited(tableName, Platform.MySQL)}`
+FROM {qualifiedTable}
 {whereClause}
 ORDER BY {orderColumns};";
 
         var result = cmd.ExecuteScalar();
         return result?.ToString() ?? "[]";
+    }
+
+    // JSON_ARRAYAGG is available on MySQL 5.7.22+ (our 5.7 floor is well past that in practice) and MariaDB 10.5+.
+    // MariaDB 10.2-10.4 lack it, so callers fall back to a GROUP_CONCAT-based aggregation there.
+    private static bool SupportsJsonArrayAgg(IDbCommand cmd)
+    {
+        cmd.CommandText = "SELECT VERSION()";
+        var version = cmd.ExecuteScalar()?.ToString() ?? "";
+        if (version.IndexOf("MariaDB", StringComparison.OrdinalIgnoreCase) < 0) return true;
+        var parts = version.Split('.');
+        return parts.Length >= 2 && int.TryParse(parts[0], out var major) && int.TryParse(parts[1], out var minor)
+               && (major > 10 || (major == 10 && minor >= 5));
     }
 
     internal static List<ColumnInfo> GetMySqlColumnInfo(IDbCommand cmd, string databaseName, string tableName)

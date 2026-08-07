@@ -23,6 +23,15 @@ public abstract class GenerateTableJsonSharedTests
     protected virtual string ExpectedIntegerType(string canonical) => canonical;
     protected virtual string ExpectedDefaultFkAction => "NO ACTION";
 
+    // Detected MySQL-family comparable (e.g. 507, 800, 1002) of the extraction source, for version-aware
+    // expectations: MySQL 5.7 behaves like MariaDB here (keeps integer display widths, reports FK RESTRICT,
+    // and has no CHECK constraints) where MySQL 8.0 does not.
+    protected int ServerVersionNum { get; private set; }
+
+    /// <summary>Whether the source enforces + exposes CHECK constraints: MySQL 8.0.16 (major >= 8); MariaDB
+    /// (>= 10.2 floor) always.</summary>
+    protected bool TargetSupportsCheckConstraints => Platform != Platform.MySQL || ServerVersionNum >= 800;
+
     private string _integrationDb = "";
     private string _connectionString;
     private string _testConnectionString;
@@ -38,6 +47,13 @@ public abstract class GenerateTableJsonSharedTests
         CreateTestDatabases();
 
         _testConnectionString = ConnectionString.Build(Platform, config[$"{ConfigPrefix}:Server"], _integrationDb, config[$"{ConfigPrefix}:User"], config[$"{ConfigPrefix}:Password"], config[$"{ConfigPrefix}:Port"], connProps);
+
+        using var vconn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_testConnectionString);
+        vconn.Open();
+        using var vcmd = vconn.CreateCommand();
+        vcmd.CommandText = "SELECT VERSION()";
+        var vp = (vcmd.ExecuteScalar()?.ToString() ?? "").Split('.');
+        ServerVersionNum = vp.Length >= 2 && int.TryParse(vp[0], out var mj) && int.TryParse(vp[1], out var mn) ? mj * 100 + mn : int.MaxValue;
     }
 
     [Test]
@@ -208,6 +224,8 @@ CREATE TABLE `{_integrationDb}`.`MyFKTable` (
     [Test]
     public void ShouldGenerateCorrectJsonForCheckConstraint()
     {
+        if (!TargetSupportsCheckConstraints)
+            Assert.Ignore("CHECK constraints require MySQL 8.0.16; MySQL 5.7 parses-and-ignores them, so none are extracted.");
         using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_testConnectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();

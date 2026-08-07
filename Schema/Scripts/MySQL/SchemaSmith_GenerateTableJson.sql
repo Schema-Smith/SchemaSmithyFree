@@ -166,21 +166,33 @@ BEGIN
           AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
     ) fk_subquery;
 
-    -- Get check constraints (MySQL 8.0.16+)
-    SELECT CONCAT('[', IFNULL(GROUP_CONCAT(
-        JSON_OBJECT(
-            'Name', cc.CONSTRAINT_NAME,
-            'Expression', REPLACE(REGEXP_REPLACE(cc.CHECK_CLAUSE, '_utf8mb4|_utf8|_latin1|_binary', ''), '\\''', '''')
-        )
-        SEPARATOR ','
-    ), ''), ']') INTO v_check_constraints
-    FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-      ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
-      AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-    WHERE tc.TABLE_SCHEMA = p_Schema
-      AND tc.TABLE_NAME = p_Table
-      AND tc.CONSTRAINT_TYPE = 'CHECK';
+    -- Get check constraints (MySQL 8.0.16+ / MariaDB; INFORMATION_SCHEMA.CHECK_CONSTRAINTS does not
+    -- exist on MySQL 5.7). MySQL binds INFORMATION_SCHEMA references at CREATE time, so the read must
+    -- live only inside this dynamically-built string, executed under the SupportsCheckConstraints guard.
+    IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+        SET @v_ccSchema = p_Schema;
+        SET @v_ccTable = p_Table;
+        SET @v_ccSql = 'SELECT CONCAT(''['', IFNULL(GROUP_CONCAT(
+    JSON_OBJECT(
+        ''Name'', cc.CONSTRAINT_NAME,
+        ''Expression'', REPLACE(REGEXP_REPLACE(cc.CHECK_CLAUSE, ''_utf8mb4|_utf8mb3|_utf8|_latin1|_binary'', ''''), ''\\\\'''''', '''''''')
+    )
+    SEPARATOR '',''
+), ''''), '']'') INTO @v_ccResult
+FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+  ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+  AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+WHERE tc.TABLE_SCHEMA = @v_ccSchema
+  AND tc.TABLE_NAME = @v_ccTable
+  AND tc.CONSTRAINT_TYPE = ''CHECK''';
+        PREPARE stmt FROM @v_ccSql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+        SET v_check_constraints = @v_ccResult;
+    ELSE
+        SET v_check_constraints = '[]';
+    END IF;
 
     -- Get fulltext indexes
     SELECT CONCAT('[', IFNULL(GROUP_CONCAT(ft_json SEPARATOR ','), ''), ']') INTO v_fulltext_indexes

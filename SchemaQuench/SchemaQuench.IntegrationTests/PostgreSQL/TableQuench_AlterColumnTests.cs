@@ -218,6 +218,7 @@ public class TableQuench_AlterColumnTests : BaseTableQuenchTests
     [Test]
     public void TableQuench_AlterColumnWithStatistics()
     {
+        if (PgServerMajor() < 14) Assert.Ignore("Expression statistics (CREATE STATISTICS on an expression) require PostgreSQL 14+.");
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
         conn.Open();
         conn.ChangeDatabase(_mainDb);
@@ -364,7 +365,7 @@ CREATE TABLE ""AlterColumnTests"".""AlterColumnWithDefault"" (""Column1"" INT NO
 CREATE TABLE ""AlterColumnTests"".""AlterColumnWithTableCheckConstraint"" (""Column1"" INT NOT NULL, ""Column2"" INT, CONSTRAINT ""CK_AlterColumnWithTableCheckConstraint_Dependency"" CHECK (""Column2"" < ""Column1""));
 --TableQuench_AlterColumnWithStatistics
 CREATE TABLE ""AlterColumnTests"".""AlterColumnWithStatistics"" (""Column1"" INT NOT NULL, ""Column2"" INT);
-CREATE STATISTICS ""AlterColumnTests"".""ST_Dependency"" ON (""Column2"" / 1) FROM ""AlterColumnTests"".""AlterColumnWithStatistics"";
+DO $$ BEGIN IF (current_setting('server_version_num')::int / 10000) >= 14 THEN EXECUTE 'CREATE STATISTICS ""AlterColumnTests"".""ST_Dependency"" ON (""Column2"" / 1) FROM ""AlterColumnTests"".""AlterColumnWithStatistics""'; END IF; END $$;
 --TableQuench_ShouldAlterColumnWithIndexFilterExpression
 CREATE TABLE ""AlterColumnTests"".""AlterColumnWithIndexFilter"" (""Column1"" INT NOT NULL, ""Column2"" INT);
 CREATE INDEX ""IDX_Dependency4"" ON ""AlterColumnTests"".""AlterColumnWithIndexFilter"" (""Column1"") WHERE ""Column2"" < 100;

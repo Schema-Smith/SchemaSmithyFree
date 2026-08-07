@@ -60,7 +60,9 @@ INSERT INTO public.test_source VALUES (1, 'Alice', 100.00), (2, 'Bob', 200.00);
         using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_adminConnectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $@"DROP DATABASE IF EXISTS ""{_mvTestDb}"" WITH (FORCE);";
+        cmd.CommandText = $@"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{_mvTestDb}' AND pid <> pg_backend_pid();";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $@"DROP DATABASE IF EXISTS ""{_mvTestDb}"";";
         cmd.ExecuteNonQuery();
         conn.Close();
     }

@@ -2,7 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR ALTER FUNCTION [SchemaSmith].[GenerateIndexedViewJson](@p_Schema SYSNAME, @p_ViewName SYSNAME)
+IF OBJECT_ID('[SchemaSmith].[GenerateIndexedViewJson]') IS NOT NULL DROP FUNCTION [SchemaSmith].[GenerateIndexedViewJson]
+GO
+CREATE FUNCTION [SchemaSmith].[GenerateIndexedViewJson](@p_Schema SYSNAME, @p_ViewName SYSNAME)
 RETURNS NVARCHAR(MAX)
 AS
 BEGIN
