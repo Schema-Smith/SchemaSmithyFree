@@ -2845,7 +2845,7 @@ SELECT cc.name AS [Name],
         using var reader = command.ExecuteReader();
         var xml = new StringBuilder();
         while (reader.Read())
-            xml.Append(reader[0]?.ToString());
+            xml.Append(reader[0]);
         var xmlText = xml.ToString();
         return string.IsNullOrWhiteSpace(xmlText) ? "" : ModelXmlSerializer.FromIngestXml(xmlText);
     }

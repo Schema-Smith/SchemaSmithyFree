@@ -298,6 +298,11 @@ jobs:
     permissions:
       contents: read
       checks: write
+    env:
+      # MySQL 5.7's TLS handshake is incompatible with the modern MySqlConnector's negotiation on the stock
+      # image (SSL Authentication Error / "corrupted frame"); the integration suite tests schema, not transport,
+      # so disable SSL for the 5.7 leg. 8.0 keeps the client default.
+      SmithySettings_MySQL__ConnectionProperties__SslMode: ${{ matrix.mysql == '5.7' && 'None' || 'Preferred' }}
     services:
       mysql:
         image: mysql:${{ matrix.mysql }}
@@ -373,6 +378,10 @@ jobs:
     permissions:
       contents: read
       checks: write
+    env:
+      # MariaDB 10.2's TLS handshake is incompatible with the modern MySqlConnector's negotiation on the stock
+      # image (same SSL Authentication Error as MySQL 5.7); disable SSL for the 10.2 leg. 10.6/11.4 keep the default.
+      SmithySettings_MariaDB__ConnectionProperties__SslMode: ${{ matrix.mariadb == '10.2' && 'None' || 'Preferred' }}
     services:
       mariadb:
         # MariaDB is a MySQL variant (GetBasePlatform() routes it to the MySQL engine + Scripts/MariaDb
