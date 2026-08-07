@@ -194,6 +194,14 @@ public class DataTongs
             ? TargetVersionDetector.Detect(cmd, Platform.PostgreSQL).ServerComparable
             : 0;
 
+        // MySQL/MariaDB data delivery is version-adaptive the same way: JSON_TABLE at MySQL 8.0 / MariaDB 10.6,
+        // a recursive-CTE shred on MariaDB 10.2-10.5, and unsupported below MySQL 8.0 (5.7 has neither). Detect
+        // the source version (the proxy for the target) so the generated Populate script matches; below the MySQL
+        // floor the merge builder throws, and delivery is skipped per table with a clear warning.
+        var mySqlServerVersionNum = _platform.GetBasePlatform() == Platform.MySQL
+            ? TargetVersionDetector.Detect(cmd, _platform).ServerComparable
+            : 0;
+
         var tablesProcessed = 0;
         var errors = 0;
 
@@ -312,10 +320,18 @@ public class DataTongs
 
                 if (!outputScripts) { tablesProcessed++; continue; }
 
+                if (mySqlServerVersionNum is > 0 and < 800)
+                {
+                    _progressLog.Warn($"    Skipping data delivery script for {tableName}: automatic data delivery requires MySQL 8.0 " +
+                                      $"(detected {mySqlServerVersionNum / 100}.{mySqlServerVersionNum % 100}); use manual data scripts.");
+                    tablesProcessed++;
+                    continue;
+                }
+
                 var destSchemaOverride = schemaTemplateMode ? "{{SchemaName}}" : null;
                 var mergeSQL = MergeScriptHelper.BuildMergeScript(_platform, cmd, querySchema, tableName, tableData,
                     keyColumns, mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, table.Filter,
-                    disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum);
+                    disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum, mySqlServerVersionNum);
 
                 var scriptFilePath = Path.Combine(scriptPath, $"Populate {encodedDisplayName}.sql");
                 _progressLog.Info($"    Writing merge script to : {scriptFilePath}");
