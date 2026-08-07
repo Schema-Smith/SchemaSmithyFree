@@ -10,6 +10,7 @@ CREATE FUNCTION SchemaSmith_NormalizeIndexColumns(
     p_IndexColumns TEXT
 ) RETURNS TEXT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci
 NOT DETERMINISTIC
+READS SQL DATA
 SQL SECURITY DEFINER
 BEGIN
     -- Normalizes an index column list for comparison.
