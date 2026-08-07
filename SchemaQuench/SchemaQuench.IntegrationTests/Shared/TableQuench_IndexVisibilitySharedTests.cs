@@ -23,11 +23,17 @@ public abstract class TableQuench_IndexVisibilitySharedTests : BaseTableQuenchTe
         conn.Open();
         using var cmd = conn.CreateCommand();
 
-        // Index should now be invisible. Read via the engine's SchemaSmith_IndexIsVisible helper
-        // (returns 1/0) rather than INFORMATION_SCHEMA.STATISTICS.IS_VISIBLE — MariaDB has no
-        // IS_VISIBLE column (it exposes the inverted IGNORED); the helper normalizes both engines.
+        // Read via the engine's SchemaSmith_IndexIsVisible helper (returns 1/0) rather than
+        // INFORMATION_SCHEMA.STATISTICS.IS_VISIBLE — MariaDB has no IS_VISIBLE column (it exposes the
+        // inverted IGNORED); the helper normalizes both engines.
         cmd.CommandText = $"SELECT `{_mainDb}`.SchemaSmith_IndexIsVisible('{TestSchema}', 'ModifyVisibilityIO', 'IDX_VisibilityIO')";
-        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(0), "Index should be invisible after IndexOnly quench");
+        var isVisible = Convert.ToInt32(cmd.ExecuteScalar());
+        if (TargetSupportsInvisibleIndexes())
+            Assert.That(isVisible, Is.EqualTo(0), "Index should be invisible after IndexOnly quench (at/above the floor)");
+        else
+            // Below MySQL 8.0 / MariaDB 10.6 the INVISIBLE/IGNORED keyword doesn't exist; the declared invisible
+            // index degrades to visible (the clause is suppressed and the compare ignores the visibility diff).
+            Assert.That(isVisible, Is.EqualTo(1), "Invisible index degrades to visible below the floor (MySQL 8.0 / MariaDB 10.6)");
 
         conn.Close();
     }
@@ -39,9 +45,20 @@ public abstract class TableQuench_IndexVisibilitySharedTests : BaseTableQuenchTe
         conn.Open();
         using var cmd = conn.CreateCommand();
 
-        // Index should now be invisible (engine-neutral read; see the IndexOnly test above).
+        // Engine-neutral read; see the IndexOnly test above.
         cmd.CommandText = $"SELECT `{_mainDb}`.SchemaSmith_IndexIsVisible('{TestSchema}', 'ModifyVisibilityTQ', 'IDX_VisibilityTQ')";
-        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(0), "Index should be invisible after table quench");
+        var isVisible = Convert.ToInt32(cmd.ExecuteScalar());
+        if (TargetSupportsInvisibleIndexes())
+        {
+            Assert.That(isVisible, Is.EqualTo(0), "Index should be invisible after table quench (at/above the floor)");
+        }
+        else
+        {
+            Assert.That(isVisible, Is.EqualTo(1), "Invisible index degrades to visible below the floor (MySQL 8.0 / MariaDB 10.6)");
+            // The degrade is surfaced as a 'downgraded' manifest row (MissingIndexesAndConstraintsQuench STEP 0.6).
+            cmd.CommandText = $"SELECT COUNT(*) FROM `{_mainDb}`.SchemaSmith_ChangeAudit WHERE ActionType = 'downgraded' AND ObjectName LIKE '%IDX_VisibilityTQ%'";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThanOrEqualTo(1), "A 'downgraded' manifest row should record the invisible-index degrade below the floor");
+        }
 
         conn.Close();
     }
@@ -49,11 +66,10 @@ public abstract class TableQuench_IndexVisibilitySharedTests : BaseTableQuenchTe
     [OneTimeSetUp]
     public void Setup()
     {
-        // Invisible/ignored indexes need MySQL 8.0 (IS_VISIBLE) / MariaDB 10.6 (IGNORED); below the floor
-        // the INVISIBLE syntax in this fixture's setup is a parse error, so skip the whole fixture there.
-        if (!TargetSupportsInvisibleIndexes())
-            Assert.Ignore("Invisible indexes require MySQL 8.0 / MariaDB 10.6; skipped below the floor.");
-
+        // Runs on every supported version: at/above MySQL 8.0 / MariaDB 10.6 the index becomes invisible;
+        // below the floor the quench degrades the declared invisible index to visible instead of parse-erroring
+        // on the INVISIBLE/IGNORED keyword (the tests assert the version-adaptive outcome). The raw setup below
+        // never emits INVISIBLE itself — only the quench does, and that emit is now version-gated.
         using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
