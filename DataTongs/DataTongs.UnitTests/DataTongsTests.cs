@@ -1142,6 +1142,9 @@ public class DataTongsTests
         var callCount = 0;
         command.ExecuteScalar().Returns(_ =>
         {
+            // Data delivery detects the server version (TargetVersionDetector) and probes JSON_ARRAYAGG support,
+            // both via SELECT VERSION() — return a modern MySQL version so the JSON_ARRAYAGG path is taken.
+            if (command.CommandText?.Contains("VERSION()") == true) return "8.0.36";
             callCount++;
             return callCount switch
             {
@@ -1379,6 +1382,8 @@ public class DataTongsTests
         var callCount = 0;
         command.ExecuteScalar().Returns(_ =>
         {
+            // Data delivery detects the server version and probes JSON_ARRAYAGG support, both via SELECT VERSION().
+            if (command.CommandText?.Contains("VERSION()") == true) return "8.0.36";
             callCount++;
             return callCount switch
             {
