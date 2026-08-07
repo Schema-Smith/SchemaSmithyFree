@@ -2830,10 +2830,10 @@ SELECT cc.name AS [Name],
     {
         command.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
         using var reader = command.ExecuteReader();
-        var json = "";
+        var json = new StringBuilder();
         while (reader.Read())
-            json += $"{reader[0]}\r\n";
-        return json;
+            json.Append($"{reader[0]}\r\n");
+        return json.ToString();
     }
 
     // Legacy encoding (pre-2016 binary, or Source:CompatEncoding=legacy): GenerateTableXml emits the model
@@ -2843,10 +2843,11 @@ SELECT cc.name AS [Name],
     {
         command.CommandText = $"EXEC SchemaSmith.GenerateTableXml @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
         using var reader = command.ExecuteReader();
-        var xml = "";
+        var xml = new StringBuilder();
         while (reader.Read())
-            xml += reader[0]?.ToString();
-        return string.IsNullOrWhiteSpace(xml) ? "" : ModelXmlSerializer.FromIngestXml(xml);
+            xml.Append(reader[0]?.ToString());
+        var xmlText = xml.ToString();
+        return string.IsNullOrWhiteSpace(xmlText) ? "" : ModelXmlSerializer.FromIngestXml(xmlText);
     }
 
     #endregion

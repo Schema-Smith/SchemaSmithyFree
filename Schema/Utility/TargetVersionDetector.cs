@@ -65,7 +65,8 @@ namespace Schema.Utility
             if (comparable == null) return null;
 
             // MySQL and MariaDB share the VERSION() query; a mismatch is ambiguous, not throwing here.
-            var isMariaDb = raw != null && raw.IndexOf("MariaDB", StringComparison.OrdinalIgnoreCase) >= 0;
+            // raw is non-null here — a null raw fails ParseDetectedVersion above, which returns early.
+            var isMariaDb = raw.IndexOf("MariaDB", StringComparison.OrdinalIgnoreCase) >= 0;
             if ((platform == Platform.MariaDb && !isMariaDb) || (platform == Platform.MySQL && isMariaDb))
                 return null;
 
