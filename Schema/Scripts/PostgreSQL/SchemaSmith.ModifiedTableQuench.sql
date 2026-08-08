@@ -1093,6 +1093,25 @@ BEGIN
                      AND COALESCE(c."Generated", 'NEVER') = COALESCE(ec."Generated", 'NEVER')
                      AND COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", ''));
 
+    -- Unsupported-feature policy: a table-level access method (ALTER TABLE ... SET ACCESS METHOD) requires
+    -- PostgreSQL 15. The emit above is gated off under 15 (and the fixup WHERE ignores the AccessMethod
+    -- difference there so it doesn't churn); 'fail' aborts, 'warn' (default) records a downgrade manifest per
+    -- table that declared a non-default access method. Same routing spine as per-column compression.
+    IF "SchemaSmith"."ServerVersionNum"() < 15 THEN
+      IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+         AND EXISTS (SELECT 1 FROM temp_tables WHERE COALESCE("AccessMethod", '') NOT IN ('', 'heap')) THEN
+        RAISE EXCEPTION 'Table access method (SET ACCESS METHOD) requires PostgreSQL 15 (detected major %); table(s): %',
+          "SchemaSmith"."ServerVersionNum"(),
+          (SELECT STRING_AGG("Schema" || '.' || "Name", ', ')
+             FROM temp_tables WHERE COALESCE("AccessMethod", '') NOT IN ('', 'heap'));
+      ELSE
+        INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+          SELECT pg_backend_pid(), 'table access method (PG15)',
+                 "Schema" || '.' || "Name", 'downgraded'
+            FROM temp_tables WHERE COALESCE("AccessMethod", '') NOT IN ('', 'heap');
+      END IF;
+    END IF;
+
     RAISE NOTICE 'Fixup Table Attributes';
     SELECT STRING_AGG('RAISE NOTICE ''  Fixing up attributes for ' || t."Schema" || '.' || t."Name" || ''';' || CHR(10) ||
                       'ALTER TABLE ' || '"' || t."Schema" || '"."' || t."Name" || '" ' ||
@@ -1100,7 +1119,7 @@ BEGIN
                            CASE WHEN t."PersistenceType" != '' AND LOWER(t."PersistenceType") != CASE rls.relpersistence WHEN 'p' THEN 'logged' WHEN 'u' THEN 'unlogged' END
                                 THEN 'SET ' || UPPER(t."PersistenceType") || ','
                                 ELSE '' END ||
-                           CASE WHEN t."AccessMethod" != '' AND t."AccessMethod" != am.amname
+                           CASE WHEN t."AccessMethod" != '' AND t."AccessMethod" != am.amname AND "SchemaSmith"."ServerVersionNum"() >= 15
                                 THEN ' SET ACCESS METHOD ' || t."AccessMethod" || ','
                                 ELSE '' END ||
                            CASE WHEN t."RowLevelSecurity" != rls.relrowsecurity
@@ -1119,7 +1138,7 @@ BEGIN
                        AND rls.relkind = 'r'
       JOIN pg_am am ON rls.relam = am.oid
       WHERE (t."PersistenceType" != '' AND LOWER(t."PersistenceType") != CASE rls.relpersistence WHEN 'p' THEN 'logged' WHEN 'u' THEN 'unlogged' END)
-         OR (t."AccessMethod" != '' AND t."AccessMethod" != am.amname)
+         OR (t."AccessMethod" != '' AND t."AccessMethod" != am.amname AND "SchemaSmith"."ServerVersionNum"() >= 15)
          OR t."RowLevelSecurity" != rls.relrowsecurity
          OR t."ForceRowLevelSecurity" != rls.relforcerowsecurity
          OR (t."UpdateFillFactor" AND t."FillFactor" != COALESCE((SELECT SPLIT_PART(opt, '=', 2) FROM UNNEST(rls.reloptions) AS opts(opt) WHERE opt LIKE 'fillfactor=%'), '100')::INT2);

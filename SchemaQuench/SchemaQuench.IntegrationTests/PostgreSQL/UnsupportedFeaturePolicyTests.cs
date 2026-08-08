@@ -357,6 +357,84 @@ CREATE TABLE ""{Schema}"".""{tableName}"" (""Id"" INT NOT NULL, ""Code"" INT NUL
         conn.Close();
     }
 
+    // Table-level access method (ALTER TABLE ... SET ACCESS METHOD) is a PG15 feature. Below the floor the
+    // emit is suppressed (so no hard 42601 on SET ACCESS METHOD, and the fixup pass ignores the difference so
+    // it does not churn); warn (default) records a downgrade manifest row naming the table.
+    [Test]
+    public void AccessMethod_BelowPg15_WarnPolicy_DeploysWithoutError_AndRecordsDowngrade()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"WarnAm_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = "SET schemasmith.version_override = '14';";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+[{
+    "Schema": "{{Schema}}",
+    "Name": "{{tableName}}",
+    "AccessMethod": "columnar",
+    "Columns": [
+        { "Name": "Id", "DataType": "INT", "Nullable": false }
+    ]
+}]
+""";
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, json, productName: $"AMW_{uniqueId}"),
+            "a non-default access method must degrade (emit suppressed) below PG15, not error on SET ACCESS METHOD");
+
+        cmd.CommandText = $@"SELECT COUNT(*) FROM ""SchemaSmith"".""ChangeAudit""
+                             WHERE ""ActionType"" = 'downgraded'
+                               AND ""ObjectName"" = '{Schema}.{tableName}'
+                               AND ""ObjectType"" = 'table access method (PG15)';";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1),
+            "a downgrade manifest row must record the table that lost its access method");
+
+        cmd.CommandText = $@"RESET schemasmith.version_override; DROP TABLE ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    // fail (opt-in): a below-15 target declaring a non-default access method aborts the quench with a clear
+    // "requires PostgreSQL 15" message rather than silently degrading.
+    [Test]
+    public void AccessMethod_BelowPg15_FailPolicy_AbortsWithRequiresPg15()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"FailAm_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = "SET schemasmith.version_override = '14'; SET schemasmith.unsupported_policy = 'fail';";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+[{
+    "Schema": "{{Schema}}",
+    "Name": "{{tableName}}",
+    "AccessMethod": "columnar",
+    "Columns": [
+        { "Name": "Id", "DataType": "INT", "Nullable": false }
+    ]
+}]
+""";
+        var ex = Assert.Catch(() => RunTableQuenchProc(cmd, json, productName: $"AMF_{uniqueId}"));
+        Assert.That(ex!.Message, Does.Contain("requires PostgreSQL 15"),
+            "the fail policy must abort naming the required version");
+
+        cmd.CommandText = $@"RESET schemasmith.version_override; RESET schemasmith.unsupported_policy;
+                             DROP TABLE IF EXISTS ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
     private void IndexOnlyQuenchNnd(IDbCommand cmd, string tableName, string indexName, string productName)
     {
         var json = $$"""
