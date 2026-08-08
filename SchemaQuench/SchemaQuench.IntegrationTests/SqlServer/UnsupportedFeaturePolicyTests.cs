@@ -135,5 +135,78 @@ namespace SchemaQuench.IntegrationTests.SqlServer
             Assert.That(ex!.Message, Does.Contain("requires SQL Server 2016"),
                 "the fail policy must abort naming the required version");
         }
+
+        // ---------------------------------------------------------------------------------------------------
+        // Dynamic data masking (MASKED WITH) — SQL Server 2016 (major 13). Below the floor the column emit
+        // (CREATE + ALTER paths) is suppressed and the modified-column detection ignores the mask diff, so a
+        // masked column deploys unmasked (warn) or the quench aborts (fail) instead of hard-failing on the
+        // 2016-only clause.
+        // ---------------------------------------------------------------------------------------------------
+
+        private const string DataMaskingObjectType = "data masking (SQL Server 2016)";
+
+        private static string MaskedTableJson(string tableName) => $$"""
+{
+    "Schema": "[dbo]",
+    "Name": "[{{tableName}}]",
+    "Columns": [
+        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+        {"Name": "[Email]", "DataType": "NVARCHAR(200)", "Nullable": false, "DataMaskFunction": "email()"}
+    ]
+}
+""";
+
+        private static int MaskedColumnCount(IDbCommand cmd, string tableName)
+        {
+            cmd.CommandText = $"SELECT COUNT(*) FROM sys.masked_columns WHERE [object_id] = OBJECT_ID('dbo.{tableName}')";
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+
+        // warn (default): a masked column on a < 2016 target is created unmasked, the MASKED WITH emit
+        // suppressed, and a downgrade manifest row names the column.
+        [Test]
+        public void DataMasking_BelowSql2016_WarnPolicy_DeploysUnmasked_AndRecordsDowngrade()
+        {
+            var tableName = $"WarnMask_{Guid.NewGuid().ToString("N")[..8]}";
+            using var conn = KindleScratchDatabase("MaskWarnBake", serverMajorVersion: 10, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, MaskedTableJson(tableName), productName: tableName),
+                "a masked column must degrade (emit suppressed) below SQL Server 2016, not hard-fail on MASKED WITH");
+
+            cmd.CommandText = $"SELECT OBJECT_ID('dbo.{tableName}')";
+            Assert.That(cmd.ExecuteScalar(), Is.Not.EqualTo(DBNull.Value), "the table must still be created");
+            Assert.That(MaskedColumnCount(cmd, tableName), Is.EqualTo(0), "no column may be masked below 2016");
+            Assert.That(DowngradeRowCount(cmd, DataMaskingObjectType, $"[dbo].[{tableName}].[Email]"), Is.EqualTo(1),
+                "a downgrade manifest row must name the column that lost masking");
+        }
+
+        // No phantom churn: a second quench of the same masked-declared column on a < 2016 target must not
+        // error and must leave the column unmasked (the mask diff is ignored in modified-column detection).
+        [Test]
+        public void DataMasking_BelowSql2016_WarnPolicy_SecondQuench_StaysUnmasked()
+        {
+            var tableName = $"NoChurnMask_{Guid.NewGuid().ToString("N")[..8]}";
+            using var conn = KindleScratchDatabase("MaskChurnBake", serverMajorVersion: 10, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            RunTableQuenchProc(cmd, MaskedTableJson(tableName), productName: tableName);
+            Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, MaskedTableJson(tableName), productName: tableName),
+                "a repeat quench below 2016 must stay idempotent");
+            Assert.That(MaskedColumnCount(cmd, tableName), Is.EqualTo(0), "the column must remain unmasked after a second quench");
+        }
+
+        // fail (opt-in): a < 2016 target with a declared masked column aborts with "requires SQL Server 2016".
+        [Test]
+        public void DataMasking_BelowSql2016_FailPolicy_AbortsWithRequiresSql2016()
+        {
+            var tableName = $"FailMask_{Guid.NewGuid().ToString("N")[..8]}";
+            using var conn = KindleScratchDatabase("MaskFailBake", serverMajorVersion: 10, policy: "fail");
+            using var cmd = conn.CreateCommand();
+
+            var ex = Assert.Catch(() => RunTableQuenchProc(cmd, MaskedTableJson(tableName), productName: tableName));
+            Assert.That(ex!.Message, Does.Contain("requires SQL Server 2016"),
+                "the fail policy must abort naming the required version");
+        }
     }
 }
