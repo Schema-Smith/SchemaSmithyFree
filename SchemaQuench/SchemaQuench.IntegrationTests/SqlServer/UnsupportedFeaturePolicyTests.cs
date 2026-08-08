@@ -208,5 +208,80 @@ namespace SchemaQuench.IntegrationTests.SqlServer
             Assert.That(ex!.Message, Does.Contain("requires SQL Server 2016"),
                 "the fail policy must abort naming the required version");
         }
+
+        // ---------------------------------------------------------------------------------------------------
+        // Always Encrypted (ENCRYPTED WITH) — SQL Server 2016 (major 13). Below the floor the column emit is
+        // suppressed and the encryption diff is ignored in modified-column detection (so no swap-guard trip),
+        // so an encrypted column deploys plaintext (warn) or the quench aborts (fail). The below-13 case never
+        // references the CEK, so the throwaway kindle DB needs no Always Encrypted key infrastructure.
+        // ---------------------------------------------------------------------------------------------------
+
+        private const string AlwaysEncryptedObjectType = "Always Encrypted (SQL Server 2016)";
+
+        private static string EncryptedTableJson(string tableName) => $$"""
+{
+    "Schema": "[dbo]",
+    "Name": "[{{tableName}}]",
+    "Columns": [
+        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+        {"Name": "[SSN]", "DataType": "NVARCHAR(11)", "Nullable": false,
+         "EncryptionType": "DETERMINISTIC", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "AEAD_AES_256_CBC_HMAC_SHA_256"}
+    ]
+}
+""";
+
+        private static int EncryptedColumnCount(IDbCommand cmd, string tableName)
+        {
+            cmd.CommandText = $"SELECT COUNT(*) FROM sys.columns WHERE [object_id] = OBJECT_ID('dbo.{tableName}') AND encryption_type IS NOT NULL";
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+
+        // warn (default): an encrypted column on a < 2016 target is created plaintext, the ENCRYPTED WITH emit
+        // suppressed (the CEK is never referenced), and a downgrade manifest row names the column.
+        [Test]
+        public void AlwaysEncrypted_BelowSql2016_WarnPolicy_DeploysPlaintext_AndRecordsDowngrade()
+        {
+            var tableName = $"WarnEnc_{Guid.NewGuid().ToString("N")[..8]}";
+            using var conn = KindleScratchDatabase("EncWarnBake", serverMajorVersion: 10, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, EncryptedTableJson(tableName), productName: tableName),
+                "an encrypted column must degrade (emit suppressed) below SQL Server 2016, not hard-fail on ENCRYPTED WITH");
+
+            cmd.CommandText = $"SELECT OBJECT_ID('dbo.{tableName}')";
+            Assert.That(cmd.ExecuteScalar(), Is.Not.EqualTo(DBNull.Value), "the table must still be created");
+            Assert.That(EncryptedColumnCount(cmd, tableName), Is.EqualTo(0), "no column may be encrypted below 2016");
+            Assert.That(DowngradeRowCount(cmd, AlwaysEncryptedObjectType, $"[dbo].[{tableName}].[SSN]"), Is.EqualTo(1),
+                "a downgrade manifest row must name the column that lost encryption");
+        }
+
+        // No phantom churn / no swap-guard trip: a second quench of the same encrypted-declared column on a
+        // < 2016 target must not error and must leave the column plaintext (the encryption diff is ignored in
+        // modified-column detection, so MustSwapColumn is never set and the AE fail-closed guard is not reached).
+        [Test]
+        public void AlwaysEncrypted_BelowSql2016_WarnPolicy_SecondQuench_StaysPlaintext()
+        {
+            var tableName = $"NoChurnEnc_{Guid.NewGuid().ToString("N")[..8]}";
+            using var conn = KindleScratchDatabase("EncChurnBake", serverMajorVersion: 10, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            RunTableQuenchProc(cmd, EncryptedTableJson(tableName), productName: tableName);
+            Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, EncryptedTableJson(tableName), productName: tableName),
+                "a repeat quench below 2016 must stay idempotent (no swap-guard trip)");
+            Assert.That(EncryptedColumnCount(cmd, tableName), Is.EqualTo(0), "the column must remain plaintext after a second quench");
+        }
+
+        // fail (opt-in): a < 2016 target with a declared encrypted column aborts with "requires SQL Server 2016".
+        [Test]
+        public void AlwaysEncrypted_BelowSql2016_FailPolicy_AbortsWithRequiresSql2016()
+        {
+            var tableName = $"FailEnc_{Guid.NewGuid().ToString("N")[..8]}";
+            using var conn = KindleScratchDatabase("EncFailBake", serverMajorVersion: 10, policy: "fail");
+            using var cmd = conn.CreateCommand();
+
+            var ex = Assert.Catch(() => RunTableQuenchProc(cmd, EncryptedTableJson(tableName), productName: tableName));
+            Assert.That(ex!.Message, Does.Contain("requires SQL Server 2016"),
+                "the fail policy must abort naming the required version");
+        }
     }
 }
