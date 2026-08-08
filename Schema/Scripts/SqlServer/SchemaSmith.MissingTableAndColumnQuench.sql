@@ -102,6 +102,12 @@ BEGIN TRY
     END
   END
 
+  -- Unsupported-feature policy: drop below-2012/2014 columnstore indexes from the working set before the
+  -- modify/missing-index passes run (both consume #Indexes) so they never try to emit COLUMNSTORE on an older
+  -- target. Runs here (the first quench proc) because #Indexes is already populated and this precedes
+  -- ModifiedTableQuench + MissingIndexesAndConstraintsQuench. See SchemaSmith.DegradeUnsupportedColumnStore.
+  EXEC SchemaSmith.DegradeUnsupportedColumnStore
+
   RAISERROR('Add New Tables', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] +
                                   CASE WHEN RTRIM(ISNULL(T.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(T.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +

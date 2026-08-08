@@ -100,6 +100,10 @@ BEGIN TRY
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   EXEC(@v_SQL)
 
+  -- Unsupported-feature policy: drop below-2012/2014 columnstore indexes from #Indexes so the --IndexOnly
+  -- create/modify passes never emit COLUMNSTORE on an older target. See SchemaSmith.DegradeUnsupportedColumnStore.
+  EXEC SchemaSmith.DegradeUnsupportedColumnStore
+
   RAISERROR('Parse XML Indexes from Json', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#XmlIndexes') IS NOT NULL DROP TABLE #XmlIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),

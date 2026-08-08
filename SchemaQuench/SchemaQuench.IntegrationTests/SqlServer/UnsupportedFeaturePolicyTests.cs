@@ -283,5 +283,135 @@ namespace SchemaQuench.IntegrationTests.SqlServer
             Assert.That(ex!.Message, Does.Contain("requires SQL Server 2016"),
                 "the fail policy must abort naming the required version");
         }
+
+        // ---------------------------------------------------------------------------------------------------
+        // Columnstore indexes — NONCLUSTERED requires SQL Server 2012 (major 11), CLUSTERED requires 2014
+        // (major 12). Below its intro version a columnstore index cannot exist, so it is dropped from the
+        // working set entirely (not just clause-suppressed): the table deploys without the index (warn) or the
+        // quench aborts (fail). Baking major 11 proves the nonclustered/clustered split -- an NCCI is created
+        // while a CCI still degrades.
+        // ---------------------------------------------------------------------------------------------------
+
+        private const string ColumnStoreObjectType = "columnstore index (SQL Server 2012/2014)";
+
+        private static string ClusteredColumnStoreJson(string tableName, string indexName) => $$"""
+{
+    "Schema": "[dbo]",
+    "Name": "[{{tableName}}]",
+    "Columns": [
+        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+        {"Name": "[Val]", "DataType": "NVARCHAR(100)", "Nullable": false}
+    ],
+    "Indexes": [
+        {"Name": "[{{indexName}}]", "Clustered": true, "ColumnStore": true, "PrimaryKey": false, "Unique": false}
+    ]
+}
+""";
+
+        private static string NonclusteredColumnStoreJson(string tableName, string indexName) => $$"""
+{
+    "Schema": "[dbo]",
+    "Name": "[{{tableName}}]",
+    "Columns": [
+        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+        {"Name": "[Val]", "DataType": "NVARCHAR(100)", "Nullable": false}
+    ],
+    "Indexes": [
+        {"Name": "[{{indexName}}]", "Clustered": false, "ColumnStore": true, "PrimaryKey": false, "Unique": false, "IncludeColumns": "[Val]"}
+    ]
+}
+""";
+
+        // sys.indexes.type: 5 = clustered columnstore, 6 = nonclustered columnstore.
+        private static int ColumnStoreIndexCount(IDbCommand cmd, string tableName)
+        {
+            cmd.CommandText = $"SELECT COUNT(*) FROM sys.indexes WHERE [object_id] = OBJECT_ID('dbo.{tableName}') AND [type] IN (5, 6)";
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+
+        // warn (default): a clustered columnstore index on a < 2014 target is skipped (the table deploys as a
+        // rowstore heap) and a downgrade manifest row names the index.
+        [Test]
+        public void ColumnStore_BelowSql2014_WarnPolicy_SkipsIndex_AndRecordsDowngrade()
+        {
+            var tableName = $"WarnCci_{Guid.NewGuid().ToString("N")[..8]}";
+            var indexName = $"cci_{tableName}";
+            using var conn = KindleScratchDatabase("CciWarnBake", serverMajorVersion: 10, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, ClusteredColumnStoreJson(tableName, indexName), productName: tableName),
+                "a columnstore index must degrade (skipped) below its intro version, not hard-fail on COLUMNSTORE");
+
+            cmd.CommandText = $"SELECT OBJECT_ID('dbo.{tableName}')";
+            Assert.That(cmd.ExecuteScalar(), Is.Not.EqualTo(DBNull.Value), "the table must still be created");
+            Assert.That(ColumnStoreIndexCount(cmd, tableName), Is.EqualTo(0), "no columnstore index may exist below the floor");
+            Assert.That(DowngradeRowCount(cmd, ColumnStoreObjectType, $"[dbo].[{tableName}].[{indexName}]"), Is.EqualTo(1),
+                "a downgrade manifest row must name the skipped columnstore index");
+        }
+
+        // No phantom churn: a second quench of the same columnstore-declared table on a below-floor target must
+        // not error and must still have no columnstore index (it was dropped from the working set, not left
+        // "missing" every run).
+        [Test]
+        public void ColumnStore_BelowSql2014_WarnPolicy_SecondQuench_StaysSkipped()
+        {
+            var tableName = $"NoChurnCci_{Guid.NewGuid().ToString("N")[..8]}";
+            var indexName = $"cci_{tableName}";
+            using var conn = KindleScratchDatabase("CciChurnBake", serverMajorVersion: 10, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            RunTableQuenchProc(cmd, ClusteredColumnStoreJson(tableName, indexName), productName: tableName);
+            Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, ClusteredColumnStoreJson(tableName, indexName), productName: tableName),
+                "a repeat quench below the floor must stay idempotent");
+            Assert.That(ColumnStoreIndexCount(cmd, tableName), Is.EqualTo(0), "the table must remain columnstore-free after a second quench");
+        }
+
+        // fail (opt-in): a below-floor target with a declared columnstore index aborts naming the required version.
+        [Test]
+        public void ColumnStore_BelowSql2014_FailPolicy_Aborts()
+        {
+            var tableName = $"FailCci_{Guid.NewGuid().ToString("N")[..8]}";
+            var indexName = $"cci_{tableName}";
+            using var conn = KindleScratchDatabase("CciFailBake", serverMajorVersion: 10, policy: "fail");
+            using var cmd = conn.CreateCommand();
+
+            var ex = Assert.Catch(() => RunTableQuenchProc(cmd, ClusteredColumnStoreJson(tableName, indexName), productName: tableName));
+            Assert.That(ex!.Message, Does.Contain("Columnstore indexes require SQL Server 2012"),
+                "the fail policy must abort naming the required version");
+        }
+
+        // Granularity: a NONCLUSTERED columnstore is supported at major 11 (2012), so baking 11 must CREATE it
+        // (no downgrade) -- proving the emit-guard is not over-degrading NCCIs at the 2012 floor.
+        [Test]
+        public void ColumnStore_Nonclustered_AtSql2012_IsCreated()
+        {
+            var tableName = $"Ncci11_{Guid.NewGuid().ToString("N")[..8]}";
+            var indexName = $"ncci_{tableName}";
+            using var conn = KindleScratchDatabase("NcciBake11", serverMajorVersion: 11, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            RunTableQuenchProc(cmd, NonclusteredColumnStoreJson(tableName, indexName), productName: tableName);
+
+            Assert.That(ColumnStoreIndexCount(cmd, tableName), Is.EqualTo(1), "a nonclustered columnstore index must be created at major 11");
+            Assert.That(DowngradeRowCount(cmd, ColumnStoreObjectType, $"[dbo].[{tableName}].[{indexName}]"), Is.EqualTo(0),
+                "no downgrade may be recorded for a supported nonclustered columnstore at major 11");
+        }
+
+        // The clustered/nonclustered split: a CLUSTERED columnstore needs major 12 (2014), so baking 11 must
+        // still degrade it even though a nonclustered one would be created at the same version.
+        [Test]
+        public void ColumnStore_Clustered_AtSql2012_StillDegrades()
+        {
+            var tableName = $"Cci11_{Guid.NewGuid().ToString("N")[..8]}";
+            var indexName = $"cci_{tableName}";
+            using var conn = KindleScratchDatabase("CciBake11", serverMajorVersion: 11, policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            RunTableQuenchProc(cmd, ClusteredColumnStoreJson(tableName, indexName), productName: tableName);
+
+            Assert.That(ColumnStoreIndexCount(cmd, tableName), Is.EqualTo(0), "a clustered columnstore must not be created below major 12");
+            Assert.That(DowngradeRowCount(cmd, ColumnStoreObjectType, $"[dbo].[{tableName}].[{indexName}]"), Is.EqualTo(1),
+                "a clustered columnstore must degrade at major 11 (needs 12)");
+        }
     }
 }
