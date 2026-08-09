@@ -93,6 +93,52 @@ public class VersionCompatTokenIntegrationTests
         }
     }
 
+    [Test]
+    public void TableXmlTwin_ShredsOnCompat100_WhereJsonOpenJsonParseErrors()
+    {
+        // A2 end-to-end: the XML twin is shreddable with XQuery on a compat-100 database, where the JSON
+        // sibling's OPENJSON path parse-errors — the exact gap the twins close for legacy-tier authors.
+        var compat100Db = "vctxml_c100_" + Guid.NewGuid().ToString("N")[..8];
+        DropTransientDb(compat100Db);
+        CreateDatabaseAtCompatLevel(compat100Db, 100);
+
+        try
+        {
+            var template = new Template { TableSchema = "[{\"Name\":\"[Orders]\"}]" };
+
+            using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+            conn.Open();
+            conn.ChangeDatabase(compat100Db); // OPENJSON's parse depends on THIS database's compatibility level
+
+            using (var xmlCmd = conn.CreateCommand())
+            {
+                xmlCmd.CommandText =
+                    "SELECT q.x.value('(/Tables/Table/Name)[1]','nvarchar(200)') FROM (SELECT CAST(@x AS xml) AS x) q";
+                var p = xmlCmd.CreateParameter();
+                p.ParameterName = "@x";
+                p.Value = template.TableXml;
+                xmlCmd.Parameters.Add(p);
+                Assert.That(xmlCmd.ExecuteScalar()?.ToString(), Is.EqualTo("[Orders]"),
+                    "The {{TableXml}} twin must shred with .value()/.nodes() at compatibility level 100.");
+            }
+
+            using (var jsonCmd = conn.CreateCommand())
+            {
+                jsonCmd.CommandText = "SELECT [value] FROM OPENJSON(@j)";
+                var p = jsonCmd.CreateParameter();
+                p.ParameterName = "@j";
+                p.Value = template.TableSchema;
+                jsonCmd.Parameters.Add(p);
+                Assert.Catch(() => jsonCmd.ExecuteScalar(),
+                    "OPENJSON must parse-error at compatibility level 100 — the reason the XML twin exists.");
+            }
+        }
+        finally
+        {
+            DropTransientDb(compat100Db);
+        }
+    }
+
     private void CreateDatabaseAtCompatLevel(string databaseName, int compatLevel)
     {
         using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);

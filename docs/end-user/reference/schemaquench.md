@@ -719,6 +719,8 @@ The same pattern works for views. Define the token, then pass it to the procedur
 
 You can also pass the full schema tokens (`{{TableSchema}}`, `{{IndexedViewSchema}}`, `{{MaterializedViewSchema}}`) to quench all objects of that type, but the specific-object pattern is more common in migration scripts where you need one table or view to exist before proceeding.
 
+> **Legacy SQL Server tier:** these tokens hand your script JSON, which the built-in quench procs shred with `OPENJSON` (compatibility level 130+). If you shred a model-payload token in *your own* SQL on a below-130 database, `OPENJSON` parse-errors — use the [XML twin](script-tokens.md#model-payload-xml-twins) (`{{AuditLogTableXml}}`-style per-object tags, or `{{TableXml}}`) and XQuery `.nodes()`/`.value()` instead, gated behind `{{CompatibilityLevel}}`. The XML shape shreds at every compatibility level.
+
 **Parameter reference:**
 
 | Parameter | TableQuench | IndexedViewQuench | MaterializedViewQuench |
