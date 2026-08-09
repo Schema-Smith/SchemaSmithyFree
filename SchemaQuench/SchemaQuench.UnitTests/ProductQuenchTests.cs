@@ -85,7 +85,11 @@ public class ProductQuenchTests
     public void SpecialTokenTags_ContainsAllExpectedTags()
     {
         Assert.That(ProductQuench.SpecialTokenTags, Is.EquivalentTo(
-            new[] { "TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_" }));
+            new[]
+            {
+                "TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_",
+                "TableXml_", "MaterializedViewXml_", "IndexedViewXml_"
+            }));
     }
 
     [Test]
@@ -275,7 +279,7 @@ public class ProductQuenchTests
     }
 
     [Test]
-    public void BuildSpecialTokens_IncludesAllFiveTokenTypes()
+    public void BuildSpecialTokens_IncludesAllTokenTypes()
     {
         var template = new Template { Name = "MyTemplate" };
 
@@ -286,7 +290,37 @@ public class ProductQuenchTests
         Assert.That(tokens.Keys, Does.Contain("QueryTokens_MyTemplate"));
         Assert.That(tokens.Keys, Does.Contain("MaterializedViewSchema_MyTemplate"));
         Assert.That(tokens.Keys, Does.Contain("IndexedViewSchema_MyTemplate"));
-        Assert.That(tokens, Has.Count.EqualTo(5));
+        // A2 cross-template XML twins
+        Assert.That(tokens.Keys, Does.Contain("TableXml_MyTemplate"));
+        Assert.That(tokens.Keys, Does.Contain("MaterializedViewXml_MyTemplate"));
+        Assert.That(tokens.Keys, Does.Contain("IndexedViewXml_MyTemplate"));
+        Assert.That(tokens, Has.Count.EqualTo(8));
+    }
+
+    [Test]
+    public void BuildSpecialTokens_XmlTwins_AreWellFormedAndRawNotEscaped()
+    {
+        var template = new Template
+        {
+            Name = "App",
+            TableSchema = "[{\"Name\":\"[Orders]\",\"Note\":\"a'b\"}]"
+        };
+
+        var tokens = ProductQuench.BuildSpecialTokens(template);
+
+        var xml = tokens["TableXml_App"];
+        Assert.Multiple(() =>
+        {
+            Assert.DoesNotThrow(() => System.Xml.Linq.XElement.Parse(xml));
+            Assert.That(xml, Does.StartWith("<Tables"));
+            Assert.That(xml, Does.Contain("[Orders]"));
+            // Stored RAW like the JSON siblings — TokenReplace escapes context-aware (#301 guard).
+            Assert.That(xml, Does.Contain("a'b"));
+            Assert.That(xml, Does.Not.Contain("a''b"));
+            // Empty view sets still produce well-formed roots.
+            Assert.That(tokens["MaterializedViewXml_App"], Does.StartWith("<MaterializedViews"));
+            Assert.That(tokens["IndexedViewXml_App"], Does.StartWith("<IndexedViews"));
+        });
     }
 
     [Test]

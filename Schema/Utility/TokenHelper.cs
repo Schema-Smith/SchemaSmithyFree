@@ -23,6 +23,11 @@ public static class TokenHelper
     public const string SpecificTableTag = "<*SpecificTable*>";
     public const string SpecificMaterializedViewTag = "<*SpecificMaterializedView*>";
     public const string SpecificIndexedViewTag = "<*SpecificIndexedView*>";
+    // A2: XML twins of the per-object tags — resolve to the object's ingest XML (ToIngestXmlObject)
+    // instead of its JSON, so a below-cliff SQL Server can shred a single object with XQuery.
+    public const string SpecificTableXmlTag = "<*SpecificTableXml*>";
+    public const string SpecificMaterializedViewXmlTag = "<*SpecificMaterializedViewXml*>";
+    public const string SpecificIndexedViewXmlTag = "<*SpecificIndexedViewXml*>";
 
     public static void ResolveFileTokens(Dictionary<string, string> tokens, string basePath, Platform platform)
     {
@@ -45,9 +50,12 @@ public static class TokenHelper
     public static void ResolveSpecificTableTokens(Dictionary<string, string> tokens, IList<Table> tables, Platform platform)
     {
         var tokenErrors = new List<string>();
-        foreach (var token in tokens.Where(t => t.Value.StartsWithIgnoringCase(SpecificTableTag)).ToList())
+        foreach (var token in tokens.Where(t =>
+                     t.Value.StartsWithIgnoringCase(SpecificTableTag) || t.Value.StartsWithIgnoringCase(SpecificTableXmlTag)).ToList())
         {
-            var table = token.Value.Substring(SpecificTableTag.Length).Trim();
+            var asXml = token.Value.StartsWithIgnoringCase(SpecificTableXmlTag);
+            var tag = asXml ? SpecificTableXmlTag : SpecificTableTag;
+            var table = token.Value.Substring(tag.Length).Trim();
             if (string.IsNullOrEmpty(table))
             {
                 tokenErrors.Add($"Unable to resolve specific table token '{token.Key}'. No table name was provided");
@@ -61,7 +69,8 @@ public static class TokenHelper
             }
             try
             {
-                tokens[token.Key] = JToken.FromObject(foundTable).ToString();
+                var json = JToken.FromObject(foundTable).ToString();
+                tokens[token.Key] = asXml ? ModelXmlSerializer.ToIngestXmlObject(json, "Table") : json;
             }
             catch (Exception e)
             {
@@ -77,9 +86,12 @@ public static class TokenHelper
         IList<PostgreSqlMaterializedView> materializedViews)
     {
         var tokenErrors = new List<string>();
-        foreach (var token in tokens.Where(t => t.Value.StartsWithIgnoringCase(SpecificMaterializedViewTag)).ToList())
+        foreach (var token in tokens.Where(t =>
+                     t.Value.StartsWithIgnoringCase(SpecificMaterializedViewTag) || t.Value.StartsWithIgnoringCase(SpecificMaterializedViewXmlTag)).ToList())
         {
-            var viewRef = token.Value.Substring(SpecificMaterializedViewTag.Length).Trim();
+            var asXml = token.Value.StartsWithIgnoringCase(SpecificMaterializedViewXmlTag);
+            var tag = asXml ? SpecificMaterializedViewXmlTag : SpecificMaterializedViewTag;
+            var viewRef = token.Value.Substring(tag.Length).Trim();
             if (string.IsNullOrEmpty(viewRef))
             {
                 tokenErrors.Add($"Unable to resolve specific materialized view token '{token.Key}'. No view name was provided");
@@ -93,7 +105,8 @@ public static class TokenHelper
             }
             try
             {
-                tokens[token.Key] = JToken.FromObject(foundView).ToString();
+                var json = JToken.FromObject(foundView).ToString();
+                tokens[token.Key] = asXml ? ModelXmlSerializer.ToIngestXmlObject(json, "MaterializedView") : json;
             }
             catch (Exception e)
             {
@@ -109,9 +122,12 @@ public static class TokenHelper
         IList<SqlServerIndexedView> indexedViews)
     {
         var tokenErrors = new List<string>();
-        foreach (var token in tokens.Where(t => t.Value.StartsWithIgnoringCase(SpecificIndexedViewTag)).ToList())
+        foreach (var token in tokens.Where(t =>
+                     t.Value.StartsWithIgnoringCase(SpecificIndexedViewTag) || t.Value.StartsWithIgnoringCase(SpecificIndexedViewXmlTag)).ToList())
         {
-            var viewRef = token.Value.Substring(SpecificIndexedViewTag.Length).Trim();
+            var asXml = token.Value.StartsWithIgnoringCase(SpecificIndexedViewXmlTag);
+            var tag = asXml ? SpecificIndexedViewXmlTag : SpecificIndexedViewTag;
+            var viewRef = token.Value.Substring(tag.Length).Trim();
             if (string.IsNullOrEmpty(viewRef))
             {
                 tokenErrors.Add($"Unable to resolve specific indexed view token '{token.Key}'. No view name was provided");
@@ -125,7 +141,8 @@ public static class TokenHelper
             }
             try
             {
-                tokens[token.Key] = JToken.FromObject(foundView).ToString();
+                var json = JToken.FromObject(foundView).ToString();
+                tokens[token.Key] = asXml ? ModelXmlSerializer.ToIngestXmlObject(json, "IndexedView") : json;
             }
             catch (Exception e)
             {

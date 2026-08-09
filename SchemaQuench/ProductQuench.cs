@@ -928,7 +928,8 @@ public class ProductQuench
                ?? assembly.GetName().Version?.ToString() ?? "unknown";
     }
 
-    internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_"];
+    internal static readonly string[] SpecialTokenTags = ["TableSchema_", "ObjectScripts_", "QueryTokens_", "MaterializedViewSchema_", "IndexedViewSchema_",
+        "TableXml_", "MaterializedViewXml_", "IndexedViewXml_"];
 
     /// <summary>
     /// Cross-template placeholder for the per-iteration <c>{{SchemaName}}</c> token (audit I8).
@@ -964,10 +965,20 @@ public class ProductQuench
             { $"ObjectScripts_{template.Name}", JsonHelper.Serialize(template.ObjectScripts.Concat(template.AfterTablesObjectScripts)) },
             { $"QueryTokens_{template.Name}", JsonHelper.Serialize(template.QueryTokens) },
             { $"MaterializedViewSchema_{template.Name}", matViewSchema },
-            { $"IndexedViewSchema_{template.Name}", indexedViewSchema }
+            { $"IndexedViewSchema_{template.Name}", indexedViewSchema },
+            // A2: cross-template XML twins. Stored RAW (not single-quote-escaped) exactly like their
+            // JSON siblings above — escaping happens context-aware in SqlScript.TokenReplace, and
+            // pre-escaping here would double-escape a token embedded in a literal (#301).
+            { $"TableXml_{template.Name}", ModelXmlSerializer.ToIngestXml(EmptyArrayIfBlank(tableSchema), "Tables", "Table") },
+            { $"MaterializedViewXml_{template.Name}", ModelXmlSerializer.ToIngestXml(EmptyArrayIfBlank(matViewSchema), "MaterializedViews", "MaterializedView") },
+            { $"IndexedViewXml_{template.Name}", ModelXmlSerializer.ToIngestXml(EmptyArrayIfBlank(indexedViewSchema), "IndexedViews", "IndexedView") }
         };
         return tokens;
     }
+
+    // ToIngestXml needs a JSON array; a template that declared no tables/views leaves the *Schema
+    // snapshot blank, so normalize it to an empty array before conversion.
+    private static string EmptyArrayIfBlank(string json) => string.IsNullOrWhiteSpace(json) ? "[]" : json;
 
     internal static bool ReferencesSpecialToken(SqlScript script) =>
         script.RemainingTokens.Any(token => SpecialTokenTags.Any(token.StartsWithIgnoringCase));
