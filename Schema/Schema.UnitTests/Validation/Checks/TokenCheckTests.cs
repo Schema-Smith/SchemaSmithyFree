@@ -164,6 +164,20 @@ public class TokenCheckTests
     }
 
     [Test]
+    public void BuiltInVersionAndCompatTokens_NotFlagged()
+    {
+        // A1: {{ServerMajorVersion}} / {{CompatibilityLevel}} are context tokens resolved per-target
+        // in Phase B (post-connection), so --Validate must recognise them as defined.
+        var scriptFile = Path.Combine(PackagePath, "Templates", "Main", "Before Scripts", "Init.sql");
+        SqlFiles(scriptFile);
+        FileContent(scriptFile, "SELECT {{ServerMajorVersion}}, {{CompatibilityLevel}}");
+
+        var findings = new TokenCheck().Run(Context()).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
     public void CleanPackage_NoFindings()
     {
         var productFile = Path.Combine(PackagePath, "Product.json");

@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -164,6 +165,12 @@ public class DatabaseQuench
     private int _mySqlServerVersionNum; // 0 until detected (major*100+minor); only meaningful for MySQL/MariaDb
     private string _unsupportedFeaturePolicy; // Target:UnsupportedFeaturePolicy; governs the MySQL data-delivery gate
 
+    // A1: the per-target version script tokens ({{ServerMajorVersion}} / {{CompatibilityLevel}}),
+    // built from the detected TargetVersionInfo in Phase B (post-connection) and applied wherever
+    // script tokens resolve — folder/component/sentinel ShouldApplyExpression and script bodies. Null
+    // until PrepareVersionScriptTokens runs (test-only entry points that bypass Execute).
+    private List<KeyValuePair<string, string>> _versionScriptTokens;
+
     // Per-iteration content built by PrepareIterationContent at the start of Execute(). For schema-
     // template iterations the script collections are cloned (isolating {{SchemaName}}-substituted
     // batches from sibling iterations that share the same in-memory Template) and the table / view
@@ -246,10 +253,15 @@ public class DatabaseQuench
         currentScripts.All(s => GetRelativeScriptPath(s.LogPath) != trackedRelativePath)
         && !_gatedOffMigrationPaths.Contains(trackedRelativePath);
 
-    private string ResolveFolderGateExpression(string expression) =>
-        string.IsNullOrEmpty(_schemaName)
-            ? expression
-            : SqlScript.TokenReplace(expression, [new KeyValuePair<string, string>("SchemaName", _schemaName)], _product.Platform);
+    private string ResolveFolderGateExpression(string expression)
+    {
+        // Version tokens apply to ALL templates (regular + schema) — gating a folder on the target
+        // version is the primary use case; {{SchemaName}} only exists on schema-template iterations.
+        var tokens = new List<KeyValuePair<string, string>>();
+        if (!string.IsNullOrEmpty(_schemaName)) tokens.Add(new("SchemaName", _schemaName));
+        if (_versionScriptTokens != null) tokens.AddRange(_versionScriptTokens);
+        return tokens.Count == 0 ? expression : SqlScript.TokenReplace(expression, tokens, _product.Platform);
+    }
 
     private void RebuildIterationScripts(HashSet<TemplateFolder> skip)
     {
@@ -461,54 +473,51 @@ public class DatabaseQuench
                     return;
                 }
 
-                // Folder-level ShouldApplyExpression (#260): drop gated-off folders' scripts from
-                // this iteration before any slot runs. Evaluated per target; read-only under WhatIf.
-                ApplyFolderGates(command);
-
                 var effectiveTableCmd = tableCommand ?? command;
                 var effectiveObjectsCmd = objectsCommand ?? command;
                 var effectiveSilentCmd = silentCommand ?? command;
 
-                if (_product.Platform == Platform.PostgreSQL)
+                // Detect the target version ONCE, up front (the connection is open) and BEFORE folder gates,
+                // since a folder ShouldApplyExpression may reference the version tokens (A1). One unified
+                // detection for all engines: ServerComparable is set on all four; CompatibilityLevel is
+                // SQL-Server-only. For SQL Server this also enforces the compat floor and selects the model-
+                // ingest encoding (compat >= 130 -> JSON/OPENJSON, below -> XML) and bakes the major version
+                // into SchemaSmith.fn_ServerMajorVersion at kindle time.
+                using (var versionCmd = connection.CreateCommand())
                 {
-                    using var versionCmd = connection.CreateCommand();
-                    _postgreSqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, Platform.PostgreSQL).ServerComparable;
+                    var versionInfo = TargetVersionDetector.Detect(versionCmd, _product.Platform, _databaseName);
+                    switch (_product.Platform.GetBasePlatform())
+                    {
+                        case Platform.PostgreSQL:
+                            _postgreSqlServerVersionNum = versionInfo.ServerComparable;
+                            break;
+                        // MySQL/MariaDb: the version drives the data-delivery version-adaptive JSON-array shred
+                        // (JSON_TABLE on MySQL 8.0+/MariaDB 10.6+, a recursive CTE on MariaDB 10.2-10.5, gated
+                        // manual scripts below MySQL 8.0); the policy governs the below-floor gate.
+                        case Platform.MySQL:
+                            _mySqlServerVersionNum = versionInfo.ServerComparable;
+                            _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"];
+                            break;
+                        case Platform.SqlServer when !_suppressKindling:
+                            SafeProgressLog($"  [{_databaseName}] detected SQL Server version {VersionHelper.DisplayVersion(versionInfo)}" +
+                                            (versionInfo.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
+                            PreFlightVersionGuard.CheckOrThrow(versionInfo, _server, _databaseName);
+                            _sqlServerMajorVersion = versionInfo.ServerComparable;
+                            var compatEncodingOverride = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:CompatEncoding"];
+                            _ingestEncoding = CompatEncoding.Select(compatEncodingOverride, versionInfo.CompatibilityLevel, versionInfo.ServerComparable);
+                            break;
+                    }
+
+                    // A1: expose the detected version as {{ServerMajorVersion}} / {{CompatibilityLevel}} script
+                    // tokens. Built BEFORE folder gating (folder ShouldApplyExpressions may reference them);
+                    // applied to script bodies + model payloads AFTER (a gated-off folder rebuilds the slot lists).
+                    PrepareVersionScriptTokens(versionInfo.ServerComparable, versionInfo.CompatibilityLevel);
                 }
 
-                // MySQL/MariaDb: detect the server version (major*100+minor) so data delivery can pick a
-                // version-adaptive JSON-array shred — JSON_TABLE on MySQL 8.0+/MariaDB 10.6+, a recursive CTE
-                // on MariaDB 10.2-10.5, and (gated) manual scripts below MySQL 8.0.
-                if (_product.Platform.GetBasePlatform() == Platform.MySQL)
-                {
-                    using var versionCmd = connection.CreateCommand();
-                    _mySqlServerVersionNum = TargetVersionDetector.Detect(versionCmd, _product.Platform).ServerComparable;
-                    _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"];
-                }
-
-                // SQL Server: detect the target *database* compatibility level before kindling (a modern
-                // server can host a database left at compat 100) to enforce the compat-100 floor and select
-                // the model-ingest encoding — at/above compat 130 the JSON/OPENJSON path, below 130 the XML
-                // ingest/compare path. A below-floor database fails with a clear message instead of a raw
-                // engine error at kindle.
-                if (_product.Platform.GetBasePlatform() == Platform.SqlServer && !_suppressKindling)
-                {
-                    using var compatCmd = connection.CreateCommand();
-                    var info = TargetVersionDetector.Detect(compatCmd, _product.Platform, _databaseName);
-                    SafeProgressLog($"  [{_databaseName}] detected SQL Server version {VersionHelper.DisplayVersion(info)}" +
-                                    (info.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
-                    PreFlightVersionGuard.CheckOrThrow(info, _server, _databaseName);
-
-                    // Baked into SchemaSmith.fn_ServerMajorVersion at kindle time (below), so the version-gated
-                    // helpers resolve the real target version on a genuine pre-2016 binary where SESSION_CONTEXT
-                    // (the former transport) is unavailable.
-                    _sqlServerMajorVersion = info.ServerComparable;
-
-                    // Select the model-ingest encoding: below the OPENJSON compat cliff (compat < 130 or a
-                    // pre-2016 binary), or when Target:CompatEncoding=legacy, the model is ingested/compared as
-                    // XML. Both the kindle (below) and the runtime ingest emitters read _ingestEncoding.
-                    var compatEncodingOverride = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:CompatEncoding"];
-                    _ingestEncoding = CompatEncoding.Select(compatEncodingOverride, info.CompatibilityLevel, info.ServerComparable);
-                }
+                // Folder-level ShouldApplyExpression (#260): drop gated-off folders' scripts from
+                // this iteration before any slot runs. Evaluated per target; read-only under WhatIf.
+                ApplyFolderGates(command);
+                ApplyVersionScriptTokens();
 
                 // Step: Kindle the forge
                 // Intentionally NOT wrapped in `_checkpointing.Track` — mirrors the
@@ -976,6 +985,69 @@ public class DatabaseQuench
             script.ReplaceQueryTokens(tokens);
         return cloned;
     }
+
+    /// <summary>
+    /// A1: build the per-target version script tokens from the detected version. Called in Phase B
+    /// (post-connection) before folder gates run, since folder <c>ShouldApplyExpression</c>s may
+    /// reference them. <paramref name="compatibilityLevel"/> is SQL-Server-only; off SQL Server it is
+    /// null and <c>{{CompatibilityLevel}}</c> falls back to the server version so one expression shape
+    /// stays portable across per-platform packages. Exposed internal for unit tests that bypass Execute.
+    /// </summary>
+    internal void PrepareVersionScriptTokens(int serverMajorVersion, int? compatibilityLevel)
+    {
+        _versionScriptTokens =
+        [
+            new("ServerMajorVersion", serverMajorVersion.ToString(CultureInfo.InvariantCulture)),
+            new("CompatibilityLevel", (compatibilityLevel ?? serverMajorVersion).ToString(CultureInfo.InvariantCulture)),
+        ];
+    }
+
+    /// <summary>
+    /// A1: substitute the version script tokens into this iteration's script bodies and model payloads.
+    /// Runs AFTER folder gating (a gated-off folder triggers RebuildIterationScripts, which reassigns the
+    /// slot lists) so the substitution isn't wiped. Script bodies are cloned only when a batch actually
+    /// contains a version token, so the tokenless common case keeps aliasing the shared SqlScript instances
+    /// (preserving the regular-template cross-DB HasBeenQuenched dedup bit-for-bit).
+    /// </summary>
+    internal void ApplyVersionScriptTokens()
+    {
+        if (_versionScriptTokens == null || _versionScriptTokens.Count == 0) return;
+
+        _iteration.BeforeScripts = SubstituteVersionTokens(_iteration.BeforeScripts);
+        _iteration.ObjectScripts = SubstituteVersionTokens(_iteration.ObjectScripts);
+        _iteration.AfterTablesObjectScripts = SubstituteVersionTokens(_iteration.AfterTablesObjectScripts);
+        _iteration.BetweenTablesAndKeysScripts = SubstituteVersionTokens(_iteration.BetweenTablesAndKeysScripts);
+        _iteration.AfterTableScripts = SubstituteVersionTokens(_iteration.AfterTableScripts);
+        _iteration.TableDataScripts = SubstituteVersionTokens(_iteration.TableDataScripts);
+        _iteration.AfterScripts = SubstituteVersionTokens(_iteration.AfterScripts);
+
+        _iteration.BaselineValidationScript = SubstituteVersionTokens(_iteration.BaselineValidationScript ?? _template.BaselineValidationScript);
+        _iteration.VersionStampScript = SubstituteVersionTokens(_iteration.VersionStampScript ?? _template.VersionStampScript);
+
+        // Model payloads carry component-level ShouldApplyExpression / Default / CheckExpression.
+        _iteration.TableSchema = SubstituteVersionTokens(IterationTableSchema);
+        _iteration.IndexedViewSchema = SubstituteVersionTokens(IterationIndexedViewSchema);
+        _iteration.MaterializedViewSchema = SubstituteVersionTokens(IterationMaterializedViewSchema);
+    }
+
+    private List<SqlScript> SubstituteVersionTokens(List<SqlScript> scripts)
+    {
+        if (scripts == null || !scripts.Any(s => s.Batches.Any(ContainsVersionToken)))
+            return scripts; // no version token present — keep the shared references (aliasing preserved)
+        var cloned = scripts.Select(s => s.Clone()).ToList();
+        foreach (var script in cloned)
+            script.ReplaceQueryTokens(_versionScriptTokens);
+        return cloned;
+    }
+
+    private string SubstituteVersionTokens(string payload) =>
+        string.IsNullOrEmpty(payload) || !ContainsVersionToken(payload)
+            ? payload
+            : SqlScript.TokenReplace(payload, _versionScriptTokens, _product.Platform);
+
+    private bool ContainsVersionToken(string text) =>
+        !string.IsNullOrEmpty(text) &&
+        _versionScriptTokens.Any(t => text.IndexOf($"{{{{{t.Key}}}}}", StringComparison.OrdinalIgnoreCase) >= 0);
 
     /// <summary>
     /// Outcome of <see cref="EnsureSchemaExists(System.Data.IDbCommand)"/>. <see cref="Execute"/>
