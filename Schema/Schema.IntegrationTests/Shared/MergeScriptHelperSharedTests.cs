@@ -95,9 +95,9 @@ CREATE TABLE `{_testDb}`.`{tableName.Replace("`", "``")}` (
             Assert.That(script, Is.Not.Null);
             Assert.That(script, Does.Contain($"`{_testDb}`.`{tableName}`"));
 
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
@@ -137,9 +137,9 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`code`", true, true, false, false, null!);
 
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
@@ -188,9 +188,9 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             // (MariaDB 10.2-10.5 uses the recursive-CTE shred instead of JSON_TABLE.)
             if (UsesJsonTable) Assert.That(script, Does.Contain("`Notes` TEXT PATH '$.Notes'"));
 
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
@@ -340,9 +340,9 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
                 tableData, "`id`", false, false, false, false, null!);
 
             // Execute the generated script (batch execution)
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
@@ -420,9 +420,9 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, null!);
 
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
@@ -504,9 +504,9 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             var script = BuildMergeScript(command, _testDb, tableName,
                 tableData, "`id`", true, true, false, false, null!);
 
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
@@ -582,9 +582,9 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
                 Assert.That(script, Does.Contain("JSON_EXTRACT(VALUES(`metadata`), '$')"));
 
             // Execute the generated script
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
@@ -628,9 +628,9 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
                 tableData, "`id`", true, true, false, false, null!);
 
             // Execute the generated script
-            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var batch in script.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries)
+                         .Where(b => !string.IsNullOrWhiteSpace(b)))
             {
-                if (string.IsNullOrWhiteSpace(batch)) continue;
                 command.CommandText = batch;
                 command.ExecuteNonQuery();
             }
