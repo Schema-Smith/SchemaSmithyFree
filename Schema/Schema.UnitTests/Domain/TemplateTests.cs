@@ -210,6 +210,59 @@ namespace Schema.UnitTests.Domain
             Assert.That(template.IndexedViewSchema, Is.EqualTo("[]"));
         }
 
+        #region A2 — model-payload XML twins
+
+        [Test]
+        public void TableXml_DerivesFromTableSchema_AsWellFormedIngestXml()
+        {
+            var template = new Template { TableSchema = "[{\"Name\":\"[Orders]\",\"Note\":\"a'b\"}]" };
+
+            var xml = template.TableXml;
+
+            Assert.Multiple(() =>
+            {
+                Assert.DoesNotThrow(() => System.Xml.Linq.XElement.Parse(xml), "Twin must be well-formed XML.");
+                Assert.That(xml, Does.StartWith("<Tables"), "Rooted at <Tables> with repeated <Table> children.");
+                Assert.That(xml, Does.Contain("<Table>"));
+                Assert.That(xml, Does.Contain("[Orders]"));
+                // The property is RAW (unescaped) exactly like the TableSchema property — single-quote
+                // escaping for SQL embedding happens at token-add time, mirroring the JSON sibling. A
+                // pre-escaped property would be the #301 double-escape bug.
+                Assert.That(xml, Does.Contain("a'b"));
+                Assert.That(xml, Does.Not.Contain("a''b"));
+            });
+        }
+
+        [Test]
+        public void ModelPayloadXmlTwins_EmptyModel_ProduceWellFormedEmptyRoots()
+        {
+            var template = new Template();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(template.TableXml, Does.StartWith("<Tables"));
+                Assert.That(template.MaterializedViewXml, Does.StartWith("<MaterializedViews"));
+                Assert.That(template.IndexedViewXml, Does.StartWith("<IndexedViews"));
+                Assert.DoesNotThrow(() => System.Xml.Linq.XElement.Parse(template.TableXml));
+                Assert.DoesNotThrow(() => System.Xml.Linq.XElement.Parse(template.MaterializedViewXml));
+                Assert.DoesNotThrow(() => System.Xml.Linq.XElement.Parse(template.IndexedViewXml));
+            });
+        }
+
+        [Test]
+        public void ModelPayloadXmlTwins_NotSerialized()
+        {
+            var template = new Template { Name = "T", TableSchema = "[{\"Name\":\"X\"}]" };
+
+            var json = JsonConvert.SerializeObject(template);
+
+            Assert.That(json, Does.Not.Contain("TableXml"));
+            Assert.That(json, Does.Not.Contain("IndexedViewXml"));
+            Assert.That(json, Does.Not.Contain("MaterializedViewXml"));
+        }
+
+        #endregion
+
         [Test]
         public void Clone_CopiesIndexedViews()
         {
