@@ -5,6 +5,7 @@ using System.Data;
 using NUnit.Framework;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Utility;
 
 namespace SchemaQuench.IntegrationTests.SqlServer
 {
@@ -412,6 +413,79 @@ namespace SchemaQuench.IntegrationTests.SqlServer
             Assert.That(ColumnStoreIndexCount(cmd, tableName), Is.EqualTo(0), "a clustered columnstore must not be created below major 12");
             Assert.That(DowngradeRowCount(cmd, ColumnStoreObjectType, $"[dbo].[{tableName}].[{indexName}]"), Is.EqualTo(1),
                 "a clustered columnstore must degrade at major 11 (needs 12)");
+        }
+
+        // ---------------------------------------------------------------------------------------------------
+        // XML ingest path (compat-100 / below the OPENJSON cliff) — CI coverage. A genuine pre-2016 target
+        // deploys through ParseTableXml / IndexOnlyXmlQuench, so the degrade must fire on that path too. Kindle
+        // the scratch DB with IngestEncoding.Xml + baked major 10 on the MODERN container to exercise the exact
+        // below-cliff code path in CI (the genuine-binary GenuineSql2008EmitGuardCertTests are the [Explicit]
+        // release-time recheck — a real old binary's catalog shape is only reproduced there, not by baking).
+        // ---------------------------------------------------------------------------------------------------
+
+        private static string AllFeaturesJson(string temporal, string cols, string cci) => $$"""
+[
+  {"Schema": "[dbo]", "Name": "[{{temporal}}]", "IsTemporal": true,
+   "Columns": [{"Name": "[Id]", "DataType": "INT", "Nullable": false, "PrimaryKey": true}, {"Name": "[Val]", "DataType": "NVARCHAR(50)", "Nullable": false}]},
+  {"Schema": "[dbo]", "Name": "[{{cols}}]",
+   "Columns": [{"Name": "[Id]", "DataType": "INT", "Nullable": false},
+               {"Name": "[Email]", "DataType": "NVARCHAR(100)", "Nullable": false, "DataMaskFunction": "email()"},
+               {"Name": "[SSN]", "DataType": "NVARCHAR(11)", "Nullable": false, "EncryptionType": "DETERMINISTIC", "EncryptionKey": "[TestCEK]", "EncryptionAlgorithm": "AEAD_AES_256_CBC_HMAC_SHA_256"}]},
+  {"Schema": "[dbo]", "Name": "[{{cci}}]",
+   "Columns": [{"Name": "[Id]", "DataType": "INT", "Nullable": false}, {"Name": "[Val]", "DataType": "NVARCHAR(50)", "Nullable": false}],
+   "Indexes": [{"Name": "[cci_{{cci}}]", "Clustered": true, "ColumnStore": true, "PrimaryKey": false, "Unique": false}]}
+]
+""";
+
+        private static void DeployXml(IDbCommand cmd, string tablesJson, string productName)
+        {
+            var xml = ModelXmlSerializer.ToIngestXml(tablesJson, "Tables", "Table");
+            cmd.CommandTimeout = 300;
+            cmd.CommandText = $"EXEC SchemaSmith.TableQuench @ProductName = '{productName}', @TableDefinitions = @xml, " +
+                              "@WhatIf = 0, @DropTablesRemovedFromProduct = 0, @DropUnknownIndexes = 0";
+            var p = cmd.CreateParameter();
+            p.ParameterName = "@xml";
+            p.Value = xml;
+            p.DbType = DbType.String;
+            cmd.Parameters.Add(p);
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+        }
+
+        // warn (default) on the XML ingest path: all four features degrade — the table deploys plain, columns
+        // unmasked/plaintext, no columnstore — and one downgrade manifest row per feature is recorded.
+        [Test]
+        public void XmlEncoding_BelowSql2016_WarnPolicy_AllFeaturesDegradeCleanly()
+        {
+            var id = Guid.NewGuid().ToString("N")[..8];
+            string temporal = $"XmlT_{id}", cols = $"XmlC_{id}", cci = $"XmlI_{id}";
+            using var conn = KindleScratchDatabase("XmlWarnBake", serverMajorVersion: 10, policy: "warn", encoding: IngestEncoding.Xml);
+            using var cmd = conn.CreateCommand();
+
+            Assert.DoesNotThrow(() => DeployXml(cmd, AllFeaturesJson(temporal, cols, cci), "XmlWarn"),
+                "all four features must degrade cleanly on the XML ingest path below 2016");
+
+            Assert.That(TableTemporalType(cmd, temporal), Is.EqualTo(0), "temporal turn-on suppressed on the XML path");
+            Assert.That(MaskedColumnCount(cmd, cols), Is.EqualTo(0), "no masking on the XML path below 2016");
+            Assert.That(EncryptedColumnCount(cmd, cols), Is.EqualTo(0), "no encryption on the XML path below 2016");
+            Assert.That(ColumnStoreIndexCount(cmd, cci), Is.EqualTo(0), "no columnstore on the XML path below the floor");
+            Assert.That(DowngradeRowCount(cmd, TemporalObjectType, $"[dbo].[{temporal}]"), Is.EqualTo(1), "temporal downgrade row (XML path)");
+            Assert.That(DowngradeRowCount(cmd, DataMaskingObjectType, $"[dbo].[{cols}].[Email]"), Is.EqualTo(1), "masking downgrade row (XML path)");
+            Assert.That(DowngradeRowCount(cmd, AlwaysEncryptedObjectType, $"[dbo].[{cols}].[SSN]"), Is.EqualTo(1), "AE downgrade row (XML path)");
+            Assert.That(DowngradeRowCount(cmd, ColumnStoreObjectType, $"[dbo].[{cci}].[cci_{cci}]"), Is.EqualTo(1), "columnstore downgrade row (XML path)");
+        }
+
+        // fail (opt-in) on the XML ingest path: the quench aborts naming the required version.
+        [Test]
+        public void XmlEncoding_BelowSql2016_FailPolicy_Aborts()
+        {
+            var id = Guid.NewGuid().ToString("N")[..8];
+            using var conn = KindleScratchDatabase("XmlFailBake", serverMajorVersion: 10, policy: "fail", encoding: IngestEncoding.Xml);
+            using var cmd = conn.CreateCommand();
+
+            var ex = Assert.Catch(() => DeployXml(cmd, AllFeaturesJson($"XmlFT_{id}", $"XmlFC_{id}", $"XmlFI_{id}"), "XmlFail"));
+            Assert.That(ex!.Message, Does.Contain("requires SQL Server"),
+                "the fail policy must abort on the XML ingest path too");
         }
     }
 }

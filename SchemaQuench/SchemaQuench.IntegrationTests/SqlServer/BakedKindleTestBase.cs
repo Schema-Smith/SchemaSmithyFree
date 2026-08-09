@@ -42,7 +42,8 @@ public abstract class BakedKindleTestBase : BaseTableQuenchTests
     /// helper set into it with the supplied baked server major version + unsupported-feature policy, and
     /// return an OPEN connection to it. The caller disposes the connection; teardown drops the database.
     /// </summary>
-    protected IDbConnection KindleScratchDatabase(string prefix, int serverMajorVersion = 0, string policy = "warn")
+    protected IDbConnection KindleScratchDatabase(string prefix, int serverMajorVersion = 0, string policy = "warn",
+        IngestEncoding encoding = IngestEncoding.Json)
     {
         var db = $"{prefix}_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString()[..8]}";
         using (var master = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString))
@@ -59,7 +60,7 @@ public abstract class BakedKindleTestBase : BaseTableQuenchTests
         conn.Open();
         using (var kindleCmd = conn.CreateCommand())
             ForgeKindler.KindleTheForge(kindleCmd, Platform.SqlServer, forceReKindle: true,
-                IngestEncoding.Json, serverMajorVersion, policy);
+                encoding, serverMajorVersion, policy);
         return conn;
     }
 
