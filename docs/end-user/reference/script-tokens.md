@@ -134,6 +134,8 @@ SchemaSmith adds these tokens automatically. You don't define them -- they appea
 | `{{MaterializedViewSchema_<TemplateName>}}` | Cross-template materialized view JSON | Any template |
 | `{{ObjectScripts_<TemplateName>}}` | Cross-template inventory of programmable object scripts (functions, views, procedures, triggers) | Any template |
 | `{{QueryTokens_<TemplateName>}}` | Cross-template inventory of query-style tokens for sharing | Any template |
+| `{{ServerMajorVersion}}` | The detected target server major version — SQL Server `16` (2022) / `13` (2016) / `10` (2008); PostgreSQL `16`; MySQL `800` (8.0); MariaDB `1006` (10.6) | Template scripts + expression fields |
+| `{{CompatibilityLevel}}` | The SQL Server database compatibility level (e.g. `160`, `130`); on PostgreSQL / MySQL / MariaDB it resolves to the same value as `{{ServerMajorVersion}}` | Template scripts + expression fields |
 
 **Why this matters.** `{{TableSchema}}` is the entire current template's table model serialized as JSON, ready to drop into a stored procedure parameter, a `JSON_VALUE`/`json_each`/`JSON_TABLE` query, or an audit row. Combined with the [Custom Properties](custom-properties.md) feature, you can write a single migration script that introspects your table definitions and reads your team's custom metadata at deployment time -- without ever leaving SchemaSmith.
 
@@ -267,6 +269,41 @@ Any script that references `{{TenantAuditTable}}` will get the iteration-qualifi
 > **Note:** Using an iteration-scoped token in a product-level script (`Product.json` `VersionStampScript`, `BaselineValidationScript`) is a validation error — those scripts run outside any iteration context and the engine has no schema name to substitute.
 
 For a narrative walkthrough of schema templates end to end — authoring layout, deployment log, tenant onboarding, and cross-schema FK patterns — see [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md).
+
+---
+
+## {{ServerMajorVersion}} and {{CompatibilityLevel}}
+
+Version-adaptive packages need to gate on what the target can actually do — apply a temporal-table migration only on SQL Server 2016+, keep a `STRING_AGG` rewrite off a legacy database, branch a `Before` script by engine version. SchemaSmith already detects the target version when it connects; these two tokens expose it so a `ShouldApplyExpression` (folder, component, or the [per-script sentinel](schemaquench.md#script-level-runtime-skip)) or a script body can gate on version without you hand-writing each engine's native version predicate.
+
+`{{ServerMajorVersion}}` is the detected server major version; `{{CompatibilityLevel}}` is the SQL Server database compatibility level. Both are set by the engine per target database — you don't define them in `ScriptTokens`, and they substitute as plain integer literals, so they drop straight into a comparison.
+
+### Gate syntax on compatibility level, gate features on server version
+
+These are two different questions, and confusing them is a real footgun. A modern binary can host a database left at an old compatibility level — a SQL Server 2022 server (`{{ServerMajorVersion}}` = `16`) with a database at compatibility level 100 (`{{CompatibilityLevel}}` = `100`). Compatibility-level-gated **syntax** — `STRING_AGG … WITHIN GROUP` and `STRING_SPLIT` (compat 130), `TRY_CONVERT` (compat 110), `OPENJSON` (compat 130) — parse-errors on that database even though the binary is brand new. So:
+
+- **Syntax availability** follows the database's compatibility level → gate on `{{CompatibilityLevel}}`.
+- **Server features** (a new engine capability, a version-only DDL form) follow the binary → gate on `{{ServerMajorVersion}}`.
+
+`SERVERPROPERTY('ProductMajorVersion') >= 16` is the gate authors reach for first, and it is the *wrong* gate for syntax: it passes on that compat-100 database and the SQL still fails.
+
+### Availability
+
+Both tokens resolve everywhere template-scoped tokens resolve — script bodies in every slot, and the `Default` / `CheckExpression` / `Expression` / `FilterExpression` / `ShouldApplyExpression` JSON fields — and they are resolved **per target database**, after SchemaSmith connects and detects the version. They are not available in product-level scripts (`Product.json` `BaselineValidationScript` / `VersionStampScript`), which run at server scope before any database is selected.
+
+> **SQL Server:** `CompatibilityLevel` is a SQL Server concept. On PostgreSQL, MySQL, and MariaDB there is no separate compatibility level, so `{{CompatibilityLevel}}` resolves to the same value as `{{ServerMajorVersion}}` — one portable expression shape works across the per-platform packages, and the syntax-vs-feature distinction above only bites on SQL Server.
+
+### Example — a version-gated folder
+
+The shipped `Demos/Conditional/SqlServer-CompatLevelGate` gates a `Programmability/Modern/` folder on the database compatibility level with a raw scalar query. The token form says the same thing more directly:
+
+```jsonc
+// Template.json — folder gate, raw SQL vs. the token form
+"ShouldApplyExpression": "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) >= 160"
+"ShouldApplyExpression": "{{CompatibilityLevel}} >= 160"
+```
+
+Pair each token with the matching version-gated script variant and you get one declarative, engine-detected gate instead of a wall of `SERVERPROPERTY` / `current_setting` SQL. For the folder-gate mechanics and the syntax-vs-feature rule in a deployment context, see [SchemaQuench — ShouldApplyExpression and Conditional Deployment](schemaquench.md#shouldapplyexpression-and-conditional-deployment).
 
 ---
 

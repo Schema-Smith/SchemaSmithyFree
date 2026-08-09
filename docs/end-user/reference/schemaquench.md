@@ -1080,6 +1080,22 @@ This turns "different folders for different flavors of a target" into a declarat
 
 > **Note:** A folder's `ShouldApplyExpression` must return a boolean. If it errors -- a SQL mistake, a missing function -- the deployment fails with a clear message naming the folder, rather than silently skipping it. A gate that quietly dropped schema folders would be the dangerous failure mode, so the engine fails closed.
 
+### Gating on the target version
+
+The most common gate is "apply this only on a new enough target." The `{{ServerMajorVersion}}` and `{{CompatibilityLevel}}` [script tokens](script-tokens.md#servermajorversion-and-compatibilitylevel) expose the version SchemaSmith already detects, so you write one portable integer comparison instead of each engine's native version SQL. The two are not interchangeable — **gate syntax on compatibility level, gate features on server version**:
+
+```jsonc
+// A folder whose scripts use OPENJSON / STRING_AGG — compat-130 syntax.
+// Gate on the DATABASE compatibility level, because a modern binary can still
+// host a compat-100 database where that syntax parse-errors.
+"ShouldApplyExpression": "{{CompatibilityLevel}} >= 130"
+
+// A folder that uses a server-version-only capability. Gate on the binary.
+"ShouldApplyExpression": "{{ServerMajorVersion}} >= 16"
+```
+
+The tokens resolve per target database, so the same folder deploys to a modern database and skips on a legacy one in a single run. The shipped `Demos/Conditional/SqlServer-CompatLevelGate` demonstrates the compatibility-level gate end to end. See [Script Tokens — {{ServerMajorVersion}} and {{CompatibilityLevel}}](script-tokens.md#servermajorversion-and-compatibilitylevel) for the full syntax-vs-feature explanation and the cross-engine `{{CompatibilityLevel}}` fallback.
+
 ---
 
 ## Script-Level Runtime Skip
