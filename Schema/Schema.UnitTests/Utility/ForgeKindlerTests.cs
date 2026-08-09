@@ -176,11 +176,13 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 26 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
+        // SqlServer: 27 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
         // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine)
         // + SchemaSmith.fn_SplitList (all-versions STRING_SPLIT replacement for the compat-100 XML path)
-        // + SchemaSmith.DegradeUnsupportedColumnStore (below-2012/2014 columnstore degrade for the emit-guard spine).
-        Assert.That(sqlServer.Length, Is.EqualTo(26));
+        // + SchemaSmith.DegradeUnsupportedColumnStore + SchemaSmith.DegradeUnsupportedFeatures (the emit-guard
+        //   degrade spine: the former drops below-2012/2014 columnstore from #Indexes, the latter is the single
+        //   choke point that neutralizes below-2016 temporal/masking/Always-Encrypted in the working set).
+        Assert.That(sqlServer.Length, Is.EqualTo(27));
         // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)

@@ -50,64 +50,6 @@ BEGIN TRY
         AND OBJECT_ID([Schema] + '.' + [Name]) IS NOT NULL
   END
 
-  -- Unsupported-feature policy: dynamic data masking (MASKED WITH) requires SQL Server 2016 (major 13). The
-  -- column emit (Parse ColumnScript + the ModifiedTableQuench mask alter) is gated off under 13 and the
-  -- modified-column detection ignores the mask diff there, so a masked column is created/left unmasked without
-  -- churn; 'fail' aborts before any DDL, 'warn' (default) records one 'downgraded' manifest row per masked
-  -- column. Mirrors the temporal degrade spine.
-  IF SchemaSmith.fn_ServerMajorVersion() < 13
-     AND EXISTS (SELECT 1 FROM #Columns WITH (NOLOCK) WHERE RTRIM(ISNULL([DataMaskFunction], '')) <> '')
-  BEGIN
-    IF SchemaSmith.UnsupportedFeaturePolicy() = 'fail'
-    BEGIN
-      DECLARE @v_MaskList NVARCHAR(MAX) = STUFF((SELECT ', ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName]
-                                                   FROM #Columns c WITH (NOLOCK) WHERE RTRIM(ISNULL(c.[DataMaskFunction], '')) <> ''
-                                                   FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
-      DECLARE @v_MaskFailMsg NVARCHAR(2048) = 'Dynamic data masking (MASKED WITH) requires SQL Server 2016 (detected major ' +
-                CONVERT(NVARCHAR(10), SchemaSmith.fn_ServerMajorVersion()) + '); column(s): ' + LEFT(@v_MaskList, 1800) + '.'
-      RAISERROR(@v_MaskFailMsg, 16, 1)
-    END
-    ELSE
-    BEGIN
-      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT @@SPID, 'data masking (SQL Server 2016)', c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName], 'downgraded'
-          FROM #Columns c WITH (NOLOCK) WHERE RTRIM(ISNULL(c.[DataMaskFunction], '')) <> ''
-      RAISERROR('  Dynamic data masking skipped (requires SQL Server 2016 - downgraded)', 10, 100) WITH NOWAIT
-    END
-  END
-
-  -- Unsupported-feature policy: Always Encrypted (ENCRYPTED WITH) requires SQL Server 2016 (major 13). The
-  -- column emit (Parse ColumnScript + the ModifiedTableQuench encryption alter) is gated off under 13 and the
-  -- modified-column detection ignores the encryption diff there (so no swap-guard trip / churn), so an
-  -- encrypted column is created/left plaintext without error; 'fail' aborts before any DDL, 'warn' (default)
-  -- records one 'downgraded' manifest row per encrypted column. Mirrors the temporal/masking degrade spine.
-  IF SchemaSmith.fn_ServerMajorVersion() < 13
-     AND EXISTS (SELECT 1 FROM #Columns WITH (NOLOCK) WHERE RTRIM(ISNULL([EncryptionType], 'NONE')) <> 'NONE')
-  BEGIN
-    IF SchemaSmith.UnsupportedFeaturePolicy() = 'fail'
-    BEGIN
-      DECLARE @v_EncList NVARCHAR(MAX) = STUFF((SELECT ', ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName]
-                                                  FROM #Columns c WITH (NOLOCK) WHERE RTRIM(ISNULL(c.[EncryptionType], 'NONE')) <> 'NONE'
-                                                  FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
-      DECLARE @v_EncFailMsg NVARCHAR(2048) = 'Always Encrypted (ENCRYPTED WITH) requires SQL Server 2016 (detected major ' +
-                CONVERT(NVARCHAR(10), SchemaSmith.fn_ServerMajorVersion()) + '); column(s): ' + LEFT(@v_EncList, 1800) + '.'
-      RAISERROR(@v_EncFailMsg, 16, 1)
-    END
-    ELSE
-    BEGIN
-      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT @@SPID, 'Always Encrypted (SQL Server 2016)', c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName], 'downgraded'
-          FROM #Columns c WITH (NOLOCK) WHERE RTRIM(ISNULL(c.[EncryptionType], 'NONE')) <> 'NONE'
-      RAISERROR('  Always Encrypted skipped (requires SQL Server 2016 - downgraded)', 10, 100) WITH NOWAIT
-    END
-  END
-
-  -- Unsupported-feature policy: drop below-2012/2014 columnstore indexes from the working set before the
-  -- modify/missing-index passes run (both consume #Indexes) so they never try to emit COLUMNSTORE on an older
-  -- target. Runs here (the first quench proc) because #Indexes is already populated and this precedes
-  -- ModifiedTableQuench + MissingIndexesAndConstraintsQuench. See SchemaSmith.DegradeUnsupportedColumnStore.
-  EXEC SchemaSmith.DegradeUnsupportedColumnStore
-
   RAISERROR('Add New Tables', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] +
                                   CASE WHEN RTRIM(ISNULL(T.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(T.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +

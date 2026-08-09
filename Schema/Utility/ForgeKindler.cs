@@ -255,6 +255,7 @@ public static class ForgeKindler
                 new("SchemaSmith.fn_ServerMajorVersion.sql"),
                 new("SchemaSmith.UnsupportedFeaturePolicy.sql"),
                 new("SchemaSmith.DegradeUnsupportedColumnStore.sql"),
+                new("SchemaSmith.DegradeUnsupportedFeatures.sql"),
                 new("SchemaSmith.PrintWithNoWait.sql"),
                 new("SchemaSmith.MissingTableAndColumnQuench.sql"),
                 new("SchemaSmith.ModifiedTableQuench.sql"),

@@ -139,32 +139,6 @@ BEGIN TRY
                             WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
                               AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
 
-  -- Unsupported-feature policy: system-versioned temporal (PERIOD FOR SYSTEM_TIME / SYSTEM_VERSIONING) requires
-  -- SQL Server 2016 (major 13). The turn-on emit below is gated off under 13 so the 2016-only DDL is never sent
-  -- to an older target; 'fail' aborts, 'warn' (default) records one 'downgraded' manifest row per temporal
-  -- table so the deploy stays idempotent (the table is simply left non-temporal). First SS use of the
-  -- UnsupportedFeaturePolicy spine -- mirrors the PostgreSQL/MySQL degrade routing.
-  IF SchemaSmith.fn_ServerMajorVersion() < 13
-     AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE IsTemporal = 1)
-  BEGIN
-    IF SchemaSmith.UnsupportedFeaturePolicy() = 'fail'
-    BEGIN
-      DECLARE @v_TemporalList NVARCHAR(MAX) = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name]
-                                                       FROM #Tables T WITH (NOLOCK) WHERE T.IsTemporal = 1
-                                                       FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
-      DECLARE @v_TemporalFailMsg NVARCHAR(2048) = 'System-versioned temporal (SYSTEM_VERSIONING) requires SQL Server 2016 (detected major ' +
-                CONVERT(NVARCHAR(10), SchemaSmith.fn_ServerMajorVersion()) + '); table(s): ' + LEFT(@v_TemporalList, 1800) + '.'
-      RAISERROR(@v_TemporalFailMsg, 16, 1)
-    END
-    ELSE
-    BEGIN
-      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT @@SPID, 'temporal (SQL Server 2016)', T.[Schema] + '.' + T.[Name], 'downgraded'
-          FROM #Tables T WITH (NOLOCK) WHERE T.IsTemporal = 1
-      RAISERROR('  Temporal tracking skipped (requires SQL Server 2016 - downgraded)', 10, 100) WITH NOWAIT
-    END
-  END
-
   RAISERROR('Turn on Temporal Tracking for tables defined as temporal', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Turn ON Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD [ValidFrom] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL DEFAULT ''0001-01-01 00:00:00.0000000'', ' +
@@ -173,7 +147,6 @@ BEGIN TRY
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = ' + T.[Schema] + '.[' + SchemaSmith.fn_StripBracketWrapping(T.[Name]) + '_Hist]));' AS NVARCHAR(MAX))
                            FROM #Tables T WITH (NOLOCK)
                            WHERE t.IsTemporal = 1
-                             AND SchemaSmith.fn_ServerMajorVersion() >= 13
                              AND OBJECTPROPERTY(OBJECT_ID([Schema] + '.' + [Name]), 'TableTemporalType') = 0
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)

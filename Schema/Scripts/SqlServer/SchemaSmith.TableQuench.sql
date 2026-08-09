@@ -16,6 +16,11 @@ BEGIN TRY
     SET NOCOUNT ON
 {{ParseJson}}
 
+  -- Sanitize the parsed working set for the detected target version BEFORE any emit/detection pass: below a
+  -- feature's intro version the declared feature is refused ('fail') or neutralized in place ('warn'), so the
+  -- quench procs stay gate-free. See SchemaSmith.DegradeUnsupportedFeatures.
+  EXEC SchemaSmith.DegradeUnsupportedFeatures
+
   EXEC SchemaSmith.MissingTableAndColumnQuench @WhatIf
   EXEC SchemaSmith.ModifiedTableQuench @ProductName, @WhatIf, @DropUnknownIndexes, @DropTablesRemovedFromProduct
   EXEC SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName, @WhatIf
