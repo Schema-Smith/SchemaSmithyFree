@@ -13,6 +13,29 @@ namespace Schema.UnitTests.Utility;
 [TestFixture]
 public class MergeScriptHelperTests
 {
+    #region B1 — XML delivery encoding guard
+
+    [Test]
+    public void BuildMergeScript_XmlEncoding_OnNonSqlServer_ThrowsNotSupported()
+    {
+        // B1: XML delivery encoding is SQL-Server-only in this slice; a PG/MySQL delivery declaring Xml must
+        // fail loudly (before any catalog access) rather than silently emit a JSON shred.
+        var cmd = Substitute.For<IDbCommand>();
+        Assert.Multiple(() =>
+        {
+            Assert.Throws<NotSupportedException>(() =>
+                MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd, "public", "t", "<rows/>", "\"id\"",
+                    mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
+                    mergeFilter: null, contentEncoding: "Xml"));
+            Assert.Throws<NotSupportedException>(() =>
+                MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd, "db", "t", "<rows/>", "`id`",
+                    mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
+                    mergeFilter: null, contentEncoding: "Xml"));
+        });
+    }
+
+    #endregion
+
     #region GetKeyColumns Tests
 
     [Test]
@@ -1294,6 +1317,7 @@ public class MergeScriptHelperTests
         var commandTexts = cmd2.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == "set_CommandText")
             .Select(c => c.GetArguments()[0]?.ToString())
+            .Where(t => t == null || !t.Contains("compatibility_level")) // B1: drop the cliff-detect probe
             .ToList();
 
         // Second query is GetJsonSelectColumns (first is GetUnsupportedColumnComments) - should contain both types
@@ -1313,6 +1337,7 @@ public class MergeScriptHelperTests
         var commandTexts = cmd.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == "set_CommandText")
             .Select(c => c.GetArguments()[0]?.ToString())
+            .Where(t => t == null || !t.Contains("compatibility_level")) // B1: drop the cliff-detect probe
             .ToList();
 
         // Fifth query is GetUpdateColumns - should check for both GEOGRAPHY and GEOMETRY
@@ -1333,6 +1358,7 @@ public class MergeScriptHelperTests
         var commandTexts = cmd.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == "set_CommandText")
             .Select(c => c.GetArguments()[0]?.ToString())
+            .Where(t => t == null || !t.Contains("compatibility_level")) // B1: drop the cliff-detect probe
             .ToList();
 
         // Fourth query is GetJsonColumnDefinitions - should contain GEOMETRY replacement
@@ -1380,6 +1406,7 @@ public class MergeScriptHelperTests
         var commandTexts = cmd.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == "set_CommandText")
             .Select(c => c.GetArguments()[0]?.ToString())
+            .Where(t => t == null || !t.Contains("compatibility_level")) // B1: drop the cliff-detect probe
             .ToList();
 
         var updateQuery = commandTexts[4];
@@ -1399,6 +1426,7 @@ public class MergeScriptHelperTests
         var commandTexts = cmd.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == "set_CommandText")
             .Select(c => c.GetArguments()[0]?.ToString())
+            .Where(t => t == null || !t.Contains("compatibility_level")) // B1: drop the cliff-detect probe
             .ToList();
 
         var jsonColDefsQuery = commandTexts[3];
@@ -1421,8 +1449,12 @@ public class MergeScriptHelperTests
         string insertCols, string updateCols, string unsupportedComments = null)
     {
         var cmd = Substitute.For<IDbCommand>();
+        // B1: GetUnsupportedColumnComments / GetUpdateColumns / GetInsertColumns each self-detect the
+        // compatibility-level cliff with an extra ExecuteScalar first; 0 (not-below-cliff) selects the
+        // modern STRING_AGG path, matching this mock's assertions.
         var sequence = new List<object>
         {
+            0,                    // cliff-check for GetUnsupportedColumnComments
             unsupportedComments,  // 1. GetUnsupportedColumnComments
             jsonSelectCols,       // 2. GetJsonSelectColumns
             needsIdentity         // 3. NeedsIdentityInsert
@@ -1431,8 +1463,12 @@ public class MergeScriptHelperTests
             sequence.Add(true);   // 4. IdentityColumnInJsonKeysSqlServer (assume identity column is in jsonKeys for unit-test mocks)
         sequence.Add(jsonColDefs);// GetJsonColumnDefinitions
         if (updateCols != null)
+        {
+            sequence.Add(0);          // cliff-check for GetUpdateColumns
             sequence.Add(updateCols); // GetUpdateColumns (only if mergeUpdate)
-        sequence.Add(insertCols);     // GetInsertColumns
+        }
+        sequence.Add(0);          // cliff-check for GetInsertColumns
+        sequence.Add(insertCols); // GetInsertColumns
 
         var callCount = 0;
         cmd.ExecuteScalar().Returns(ci =>
@@ -1607,6 +1643,7 @@ public class MergeScriptHelperTests
         var allQueries = cmd.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == "set_CommandText")
             .Select(c => c.GetArguments()[0]?.ToString())
+            .Where(t => t == null || !t.Contains("compatibility_level")) // B1: drop the cliff-detect probe
             .ToList();
 
         // GetJsonSelectColumns, GetJsonColumnDefinitions, GetInsertColumns, GetUpdateColumns should all have the filter
@@ -1636,6 +1673,7 @@ public class MergeScriptHelperTests
         var allQueries = cmd.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == "set_CommandText")
             .Select(c => c.GetArguments()[0]?.ToString())
+            .Where(t => t == null || !t.Contains("compatibility_level")) // B1: drop the cliff-detect probe
             .ToList();
 
         // GetJsonColumnDefinitions, GetInsertColumns, GetUpdateColumns should all have the filter
@@ -2039,8 +2077,9 @@ public class MergeScriptHelperTests
         // the override.
         var cmd = Substitute.For<IDbCommand>();
 
-        // Sequence: unsupported(null) -> jsonSelectCols -> needsIdentity -> jsonColDefs -> insertCols.
-        var sequence = new Queue<object>(new object[] { null, "[Id]", false, "           [Id] INT", "        [Id]" });
+        // Sequence: cliff -> unsupported(null) -> jsonSelectCols -> needsIdentity -> jsonColDefs ->
+        // cliff -> insertCols. The 0 entries answer the compat-cliff self-detection (not-below-cliff).
+        var sequence = new Queue<object>(new object[] { 0, null, "[Id]", false, "           [Id] INT", 0, "        [Id]" });
         cmd.ExecuteScalar().Returns(_ => sequence.Count > 0 ? sequence.Dequeue() : null);
         var bound = CaptureBoundParameters(cmd);
 

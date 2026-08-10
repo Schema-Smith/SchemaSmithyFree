@@ -283,7 +283,8 @@ public class DataDeliveryProcessor : IDataDelivery
 
                 var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
                     tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
-                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum, context.MySqlServerVersionNum);
+                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum, context.MySqlServerVersionNum,
+                    delivery.ContentEncoding ?? "Json");
 
                 if (!context.WhatIf)
                 {
@@ -384,7 +385,8 @@ public class DataDeliveryProcessor : IDataDelivery
                 var mergeFilter = ResolveMergeFilter(delivery.MergeFilter, context.SchemaName);
                 var mergeScript = helper.BuildMergeScript(context.Command, schemaOrDb, table.Name,
                     tableData, keyColumns, update, delete, delivery.MergeDisableTriggers, false, mergeFilter,
-                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum, context.MySqlServerVersionNum);
+                    delivery.MergeDisableRules, delivery.MergeUpdateDescendents, context.PostgreSqlServerVersionNum, context.MySqlServerVersionNum,
+                    delivery.ContentEncoding ?? "Json");
 
                 try
                 {
@@ -410,7 +412,7 @@ public class DataDeliveryProcessor : IDataDelivery
             schemaOrDb, table.Name, tableData, keyColumns,
             delivery.MergeDisableTriggers, deferredColumns,
             delivery.MergeDisableRules, delivery.MergeUpdateDescendents,
-            context.PostgreSqlServerVersionNum);
+            context.PostgreSqlServerVersionNum, delivery.ContentEncoding ?? "Json");
     }
 
     /// <summary>

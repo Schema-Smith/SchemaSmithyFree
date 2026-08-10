@@ -52,7 +52,8 @@ public interface IMergeScriptHelper
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
         bool disableRules = false, bool updateDescendents = false,
-        int pgServerVersionNum = 0, int mySqlServerVersionNum = 0);
+        int pgServerVersionNum = 0, int mySqlServerVersionNum = 0,
+        string contentEncoding = "Json");
 
     /// <summary>
     /// Gets detailed column metadata for a table. Used to build deferred merge scripts

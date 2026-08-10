@@ -49,6 +49,53 @@ public static class MergeScriptHelper
         }
     }
 
+    // B1: the XML-delivery analogue of GetJsonDataKeys. The delivery XML shape is
+    // <rows><row><c n="ColName">value</c>…</row></rows>, so the "keys present in the data" are the
+    // distinct <c> @n attribute values. Returns null (include all columns) on empty/unparseable input.
+    internal static HashSet<string> GetXmlDataKeys(string tableData)
+    {
+        if (string.IsNullOrWhiteSpace(tableData)) return null;
+        try
+        {
+            var doc = System.Xml.Linq.XDocument.Parse(tableData);
+            var names = doc.Descendants("c")
+                .Select(c => (string)c.Attribute("n"))
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToHashSet(StringComparer.InvariantCultureIgnoreCase);
+            return names.Count == 0 ? null : names;
+        }
+        catch
+        {
+            return null; // If parsing fails, include all columns
+        }
+    }
+
+    // B1: the SQL Server data-delivery metadata helpers below aggregate column lists with
+    // STRING_AGG … WITHIN GROUP, which requires database compatibility level 130+. On a compat-100
+    // target (the lowered floor), that parse-errors during the merge BUILD — so each helper detects the
+    // cliff once and falls back to reading the component rows and joining them in C# (works at every
+    // compat level), leaving the modern STRING_AGG path bit-for-bit unchanged. Self-contained (no
+    // signature threading) because GetKeyColumns is invoked outside BuildMergeScript.
+    private static bool IsBelowJsonCliffSqlServer(IDbCommand cmd)
+    {
+        cmd.Parameters.Clear();
+        cmd.CommandText = "SELECT CASE WHEN (SELECT compatibility_level FROM sys.databases WHERE database_id = DB_ID()) < 130 THEN 1 ELSE 0 END";
+        // An unparseable result (e.g. a mocked unit-test command) is treated as at/above the cliff — the
+        // modern STRING_AGG path, the safe default.
+        return int.TryParse(cmd.ExecuteScalar()?.ToString(), out var v) && v == 1;
+    }
+
+    // Reads a single-string-column result set into an ordered list — the C#-side aggregation used by the
+    // below-cliff fallbacks in place of STRING_AGG.
+    private static List<string> ReadStringColumn(IDbCommand cmd)
+    {
+        var rows = new List<string>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            rows.Add(reader.IsDBNull(0) ? "" : reader.GetString(0));
+        return rows;
+    }
+
     /// <summary>
     /// Builds a SQL IN clause fragment for filtering columns by JSON data keys.
     /// Returns empty string if jsonKeys is null (include all columns).
@@ -391,9 +438,10 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
         tableSchema = tableSchema.Trim().Trim('[', ']');
         tableName = tableName.Trim().Trim('[', ']');
 
+        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@objname", $"{tableSchema}.{tableName}"));
-        cmd.CommandText = $@"
-SELECT STRING_AGG(CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']', ',')
+        const string aggExpr = "CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']'";
+        const string fromWhere = @"
   FROM sys.indexes si WITH (NOLOCK)
   JOIN sys.index_columns ic WITH (NOLOCK) ON ic.[object_id] = si.[object_id]
                                          AND ic.index_id = si.index_id
@@ -411,6 +459,12 @@ SELECT STRING_AGG(CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_
                                     WHERE ic2.[object_id] = si2.[object_id]
                                       AND sc.is_nullable = 0))
 ";
+        if (belowCliff)
+        {
+            cmd.CommandText = $"SELECT {aggExpr}{fromWhere}  ORDER BY ic.key_ordinal";
+            return string.Join(",", ReadStringColumn(cmd));
+        }
+        cmd.CommandText = $"SELECT STRING_AGG({aggExpr}, ','){fromWhere}";
         return cmd.ExecuteScalar()?.ToString() ?? "";
     }
 
@@ -499,20 +553,30 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
         bool disableRules = false, bool updateDescendents = false,
-        string destSchemaOverride = null, int pgServerVersionNum = 0, int mySqlServerVersionNum = 0)
+        string destSchemaOverride = null, int pgServerVersionNum = 0, int mySqlServerVersionNum = 0,
+        string contentEncoding = "Json")
     {
-        // Extract JSON keys to filter columns — only include columns present in the data.
+        var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
+
+        // B1: XML delivery shreds the payload with .nodes()/.value() (every SQL Server compat level) instead
+        // of OPENJSON (compat 130+). SQL Server is the only engine wired for it in this slice; a PG/MySQL
+        // delivery that declares Xml fails loudly rather than silently emitting a JSON shred.
+        if (isXml && platform.GetBasePlatform() != Platform.SqlServer)
+            throw new NotSupportedException(
+                $"XML data-delivery encoding is not yet supported on {platform.GetBasePlatform()}; use JSON (its shred works at every supported version).");
+
+        // Extract the data keys to filter columns — only include columns present in the data.
         // For tokenized scripts, data is replaced at runtime so we include all columns.
-        var jsonKeys = tokenizeScripts ? null : GetJsonDataKeys(tableData);
+        var dataKeys = tokenizeScripts ? null : (isXml ? GetXmlDataKeys(tableData) : GetJsonDataKeys(tableData));
 
         return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride),
+                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, isXml),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, jsonKeys, destSchemaOverride, pgServerVersionNum),
+                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum),
             Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
-                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, jsonKeys, mySqlServerVersionNum),
+                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, dataKeys, mySqlServerVersionNum),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
         };
     }
@@ -536,13 +600,20 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
 
     private static string GetUnsupportedColumnCommentsSqlServer(IDbCommand cmd, string tableSchema, string tableName)
     {
+        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
-        cmd.CommandText = $@"
-SELECT STRING_AGG('-- Column [' + c.COLUMN_NAME + '] skipped: ' + c.DATA_TYPE + ' is not supported for data delivery', CHAR(13) + CHAR(10))
+        const string aggExpr = "'-- Column [' + c.COLUMN_NAME + '] skipped: ' + c.DATA_TYPE + ' is not supported for data delivery'";
+        const string filters = @"
   FROM INFORMATION_SCHEMA.COLUMNS c
   WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
     AND c.DATA_TYPE IN ('sql_variant', 'rowversion', 'timestamp')
 ";
+        if (belowCliff)
+        {
+            cmd.CommandText = $"SELECT {aggExpr}{filters}  ORDER BY c.COLUMN_NAME";
+            return string.Join("\r\n", ReadStringColumn(cmd));
+        }
+        cmd.CommandText = $"SELECT STRING_AGG({aggExpr}, CHAR(13) + CHAR(10)){filters}";
         return cmd.ExecuteScalar()?.ToString() ?? "";
     }
 
@@ -570,7 +641,7 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
     private static string BuildMergeScriptSqlServer(IDbCommand cmd, string tableSchema, string tableName,
         string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null)
+        string destSchemaOverride = null, bool isXml = false)
     {
         tableSchema = tableSchema.Trim().Trim('[', ']');
         tableName = tableName.Trim().Trim('[', ']');
@@ -584,12 +655,17 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
 
         var unsupportedComments = GetUnsupportedColumnCommentsSqlServer(cmd, tableSchema, tableName);
         var matchColumns = BuildSqlServerMatchColumns(keyColumns);
-        var fromJsonSelectColumns = GetJsonSelectColumnsSqlServer(cmd, tableSchema, tableName, jsonKeys);
+        // Select-column list for the MERGE source, computed here (before identityInsert) so the catalog-query
+        // call order is identical to the JSON-only path that predates the XML encoding. XML shreds with
+        // .nodes()/.value(); JSON reads OPENJSON WITH columns (the WITH clause is jsonColumns, below).
+        var selectColumns = isXml
+            ? BuildXmlShredSelectColumnsSqlServer(cmd, tableSchema, tableName, jsonKeys)
+            : GetJsonSelectColumnsSqlServer(cmd, tableSchema, tableName, jsonKeys);
         // IDENTITY_INSERT must be ON only when tabledata provides values for an identity column.
-        // NeedsIdentityInsertSqlServer returns true whenever ANY identity column exists; filter by jsonKeys.
+        // NeedsIdentityInsertSqlServer returns true whenever ANY identity column exists; filter by data keys.
         var identityInsert = NeedsIdentityInsertSqlServer(cmd, tableSchema, tableName)
                              && IdentityColumnInJsonKeysSqlServer(cmd, tableSchema, tableName, jsonKeys);
-        var jsonColumns = GetJsonColumnDefinitionsSqlServer(cmd, tableSchema, tableName, jsonKeys);
+        var jsonColumns = isXml ? null : GetJsonColumnDefinitionsSqlServer(cmd, tableSchema, tableName, jsonKeys);
 
         // Content-file token: when destination is overridden, the .tabledata file is unqualified
         // (DataTongs writes Customers.tabledata, not tenant_seed.Customers.tabledata in schema-
@@ -597,23 +673,35 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
         var contentToken = string.IsNullOrEmpty(destSchemaOverride)
             ? $"{tableSchema}.{tableName}.tabledata"
             : $"{tableName}.tabledata";
-        var jsonValue = tokenizeScripts
+        var contentValue = tokenizeScripts
             ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
 
-        var mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\r\n") + $@"
-DECLARE @v_json NVARCHAR(MAX) = '{jsonValue}';
-
-{(disableTriggers ? $"ALTER TABLE [{destSchema}].[{tableName}] DISABLE TRIGGER ALL;" : "")}
-{(identityInsert ? $"SET IDENTITY_INSERT [{destSchema}].[{tableName}] ON;" : "")}
-MERGE INTO [{destSchema}].[{tableName}] AS Target
-USING (
-  SELECT {fromJsonSelectColumns}
+        // B1: the row source is the only thing that differs by encoding. XML shreds the payload with
+        // .nodes()/.value() (works at every compat level); JSON uses OPENJSON (compat 130+). The MERGE
+        // tail (match/update/insert/delete/identity/triggers) below is identical for both.
+        var (declareLine, rowSource) = isXml
+            ? ($"DECLARE @v_xml XML = '{contentValue}';",
+               $@"USING (
+  SELECT {selectColumns}
+    FROM @v_xml.nodes('/rows/row') AS Src(n)
+) AS Source")
+            : ($"DECLARE @v_json NVARCHAR(MAX) = '{contentValue}';",
+               $@"USING (
+  SELECT {selectColumns}
     FROM OPENJSON(@v_json)
     WITH (
 {jsonColumns}
     )
-) AS Source
+) AS Source");
+
+        var mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\r\n") + $@"
+{declareLine}
+
+{(disableTriggers ? $"ALTER TABLE [{destSchema}].[{tableName}] DISABLE TRIGGER ALL;" : "")}
+{(identityInsert ? $"SET IDENTITY_INSERT [{destSchema}].[{tableName}] ON;" : "")}
+MERGE INTO [{destSchema}].[{tableName}] AS Target
+{rowSource}
 ON {matchColumns}
 ";
 
@@ -696,6 +784,40 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
         return cmd.ExecuteScalar()?.ToString();
     }
 
+    // B1: builds the XML-shred SELECT column list for a SQL Server data-delivery MERGE source. Assembled
+    // in C# from GetColumnMetadata (whose column set matches GetJsonSelectColumns exactly — same
+    // computed/rowguid/unsupported-type exclusions and data-key filter), so the emitted Source exposes
+    // exactly the columns the MERGE's insert/update/match clauses reference. The delivery XML shape is
+    // <rows><row><c n="ColName">value</c>…</row></rows>; each column is shredded with
+    // Src.n.value('(c[@n="ColName"]/text())[1]', <type>). NULL = absent <c>.
+    private static string BuildXmlShredSelectColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
+    {
+        var columns = GetColumnMetadataSqlServer(cmd, tableSchema, tableName, jsonKeys);
+        if (columns.Count == 0) return "*";
+
+        static string Node(string name) => $"(c[@n=\"{name}\"]/text())[1]";
+
+        return string.Join(",", columns.Select(c =>
+        {
+            var alias = $"[{c.Name}]";
+            if (c.IsGeometry)
+            {
+                var spatialType = c.DataType.Equals("geography", StringComparison.OrdinalIgnoreCase) ? "geography" : "geometry";
+                // WKT + SRID companion (<c n="Col.STSrid">), mirroring the JSON path's [Col]/[Col.STSrid] pair.
+                return $"{spatialType}::STGeomFromText(Src.n.value('{Node(c.Name)}','NVARCHAR(4000)'), Src.n.value('{Node(c.Name + ".STSrid")}','INT')) AS {alias}";
+            }
+            if (c.IsBinary)
+                // Delivery stores binary as base64 text; xs:base64Binary decodes it in-shred (a straight
+                // CAST to VARBINARY would hex-interpret the text, corrupting the bytes).
+                return $"Src.n.value('xs:base64Binary({Node(c.Name)})','{c.JsonParseType}') AS {alias}";
+            if (c.IsXml)
+                // .value() cannot return the xml type; shred as NVARCHAR(MAX) and let the INSERT implicitly
+                // convert the text into the xml column.
+                return $"Src.n.value('{Node(c.Name)}','NVARCHAR(MAX)') AS {alias}";
+            return $"Src.n.value('{Node(c.Name)}','{c.JsonParseType}') AS {alias}";
+        }));
+    }
+
     private static bool NeedsIdentityInsertSqlServer(IDbCommand cmd, string tableSchema, string tableName)
     {
         BindIdentifierParameters(cmd, ("@objname", $"{tableSchema}.{tableName}"));
@@ -755,9 +877,10 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
 
     private static string GetInsertColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
-        cmd.CommandText = $@"
-SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+        var aggExpr = "'        [' + c.COLUMN_NAME + ']'";
+        var filters = $@"
   FROM INFORMATION_SCHEMA.COLUMNS c
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
   LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = COLUMN_NAME
@@ -769,21 +892,29 @@ SELECT STRING_AGG('        [' + c.COLUMN_NAME + ']', ',' + CHAR(13) + CHAR(10)) 
     AND sc.is_rowguidcol = 0
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
 ";
+        if (belowCliff)
+        {
+            cmd.CommandText = $"SELECT {aggExpr}{filters}  ORDER BY c.COLUMN_NAME";
+            var rows = ReadStringColumn(cmd);
+            return rows.Count == 0 ? null : string.Join(",\r\n", rows);
+        }
+        cmd.CommandText = $"SELECT STRING_AGG({aggExpr}, ',' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY c.COLUMN_NAME){filters}";
         return cmd.ExecuteScalar()?.ToString();
     }
 
     private static string GetUpdateColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
-        cmd.CommandText = $@"
-SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
+        const string aggExpr = @"CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
                        WHEN c.DATA_TYPE = 'DATETIMEOFFSET' THEN 'D'
                        WHEN c.DATA_TYPE = 'XML' THEN 'X'
                        WHEN c.DATA_TYPE = 'NTEXT' THEN 'N'
                        WHEN c.DATA_TYPE = 'TEXT' THEN 'T'
                        WHEN c.DATA_TYPE = 'IMAGE' THEN 'I'
                        ELSE '' END +
-                  '[' + c.COLUMN_NAME + ']', ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+                  '[' + c.COLUMN_NAME + ']'";
+        var filters = $@"
   FROM INFORMATION_SCHEMA.COLUMNS c
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
   LEFT JOIN sys.identity_columns ident WITH (NOLOCK) ON ident.[Name] = COLUMN_NAME
@@ -796,6 +927,13 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
     AND sc.is_rowguidcol = 0
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
 ";
+        if (belowCliff)
+        {
+            cmd.CommandText = $"SELECT {aggExpr}{filters}  ORDER BY c.COLUMN_NAME";
+            var rows = ReadStringColumn(cmd);
+            return rows.Count == 0 ? null : string.Join(",", rows);
+        }
+        cmd.CommandText = $"SELECT STRING_AGG({aggExpr}, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME){filters}";
         return cmd.ExecuteScalar()?.ToString();
     }
 
