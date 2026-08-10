@@ -681,7 +681,9 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
         // .nodes()/.value() (works at every compat level); JSON uses OPENJSON (compat 130+). The MERGE
         // tail (match/update/insert/delete/identity/triggers) below is identical for both.
         var (declareLine, rowSource) = isXml
-            ? ($"DECLARE @v_xml XML = '{contentValue}';",
+            // XML data type methods (.nodes()/.value()) require QUOTED_IDENTIFIER ON; emit it so the script
+            // is self-sufficient regardless of the executing session's setting (verified on SQL Server 2008 R2).
+            ? ($"SET QUOTED_IDENTIFIER ON;\r\n\r\nDECLARE @v_xml XML = '{contentValue}';",
                $@"USING (
   SELECT {selectColumns}
     FROM @v_xml.nodes('/rows/row') AS Src(n)

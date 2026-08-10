@@ -57,6 +57,9 @@ internal static class DeferredMergeBuilder
         var columns = helper.GetColumnMetadata(cmd, schemaOrDb, tableName);
 
         var sb = new StringBuilder();
+        // XML data type methods (.nodes()/.value()) require QUOTED_IDENTIFIER ON; emit it so the script is
+        // self-sufficient regardless of the executing session's setting (verified on SQL Server 2008 R2).
+        if (isXml) sb.AppendLine("SET QUOTED_IDENTIFIER ON;").AppendLine();
         sb.AppendLine(isXml
             ? $"DECLARE @v_xml XML = '{tableData?.Replace("'", "''")}';"
             : $"DECLARE @v_json NVARCHAR(MAX) = '{tableData?.Replace("'", "''")}';");
