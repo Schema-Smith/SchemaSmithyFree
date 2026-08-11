@@ -26,16 +26,31 @@ function Get-LabEndpointLabel {
 
 function Get-LabClient {
     param([Parameter(Mandatory)][string]$Engine)
-    $client = @{ sqlserver = 'sqlcmd'; postgres = 'psql'; mysql = 'mysql'; mariadb = 'mariadb' }[$Engine]
-    if (-not (Get-Command $client -ErrorAction SilentlyContinue)) {
-        throw "LAB-SQL: '$client' is required to reach your own $Engine server but is not on PATH. Install the engine's command-line client (see docs/end-user/guide/use-your-own-server.md), re-open your shell, and verify with '$client --version'."
+    # MariaDB renamed its client to 'mariadb' in later releases; 10.2-10.4 ship only 'mysql'.
+    # Accept either so a learner on a supported-but-older MariaDB isn't turned away.
+    $candidates = @{ sqlserver = @('sqlcmd'); postgres = @('psql'); mysql = @('mysql'); mariadb = @('mariadb', 'mysql') }[$Engine]
+    foreach ($c in $candidates) {
+        if (Get-Command $c -ErrorAction SilentlyContinue) { return $c }
     }
-    return $client
+    $shown = $candidates -join "' or '"
+    throw "LAB-SQL: '$shown' is required to reach your own $Engine server but is not on PATH. Install the engine's command-line client (see docs/end-user/guide/use-your-own-server.md), re-open your shell, and verify with '$($candidates[0]) --version'."
 }
 
 function Get-LabContainer {
     param([Parameter(Mandatory)][string]$Engine)
     return @{ sqlserver = 'learn-sqlserver'; postgres = 'learn-postgres'; mysql = 'learn-mysql'; mariadb = 'learn-mariadb' }[$Engine]
+}
+
+# MariaDB 10.2-10.4 containers have no 'mariadb' binary -- only 'mysql'. Probe once per
+# container and cache, so a floor-version sandbox is reachable without a per-call check.
+$script:LabMariaClientCache = @{}
+function Get-LabContainerMariaClient {
+    param([Parameter(Mandatory)][string]$Container)
+    if ($script:LabMariaClientCache.ContainsKey($Container)) { return $script:LabMariaClientCache[$Container] }
+    docker exec $Container sh -c 'command -v mariadb >/dev/null 2>&1' 2>&1 | Out-Null
+    $client = if ($LASTEXITCODE -eq 0) { 'mariadb' } else { 'mysql' }
+    $script:LabMariaClientCache[$Container] = $client
+    return $client
 }
 
 # PowerShell 5.1 wraps a native command's redirected stderr in ErrorRecords, which
@@ -84,7 +99,7 @@ function Invoke-LabSql {
             'sqlserver' { $out = docker exec $container /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d $Database -h -1 -W -Q "SET NOCOUNT ON; $Sql" 2>&1 }
             'postgres'  { $out = docker exec $container psql -U postgres -d $Database -v ON_ERROR_STOP=1 -tAc $Sql 2>&1 }
             'mysql'     { $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container mysql -uroot -N -s -D $Database -e $Sql 2>&1 }
-            'mariadb'   { $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container mariadb -uroot -N -s -D $Database -e $Sql 2>&1 }
+            'mariadb'   { $mc = Get-LabContainerMariaClient -Container $container; $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container $mc -uroot -N -s -D $Database -e $Sql 2>&1 }
         }
     }
     $streams = Split-LabStreams $out
@@ -125,7 +140,7 @@ function Invoke-LabSqlFile {
             'sqlserver' { $out = docker exec $container /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d $Database -i /tmp/lab-seed.sql 2>&1 }
             'postgres'  { $out = docker exec $container psql -U postgres -d $Database -v ON_ERROR_STOP=1 -f /tmp/lab-seed.sql 2>&1 }
             'mysql'     { $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container mysql -uroot -D $Database -e 'source /tmp/lab-seed.sql' 2>&1 }
-            'mariadb'   { $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container mariadb -uroot -D $Database -e 'source /tmp/lab-seed.sql' 2>&1 }
+            'mariadb'   { $mc = Get-LabContainerMariaClient -Container $container; $out = docker exec -e MYSQL_PWD=Learn!Passw0rd $container $mc -uroot -D $Database -e 'source /tmp/lab-seed.sql' 2>&1 }
         }
     }
     if ($LASTEXITCODE -ne 0) {

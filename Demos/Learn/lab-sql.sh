@@ -30,7 +30,9 @@ lab_client() {
     sqlserver) client=sqlcmd ;;
     postgres)  client=psql ;;
     mysql)     client=mysql ;;
-    mariadb)   client=mariadb ;;
+    # MariaDB renamed its client to 'mariadb' in later releases; 10.2-10.4 ship only
+    # 'mysql'. Accept either so a supported-but-older MariaDB isn't turned away.
+    mariadb)   if command -v mariadb >/dev/null 2>&1; then client=mariadb; else client=mysql; fi ;;
   esac
   if ! command -v "$client" >/dev/null 2>&1; then
     echo "LAB-SQL: '$client' is required to reach your own $1 server but is not on PATH. Install the engine's command-line client (see docs/end-user/guide/use-your-own-server.md), re-open your shell, and verify with '$client --version'." >&2
@@ -46,6 +48,16 @@ lab_container() {
     mysql)     printf 'learn-mysql' ;;
     mariadb)   printf 'learn-mariadb' ;;
   esac
+}
+
+# MariaDB 10.2-10.4 containers have no 'mariadb' binary -- only 'mysql'. Probe the
+# container so a floor-version sandbox is reachable.
+lab_container_maria_client() {
+  if docker exec "$1" sh -c 'command -v mariadb >/dev/null 2>&1' >/dev/null 2>&1; then
+    printf 'mariadb'
+  else
+    printf 'mysql'
+  fi
 }
 
 # Trim leading and trailing whitespace so output matches the PowerShell twin exactly.
@@ -84,7 +96,7 @@ lab_sql() {
                          -Q "SET NOCOUNT ON; $sql" 2>"$errfile"); rc=$? ;;
       postgres)  out=$(docker exec "$container" psql -U postgres -d "$db" -v ON_ERROR_STOP=1 -tAc "$sql" 2>"$errfile"); rc=$? ;;
       mysql)     out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mysql -uroot -N -s -D "$db" -e "$sql" 2>"$errfile"); rc=$? ;;
-      mariadb)   out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mariadb -uroot -N -s -D "$db" -e "$sql" 2>"$errfile"); rc=$? ;;
+      mariadb)   mc=$(lab_container_maria_client "$container"); out=$(docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" "$mc" -uroot -N -s -D "$db" -e "$sql" 2>"$errfile"); rc=$? ;;
     esac
   fi
   err="$(cat "$errfile" 2>/dev/null)"
@@ -129,7 +141,7 @@ lab_sql_file() {
                          -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d "$db" -i /tmp/lab-seed.sql 2>&1); rc=$? ;;
       postgres)  out=$(MSYS_NO_PATHCONV=1 docker exec "$container" psql -U postgres -d "$db" -v ON_ERROR_STOP=1 -f /tmp/lab-seed.sql 2>&1); rc=$? ;;
       mysql)     out=$(MSYS_NO_PATHCONV=1 docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mysql -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
-      mariadb)   out=$(MSYS_NO_PATHCONV=1 docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" mariadb -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
+      mariadb)   mc=$(lab_container_maria_client "$container"); out=$(MSYS_NO_PATHCONV=1 docker exec -e 'MYSQL_PWD=Learn!Passw0rd' "$container" "$mc" -uroot -D "$db" -e 'source /tmp/lab-seed.sql' 2>&1); rc=$? ;;
     esac
   fi
   if [ "$rc" -ne 0 ]; then
