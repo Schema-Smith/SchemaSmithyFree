@@ -163,6 +163,7 @@ public class DatabaseQuench
         FailureContext.ResolveCapacity(FactoryContainer.Resolve<IConfigurationRoot>()));
     private int _postgreSqlServerVersionNum; // 0 until detected; only meaningful when Platform == PostgreSQL
     private int _mySqlServerVersionNum; // 0 until detected (major*100+minor); only meaningful for MySQL/MariaDb
+    private int _sqlServerCompatibilityLevel; // 0 until detected; SQL-Server-only; gates JSON data delivery below 130 (B1 slice 2)
     private string _unsupportedFeaturePolicy; // Target:UnsupportedFeaturePolicy; governs the MySQL data-delivery gate
 
     // A1: the per-target version script tokens ({{ServerMajorVersion}} / {{CompatibilityLevel}}),
@@ -486,6 +487,12 @@ public class DatabaseQuench
                 using (var versionCmd = connection.CreateCommand())
                 {
                     var versionInfo = TargetVersionDetector.Detect(versionCmd, _product.Platform, _databaseName);
+                    // Captured for every engine (CompatibilityLevel is null => 0 on non-SQL-Server). SQL Server's
+                    // JSON data delivery gates on compat < 130 (B1 slice 2); the policy governs that and the
+                    // MySQL < 8.0 data-delivery gate. Resolved up front so both the deliver and WhatIf contexts
+                    // below see them regardless of the per-engine switch.
+                    _sqlServerCompatibilityLevel = versionInfo.CompatibilityLevel ?? 0;
+                    _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"];
                     switch (_product.Platform.GetBasePlatform())
                     {
                         case Platform.PostgreSQL:
@@ -496,7 +503,6 @@ public class DatabaseQuench
                         // manual scripts below MySQL 8.0); the policy governs the below-floor gate.
                         case Platform.MySQL:
                             _mySqlServerVersionNum = versionInfo.ServerComparable;
-                            _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"];
                             break;
                         case Platform.SqlServer when !_suppressKindling:
                             SafeProgressLog($"  [{_databaseName}] detected SQL Server version {VersionHelper.DisplayVersion(versionInfo)}" +
@@ -699,6 +705,7 @@ public class DatabaseQuench
                                 WhatIf = IsWhatIf,
                                 PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
                                 MySqlServerVersionNum = _mySqlServerVersionNum,
+                                SqlServerCompatibilityLevel = _sqlServerCompatibilityLevel,
                                 UnsupportedFeaturePolicy = _unsupportedFeaturePolicy,
                                 WriteResolvedSqlArtifact = (label, sql) =>
                                 {
@@ -810,6 +817,7 @@ public class DatabaseQuench
                             SchemaName = _schemaName,
                             PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
                             MySqlServerVersionNum = _mySqlServerVersionNum,
+                            SqlServerCompatibilityLevel = _sqlServerCompatibilityLevel,
                             UnsupportedFeaturePolicy = _unsupportedFeaturePolicy,
                             TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
                             ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),

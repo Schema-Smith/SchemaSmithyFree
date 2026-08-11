@@ -112,6 +112,36 @@ public class DataDeliveryProcessor : IDataDelivery
 
         var appliedByTable = tablesToDeliver.ToDictionary(t => t, ResolveApplied);
 
+        // B1 slice 2: a JSON (OPENJSON) delivery requires SQL Server compatibility level 130. On a
+        // below-cliff target (compat 100-120, common where a line-of-business app is certified at an
+        // older level) an XML-encoded delivery still applies (.nodes()/.value() works at every level),
+        // but a JSON one parse-errors — so degrade it per Target:UnsupportedFeaturePolicy: warn (the
+        // default) skips just that delivery with a clear message and delivers the rest; fail aborts.
+        // Per-delivery (not a whole-table return like the MySQL < 8.0 case at :59) because the encoding
+        // is a per-delivery author choice — a table may pair a JSON and an XML variant. Filtered before
+        // CASCADE validation / content reads / the deliver loop so skipped deliveries never reach them.
+        if (platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) &&
+            context.SqlServerCompatibilityLevel is > 0 and < 130)
+        {
+            var failFast = string.Equals(context.UnsupportedFeaturePolicy, "fail", StringComparison.OrdinalIgnoreCase);
+            foreach (var table in tablesToDeliver)
+            {
+                var applied = appliedByTable[table];
+                var kept = applied.Where(x => string.Equals(x.Delivery.ContentEncoding, "Xml", StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (var (_, delivery) in applied.Where(x => !string.Equals(x.Delivery.ContentEncoding, "Xml", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var msg = $"JSON data delivery for {DataDeliveryHelper.GetTableKey(table, platform)}{VariantSuffix(delivery)} " +
+                              $"requires SQL Server compatibility level 130 (target is at {context.SqlServerCompatibilityLevel}); " +
+                              "re-encode this delivery as XML (\"ContentEncoding\": \"Xml\") to deploy it on a legacy-compat target.";
+                    if (failFast)
+                        throw new NotSupportedException(msg);
+                    log($"    [SKIPPED - requires compatibility level 130 for JSON delivery] {msg}");
+                }
+                if (kept.Count != applied.Count)
+                    appliedByTable[table] = kept;
+            }
+        }
+
         // CASCADE validation is scoped to the gated-IN (applied) deliveries only — a delivery
         // whose gate is false this run will never execute here, so its table must not be able to
         // false-abort the whole run just because a CASCADE FK exists on it (#278). Unlike
