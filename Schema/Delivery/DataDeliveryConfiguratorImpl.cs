@@ -94,6 +94,11 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
         var mergeFilter = string.IsNullOrWhiteSpace(context.MergeFilterOverride) ? null : context.MergeFilterOverride;
         changed |= SetIfDifferent(delivery, "MergeFilter", mergeFilter);
 
+        // "Xml" writes ContentEncoding; "Json"/blank removes it (JSON is the default encoding, so we
+        // don't clutter the entry with a redundant "ContentEncoding": "Json").
+        var contentEncoding = string.Equals(context.ContentEncoding, "Xml", StringComparison.OrdinalIgnoreCase) ? "Xml" : null;
+        changed |= SetIfDifferent(delivery, "ContentEncoding", contentEncoding);
+
         changed |= SetBoolIfDifferent(delivery, "MergeDisableTriggers", context.DisableTriggers);
 
         if (context.Platform?.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase) == true)

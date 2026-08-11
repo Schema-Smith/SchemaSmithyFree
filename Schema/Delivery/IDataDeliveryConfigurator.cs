@@ -63,6 +63,13 @@ public class DataDeliveryConfiguratorContext
     public string MergeFilterOverride { get; set; }
 
     /// <summary>
+    /// Content-file encoding to stamp on the reconciled DataDelivery entry: "Xml" writes
+    /// <c>"ContentEncoding": "Xml"</c>; "Json" (or blank) removes the property (JSON is the default).
+    /// Set by DataTongs when extracting in the XML delivery encoding (B1 slice 3).
+    /// </summary>
+    public string ContentEncoding { get; set; }
+
+    /// <summary>
     /// Optional identity of the authored DataDelivery array variant this extraction targets.
     /// When the table's DataDelivery is an array, the configurator reconciles the single matching
     /// element (by VariantName) and leaves the rest untouched; blank means "single-object table or

@@ -91,6 +91,20 @@ public class DataTongs
         var scriptPath = config["ScriptPath"] ?? ".";
         var configureDataDelivery = CommandLineParser.ContainsSwitch("ConfigureDataDelivery")
             || config["ShouldCast:ConfigureDataDelivery"]?.ToLower() == "true";
+
+        // B1 slice 3: a global switch to extract delivery content in the XML encoding (default Json),
+        // so a package can be authored to deploy on a legacy-compatibility SQL Server (below the
+        // OPENJSON cliff). SQL Server only — XML delivery deploys there alone; on the other engines
+        // JSON shreds at every supported version, so an Xml request is warned-and-ignored.
+        var deliveryEncoding = CommandLineParser.ValueOfSwitch("DeliveryEncoding", null)
+            ?? config["ShouldCast:DeliveryEncoding"] ?? "Json";
+        var extractAsXml = deliveryEncoding.Trim().Equals("Xml", StringComparison.OrdinalIgnoreCase);
+        if (extractAsXml && _platform.GetBasePlatform() != Platform.SqlServer)
+        {
+            _progressLog.Warn($"  DeliveryEncoding=Xml is SQL Server only (XML data delivery deploys on SQL Server alone; " +
+                              $"{_platform} shreds its JSON delivery at every supported version). Extracting as JSON.");
+            extractAsXml = false;
+        }
         var templatePath = CommandLineParser.ValueOfSwitch("TemplatePath", null)
             ?? config["TemplatePath"];
         var sourceSchemaSetting = config["Source:Schema"] ?? "";
@@ -255,7 +269,12 @@ public class DataTongs
 
                 string tableData;
                 string selectColumns = null;
-                if (_platform.GetBasePlatform() == Platform.MySQL)
+                if (extractAsXml)
+                {
+                    // SQL-Server-only (guarded above). Emits the delivery XML shape the legacy-tier shred consumes.
+                    tableData = GetTableDataXmlSqlServer(cmd, tableSchema, tableName, orderColumns, table.Filter);
+                }
+                else if (_platform.GetBasePlatform() == Platform.MySQL)
                 {
                     tableData = GetTableDataJsonMySql(cmd, querySchema, tableName, orderColumns, table.Filter, table.SelectColumns);
                 }
@@ -267,7 +286,9 @@ public class DataTongs
                     tableData = GetTableDataJson(cmd, selectColumns, tableSchema, tableName, orderColumns, table.Filter);
                 }
 
-                if (string.IsNullOrEmpty(tableData) || tableData == "null" || tableData == "[]")
+                // Empty markers differ by encoding: XML delivery shreds <rows></rows>, JSON shreds [].
+                var emptyContent = extractAsXml ? "<rows></rows>" : "[]";
+                if (string.IsNullOrEmpty(tableData) || tableData == "null" || tableData == "[]" || tableData == "<rows></rows>" || tableData == "<rows/>")
                 {
                     _progressLog.Info($"    No rows found for {table.TableName}. Skipping merge script.");
 
@@ -275,7 +296,7 @@ public class DataTongs
                     {
                         var emptyContentFilePath = Path.Combine(contentsPath, $"{encodedDisplayName}.tabledata");
                         _progressLog.Info($"    Writing contents to : {emptyContentFilePath}");
-                        FileWrapper.GetFromFactory().WriteAllText(emptyContentFilePath, "[]");
+                        FileWrapper.GetFromFactory().WriteAllText(emptyContentFilePath, emptyContent);
                     }
 
                     tablesProcessed++;
@@ -283,7 +304,7 @@ public class DataTongs
                 }
                 else
                 {
-                    var rowCount = CountRows(tableData);
+                    var rowCount = extractAsXml ? CountXmlRows(tableData) : CountRows(tableData);
                     _progressLog.Info($"    Extracted {rowCount} row(s) from {table.TableName}.");
                 }
 
@@ -306,6 +327,7 @@ public class DataTongs
                         ContentFilePath = contentFilePath,
                         KeyColumns = keyColumns,
                         DefaultMergeType = mergeDelete ? "Insert/Update/Delete" : mergeUpdate ? "Insert/Update" : "Insert",
+                        ContentEncoding = extractAsXml ? "Xml" : "Json",
                         DisableTriggers = disableTriggers,
                         DisableRules = disableRules,
                         UpdateDescendents = updateDescendents,
@@ -331,7 +353,8 @@ public class DataTongs
                 var destSchemaOverride = schemaTemplateMode ? "{{SchemaName}}" : null;
                 var mergeSQL = MergeScriptHelper.BuildMergeScript(_platform, cmd, querySchema, tableName, tableData,
                     keyColumns, mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, table.Filter,
-                    disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum, mySqlServerVersionNum);
+                    disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum, mySqlServerVersionNum,
+                    extractAsXml ? "Xml" : "Json");
 
                 var scriptFilePath = Path.Combine(scriptPath, $"Populate {encodedDisplayName}.sql");
                 _progressLog.Info($"    Writing merge script to : {scriptFilePath}");
@@ -717,6 +740,101 @@ ORDER BY {orderColumns};";
                && (major > 10 || (major == 10 && minor >= 5));
     }
 
+    #region Table Data XML Extraction (SQL Server, B1 slice 3)
+
+    // Extracts a table's rows in the delivery XML shape the SQL Server legacy-tier shred consumes:
+    //   <rows><row><c n="Col">value</c>...</row></rows>
+    // Attribute-named columns so any name (incl. [Order Date]) round-trips verbatim; NULL columns are
+    // omitted (absent <c> = NULL). Per-type text forms match the shred's typed .value(): bit -> 0/1,
+    // datetime -> ISO-8601 (style 126), geometry -> WKT + a <c n="Col.STSrid"> companion, binary ->
+    // base64 (xs:base64Binary decodes it in-shred). The whole shape was verified round-trip on a live
+    // instance. SQL Server only — XML delivery deploys on SQL Server alone (see the caller's guard).
+    internal string GetTableDataXmlSqlServer(IDbCommand cmd, string tableSchema, string tableName,
+        string orderColumns, string filter)
+    {
+        var columns = GetSqlServerColumnInfo(cmd, tableSchema, tableName);
+        if (columns.Count == 0) return "";
+
+        var fragments = string.Join(",\r\n        ", columns.Select(BuildSqlServerXmlValueFragment));
+        var whereClause = string.IsNullOrWhiteSpace(filter) ? "" : $"WHERE {filter}";
+
+        // QUOTED_IDENTIFIER ON is required for the XML data-type methods used below.
+        cmd.CommandText = $@"
+SET QUOTED_IDENTIFIER ON;
+SELECT CAST((
+  SELECT (
+    SELECT x.n AS [@n], x.v AS [*]
+      FROM (VALUES
+        {fragments}
+      ) AS x(n, v)
+     WHERE x.v IS NOT NULL
+       FOR XML PATH('c'), TYPE
+  )
+    FROM [{Identifier.EscapeDelimited(tableSchema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(tableName, Platform.SqlServer)}] AS t WITH (NOLOCK)
+  {whereClause}
+   ORDER BY {orderColumns}
+     FOR XML PATH('row'), ROOT('rows')
+) AS NVARCHAR(MAX))
+";
+        return cmd.ExecuteScalar()?.ToString() ?? "";
+    }
+
+    // One VALUES tuple per column: ('ColName', <text-yielding expression over t.[ColName]>). The name
+    // becomes a SQL string literal (for the @n attribute); the value expression uses the DB's native
+    // text form so it matches the shred's typed .value(...). Geometry emits a second (SRID) tuple.
+    internal static string BuildSqlServerXmlValueFragment(ColumnInfo c)
+    {
+        var nameLiteral = c.Name.Replace("'", "''");
+        var ident = $"[{c.Name.Replace("]", "]]")}]";
+        switch ((c.DataType ?? "").ToLowerInvariant())
+        {
+            case "geometry":
+            case "geography":
+                return $"('{nameLiteral}', t.{ident}.STAsText())," +
+                       $"('{nameLiteral}.STSrid', CONVERT(NVARCHAR(MAX), t.{ident}.STSrid))";
+            case "hierarchyid":
+                return $"('{nameLiteral}', t.{ident}.ToString())";
+            case "binary":
+            case "varbinary":
+            case "image":
+                return $"('{nameLiteral}', CAST('' AS XML).value('xs:base64Binary(sql:column(\"t.{ident}\"))','NVARCHAR(MAX)'))";
+            case "date":
+            case "time":
+            case "datetime":
+            case "datetime2":
+            case "datetimeoffset":
+            case "smalldatetime":
+                return $"('{nameLiteral}', CONVERT(NVARCHAR(MAX), t.{ident}, 126))";
+            default:
+                return $"('{nameLiteral}', CONVERT(NVARCHAR(MAX), t.{ident}))";
+        }
+    }
+
+    // Column roster for XML extraction: identical filters to GetSelectColumnsSqlServer (exclude computed,
+    // rowguid, and the delivery-unsupported sql_variant/rowversion/timestamp), ordered by name.
+    internal static List<ColumnInfo> GetSqlServerColumnInfo(IDbCommand cmd, string tableSchema, string tableName)
+    {
+        cmd.CommandText = $@"
+SELECT c.COLUMN_NAME, c.DATA_TYPE
+  FROM INFORMATION_SCHEMA.COLUMNS c
+  JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
+  LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
+                                                 AND cc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME)
+  WHERE c.TABLE_SCHEMA = '{tableSchema.Replace("'", "''")}' AND c.TABLE_NAME = '{tableName.Replace("'", "''")}'
+    AND cc.[name] IS NULL
+    AND sc.is_rowguidcol = 0
+    AND c.DATA_TYPE NOT IN ('sql_variant', 'rowversion', 'timestamp')
+  ORDER BY c.COLUMN_NAME";
+
+        var columns = new List<ColumnInfo>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            columns.Add(new ColumnInfo { Name = reader.GetString(0), DataType = reader.GetString(1) });
+        return columns;
+    }
+
+    #endregion
+
     internal static List<ColumnInfo> GetMySqlColumnInfo(IDbCommand cmd, string databaseName, string tableName)
     {
         cmd.CommandText = $@"
@@ -768,6 +886,19 @@ ORDER BY c.ORDINAL_POSITION;";
     }
 
     internal static int CountRows(string tableDataJson) => JArray.Parse(tableDataJson).Count;
+
+    // Counts <row> elements in the delivery XML shape (<rows><row>...</row></rows>). The element is
+    // always emitted as a bare "<row>" (no attributes), so a literal substring count is exact and
+    // "<rows>" is never miscounted (it is "<row" + "s", not "<row>").
+    internal static int CountXmlRows(string tableDataXml)
+    {
+        if (string.IsNullOrEmpty(tableDataXml)) return 0;
+        var count = 0;
+        for (var i = tableDataXml.IndexOf("<row>", StringComparison.Ordinal); i >= 0;
+             i = tableDataXml.IndexOf("<row>", i + 5, StringComparison.Ordinal))
+            count++;
+        return count;
+    }
 
     #endregion
 

@@ -84,6 +84,37 @@ public class DataDeliveryConfiguratorImplTests
     }
 
     [Test]
+    public void Configure_XmlContentEncoding_StampsIt()
+    {
+        _file.ReadAllText(TableJsonPath).Returns("""
+            { "Schema": "dbo", "Name": "TestTable", "Columns": [] }
+            """);
+        var context = MakeContext();
+        context.ContentEncoding = "Xml";
+
+        DataDeliveryConfiguratorImpl.GetFromFactory().Configure(context);
+
+        _file.Received(1).WriteAllText(TableJsonPath, Arg.Is<string>(s =>
+            s.ContainsIgnoringCase("\"ContentEncoding\": \"Xml\"")));
+    }
+
+    [Test]
+    public void Configure_JsonContentEncoding_DoesNotStampIt()
+    {
+        // JSON is the default encoding, so no redundant "ContentEncoding": "Json" is written.
+        _file.ReadAllText(TableJsonPath).Returns("""
+            { "Schema": "dbo", "Name": "TestTable", "Columns": [] }
+            """);
+        var context = MakeContext();
+        context.ContentEncoding = "Json";
+
+        DataDeliveryConfiguratorImpl.GetFromFactory().Configure(context);
+
+        _file.Received(1).WriteAllText(TableJsonPath, Arg.Is<string>(s =>
+            !s.ContainsIgnoringCase("ContentEncoding")));
+    }
+
+    [Test]
     public void Configure_WhenDataDeliveryIsObject_UpdatesInPlace()
     {
         var tableJson = """
