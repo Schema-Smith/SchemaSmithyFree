@@ -259,6 +259,97 @@ public class TableDataDeliveryTests
     }
 
     [Test]
+    public void DeliverTables_JsonBelowCompat130_SkipsGracefully_WhileXmlSiblingApplies()
+    {
+        // B1 slice 2 (end-to-end): on a compatibility-level-100 target the DataDeliveryProcessor skips a
+        // JSON-encoded delivery with a clear warning (default policy) and still applies an XML-encoded
+        // delivery on the same table — the graceful degrade the low-level "JSON parse-errors at compat
+        // 100" proof above motivates. Exercises the real MergeScriptHelperAdapter + real SQL execution.
+        var db = "vctdd_s2_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        File.WriteAllText(Path.Combine(tempDir, "json.tabledata"), @"[{""code"":""J001"",""name"":""FromJson""}]");
+        File.WriteAllText(Path.Combine(tempDir, "xml.tabledata"), @"<rows><row><c n=""code"">X001</c><c n=""name"">FromXml</c></row></rows>");
+
+        using (var master = _connection.CreateCommand())
+        {
+            master.CommandText = $"CREATE DATABASE [{db}]; ALTER DATABASE [{db}] SET COMPATIBILITY_LEVEL = 100;";
+            master.ExecuteNonQuery();
+        }
+        try
+        {
+            _connection.ChangeDatabase(db);
+            using (var c = _connection.CreateCommand())
+            {
+                c.CommandText = $"CREATE TABLE [dbo].[{_testTableName}] ([code] VARCHAR(20) NOT NULL PRIMARY KEY, [name] VARCHAR(100) NOT NULL)";
+                c.ExecuteNonQuery();
+            }
+
+            var logs = new List<string>();
+            var table = new SqlServerTable
+            {
+                Name = _testTableName,
+                Schema = "dbo",
+                Columns =
+                [
+                    new Column { Name = "code", DataType = "VARCHAR(20)" },
+                    new Column { Name = "name", DataType = "VARCHAR(100)" }
+                ],
+                DataDelivery =
+                [
+                    // ContentEncoding absent => Json => must be skipped at compat 100.
+                    new DataDelivery { MergeType = "Insert", ContentFile = "json.tabledata", VariantName = "json" },
+                    new DataDelivery { MergeType = "Insert", ContentFile = "xml.tabledata", ContentEncoding = "Xml", VariantName = "xml" }
+                ]
+            };
+
+            using (var deliverCmd = _connection.CreateCommand())
+            {
+                var context = new DataDeliveryContext
+                {
+                    Tables = new List<IDeliverableTable> { table },
+                    Platform = "SqlServer",
+                    Command = deliverCmd,
+                    DatabaseName = db,
+                    TemplateRootPath = tempDir,
+                    ScriptHelper = new MergeScriptHelperAdapter(Platform.SqlServer),
+                    ReadFileContent = path => File.ReadAllText(path),
+                    ExecuteScript = (_, script) =>
+                    {
+                        using var ec = _connection.CreateCommand();
+                        ec.CommandText = script;
+                        ec.ExecuteNonQuery();
+                    },
+                    ProgressLog = msg => logs.Add(msg),
+                    ProgressLogError = msg => logs.Add("ERROR: " + msg),
+                    SqlServerCompatibilityLevel = 100
+                };
+
+                DataDeliveryProcessor.GetFromFactory().DeliverTables(context);
+            }
+
+            using (var c = _connection.CreateCommand())
+            {
+                c.CommandText = $"SELECT COUNT(*) FROM [dbo].[{_testTableName}] WHERE [code] = 'X001'";
+                Assert.That(Convert.ToInt32(c.ExecuteScalar()), Is.EqualTo(1), "The XML delivery must apply at compatibility level 100.");
+                c.CommandText = $"SELECT COUNT(*) FROM [dbo].[{_testTableName}] WHERE [code] = 'J001'";
+                Assert.That(Convert.ToInt32(c.ExecuteScalar()), Is.EqualTo(0), "The JSON delivery must be skipped at compatibility level 100.");
+            }
+            Assert.That(logs, Has.Some.Contains("compatibility level 130"), "The JSON skip must be logged with a clear reason.");
+        }
+        finally
+        {
+            _connection.ChangeDatabase(_testDb);
+            using (var master = _connection.CreateCommand())
+            {
+                master.CommandText = $"IF DB_ID('{db}') IS NOT NULL BEGIN ALTER DATABASE [{db}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{db}]; END";
+                master.ExecuteNonQuery();
+            }
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
     public void DeliverTableData_ViaTemplate_ProcessesTablesWithMergeType()
     {
         using var command = _connection.CreateCommand();
