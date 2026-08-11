@@ -8,6 +8,8 @@ Your team is about to push a schema update to three tenant databases across a fl
 
 ## Before you start
 
+> **Engine floor:** this lab deliberately declares a floor *higher* than it needs (SQL Server `2019`, PostgreSQL `15`, MySQL `8.0`, MariaDB `10.6`) so that raising it can be shown failing. On your own server, either meet those or edit `Product.json` down — they are the lab's teaching values, not SchemaSmith limits.
+
 - The four-engine sandbox is up (`Demos/Learn/docker`) and `course6-setup` has been run — it seeds `shop_tenant_a`, `shop_tenant_b`, and `shop_tenant_c` on each engine.
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later). The `--TestConnection` and `--PreviewTargets` switches shipped in v2.2.0; if `schemaquench --help` does not list them, upgrade to v2.3.0 or later.
 
@@ -43,6 +45,7 @@ This scenario shows what the check looks like when the server is reachable but b
 - SQL Server: set `"MinimumVersion": "99"`
 - PostgreSQL: set `"MinimumVersion": "99"`
 - MySQL: set `"MinimumVersion": "9.9"`
+- MariaDB: set `"MinimumVersion": "99.9"`
 
 Re-run:
 
@@ -72,7 +75,9 @@ MySQL output (floor `9.9`, detected version `8.0.45`):
 
 Exit code: `2` on all four engines. The manifest names the server, the detected version, and the declared floor — enough information to act without opening a separate database client.
 
-**Restore `MinimumVersion`** to its original value before continuing (`2019` for SQL Server, `15` for PostgreSQL, `8.0` for MySQL).
+**Restore `MinimumVersion`** to its original value before continuing (`2019` for SQL Server, `15` for PostgreSQL, `8.0` for MySQL, `10.6` for MariaDB).
+
+Those originals are values *this lab declares* — deliberately well above what it needs, so Scenario 2 has room to fail against. They are not SchemaSmith's floors, which are SQL Server 2008, PostgreSQL 12, MySQL 5.7, and MariaDB 10.2. A real product declares the floor *it* needs.
 
 ## Scenario 3 — `--PreviewTargets` pass
 
@@ -166,12 +171,16 @@ The exit codes — 0 and 2 — are the contract. Whether the gate is GitHub Acti
 
 ## Per-engine notes
 
-| | SQL Server | PostgreSQL | MySQL |
-|---|---|---|---|
-| Connection | `localhost,11433` (sa) | `localhost:15432` (postgres) | `localhost:13306` (root) |
-| `DatabaseIdentificationScript` | `SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_%'` | `SELECT datname FROM pg_database WHERE datname LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` |
-| Detected version display | `16` | `160013` | `8.0.45` |
-| Pass floor used | `2019` | `15` | `8.0` |
+| | SQL Server | PostgreSQL | MySQL | MariaDB |
+|---|---|---|---|---|
+| Connection | `localhost,11433` (sa) | `localhost:15432` (postgres) | `localhost:13306` (root) | `localhost:13307` (root) |
+| `DatabaseIdentificationScript` | `SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_%'` | `SELECT datname FROM pg_database WHERE datname LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` |
+| Detected version display | `16` | `160013` | `8.0.45` | `11.4.12-MariaDB-ubu2404` |
+| Floor **this lab declares** | `2019` | `15` | `8.0` | `10.6` |
+
+Each engine reports its version in its own native form, so that row is what the sandbox's current images happen to return — yours will differ, and the shapes vary a lot (SQL Server's clean major, PostgreSQL's `server_version_num`, the MySQL family's full string). What matters is that the comparison against the declared floor is correct on all four; only the printed token differs.
+
+The last row is what each lab package declares in its own `Product.json`, chosen well above what the lab actually needs so Scenario 2 has something to fail against. It is **not** SchemaSmith's supported floor — those are SQL Server 2008, PostgreSQL 12, MySQL 5.7, and MariaDB 10.2.
 
 > *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 

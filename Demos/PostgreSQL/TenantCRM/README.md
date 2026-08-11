@@ -34,7 +34,7 @@ package; hotfixes can target a single tenant for canary rollout.
 
 ## Prerequisites
 
-- Docker (for the local PostgreSQL container) or any PostgreSQL 15+ instance.
+- Docker (for the local PostgreSQL container) or any PostgreSQL 12+ instance — SchemaSmith's PostgreSQL floor, and this package needs nothing above it.
 - The SchemaSmith CLI (or use the bundled `docker compose up` flow from the
   parent `Demos/PostgreSQL/` directory).
 

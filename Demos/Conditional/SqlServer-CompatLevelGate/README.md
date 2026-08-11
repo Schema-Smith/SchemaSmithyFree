@@ -29,7 +29,7 @@ One SQL Server 2022 instance hosting two databases:
 | Database | Compatibility level | Gets |
 |---|---|---|
 | `AppDb_Modern` | 160 | the `GENERATE_SERIES` view |
-| `AppDb_Legacy` | 130 (SchemaSmith's floor) | the recursive-CTE view |
+| `AppDb_Legacy` | 130 (this demo's lower rung) | the recursive-CTE view |
 
 A single table (`dbo.Reading`) and **two variants of the same view** (`dbo.vReadingCalendar`), each in its own folder, each gated in [`Template.json`](Package/Templates/Main/Template.json):
 

@@ -1,7 +1,7 @@
 name: schemasmith-conditional-mysql-demo
 
 # Conditional deployment demo: same schema package deploys against MySQL 8.0
-# (the SchemaSmith floor) and MySQL 9 (current). An Embeddings.Embedding
+# (this demo's lower rung) and MySQL 9 (current). An Embeddings.Embedding
 # column declared as VECTOR(384) is gated by
 # `CAST(SUBSTRING_INDEX(VERSION(), '.', 1) AS UNSIGNED) >= 9` -- the VECTOR
 # type landed in MySQL 9, so MySQL 8.0 skips the column entirely and the

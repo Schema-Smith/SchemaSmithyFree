@@ -1,7 +1,7 @@
 name: schemasmith-conditional-pg-demo
 
 # Conditional deployment demo: same schema package deploys against PostgreSQL 15
-# (the SchemaSmith floor) and PostgreSQL 18 (the current major). A virtual
+# (this demo's lower rung) and PostgreSQL 18 (the current major). A virtual
 # generated column on OrderEvents.Status is gated by
 # `current_setting('server_version_num')::int >= 180000` -- it skips on PG15
 # (virtual generated columns landed in PG18) and applies on PG18.
