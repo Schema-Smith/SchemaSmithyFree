@@ -16,6 +16,18 @@
       "FolderPath": "Procedures",
       "QuenchSlot": "Objects",
       "ObjectType": "Procedures"
+    },
+    {
+      "FolderPath": "Procedures-Modern",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures",
+      "ShouldApplyExpression": "{{ServerMajorVersion}} >= 14 AND {{CompatibilityLevel}} >= 130"
+    },
+    {
+      "FolderPath": "Procedures-Legacy",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Procedures",
+      "ShouldApplyExpression": "{{ServerMajorVersion}} < 14 OR {{CompatibilityLevel}} < 130"
     }
   ]
 }
