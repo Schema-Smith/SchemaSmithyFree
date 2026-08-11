@@ -62,7 +62,7 @@ services:
     ports:
       - "15432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d learn"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d learn"]
       interval: 10s
       timeout: 5s
       retries: 20
