@@ -5,6 +5,8 @@ Two induced incidents on one database (`diag_scripts`), read end to end. Modules
 indexes, foreign keys). This module diagnoses the other half: the scripts and the data **you** put in
 the package. Same method — locate the phase, read the error, recover — but a different evidence shape.
 
+> **Engine floor:** on your own server this lab needs **SQL Server 2016+** or **MySQL 8.0+** — its induced data-delivery failure needs automatic data delivery, which needs `OPENJSON` / `JSON_TABLE`. PostgreSQL and MariaDB run it at any supported version. The Docker sandbox is already above the floor.
+
 ## The triage split
 
 When a deploy fails, the first question is *whose problem is it — the engine's computed DDL, or my

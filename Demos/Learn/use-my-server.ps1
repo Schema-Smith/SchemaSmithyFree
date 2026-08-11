@@ -75,4 +75,9 @@ $env:SmithySettings_Target__Password = $Password
 Write-Host "Learn labs now target $Engine at ${Server}:${Port} as '$User'." -ForegroundColor Green
 Write-Host '  This shell only -- open a new terminal and you will need to source this again.'
 Write-Host "  Run each course's setup script before its labs; it creates that course's databases on your server."
+switch ($Engine) {
+  'sqlserver' { Write-Host '  A few labs need SQL Server 2016 or newer; they say so under "Before you start" and stop at pre-flight if your server is older. See "Will these labs run on my server?" in README.md.' }
+  'mysql'     { Write-Host '  A few labs need MySQL 8.0 or newer; they say so under "Before you start" and stop at pre-flight if your server is older. See "Will these labs run on my server?" in README.md.' }
+  default     { Write-Host "  Every lab runs at this engine's supported floor -- nothing to check." }
+}
 Write-Host '  Back to the sandbox: . .\use-my-server.ps1 -Off'

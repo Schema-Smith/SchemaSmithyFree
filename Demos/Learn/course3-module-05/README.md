@@ -48,6 +48,7 @@ the data never moves. Everything else — columns, keys, the recyclebin — is i
 
 ## Before you start
 
+> **Engine floor:** on your own server this lab needs **SQL Server 2016+** (it uses `CREATE OR ALTER`). It also ships two variants of its table-drop procedure and picks one from the detected version — `STRING_AGG` on 2017+, `FOR XML PATH` below — so the behaviour is the same either way. Other engines run it at any supported version, and the Docker sandbox is already above the floor.
 - The [sandbox](../docker) is up (`docker compose up -d`) and all four engines are healthy.
 - The target databases exist. Run the Course 3 setup once (idempotent — safe to re-run):
 

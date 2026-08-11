@@ -123,6 +123,31 @@ Four things are worth knowing:
   into a same-named database they didn't create — they stop and tell you to rename or move it. The
   `--reset` switch each setup script carries honours the same rule.
 
+### Will these labs run on my server?
+
+**Using the Docker sandbox? Skip this — it already meets every floor.** This section is only for
+the own-server path above.
+
+SchemaSmith itself supports SQL Server 2008+, PostgreSQL 12+, MySQL 5.7+, and MariaDB 10.2+. Some
+labs need more than that, because they demonstrate a feature that needs a newer engine — most often
+automatic data delivery, which needs `OPENJSON` (SQL Server 2016) or `JSON_TABLE` (MySQL 8.0).
+
+| Your engine | Runs every lab at | Below that |
+|---|---|---|
+| **SQL Server** | **2016** | Most labs still run; the ones that need more stop at pre-flight and name the version |
+| **MySQL** | **8.0** | Data delivery has no fallback on 5.7, so those labs stop rather than deploy a schema with no rows |
+| **PostgreSQL** | **12** | Every lab runs at PostgreSQL's floor |
+| **MariaDB** | **10.2** | Every lab runs at MariaDB's floor |
+
+Labs that need a newer engine say so under **Before you start**. If your server is below one, the
+run stops at pre-flight naming the version it needs — it won't deploy half a schema and leave you
+guessing. Nothing here applies to PostgreSQL or MariaDB: both do everything these labs ask at their
+floors.
+
+A few SQL Server labs go one better and ship *two* variants of the same object, picking one from the
+detected version — you get the same result either way, and the lab says so. That is the same
+`ShouldApplyExpression` gate Course 3 teaches, used on the labs themselves.
+
 Want just the `learn` database from Courses 1–2 without the rest? `deploy-to-endpoint` still does
 exactly that:
 
