@@ -6,6 +6,8 @@
     "ProductSummaryView": "<*SpecificIndexedView*>dbo.vProductSummary"
   },
   "ScriptFolders": [
-    { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" },
+    { "FolderPath": "After Scripts-Modern", "QuenchSlot": "After", "ShouldApplyExpression": "{{ServerMajorVersion}} >= 14 AND {{CompatibilityLevel}} >= 130" },
+    { "FolderPath": "After Scripts-Legacy", "QuenchSlot": "After", "ShouldApplyExpression": "{{ServerMajorVersion}} < 14 OR {{CompatibilityLevel}} < 130" }
   ]
 }
