@@ -1,5 +1,6 @@
 {
   "Name": "Northwind",
+  "MinimumVersion": "8.0",
   "ValidationScript": "SELECT EXISTS(SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME IN ('{{NorthwindDb}}', 'TestMain'))",
   "TemplateOrder": [
     "Initialize",
