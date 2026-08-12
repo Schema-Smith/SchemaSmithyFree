@@ -7,7 +7,13 @@ DROP FUNCTION IF EXISTS `SchemaSmith_JsonScalarStr`;
 DELIMITER //
 
 CREATE FUNCTION `SchemaSmith_JsonScalarStr`(p_val JSON)
-RETURNS LONGTEXT
+-- CHARACTER SET is explicit on purpose. Without it the return value takes the *database's* default
+-- collation, while JSON_UNQUOTE below and the string literals at every call site take the *connection*
+-- collation. On a database whose collation differs from the server default (an extracted product often
+-- has one) the two are both COERCIBLE and neither wins, so every NULLIF(TRIM(...), '') around this
+-- function raises "Illegal mix of collations". Naming the charset lets each server use that charset's
+-- own default collation -- the same one the literals get -- on 5.7 / 8.x / MariaDB alike.
+RETURNS LONGTEXT CHARACTER SET utf8mb4
 DETERMINISTIC
 NO SQL
 BEGIN

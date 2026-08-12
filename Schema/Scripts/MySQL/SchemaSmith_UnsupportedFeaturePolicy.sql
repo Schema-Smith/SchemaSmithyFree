@@ -7,7 +7,11 @@ DROP FUNCTION IF EXISTS `SchemaSmith_UnsupportedFeaturePolicy`;
 DELIMITER //
 
 CREATE FUNCTION `SchemaSmith_UnsupportedFeaturePolicy`()
-RETURNS VARCHAR(4)
+-- CHARACTER SET is explicit for the same reason as SchemaSmith_JsonScalarStr: an unqualified text return
+-- inherits the database's collation, and this result is compared against 'warn'/'fail' literals carrying
+-- the connection's, which raises "Illegal mix of collations" on a database that differs from the server
+-- default.
+RETURNS VARCHAR(4) CHARACTER SET utf8mb4
 NOT DETERMINISTIC
 NO SQL
 BEGIN
