@@ -75,7 +75,9 @@ services:
       MARIADB_PASSWORD: ${MARIADB_PASSWORD}
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "mariadb -u ${MARIADB_USER} -p${MARIADB_PASSWORD} -e \"SELECT 1 FROM TestMain._init_complete LIMIT 1\" 2>/dev/null | grep -q 1"]
+      # MariaDB renamed its client to 'mariadb' in later releases; 10.2-10.4 ship only 'mysql', so
+      # naming one outright leaves the server permanently unhealthy on a supported floor version.
+      test: ["CMD-SHELL", "{ command -v mariadb >/dev/null 2>&1 && CLI=mariadb || CLI=mysql; } ; $$CLI -u ${MARIADB_USER} -p${MARIADB_PASSWORD} -e \"SELECT 1 FROM TestMain._init_complete LIMIT 1\" 2>/dev/null | grep -q 1"]
       interval: 5s
       timeout: 5s
       retries: 30

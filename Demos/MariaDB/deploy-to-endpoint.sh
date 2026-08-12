@@ -8,15 +8,22 @@ while [ $# -gt 0 ]; do case "$1" in
   --manifest) MANIFEST="$2"; shift 2;; --force) FORCE=1; shift;;
   *) echo "unknown arg: $1" >&2; exit 64;; esac; done
 
-# The MariaDB client is `mariadb` (`mysql` is a legacy symlink being phased out).
-command -v mariadb >/dev/null 2>&1 || { cat >&2 <<'EOF'
-mariadb is required but was not found on PATH.
+# The MariaDB client is `mariadb` on current releases; 10.2-10.4 ship only `mysql`. Accept
+# either so a supported-but-older MariaDB isn't told to install a client it already has.
+if command -v mariadb >/dev/null 2>&1; then
+  MARIA_CLI=mariadb
+elif command -v mysql >/dev/null 2>&1; then
+  MARIA_CLI=mysql
+else
+  cat >&2 <<'EOF'
+mariadb (or mysql, on MariaDB 10.2-10.4) is required but neither was found on PATH.
 Install the MariaDB client tools and re-open your shell:
   macOS : brew install mariadb   (then add its bin to PATH)
   Linux : apt-get install mariadb-client   (or dnf install MariaDB-client)
 Verify with:  mariadb --version
 EOF
-exit 1; }
+  exit 1
+fi
 command -v schemaquench >/dev/null 2>&1 || { echo "schemaquench is required but was not found on PATH." >&2; exit 1; }
 
 # mariadb reads the password from MYSQL_PWD (avoids the "password on the command line
@@ -27,9 +34,9 @@ export MYSQL_PWD="$PASSWORD"
 maria_run() { # maria_run <infile> [<db> <op>]
   local infile="$1"; local db="${2:-}"; local op="${3:-}"
   if [ -n "$db" ]; then
-    mariadb -h "$SERVER" -P "$PORT" -u "$USER_" -N -s --init-command="SET @db='$db', @op='$op'" < "$infile"
+    "$MARIA_CLI" -h "$SERVER" -P "$PORT" -u "$USER_" -N -s --init-command="SET @db='$db', @op='$op'" < "$infile"
   else
-    mariadb -h "$SERVER" -P "$PORT" -u "$USER_" -N -s < "$infile"
+    "$MARIA_CLI" -h "$SERVER" -P "$PORT" -u "$USER_" -N -s < "$infile"
   fi
 }
 
