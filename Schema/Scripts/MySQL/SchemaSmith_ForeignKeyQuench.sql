@@ -38,44 +38,79 @@ BEGIN
         PRIMARY KEY (TableName, ConstraintName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-    -- Find FKs that exist but have different definition
-    -- Uses GROUP_CONCAT to aggregate KEY_COLUMN_USAGE columns for composite FK comparison,
-    -- avoiding duplicate rows that would cause primary key violations on _SchemaSmith_ModifiedFKs.
+    -- Snapshot the live FK picture ONCE before comparing.
+    --
+    -- This comparison used to read INFORMATION_SCHEMA inside the per-row path: two joins plus two
+    -- correlated KEY_COLUMN_USAGE subqueries, with every predicate wrapped in BINARY and a stored
+    -- function so nothing could be pushed down or indexed. INFORMATION_SCHEMA is not a real table --
+    -- each access re-materialises server-wide metadata -- so the cost was (declared FKs x 4 scans).
+    -- Measured on MariaDB 10.2 with 333 tables: TABLE_CONSTRAINTS 1.73s, KEY_COLUMN_USAGE 1.96s,
+    -- REFERENTIAL_CONSTRAINTS 1.19s per scan, so 90 declared FKs cost ~600s to compare 90 rows.
+    -- Hoisting the metadata into temp tables turns ~360 scans into 3.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ExistingFKCols;
+    CREATE TEMPORARY TABLE _SchemaSmith_ExistingFKCols (
+        ConstraintName VARCHAR(128) NOT NULL,
+        FkColumns TEXT,
+        RefColumns TEXT,
+        PRIMARY KEY (ConstraintName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    -- One pass over KEY_COLUMN_USAGE, aggregated per constraint. GROUP_CONCAT ordering and the
+    -- default ',' separator match the correlated subqueries this replaces, so composite FKs compare
+    -- byte-for-byte as before.
+    INSERT INTO _SchemaSmith_ExistingFKCols (ConstraintName, FkColumns, RefColumns)
+    SELECT kcu.CONSTRAINT_NAME,
+           GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION),
+           GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION)
+      FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+     WHERE BINARY kcu.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
+       AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+     GROUP BY kcu.CONSTRAINT_NAME;
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ExistingFKs;
+    CREATE TEMPORARY TABLE _SchemaSmith_ExistingFKs (
+        TableName VARCHAR(128) NOT NULL,
+        ConstraintName VARCHAR(128) NOT NULL,
+        ReferencedTable VARCHAR(128),
+        DeleteRule VARCHAR(64),
+        UpdateRule VARCHAR(64),
+        PRIMARY KEY (TableName, ConstraintName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    INSERT INTO _SchemaSmith_ExistingFKs (TableName, ConstraintName, ReferencedTable, DeleteRule, UpdateRule)
+    SELECT tc.TABLE_NAME, tc.CONSTRAINT_NAME, rc.REFERENCED_TABLE_NAME, rc.DELETE_RULE, rc.UPDATE_RULE
+      FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+      JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+        ON BINARY rc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
+       AND BINARY rc.CONSTRAINT_NAME = BINARY tc.CONSTRAINT_NAME
+     WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+       AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY';
+
+    -- Find FKs that exist but have different definition. Same predicates as before, now against the
+    -- snapshots. The column join stays a LEFT JOIN so a constraint with no KEY_COLUMN_USAGE rows
+    -- yields NULL and the comparison stays NULL (not flagged) -- the correlated-subquery behaviour.
     INSERT INTO _SchemaSmith_ModifiedFKs (TableName, ConstraintName)
     SELECT
         SchemaSmith_StripBacktickWrapping(f.TableName) AS TableName,
         SchemaSmith_StripBacktickWrapping(f.KeyName) AS ConstraintName
     FROM _SchemaSmith_ForeignKeys f
-    JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-        ON BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.TableName)
-        AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
-        AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
-    JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
-        ON BINARY rc.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
-        AND BINARY rc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
+    JOIN _SchemaSmith_ExistingFKs e
+        ON BINARY e.TableName = BINARY SchemaSmith_StripBacktickWrapping(f.TableName)
+        AND BINARY e.ConstraintName = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
+    LEFT JOIN _SchemaSmith_ExistingFKCols c
+        ON BINARY c.ConstraintName = BINARY e.ConstraintName
     WHERE (
         -- Different referenced table
-        BINARY rc.REFERENCED_TABLE_NAME != BINARY SchemaSmith_StripBacktickWrapping(f.RelatedTable)
+        BINARY e.ReferencedTable != BINARY SchemaSmith_StripBacktickWrapping(f.RelatedTable)
         -- Or different delete action
-        OR BINARY rc.DELETE_RULE != BINARY COALESCE(f.DeleteAction, 'NO ACTION')
+        OR BINARY e.DeleteRule != BINARY COALESCE(f.DeleteAction, 'NO ACTION')
         -- Or different update action
-        OR BINARY rc.UPDATE_RULE != BINARY COALESCE(f.UpdateAction, 'NO ACTION')
+        OR BINARY e.UpdateRule != BINARY COALESCE(f.UpdateAction, 'NO ACTION')
         -- Or different columns (aggregate comparison handles composite FKs;
         -- REPLACE strips backticks from comma-separated column lists like `Col1`,`Col2`)
-        OR BINARY (SELECT GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION)
-                     FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-                    WHERE BINARY kcu.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
-                      AND BINARY kcu.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
-                      AND kcu.REFERENCED_TABLE_NAME IS NOT NULL)
-           != BINARY REPLACE(f.Columns, '`', '')
+        OR BINARY c.FkColumns != BINARY REPLACE(f.Columns, '`', '')
         -- Or different referenced columns
-        OR BINARY (SELECT GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION)
-                     FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-                    WHERE BINARY kcu.CONSTRAINT_SCHEMA = BINARY p_DatabaseName
-                      AND BINARY kcu.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(f.KeyName)
-                      AND kcu.REFERENCED_TABLE_NAME IS NOT NULL)
-           != BINARY REPLACE(f.RelatedColumns, '`', '')
+        OR BINARY c.RefColumns != BINARY REPLACE(f.RelatedColumns, '`', '')
     );
 
     -- Drop modified FKs
