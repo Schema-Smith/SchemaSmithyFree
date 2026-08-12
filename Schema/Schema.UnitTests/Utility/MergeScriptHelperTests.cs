@@ -36,6 +36,93 @@ public class MergeScriptHelperTests
 
     #endregion
 
+    #region MariaDB 10.2-10.5 chunked shred
+
+    private static string BuildPayload(int rows) =>
+        "[" + string.Join(",", Enumerable.Range(0, rows).Select(i => $"{{\"Id\":{i},\"Name\":\"n{i}\"}}")) + "]";
+
+    [Test]
+    public void TryChunkMySqlPayload_OnlyChunksTheCtePathWithRealDataAboveTheThreshold()
+    {
+        Assert.Multiple(() =>
+        {
+            // JSON_TABLE parses the document once, so chunking buys nothing and must not kick in.
+            Assert.That(MergeScriptHelper.TryChunkMySqlPayload(true, false, BuildPayload(5000), out _), Is.False,
+                "A JSON_TABLE target must keep the single-statement form.");
+            // The payload is a {{table.tabledata}} placeholder at build time -- nothing to slice.
+            Assert.That(MergeScriptHelper.TryChunkMySqlPayload(false, true, BuildPayload(5000), out _), Is.False,
+                "Tokenized scripts have no payload to chunk.");
+            // Small payloads are already fast; the extra statements would just be noise.
+            Assert.That(MergeScriptHelper.TryChunkMySqlPayload(false, false, BuildPayload(10), out _), Is.False,
+                "A payload under the threshold must not be chunked.");
+            Assert.That(MergeScriptHelper.TryChunkMySqlPayload(false, false, "not json", out _), Is.False,
+                "Unparseable data must fall through to the existing path, not throw.");
+            Assert.That(MergeScriptHelper.TryChunkMySqlPayload(false, false, BuildPayload(500), out var rows), Is.True);
+            Assert.That(rows.Count, Is.EqualTo(500));
+        });
+    }
+
+    [Test]
+    public void BuildChunkedMergeMySql_EmitsOneStatementPerChunk_AndExactlyOneDelete()
+    {
+        // The load-bearing invariant: the full-sync DELETE is a NOT EXISTS over the payload, so running it
+        // per chunk would delete every row that lives in another chunk. It must run ONCE, against a key
+        // set every chunk contributed to.
+        // Sized off the constant so retuning the chunk size doesn't silently invalidate the assertions.
+        var expectedChunks = 3;
+        var rowCount = MergeScriptHelper.MariaDbShredChunkRows * expectedChunks;
+        var rows = Newtonsoft.Json.Linq.JArray.Parse(BuildPayload(rowCount));
+        var columns = new List<MergeScriptHelper.MySqlColumnInfo>
+        {
+            new() { Name = "Id", DataType = "int" }
+        };
+        var sql = MergeScriptHelper.BuildChunkedMergeMySql("db", "t", "`Id`, `Name`", "jt.`Id`, jt.`Name`",
+            "(SELECT 1) AS jt", "`Id`, `Name`", "`Id`", rows, columns,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(CountOf(sql, "SET @json_data"), Is.EqualTo(expectedChunks), "One payload assignment per chunk.");
+            Assert.That(CountOf(sql, "INSERT INTO `db`.`t`"), Is.EqualTo(expectedChunks), "One upsert per chunk.");
+            Assert.That(CountOf(sql, "DELETE Target"), Is.EqualTo(1), "The delete must run exactly once.");
+            Assert.That(CountOf(sql, "CREATE TEMPORARY TABLE `_ss_merge_keys`"), Is.EqualTo(1));
+            Assert.That(CountOf(sql, "DROP TEMPORARY TABLE `_ss_merge_keys`"), Is.EqualTo(1));
+            Assert.That(CountOf(sql, "INSERT INTO `_ss_merge_keys`"), Is.EqualTo(expectedChunks), "Every chunk contributes its keys.");
+            // The delete must come after the last chunk, or it would see an incomplete key set.
+            Assert.That(sql.IndexOf("DELETE Target", StringComparison.Ordinal),
+                Is.GreaterThan(sql.LastIndexOf("INSERT INTO `_ss_merge_keys`", StringComparison.Ordinal)),
+                "The delete must follow every key-collecting insert.");
+        });
+    }
+
+    [Test]
+    public void BuildChunkedMergeMySql_WithoutDelete_EmitsNoKeyTable()
+    {
+        var noDeleteChunks = 2;
+        var rows = Newtonsoft.Json.Linq.JArray.Parse(BuildPayload(MergeScriptHelper.MariaDbShredChunkRows * noDeleteChunks));
+        var columns = new List<MergeScriptHelper.MySqlColumnInfo> { new() { Name = "Id", DataType = "int" } };
+        var sql = MergeScriptHelper.BuildChunkedMergeMySql("db", "t", "`Id`", "jt.`Id`",
+            "(SELECT 1) AS jt", null, "`Id`", rows, columns, null, null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(CountOf(sql, "SET @json_data"), Is.EqualTo(noDeleteChunks));
+            Assert.That(CountOf(sql, "INSERT IGNORE INTO `db`.`t`"), Is.EqualTo(noDeleteChunks), "No update columns => INSERT IGNORE.");
+            Assert.That(sql, Does.Not.Contain("_ss_merge_keys"), "No delete half means no key table.");
+            Assert.That(sql, Does.Not.Contain("DELETE Target"));
+        });
+    }
+
+    private static int CountOf(string haystack, string needle)
+    {
+        var n = 0;
+        for (var i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0;
+             i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal)) n++;
+        return n;
+    }
+
+    #endregion
+
     #region GetKeyColumns Tests
 
     [Test]
