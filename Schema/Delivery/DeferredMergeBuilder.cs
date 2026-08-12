@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
+using Schema.Utility;
 
 namespace Schema.Delivery;
 
@@ -299,17 +300,42 @@ internal static class DeferredMergeBuilder
 
         var jsonSource = BuildDeferredJsonRowSourceMySql(columns.Where(c => !c.IsComputed).ToList(), versionNum);
 
-        var sb = new StringBuilder();
-        sb.AppendLine($"SET @json_data = '{tableData?.Replace("'", "''")}';");
-        sb.AppendLine();
-        sb.AppendLine($"INSERT INTO `{db}`.`{table}` ({columnList})");
-        sb.AppendLine($"SELECT {selectExpressions}");
-        sb.AppendLine($"FROM {jsonSource}");
-
         var updateCols = columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c =>
             deferredSet.Contains(c.Name) ? $"`{c.Name}` = NULL" : $"`{c.Name}` = VALUES(`{c.Name}`)");
-        sb.AppendLine($"ON DUPLICATE KEY UPDATE {string.Join(", ", updateCols)};");
+        var onDuplicate = $"ON DUPLICATE KEY UPDATE {string.Join(", ", updateCols)};";
 
+        var sb = new StringBuilder();
+
+        // The pre-10.6 shred is quadratic in payload size (see MergeScriptHelper.MariaDbShredChunkRows),
+        // and this two-pass FK path shreds the same payload, so it needs the same slicing. Without it a
+        // large deferred table stalls here exactly as the single-pass path did. No delete half to worry
+        // about: pass 1 only inserts, so every chunk is independent.
+        var chunked = MergeScriptHelper.TryChunkMySqlPayload(
+            hasJsonTable: !jsonSource.Contains("_ss_seq"), tokenizeScripts: false, tableData, out var payloadRows);
+
+        if (!chunked)
+        {
+            sb.AppendLine($"SET @json_data = '{tableData?.Replace("'", "''")}';");
+            sb.AppendLine();
+            sb.AppendLine($"INSERT INTO `{db}`.`{table}` ({columnList})");
+            sb.AppendLine($"SELECT {selectExpressions}");
+            sb.AppendLine($"FROM {jsonSource}");
+            sb.AppendLine(onDuplicate);
+            return sb.ToString();
+        }
+
+        for (var offset = 0; offset < payloadRows.Count; offset += MergeScriptHelper.MariaDbShredChunkRows)
+        {
+            var chunk = new Newtonsoft.Json.Linq.JArray(
+                payloadRows.Skip(offset).Take(MergeScriptHelper.MariaDbShredChunkRows));
+            sb.AppendLine($"SET @json_data = '{chunk.ToString(Newtonsoft.Json.Formatting.None).Replace("'", "''")}';");
+            sb.AppendLine();
+            sb.AppendLine($"INSERT INTO `{db}`.`{table}` ({columnList})");
+            sb.AppendLine($"SELECT {selectExpressions}");
+            sb.AppendLine($"FROM {jsonSource}");
+            sb.AppendLine(onDuplicate);
+            sb.AppendLine();
+        }
         return sb.ToString();
     }
 
