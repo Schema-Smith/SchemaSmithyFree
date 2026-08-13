@@ -442,8 +442,8 @@ BEGIN
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateIdxStmts;
         CREATE TEMPORARY TABLE _SchemaSmith_CreateIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT, AuditName TEXT)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        -- Detection reads LIVE INFORMATION_SCHEMA.STATISTICS so a just-dropped modified index
-        -- (STEP 2) is correctly seen as missing here and recreated.
+        -- Detection reads the post-drop snapshot _SchemaSmith_IdxExistPostDrop (taken after STEP 2's
+        -- drops) so a just-dropped modified index (STEP 2) is correctly seen as missing here and recreated.
         INSERT INTO _SchemaSmith_CreateIdxStmts (LogMsg, Stmt, AuditName)
         SELECT
             CONCAT('  Create index: ', SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName),
@@ -793,8 +793,8 @@ WHERE col.CheckExpression IS NOT NULL
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateChkStmts;
         CREATE TEMPORARY TABLE _SchemaSmith_CreateChkStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT, AuditName TEXT)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        -- Detection reads LIVE INFORMATION_SCHEMA.TABLE_CONSTRAINTS so a just-dropped modified
-        -- table check (STEP 3.5) is correctly seen as missing here and recreated.
+        -- Detection reads the pre-create snapshot _SchemaSmith_ChkExist (taken after STEP 3.5's drops)
+        -- so a just-dropped modified table check (STEP 3.5) is correctly seen as missing here and recreated.
         INSERT INTO _SchemaSmith_CreateChkStmts (LogMsg, Stmt, AuditName)
         SELECT
             CONCAT('  Create check constraint: ', c.TableName, '.', c.ConstraintName,
@@ -882,8 +882,8 @@ WHERE col.CheckExpression IS NOT NULL
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateColChkStmts;
         CREATE TEMPORARY TABLE _SchemaSmith_CreateColChkStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        -- Detection reads LIVE INFORMATION_SCHEMA.TABLE_CONSTRAINTS so a just-dropped modified
-        -- column check (STEP 3.5) is correctly seen as missing here and recreated.
+        -- Detection reads the pre-create snapshot _SchemaSmith_ChkExist (taken after STEP 3.5's drops)
+        -- so a just-dropped modified column check (STEP 3.5) is correctly seen as missing here and recreated.
         INSERT INTO _SchemaSmith_CreateColChkStmts (LogMsg, Stmt)
         SELECT
             CONCAT('  Create column check constraint: ',
