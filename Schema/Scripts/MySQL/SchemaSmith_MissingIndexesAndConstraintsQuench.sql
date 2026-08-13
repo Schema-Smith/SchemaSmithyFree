@@ -196,6 +196,19 @@ BEGIN
      WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
      GROUP BY s.TABLE_NAME, s.INDEX_NAME;
 
+    -- A names-only copy of the same snapshot. STEP 1 references the snapshot twice in one statement
+    -- (the main join AND the "new index name doesn't exist" NOT EXISTS); MySQL/MariaDB forbid opening a
+    -- TEMPORARY table twice in a single query (ER_CANT_REOPEN_TABLE 1137) -- the original could because
+    -- it read INFORMATION_SCHEMA (not a temp) on both sides. The second reference reads this copy.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDetectNames;
+    CREATE TEMPORARY TABLE _SchemaSmith_IdxDetectNames (
+        TableName VARCHAR(128) NOT NULL,
+        IndexName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName, IndexName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INSERT INTO _SchemaSmith_IdxDetectNames (TableName, IndexName)
+    SELECT TableName, IndexName FROM _SchemaSmith_IdxDetectSnap;
+
     -- Per-engine index-visibility snapshot (MySQL IS_VISIBLE / MariaDb IGNORED), one scan, for STEP 2's
     -- modified-index visibility comparison -- replaces the per-candidate SchemaSmith_IndexIsVisible() call.
     CALL SchemaSmith_SnapshotIndexVisibility(p_DatabaseName);
@@ -232,7 +245,7 @@ BEGIN
     WHERE i.IsPrimaryKey = 0
       -- New index name doesn't exist
       AND NOT EXISTS (
-          SELECT 1 FROM _SchemaSmith_IdxDetectSnap s2
+          SELECT 1 FROM _SchemaSmith_IdxDetectNames s2
           WHERE BINARY s2.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
             AND BINARY s2.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
       )
