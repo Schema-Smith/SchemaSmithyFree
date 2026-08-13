@@ -136,6 +136,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_ForeignKeyQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_IndexOnlyQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_TableQuench.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexVisibility.sql"));
     }
 
     [Test]
@@ -201,7 +202,10 @@ public class ForgeKindlerTests
         // SchemaSmith_SupportsDescendingIndex (DESC key parts need MySQL 8.0 / MariaDB 10.8 — below, degrade to
         // ascending idempotently) + SchemaSmith_SupportsInvisibleIndex (INVISIBLE needs MySQL 8.0 / MariaDB 10.6
         // — below, degrade to visible; the emit-guard invisible-index slice).
-        Assert.That(mysql.Length, Is.EqualTo(36));
+        // +1 = SchemaSmith_SnapshotIndexVisibility (per-engine index-visibility snapshot procedure; MySQL reads
+        // IS_VISIBLE, the MariaDb override reads IGNORED — replaces the per-row SchemaSmith_IndexIsVisible call in
+        // the MissingIndexes/IndexOnly modified-index detection with a one-scan snapshot + join).
+        Assert.That(mysql.Length, Is.EqualTo(37));
     }
 
     [Test]

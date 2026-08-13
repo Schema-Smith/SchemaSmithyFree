@@ -25,14 +25,24 @@ BEGIN
     -- per-object progress message) into an AUTO_INCREMENT temp table, then a WHILE loop
     -- drains it by ascending RowId (SELECT ... INTO + PREPARE/EXECUTE). This replaces the
     -- old cursors and matches the materialize-then-WHILE idiom used by ForeignKeyQuench.
-    -- Detection queries (STEP 1..STEP 7) read LIVE INFORMATION_SCHEMA because each must see
-    -- current catalog state relative to THIS proc's own earlier mutations (e.g. STEP 3 must
-    -- see indexes STEP 2 just dropped; STEP 7 must see objects STEP 3/4/4.5 just created).
-    --
-    -- Crash-safety is localized to STEP 8 only: its ProductOwnership x INFORMATION_SCHEMA.STATISTICS
-    -- query is the one the roadmap identifies as a segfault trigger when run frequently, so
-    -- STEP 8 snapshots STATISTICS / KEY_COLUMN_USAGE / TABLE_CONSTRAINTS into temp tables
-    -- RIGHT BEFORE its detection (current, post-create/drop/rename state) and reads those.
+    -- Detection reads INFORMATION_SCHEMA through STEP-LOCAL snapshots, not per declared object.
+    -- INFORMATION_SCHEMA is not a stored table on MySQL/MariaDB, so a correlated / per-row read
+    -- re-materialises server-wide metadata once per object (cost = declared objects x tables-on-instance);
+    -- the same shape ForeignKeyQuench eliminated. Each detection pass instead snapshots the catalog it
+    -- needs into a temp table with ONE scan, then joins it. The snapshots are placed to preserve the
+    -- exact point-in-time state each pass must see relative to THIS proc's own earlier mutations:
+    --   * _SchemaSmith_IdxDetectSnap + _SchemaSmith_ExistingIndexVisibility -- pre-mutation, for STEP 1
+    --     (rename) and STEP 2 (modified index); STEP 1 renames only where columns already match and STEP 2
+    --     excludes just-renamed indexes, so the pre-mutation snapshot equals the live reads it replaces.
+    --   * _SchemaSmith_IdxExistPostDrop -- taken after STEP 2's drops so STEP 3 sees a dropped modified
+    --     index as MISSING and recreates it.
+    --   * _SchemaSmith_ChkExist -- built after the STEP 3.5 / by-absence check drops for the STEP 4/4.5
+    --     create passes, then REBUILT post-create for STEP 7 ownership.
+    --   * _SchemaSmith_IdxExistFinal + the STEP 7 _SchemaSmith_ChkExist rebuild -- post-create, so STEP 7
+    --     writes ownership only for objects that actually landed.
+    -- In WhatIf mode nothing is mutated, so every snapshot reflects the unchanged catalog -- identical to
+    -- the live reads. STEP 8 keeps its own late snapshots (STATISTICS / KEY_COLUMN_USAGE / TABLE_CONSTRAINTS),
+    -- the ProductOwnership x STATISTICS query the roadmap flags as a frequent-run segfault trigger.
 
     SET SESSION group_concat_max_len = 1000000;
 
@@ -150,6 +160,47 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- Detection snapshot: the live index picture read ONCE here into a temp table so STEP 1 (rename)
+    -- and STEP 2 (modified) join it instead of re-reading INFORMATION_SCHEMA.STATISTICS per declared
+    -- index. INFORMATION_SCHEMA is not a stored table on MySQL/MariaDB -- each access re-materialises
+    -- server-wide metadata -- so the original per-row reads (a STATISTICS join plus a correlated
+    -- GROUP_CONCAT column-list subquery, per declared index) cost (declared indexes x whole-server
+    -- scans). This snapshot reflects the catalog BEFORE STEP 1's renames and STEP 2's drops, which is
+    -- exactly the state both passes read: STEP 1 renames only where the column list already matches
+    -- (so it never changes what STEP 2 compares), and STEP 2 excludes just-renamed indexes via
+    -- _SchemaSmith_IndexRenames -- so the pre-mutation snapshot is equivalent to the live reads it
+    -- replaces. STEP 3 (create-missing) needs the POST-drop state and takes its own later snapshot.
+    -- One row per index; NormColumns is built by the same GROUP_CONCAT expression the correlated
+    -- subqueries used, so composite index column lists compare byte-for-byte as before.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDetectSnap;
+    CREATE TEMPORARY TABLE _SchemaSmith_IdxDetectSnap (
+        TableName VARCHAR(128) NOT NULL,
+        IndexName VARCHAR(128) NOT NULL,
+        NonUnique TINYINT DEFAULT 0,
+        IndexType VARCHAR(32),
+        NormColumns TEXT,
+        PRIMARY KEY (TableName, IndexName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
+    SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
+           CONVERT(s.INDEX_NAME USING utf8mb4),
+           MAX(s.NON_UNIQUE),
+           CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
+           GROUP_CONCAT(
+               CONCAT('`', s.COLUMN_NAME, '`',
+                      CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+               ORDER BY s.SEQ_IN_INDEX
+               SEPARATOR ','
+           )
+      FROM INFORMATION_SCHEMA.STATISTICS s
+     WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+     GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+
+    -- Per-engine index-visibility snapshot (MySQL IS_VISIBLE / MariaDb IGNORED), one scan, for STEP 2's
+    -- modified-index visibility comparison -- replaces the per-candidate SchemaSmith_IndexIsVisible() call.
+    CALL SchemaSmith_SnapshotIndexVisibility(p_DatabaseName);
+
+    -- =========================================================================
     -- STEP 1: Detect index renames (same columns, different name)
     -- =========================================================================
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexRenames;
@@ -168,41 +219,27 @@ BEGIN
     INSERT INTO _SchemaSmith_IndexRenames (TableName, OldIndexName, NewIndexName)
     SELECT
         SchemaSmith_StripBacktickWrapping(i.TableName) AS TableName,
-        CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci AS OldIndexName,
+        snap.IndexName COLLATE utf8mb4_unicode_ci AS OldIndexName,
         SchemaSmith_StripBacktickWrapping(i.IndexName) AS NewIndexName
     FROM _SchemaSmith_Indexes i
-    JOIN INFORMATION_SCHEMA.STATISTICS s
-        ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-        AND s.SEQ_IN_INDEX = 1
+    JOIN _SchemaSmith_IdxDetectSnap snap
+        ON BINARY snap.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
     JOIN SchemaSmith_ProductOwnership po
         ON BINARY po.ProductName = BINARY p_ProductName
         AND BINARY po.ObjectSchema = BINARY p_DatabaseName
         AND po.ObjectType = 'INDEX'
-        AND BINARY po.ObjectName = BINARY CONCAT(CONVERT(s.TABLE_NAME USING utf8mb4), '.', CONVERT(s.INDEX_NAME USING utf8mb4))
+        AND BINARY po.ObjectName = BINARY CONCAT(snap.TableName, '.', snap.IndexName)
     WHERE i.IsPrimaryKey = 0
       -- New index name doesn't exist
       AND NOT EXISTS (
-          SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s2
-          WHERE BINARY s2.TABLE_SCHEMA = BINARY p_DatabaseName
-            AND BINARY s2.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-            AND BINARY s2.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+          SELECT 1 FROM _SchemaSmith_IdxDetectSnap s2
+          WHERE BINARY s2.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+            AND BINARY s2.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
       )
       -- Old index exists with same columns (compare normalized column list)
-      AND BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) = BINARY (
-          SELECT GROUP_CONCAT(
-              CONCAT('`', sc.COLUMN_NAME, '`',
-                     CASE WHEN BINARY sc.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-              ORDER BY sc.SEQ_IN_INDEX
-              SEPARATOR ','
-          )
-          FROM INFORMATION_SCHEMA.STATISTICS sc
-          WHERE BINARY sc.TABLE_SCHEMA = BINARY p_DatabaseName
-            AND BINARY sc.TABLE_NAME = BINARY s.TABLE_NAME
-            AND BINARY sc.INDEX_NAME = BINARY s.INDEX_NAME
-      )
+      AND BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) = BINARY snap.NormColumns
       -- Same uniqueness
-      AND i.IsUnique = (s.NON_UNIQUE = 0);
+      AND i.IsUnique = (snap.NonUnique = 0);
 
     -- Handle renames
     IF p_WhatIf = 1 THEN
@@ -263,11 +300,12 @@ BEGIN
         SchemaSmith_StripBacktickWrapping(i.TableName) AS TableName,
         SchemaSmith_StripBacktickWrapping(i.IndexName) AS IndexName
     FROM _SchemaSmith_Indexes i
-    JOIN INFORMATION_SCHEMA.STATISTICS s
-        ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-        AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-        AND s.SEQ_IN_INDEX = 1
+    JOIN _SchemaSmith_IdxDetectSnap snap
+        ON BINARY snap.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+        AND BINARY snap.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+    LEFT JOIN _SchemaSmith_ExistingIndexVisibility viz
+        ON BINARY viz.TableName = BINARY snap.TableName
+        AND BINARY viz.IndexName = BINARY snap.IndexName
     WHERE i.IsPrimaryKey = 0
       -- Skip indexes that were just renamed
       AND NOT EXISTS (
@@ -278,26 +316,18 @@ BEGIN
       -- Check if definition differs
       AND (
           -- Columns differ
-          BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) != BINARY (
-              SELECT GROUP_CONCAT(
-                  CONCAT('`', sc.COLUMN_NAME, '`',
-                         CASE WHEN BINARY sc.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-                  ORDER BY sc.SEQ_IN_INDEX
-                  SEPARATOR ','
-              )
-              FROM INFORMATION_SCHEMA.STATISTICS sc
-              WHERE BINARY sc.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY sc.TABLE_NAME = BINARY s.TABLE_NAME
-                AND BINARY sc.INDEX_NAME = BINARY s.INDEX_NAME
-          )
+          BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) != BINARY snap.NormColumns
           -- Or uniqueness differs
-          OR i.IsUnique != (s.NON_UNIQUE = 0)
+          OR i.IsUnique != (snap.NonUnique = 0)
           -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them). Below the
           -- invisible-index floor (MySQL 8.0 / MariaDB 10.6) the keyword can't be emitted, so a declared
           -- invisible index is stored visible; ignore the visibility difference there or it churns every run.
-          OR (BINARY UPPER(s.INDEX_TYPE) != BINARY 'FULLTEXT'
+          -- viz.IsVisible is the once-snapshotted per-engine visibility (IS_VISIBLE / IGNORED), replacing
+          -- the per-candidate SchemaSmith_IndexIsVisible() read; it is populated only at/above the floor,
+          -- which is exactly when SchemaSmith_SupportsInvisibleIndex() = 1 gates this term.
+          OR (BINARY UPPER(snap.IndexType) != BINARY 'FULLTEXT'
               AND SchemaSmith_SupportsInvisibleIndex() = 1
-              AND i.IsVisible != SchemaSmith_IndexIsVisible(s.TABLE_SCHEMA, s.TABLE_NAME, s.INDEX_NAME))
+              AND i.IsVisible != viz.IsVisible)
       );
 
     -- Drop modified indexes (they'll be recreated later)
@@ -333,6 +363,23 @@ BEGIN
     -- =========================================================================
     -- STEP 3: Create missing indexes (non-primary)
     -- =========================================================================
+    -- Post-mutation existence snapshot: taken HERE, after STEP 1's renames and STEP 2's drops, so it
+    -- reflects the current catalog -- exactly what the original per-index live NOT EXISTS reads saw at
+    -- this point. This is the crux the "snapshot once at top" approach would get wrong: a just-dropped
+    -- modified index (STEP 2) must be seen as MISSING here and recreated, so this snapshot must be
+    -- taken after the drops, not reused from the pre-STEP-1 detection snapshot. One row per index.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxExistPostDrop;
+    CREATE TEMPORARY TABLE _SchemaSmith_IdxExistPostDrop (
+        TableName VARCHAR(128) NOT NULL,
+        IndexName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName, IndexName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INSERT INTO _SchemaSmith_IdxExistPostDrop (TableName, IndexName)
+    SELECT CONVERT(s.TABLE_NAME USING utf8mb4), CONVERT(s.INDEX_NAME USING utf8mb4)
+    FROM INFORMATION_SCHEMA.STATISTICS s
+    WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+      AND s.SEQ_IN_INDEX = 1;
+
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -356,10 +403,9 @@ BEGIN
                 AND r.NewIndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-              WHERE CONVERT(s.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                AND CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
-                AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
+              SELECT 1 FROM _SchemaSmith_IdxExistPostDrop s
+              WHERE s.TableName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
+                AND s.IndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           );
 
         -- #363: WhatIf twin of the ELSE-branch 'index'/'created' audit; same predicate, set-based wouldCreate.
@@ -373,10 +419,9 @@ BEGIN
                 AND r.NewIndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-              WHERE CONVERT(s.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                AND CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
-                AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
+              SELECT 1 FROM _SchemaSmith_IdxExistPostDrop s
+              WHERE s.TableName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
+                AND s.IndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
@@ -412,10 +457,9 @@ BEGIN
                 AND r.NewIndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-              WHERE CONVERT(s.TABLE_SCHEMA USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                AND CONVERT(s.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
-                AND CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
+              SELECT 1 FROM _SchemaSmith_IdxExistPostDrop s
+              WHERE s.TableName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.TableName) COLLATE utf8mb4_unicode_ci
+                AND s.IndexName COLLATE utf8mb4_unicode_ci = SchemaSmith_StripBacktickWrapping(i.IndexName) COLLATE utf8mb4_unicode_ci
           );
 
         SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateIdxStmts);
@@ -654,6 +698,27 @@ WHERE col.CheckExpression IS NOT NULL
     END IF;
 
     -- =========================================================================
+    -- CHECK-constraint existence snapshot: taken HERE, after STEP 3.5's modified-check drops and the
+    -- by-absence drops, so a just-dropped check is correctly seen as MISSING by the STEP 4 / STEP 4.5
+    -- create passes and recreated -- the same reason STEP 3 snapshots after the index drops. In WhatIf
+    -- mode nothing was dropped, so this reflects the unchanged catalog, matching the live reads it
+    -- replaces. One row per CHECK constraint. STEP 7 (ownership) REBUILDS this same table post-create,
+    -- so the create passes here see the pre-create state and the ownership pass sees the post-create state.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ChkExist;
+    CREATE TEMPORARY TABLE _SchemaSmith_ChkExist (
+        TableName VARCHAR(128) NOT NULL,
+        ConstraintName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName, ConstraintName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+        INSERT INTO _SchemaSmith_ChkExist (TableName, ConstraintName)
+        SELECT CONVERT(tc.TABLE_NAME USING utf8mb4), CONVERT(tc.CONSTRAINT_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND tc.CONSTRAINT_TYPE = 'CHECK';
+    END IF;
+
+    -- =========================================================================
     -- STEP 4: Create missing check constraints (MySQL 8.0.16+)
     -- =========================================================================
     -- CHECK constraints require MySQL 8.0.16 (INFORMATION_SCHEMA.CHECK_CONSTRAINTS + enforcement); on MySQL
@@ -695,11 +760,9 @@ WHERE col.CheckExpression IS NOT NULL
                       ' CHECK (', c.Expression, ')')
         FROM _SchemaSmith_CheckConstraints c
         WHERE NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-              AND tc.CONSTRAINT_TYPE = 'CHECK'
+            SELECT 1 FROM _SchemaSmith_ChkExist tc
+            WHERE BINARY tc.TableName = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.ConstraintName = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
         );
 
         -- #363: WhatIf twin of the ELSE-branch 'constraint'/'created' (check) audit; same predicate, wouldCreate.
@@ -707,11 +770,9 @@ WHERE col.CheckExpression IS NOT NULL
         SELECT CONNECTION_ID(), 'constraint', CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName)), 'wouldCreate'
         FROM _SchemaSmith_CheckConstraints c
         WHERE NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-              AND tc.CONSTRAINT_TYPE = 'CHECK'
+            SELECT 1 FROM _SchemaSmith_ChkExist tc
+            WHERE BINARY tc.TableName = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.ConstraintName = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
         );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing check constraints');
@@ -733,11 +794,9 @@ WHERE col.CheckExpression IS NOT NULL
             CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName))
         FROM _SchemaSmith_CheckConstraints c
         WHERE NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-              AND tc.CONSTRAINT_TYPE = 'CHECK'
+            SELECT 1 FROM _SchemaSmith_ChkExist tc
+            WHERE BINARY tc.TableName = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.ConstraintName = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
         );
 
         SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateChkStmts);
@@ -800,11 +859,9 @@ WHERE col.CheckExpression IS NOT NULL
         WHERE c.CheckExpression IS NOT NULL
           AND TRIM(c.CheckExpression) != ''
           AND NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-              AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
-              AND tc.CONSTRAINT_TYPE = 'CHECK'
+            SELECT 1 FROM _SchemaSmith_ChkExist tc
+            WHERE BINARY tc.TableName = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.ConstraintName = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
         );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing column check constraints');
@@ -829,11 +886,9 @@ WHERE col.CheckExpression IS NOT NULL
         WHERE c.CheckExpression IS NOT NULL
           AND TRIM(c.CheckExpression) != ''
           AND NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-              AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
-              AND tc.CONSTRAINT_TYPE = 'CHECK'
+            SELECT 1 FROM _SchemaSmith_ChkExist tc
+            WHERE BINARY tc.TableName = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.ConstraintName = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
         );
 
         SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_CreateColChkStmts);
@@ -850,19 +905,49 @@ WHERE col.CheckExpression IS NOT NULL
 
     -- =========================================================================
     -- STEP 7: Update ProductOwnership for managed objects
-    -- Reads LIVE INFORMATION_SCHEMA so it confirms objects created THIS run (STEP 3/4/4.5).
+    -- Confirms objects created THIS run (STEP 3/4/4.5) via post-create existence snapshots taken here,
+    -- so ownership is written only for what actually landed -- the same confirmation the original live
+    -- INFORMATION_SCHEMA reads gave, now one scan each instead of one per declared object.
     -- =========================================================================
     IF p_WhatIf = 0 THEN
+        -- Post-create existence snapshots (indexes + CHECK constraints), reflecting STEP 3/4/4.5 creates.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxExistFinal;
+        CREATE TEMPORARY TABLE _SchemaSmith_IdxExistFinal (
+            TableName VARCHAR(128) NOT NULL,
+            IndexName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, IndexName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_IdxExistFinal (TableName, IndexName)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4), CONVERT(s.INDEX_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.STATISTICS s
+        WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+          AND s.SEQ_IN_INDEX = 1;
+
+        -- Rebuild the CHECK existence snapshot to the post-create state (the create passes above saw the
+        -- pre-create build; ownership must see what now exists).
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ChkExist;
+        CREATE TEMPORARY TABLE _SchemaSmith_ChkExist (
+            TableName VARCHAR(128) NOT NULL,
+            ConstraintName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName, ConstraintName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        IF SchemaSmith_SupportsCheckConstraints() = 1 THEN
+            INSERT INTO _SchemaSmith_ChkExist (TableName, ConstraintName)
+            SELECT CONVERT(tc.TABLE_NAME USING utf8mb4), CONVERT(tc.CONSTRAINT_NAME USING utf8mb4)
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
+              AND tc.CONSTRAINT_TYPE = 'CHECK';
+        END IF;
+
         -- Track indexes
         INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
         SELECT p_ProductName, '', p_DatabaseName, 'INDEX',
                CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
         FROM _SchemaSmith_Indexes i
         WHERE EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-            WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-              AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+            SELECT 1 FROM _SchemaSmith_IdxExistFinal s
+            WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+              AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
         );
 
         -- Track check constraints
@@ -871,11 +956,9 @@ WHERE col.CheckExpression IS NOT NULL
                CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ConstraintName))
         FROM _SchemaSmith_CheckConstraints c
         WHERE EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-              AND BINARY tc.CONSTRAINT_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
-              AND tc.CONSTRAINT_TYPE = 'CHECK'
+            SELECT 1 FROM _SchemaSmith_ChkExist tc
+            WHERE BINARY tc.TableName = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.ConstraintName = BINARY SchemaSmith_StripBacktickWrapping(c.ConstraintName)
         );
 
         -- Track column-level check constraints (deterministic CK_<table>_<column> name)
@@ -887,11 +970,9 @@ WHERE col.CheckExpression IS NOT NULL
         WHERE c.CheckExpression IS NOT NULL
           AND TRIM(c.CheckExpression) != ''
           AND EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            WHERE BINARY tc.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY tc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
-              AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
-              AND tc.CONSTRAINT_TYPE = 'CHECK'
+            SELECT 1 FROM _SchemaSmith_ChkExist tc
+            WHERE BINARY tc.TableName = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+              AND BINARY tc.ConstraintName = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(c.TableName), '_', SchemaSmith_StripBacktickWrapping(c.ColumnName))
         );
     END IF;
 
