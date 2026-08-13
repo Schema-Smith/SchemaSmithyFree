@@ -28,10 +28,12 @@ They're archived with the rest of the logs when a run finishes, so a report trav
 The default location keeps the report with its logs, which is what you want most of the time. But CI pipelines often want the summary at a known path — a build artifact to publish, a file a later step parses — independent of wherever the logs happen to rotate. The `--report` switch pins both files wherever you name them.
 
 ```bash
-SchemaQuench --report ./artifacts/deploy-summary
+SchemaQuench --report:./artifacts/deploy-summary
 ```
 
 That writes `./artifacts/deploy-summary.json` and `./artifacts/deploy-summary.md`. You give the path *without* an extension; SchemaQuench appends `.json` and `.md` to the base you provide. Omit the switch and both files fall back to `SchemaQuench - Summary.json` / `.md` in the log directory.
+
+Attach the value with `:` or `=`, as with every other SchemaSmith switch — **not** with a space. A space-separated `--report ./artifacts/deploy-summary` leaves the switch with no value, so the report silently falls back to the default location instead of the path you named.
 
 ## Tuning bottleneck detection
 
