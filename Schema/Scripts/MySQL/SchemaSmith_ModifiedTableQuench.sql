@@ -64,6 +64,36 @@ BEGIN
             SET MESSAGE_TEXT = @schemasmith_error_msg;
     END IF;
 
+    -- Existing-table snapshot: the "does table X exist" checks below (ownership reconcile, ownership
+    -- write, the STEP 8 drop-candidate builds, the PreventDrop report) each read INFORMATION_SCHEMA.TABLES
+    -- per owned/declared table. INFORMATION_SCHEMA is not a stored table on MySQL/MariaDB, so those per-row
+    -- reads re-materialise the server-wide table list every time (cost = tables-processed x tables-on-instance).
+    -- Snapshot the schema's table names ONCE here and check against it. Table existence is stable from proc
+    -- start through STEP 7 (renames already ran upstream in MissingTableAndColumnQuench; STEPs 3-7 only ALTER,
+    -- never create/drop), so this pre-STEP-8 snapshot is what every check before STEP 8 reads. STEP 9's prune
+    -- needs the POST-drop state, so the snapshot is REBUILT there. In WhatIf nothing is dropped, so it stays
+    -- accurate. _SchemaSmith_ExistingTablesN is a copy: STEP 1's rename reconcile references the snapshot twice
+    -- in one statement (new-name EXISTS + old-name NOT EXISTS), which MySQL/MariaDB forbid for a TEMPORARY
+    -- table (ER_CANT_REOPEN_TABLE 1137); the second reference reads the copy.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ExistingTables;
+    CREATE TEMPORARY TABLE _SchemaSmith_ExistingTables (
+        TableName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    -- No TABLE_TYPE filter: the original per-row checks read INFORMATION_SCHEMA.TABLES unfiltered (which
+    -- includes views), so the snapshot must too, to stay behaviour-identical.
+    INSERT INTO _SchemaSmith_ExistingTables (TableName)
+    SELECT CONVERT(ist.TABLE_NAME USING utf8mb4)
+    FROM INFORMATION_SCHEMA.TABLES ist
+    WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName;
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ExistingTablesN;
+    CREATE TEMPORARY TABLE _SchemaSmith_ExistingTablesN (
+        TableName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INSERT INTO _SchemaSmith_ExistingTablesN (TableName) SELECT TableName FROM _SchemaSmith_ExistingTables;
+
     -- =======================
     -- STEP 1: RECONCILE OWNERSHIP FOR RENAMED TABLES
     -- =======================
@@ -94,14 +124,12 @@ BEGIN
         WHERE t.OldName IS NOT NULL
           AND t.NewTable = 0
           AND EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+              SELECT 1 FROM _SchemaSmith_ExistingTables ist
+              WHERE BINARY ist.TableName = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
           )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-              WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.OldName)
+              SELECT 1 FROM _SchemaSmith_ExistingTablesN ist
+              WHERE BINARY ist.TableName = BINARY SchemaSmith_StripBacktickWrapping(t.OldName)
           );
 
         -- Update ProductOwnership for the renamed tables (set-based join, one UPDATE for all pairs).
@@ -1115,9 +1143,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
         SELECT p_ProductName, '', p_DatabaseName, 'TABLE', SchemaSmith_StripBacktickWrapping(t.TableName), COALESCE(t.PreventDrop, 0)
         FROM _SchemaSmith_Tables t
         WHERE EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-            WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+            SELECT 1 FROM _SchemaSmith_ExistingTables ist
+            WHERE BINARY ist.TableName = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
         );
 
         -- INSERT IGNORE skips existing ownership rows, so a toggled PreventDrop would not take
@@ -1154,9 +1181,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
           AND po.ObjectType = 'TABLE'
           AND COALESCE(po.PreventDrop, 0) = 0
           AND EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-              WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+              SELECT 1 FROM _SchemaSmith_ExistingTables ist
+              WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
           )
           AND NOT EXISTS (
               SELECT 1 FROM _SchemaSmith_Tables t
@@ -1197,9 +1223,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
               AND po.ObjectType = 'TABLE'
               AND COALESCE(po.PreventDrop, 0) = 0
               AND EXISTS (
-                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+                  SELECT 1 FROM _SchemaSmith_ExistingTables ist
+                  WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               )
               AND NOT EXISTS (
                   SELECT 1 FROM _SchemaSmith_Tables t
@@ -1234,9 +1259,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
               AND po.ObjectType = 'TABLE'
               AND COALESCE(po.PreventDrop, 0) = 0
               AND EXISTS (
-                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+                  SELECT 1 FROM _SchemaSmith_ExistingTables ist
+                  WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               )
               AND NOT EXISTS (
                   SELECT 1 FROM _SchemaSmith_Tables t
@@ -1295,9 +1319,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
               AND COALESCE(po.PreventDrop, 0) = 0
               -- Table exists
               AND EXISTS (
-                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+                  SELECT 1 FROM _SchemaSmith_ExistingTables ist
+                  WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               )
               -- Not in current definition
               AND NOT EXISTS (
@@ -1315,9 +1338,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
               AND po.ObjectType = 'TABLE'
               AND COALESCE(po.PreventDrop, 0) = 0
               AND EXISTS (
-                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+                  SELECT 1 FROM _SchemaSmith_ExistingTables ist
+                  WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               )
               AND NOT EXISTS (
                   SELECT 1 FROM _SchemaSmith_Tables t
@@ -1347,9 +1369,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
               AND COALESCE(po.PreventDrop, 0) = 0
               -- Table exists
               AND EXISTS (
-                  SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                  WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+                  SELECT 1 FROM _SchemaSmith_ExistingTables ist
+                  WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
               )
               -- Not in current definition
               AND NOT EXISTS (
@@ -1431,9 +1452,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
           AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
           AND po.ObjectType = 'TABLE'
           AND COALESCE(po.PreventDrop, 0) = 1
-          AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                       WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                         AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4))
+          AND EXISTS (SELECT 1 FROM _SchemaSmith_ExistingTables ist
+                       WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4))
           AND NOT EXISTS (SELECT 1 FROM _SchemaSmith_Tables t
                             WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
     END IF;
@@ -1448,6 +1468,18 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     -- table first (a SELECT, not DML), then DELETE against the temp — matching the STEP 8 ELSE
     -- crash-safety convention so no INFORMATION_SCHEMA read runs inside DML (Index-B).
     IF p_WhatIf = 0 THEN
+        -- Rebuild the existing-table snapshot to the POST-drop state: the prune must see tables STEP 8 just
+        -- dropped (and any dropped out-of-band) as gone, so their ownership rows are reconciled here.
+        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ExistingTables;
+        CREATE TEMPORARY TABLE _SchemaSmith_ExistingTables (
+            TableName VARCHAR(128) NOT NULL,
+            PRIMARY KEY (TableName)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO _SchemaSmith_ExistingTables (TableName)
+        SELECT CONVERT(ist.TABLE_NAME USING utf8mb4)
+        FROM INFORMATION_SCHEMA.TABLES ist
+        WHERE BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName;
+
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_OrphanedOwnership;
         CREATE TEMPORARY TABLE _SchemaSmith_OrphanedOwnership (Id INT PRIMARY KEY)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1457,9 +1489,8 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
           WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
             AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
             AND po.ObjectType = 'TABLE'
-            AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES ist
-                             WHERE CONVERT(ist.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                               AND CONVERT(ist.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
+            AND NOT EXISTS (SELECT 1 FROM _SchemaSmith_ExistingTables ist
+                             WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4));
         DELETE po FROM SchemaSmith_ProductOwnership po
           JOIN _SchemaSmith_OrphanedOwnership o ON o.Id = po.Id;
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_OrphanedOwnership;
