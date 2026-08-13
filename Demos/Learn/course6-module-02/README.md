@@ -188,7 +188,9 @@ The exit codes — 0 and 2 — are the contract. Whether the gate is GitHub Acti
 | Detected version display | `16.0.4260.1` | `16` | `8.0.45` | `11.4.12-MariaDB-ubu2404` |
 | Floor **this lab declares** | `2019` | `15` | `8.0` | `10.6` |
 
-Each engine reports its version in its own native form, so that row is what the sandbox's current images happen to return — yours will differ, and the shapes vary a lot (SQL Server's full build number, PostgreSQL's bare major, the MySQL family's semver-plus-vendor-tail). What matters is that the comparison against the declared floor is correct on all four; only the printed token differs.
+Each engine reports its version in its own native form, so that row is what the sandbox's current images happen to return — yours will differ. The shapes vary because the precision does: SQL Server's full build number distinguishes 2016 **SP1** from 2016 RTM (`CREATE OR ALTER` is an SP1 feature), the MySQL family gates mid-major (CHECK at MySQL **8.0.16**, `RENAME COLUMN` at MariaDB **10.5.2**), and PostgreSQL gates on the major alone. SchemaSmith prints what the server publishes rather than trimming all four to a common shape, because the trimmed digits are the ones that explain a degrade.
+
+The declared floor is a separate, friendlier grammar — you never match the detected string's shape. This lab declares `2019` and passes against a server reporting `16.0.4260.1`.
 
 The last row is what each lab package declares in its own `Product.json`, chosen well above what the lab actually needs so Scenario 2 has something to fail against. It is **not** SchemaSmith's supported floor — those are SQL Server 2008, PostgreSQL 12, MySQL 5.7, and MariaDB 10.2.
 

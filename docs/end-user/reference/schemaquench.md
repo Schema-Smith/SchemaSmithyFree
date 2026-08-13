@@ -353,6 +353,21 @@ See [Schema Packages -- Product.json](schema-packages.md#productjson) for the ac
 
 If a target's version cannot be determined, that is a hard error -- SchemaQuench never deploys blind against an unknown version. An unparseable `MinimumVersion` value fails at startup before any connections open.
 
+#### The detected version is reported in each engine's own form
+
+Pre-flight logs the version it detected for every server, and **that string is whatever the engine itself publishes** -- SchemaSmith does not reshape it into a common format. The four look quite different, and that is deliberate rather than an inconsistency to work around:
+
+| Platform | Detected version reads like | Why that precision |
+|----------|-----------------------------|--------------------|
+| SQL Server | `16.0.4260.1` (full build) | Servicing level is load-bearing: `CREATE OR ALTER` arrived in 2016 **SP1**, so `13.0.4001` and `13.0.1601` are the same major and behave differently. |
+| PostgreSQL | `16` (major) | PostgreSQL gates features on the major; the minor carries no capability difference to report. |
+| MySQL | `8.0.45` | Feature boundaries land mid-major -- CHECK constraints at **8.0.16**, so a major alone cannot answer the question. |
+| MariaDB | `11.4.12-MariaDB-ubu2404` | Same reason, plus the vendor/build tail the server appends -- `RENAME COLUMN` at **10.5.2**, native `UUID` at **10.7**. |
+
+Normalizing all four to a bare major would read tidier and tell you less: on three of the four engines it would discard the digits SchemaSmith's own version gates turn on, and a degrade you needed to diagnose would become invisible in the log. **The comparison is unaffected either way** -- the floor check and `MinimumVersion` both parse each engine's form correctly, so a passing or failing verdict never depends on how the string is printed.
+
+What you *declare* is a separate, friendlier grammar: `MinimumVersion` takes `16` or `2022` on SQL Server, `15` on PostgreSQL, `8.0` on MySQL, `10.6` on MariaDB. You never have to match the detected string's shape -- declare the floor you need and SchemaSmith compares it correctly against whatever the server reports.
+
 ### Version-adaptive code generation
 
 When the supported range across your targets diverges, SchemaSmith adapts the DDL it generates automatically. There is nothing to configure -- you deploy the same package to older and newer engine versions and SchemaSmith picks the right form for each target.
