@@ -46,10 +46,10 @@ cd sqlserver     # back into the engine folder
 
 ## Step 3: Run the rollout and write the report
 
-Deploy `after/` fleet-wide, and pin the report where the sandbox can read it. `--report` takes a base path with no extension — SchemaSmith writes both `.json` and `.md`. The lab lowers `BottleneckThresholdMs` far below its 30-second default so a fast five-tenant run still surfaces a long pole:
+Deploy `after/` fleet-wide, and pin the report where the sandbox can read it. `--report:` takes a base path with no extension — SchemaSmith writes both `.json` and `.md`. Attach the value with `:` or `=`, never a space: a bare `--report` carries no value, so the report falls back to the default location (the executable's own directory) and `out/` never appears. The lab lowers `BottleneckThresholdMs` far below its 30-second default so a fast five-tenant run still surfaces a long pole:
 
 ```bash
-schemaquench --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
+schemaquench --ConfigFile:quench.settings.after.json --report:./out/deploy-summary --BottleneckThresholdMs=800
 ```
 
 The run finishes with exit code `2` — four tenants converge, `fleet_tenant_003` fails on its duplicate emails. Now open `out/deploy-summary.json` (and its human-readable twin `out/deploy-summary.md`).
@@ -62,7 +62,7 @@ Read the report top to bottom — it's built to be read in that order:
 - **`targets[]`** — five entries; four `Success`, `fleet_tenant_003` `Failed`. Filter on `outcome != "Success"` for your failed set.
 - **`timing`** — `bySlot` rolls per-slot time fleet-wide (watch the `targetCount`: `ModifiedTables` reaches all 5, the later slots only the 4 that got past the failure); `bottlenecks` lists the slot-on-a-target measurements over your threshold.
 - **`failures[]`** — one entry: the same duplicate-key error, phase trail, and artifact pointer Module 5 chased through `Failures.log`, now as structured data.
-- **`objectChanges`** — the centerpiece. `instrumented: true` means the counts are real. Read them as **fleet-wide totals**: on SQL Server this run reports `created` tables `5` / indexes `4` / constraints `4`, `modified.columns 5`, `dropped.indexes 5`, and `scriptsRan 5`. The two `created` buckets that read `4` instead of `5` (`UQ_Customer_Email`, `PK_ShipmentEvent`) are short by exactly the one tenant that died at the index phase — the counts name the failure before you read a single error. Note `created.views` stays `0` even though the view ran on every tenant: an object script is reported as **`scriptsRan`** / `"action": "ran"`, never "created", because a re-applied script can't be known to have changed anything. The new `Customer.Region` column has no `created.columns` bucket to roll into — it surfaces only in `details[]`; `modified.columns` counts ALTERs of existing columns (here `FullName`'s widening).
+- **`objectChanges`** — the centerpiece. `instrumented: true` means the counts are real. Read them as **fleet-wide totals**: on SQL Server this run reports `created` tables `5` / columns `5` / indexes `4` / constraints `4`, `modified.columns 5`, `dropped.indexes 5`, and `scriptsRan 5`. The two `created` buckets that read `4` instead of `5` (`UQ_Customer_Email`, `PK_ShipmentEvent`) are short by exactly the one tenant that died at the index phase — the counts name the failure before you read a single error. Note `created.views` stays `0` even though the view ran on every tenant: an object script is reported as **`scriptsRan`** / `"action": "ran"`, never "created", because a re-applied script can't be known to have changed anything. `created.columns` and `modified.columns` count different work on different columns — the new `Customer.Region` versus the widened `Customer.FullName` — so a release that adds and reshapes shows both.
 
 ## Step 5 (optional): clear the failure and re-read
 
@@ -72,7 +72,7 @@ Reset the one tenant and re-run to watch the summary go all-green:
 cd ..            # back to the lab folder
 ../lab-sql.sh sqlserver fleet_tenant_003 --file sqlserver/reset-tenant-003.sql
 cd sqlserver     # back into the engine folder
-schemaquench --ConfigFile:quench.settings.after.json --report ./out/deploy-summary --BottleneckThresholdMs=800
+schemaquench --ConfigFile:quench.settings.after.json --report:./out/deploy-summary --BottleneckThresholdMs=800
 ```
 
 Exit `0`, `outcome: "Success"`, empty `failures[]`, and `objectChanges` now shows only what this second run changed — the structure already converged, so the counts are near-empty except the view, which re-runs every time (`scriptsRan`). That contrast — a busy first run, a quiet idempotent second — is the audit telling the truth about what each run actually did.

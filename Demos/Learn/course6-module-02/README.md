@@ -28,13 +28,15 @@ SQL Server output:
 ```
 Pre-flight diagnostics for Shop (--TestConnection)
 Testing connection to configured servers
-  localhost,11433 (a742c1f6fc50) connection succeeded
+  localhost,11433 (663cfb8abdfa) connection succeeded
 
+Validate server version floor
+  localhost,11433: detected SqlServer version 16.0.4260.1
 Validate Minimum Version
 RESULT: PASS (connections and minimum version validated)
 ```
 
-Exit code: `0`. PostgreSQL, MySQL, and MariaDB produce the same shape (`connection succeeded` line, then `RESULT: PASS`) with their respective connection identifiers.
+Exit code: `0`. Two version checks run: **Validate server version floor** is SchemaSmith's own intrinsic floor (and logs the detected version either way), **Validate Minimum Version** is the floor this package declares. PostgreSQL, MySQL, and MariaDB produce the same shape (`connection succeeded`, the detected-version line, then `RESULT: PASS`) with their respective connection identifiers and version strings.
 
 ## Scenario 2 — `--TestConnection` fail: raise the floor above the server
 
@@ -53,24 +55,32 @@ Re-run:
 schemaquench --ConfigFile:quench.settings.json --TestConnection
 ```
 
-SQL Server output (floor `99`, detected version `16`):
+SQL Server output (floor `99`, detected version `16.0.4260.1`):
 
 ```
+Validate server version floor
+  localhost,11433: detected SqlServer version 16.0.4260.1
 Validate Minimum Version
 Pre-flight FAILED: One or more target servers are below the product's declared MinimumVersion; aborting before any deployment:
-  localhost,11433: detected version 16 is below the product's declared MinimumVersion 99
+  localhost,11433: detected version 16.0.4260.1 is below the product's declared MinimumVersion 99
 ```
 
-PostgreSQL output (floor `99`, detected version `160013`):
+PostgreSQL output (floor `99`, detected version `16`):
 
 ```
-  localhost: detected version 160013 is below the product's declared MinimumVersion 99
+  localhost: detected version 16 is below the product's declared MinimumVersion 99
 ```
 
 MySQL output (floor `9.9`, detected version `8.0.45`):
 
 ```
   localhost: detected version 8.0.45 is below the product's declared MinimumVersion 9.9
+```
+
+MariaDB output (floor `99.9`, detected version `11.4.12-MariaDB-ubu2404`):
+
+```
+  localhost: detected version 11.4.12-MariaDB-ubu2404 is below the product's declared MinimumVersion 99.9
 ```
 
 Exit code: `2` on all four engines. The manifest names the server, the detected version, and the declared floor — enough information to act without opening a separate database client.
@@ -175,10 +185,10 @@ The exit codes — 0 and 2 — are the contract. Whether the gate is GitHub Acti
 |---|---|---|---|---|
 | Connection | `localhost,11433` (sa) | `localhost:15432` (postgres) | `localhost:13306` (root) | `localhost:13307` (root) |
 | `DatabaseIdentificationScript` | `SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_%'` | `SELECT datname FROM pg_database WHERE datname LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` |
-| Detected version display | `16` | `160013` | `8.0.45` | `11.4.12-MariaDB-ubu2404` |
+| Detected version display | `16.0.4260.1` | `16` | `8.0.45` | `11.4.12-MariaDB-ubu2404` |
 | Floor **this lab declares** | `2019` | `15` | `8.0` | `10.6` |
 
-Each engine reports its version in its own native form, so that row is what the sandbox's current images happen to return — yours will differ, and the shapes vary a lot (SQL Server's clean major, PostgreSQL's `server_version_num`, the MySQL family's full string). What matters is that the comparison against the declared floor is correct on all four; only the printed token differs.
+Each engine reports its version in its own native form, so that row is what the sandbox's current images happen to return — yours will differ, and the shapes vary a lot (SQL Server's full build number, PostgreSQL's bare major, the MySQL family's semver-plus-vendor-tail). What matters is that the comparison against the declared floor is correct on all four; only the printed token differs.
 
 The last row is what each lab package declares in its own `Product.json`, chosen well above what the lab actually needs so Scenario 2 has something to fail against. It is **not** SchemaSmith's supported floor — those are SQL Server 2008, PostgreSQL 12, MySQL 5.7, and MariaDB 10.2.
 
