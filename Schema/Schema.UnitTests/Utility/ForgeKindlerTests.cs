@@ -137,6 +137,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_IndexOnlyQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_TableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexVisibility.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexExistence.sql"));
     }
 
     [Test]
@@ -205,7 +206,10 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_SnapshotIndexVisibility (per-engine index-visibility snapshot procedure; MySQL reads
         // IS_VISIBLE, the MariaDb override reads IGNORED — replaces the per-row SchemaSmith_IndexIsVisible call in
         // the MissingIndexes/IndexOnly modified-index detection with a one-scan snapshot + join).
-        Assert.That(mysql.Length, Is.EqualTo(37));
+        // +1 = SchemaSmith_SnapshotIndexExistence (engine-agnostic index-existence snapshot procedure; refreshes
+        // _SchemaSmith_IdxExist at each IndexOnlyQuench create/ownership point, replacing the per-declared-index
+        // live existence reads with a one-scan snapshot).
+        Assert.That(mysql.Length, Is.EqualTo(38));
     }
 
     [Test]

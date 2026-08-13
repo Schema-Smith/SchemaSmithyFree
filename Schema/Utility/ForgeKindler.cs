@@ -341,6 +341,7 @@ public static class ForgeKindler
                 new("SchemaSmith_NormalizeColumnDefault.sql"),
                 new("SchemaSmith_IndexIsVisible.sql"),
                 new("SchemaSmith_SnapshotIndexVisibility.sql"),
+                new("SchemaSmith_SnapshotIndexExistence.sql"),
                 new("SchemaSmith_DropCheckClause.sql"),
                 new("SchemaSmith_IndexInvisibleClause.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
