@@ -297,6 +297,22 @@ BEGIN
           AND po.ObjectType = 'INDEX';
     END IF;
 
+    -- STEP 1 executed its renames in the live branch, so each renamed index's OLD name is now gone from
+    -- the catalog. Drop those old names from the detection snapshots before STEP 2 -- otherwise a declared
+    -- index whose name equals a renamed-away old name (e.g. two indexes on one column, where one is renamed
+    -- and the other declared under the freed-up old name) would match a stale snapshot row and be wrongly
+    -- flagged as modified, generating a DROP for an index that no longer exists under that name. The
+    -- original read live INFORMATION_SCHEMA here, which already reflected the rename. WhatIf executes no
+    -- rename, so it must keep the old names to match that live-read behaviour -- hence the p_WhatIf guard.
+    IF p_WhatIf = 0 THEN
+        DELETE snap FROM _SchemaSmith_IdxDetectSnap snap
+            JOIN _SchemaSmith_IndexRenames r
+              ON BINARY r.TableName = BINARY snap.TableName AND BINARY r.OldIndexName = BINARY snap.IndexName;
+        DELETE nm FROM _SchemaSmith_IdxDetectNames nm
+            JOIN _SchemaSmith_IndexRenames r
+              ON BINARY r.TableName = BINARY nm.TableName AND BINARY r.OldIndexName = BINARY nm.IndexName;
+    END IF;
+
     -- =========================================================================
     -- STEP 2: Detect modified indexes (same name, different definition)
     -- =========================================================================
