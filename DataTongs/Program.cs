@@ -17,6 +17,7 @@ public static class Program
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", LogFactory.GetLogger("ProgressLog").Info);
+        CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
 
         var platform = ResolvePlatform();
 
@@ -39,9 +40,12 @@ public static class Program
         return PlatformExtensions.ParsePlatform(platformValue);
     }
 
+    private static readonly string[] KnownArguments = { "ConfigureDataDelivery" };
+
     private static void ToolSpecificSwitches()
     {
         Console.WriteLine("  --ConfigureDataDelivery          Write data delivery configuration into table JSON files after extraction.");
         Console.WriteLine("  --TemplatePath:<path>            Template root (containing Tables/) used by --ConfigureDataDelivery.");
+        Console.WriteLine("  --DeliveryEncoding:<encoding>    Content-file encoding for extracted data: Json (default) | Xml. Xml is SQL Server only.");
     }
 }

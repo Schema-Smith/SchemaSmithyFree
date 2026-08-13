@@ -20,6 +20,7 @@ public static class Program
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
+        CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
 
         RegisterCheckpointing();
 
@@ -119,6 +120,11 @@ public static class Program
         }
     }
 
+    private static readonly string[] KnownArguments =
+    {
+        "SkipKindlingForge", "Validate", "TestConnection", "PreviewTargets", "ResumeQuench", "ForceReKindle"
+    };
+
     private static void ToolSpecificSwitches()
     {
         Console.WriteLine("  --Validate                       Statically validate the schema package (no database connection), then exit.");
@@ -128,5 +134,6 @@ public static class Program
         Console.WriteLine("  --CheckpointDirectory:<path>     Directory for checkpoint files (default: %TEMP%/schemaquench-checkpoints).");
         Console.WriteLine("  --ForceReKindle                  Re-deploy the SchemaSmith helper procedures this run even if the in-database kindle stamp is current.");
         Console.WriteLine("  --WhatIfDetail:<mode>            WhatIf console verbosity: concise | normal (default) | verbose. Concise collapses each section's per-script lines into per-category counts. Does not affect the WhatIf summary file.");
+        Console.WriteLine("  --report:<basepath>              Write the deployment summary to <basepath>.json and <basepath>.md instead of the log directory. Give the path without an extension.");
     }
 }

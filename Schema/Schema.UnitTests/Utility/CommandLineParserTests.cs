@@ -524,4 +524,122 @@ public class CommandLineParserTests
             CommandLineParser.ApplyTransportSecuritySwitch(Platform.SqlServer, props));
         Assert.That(ex.Message, Does.Contain("Encrypt").And.Contain("NoEncrypt"));
     }
+
+    private static readonly string[] KnownFlags = { "TestConnection", "Validate", "Zip" };
+
+    [Test]
+    public void Unrecognized_SpaceSeparatedSwitchValue_ReportsTheStrandedValue()
+    {
+        // The exact trap: --report takes its value attached, so the path lands as a bare
+        // positional the run never reads and the report goes to the default location. Both
+        // halves are reported — the switch that lost its value, and the value it lost.
+        _mockEnvironment.CommandLine.Returns("app.exe --report ./out/deploy-summary");
+
+        var unread = CommandLineParser.UnrecognizedArguments(KnownFlags);
+
+        Assert.That(unread, Is.EqualTo(new[] { "--report", "./out/deploy-summary" }));
+    }
+
+    [Test]
+    public void Unrecognized_MisspelledBareFlag_IsReported()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --TestConection");
+
+        var unread = CommandLineParser.UnrecognizedArguments(KnownFlags);
+
+        Assert.That(unread, Is.EqualTo(new[] { "--TestConection" }));
+    }
+
+    [Test]
+    public void Unrecognized_KnownBareFlag_IsAccepted()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --TestConnection --validate");
+
+        Assert.That(CommandLineParser.UnrecognizedArguments(KnownFlags), Is.Empty);
+    }
+
+    [Test]
+    public void Unrecognized_SwitchCarryingAValue_IsAlwaysAccepted()
+    {
+        // Any --Key=value / --Key:value is a legitimate config override, known or not.
+        _mockEnvironment.CommandLine.Returns("app.exe --Target__Server=host --LogPath:./logs --report:./out/x");
+
+        Assert.That(CommandLineParser.UnrecognizedArguments(KnownFlags), Is.Empty);
+    }
+
+    [Test]
+    public void Unrecognized_ExecutableAndSlashForm_AreNotReported()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe /Zip");
+
+        Assert.That(CommandLineParser.UnrecognizedArguments(KnownFlags), Is.Empty);
+    }
+
+    [Test]
+    public void Unrecognized_QuotedStrandedPath_IsReportedIntact()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --LogPath \"C:\\my logs\"");
+
+        Assert.That(CommandLineParser.UnrecognizedArguments(KnownFlags),
+            Is.EqualTo(new[] { "--LogPath", "C:\\my logs" }));
+    }
+
+    [Test]
+    public void Unrecognized_NothingButTheExecutable_IsEmpty()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe");
+
+        Assert.That(CommandLineParser.UnrecognizedArguments(KnownFlags), Is.Empty);
+    }
+
+    [Test]
+    public void Unrecognized_KnownFlagsAreMatchedCaseInsensitively()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --TESTCONNECTION");
+
+        Assert.That(CommandLineParser.UnrecognizedArguments(KnownFlags), Is.Empty);
+    }
+
+    [Test]
+    public void Unrecognized_CommonFlagsNeedNoDeclaration()
+    {
+        // version/help variants are handled by HandleCommonSwitches for every tool.
+        _mockEnvironment.CommandLine.Returns("app.exe --version --help -h -? --ver --Encrypt --debug --verbose");
+
+        Assert.That(CommandLineParser.UnrecognizedArguments(KnownFlags), Is.Empty);
+    }
+
+    [Test]
+    public void Unrecognized_DeclaredPositionalCommand_IsAccepted()
+    {
+        // SchemaQuench takes a positional command; an undeclared positional is still reported.
+        _mockEnvironment.CommandLine.Returns("app.exe SkipKindlingForge stray");
+
+        var unread = CommandLineParser.UnrecognizedArguments(new[] { "SkipKindlingForge" });
+
+        Assert.That(unread, Is.EqualTo(new[] { "stray" }));
+    }
+
+    [Test]
+    public void WarnOnUnrecognized_NamesTheArgumentsAndTheGrammar()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --report ./out/x");
+        var warnings = new List<string>();
+
+        CommandLineParser.WarnOnUnrecognizedArguments(KnownFlags, warnings.Add);
+
+        Assert.That(warnings, Has.Count.EqualTo(1));
+        Assert.That(warnings[0], Does.Contain("--report").And.Contain("./out/x").And.Contain("never a space"));
+    }
+
+    [Test]
+    public void WarnOnUnrecognized_CleanCommandLine_SaysNothing()
+    {
+        _mockEnvironment.CommandLine.Returns("app.exe --TestConnection --LogPath:./logs");
+        var warnings = new List<string>();
+
+        CommandLineParser.WarnOnUnrecognizedArguments(KnownFlags, warnings.Add);
+
+        Assert.That(warnings, Is.Empty);
+    }
 }

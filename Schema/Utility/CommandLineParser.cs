@@ -128,6 +128,51 @@ public static class CommandLineParser
         props[key] = value;
     }
 
+    private static readonly string[] CommonBareFlags =
+        { "v", "ver", "version", "?", "h", "help", "Encrypt", "NoEncrypt", "debug", "verbose" };
+
+    /// <summary>
+    /// Arguments this run will never read, in command-line order. Two shapes qualify, and both are
+    /// silently inert without this check: a token that is not a switch at all — the usual cause is a
+    /// switch value written with a space, since the ':'/'=' grammar leaves <c>--report ./out/x</c>
+    /// holding no value and strands the path — and a bare switch that is not one of
+    /// <paramref name="knownBareFlags"/>, which is how a misspelled <c>--TestConection</c> quietly
+    /// becomes a full deployment. A switch that carries a value is always legitimate: any
+    /// <c>--Key=value</c> / <c>--Key:value</c> is a configuration override, so no list can know it.
+    /// Pass only genuinely valueless flags in <paramref name="knownArguments"/> — a value switch left
+    /// out of it (LogPath, ConfigFile, report…) is then correctly reported when given bare. A tool
+    /// that takes a positional command (SchemaQuench's <c>SkipKindlingForge</c>) lists it there too.
+    /// </summary>
+    public static List<string> UnrecognizedArguments(IEnumerable<string> knownArguments)
+    {
+        var known = new HashSet<string>(CommonBareFlags, StringComparer.InvariantCultureIgnoreCase);
+        foreach (var flag in knownArguments ?? Enumerable.Empty<string>())
+            known.Add(flag);
+
+        return Arguments.Skip(1)
+            .Where(arg => IsSwitch(arg)
+                ? CarriesNoValue(arg) && !known.Contains(TrimKeyName(arg))
+                : !known.Contains(arg))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Reports <see cref="UnrecognizedArguments"/> through <paramref name="warn"/>, naming the
+    /// grammar so the fix is in the message. Silent when everything on the line was read.
+    /// </summary>
+    public static void WarnOnUnrecognizedArguments(IEnumerable<string> knownArguments, Action<string> warn)
+    {
+        var unread = UnrecognizedArguments(knownArguments);
+        if (unread.Count == 0) return;
+
+        warn($"Ignored - not recognized: {string.Join(" ", unread)}"
+             + " (a switch value attaches with ':' or '=', never a space - e.g. --LogPath:./logs)");
+    }
+
+    private static bool IsSwitch(string arg) => arg.StartsWith("/") || arg.StartsWith("-");
+
+    private static bool CarriesNoValue(string arg) => arg.IndexOf('=') < 0 && arg.IndexOf(':') < 0;
+
     public static void HandleCommonSwitches(string app, Action toolSpecificSwitches = null)
     {
         if (ContainsSwitch("v") || ContainsSwitch("ver") || ContainsSwitch("version")) ShowVersionAndExit(app);
