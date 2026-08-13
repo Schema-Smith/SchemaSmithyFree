@@ -22,13 +22,13 @@ namespace SchemaTongs.IntegrationTests.SqlServer;
 /// when <c>Source:CompatEncoding=legacy</c>, <see cref="SchemaTongs"/> kindles the XML twins and extracts
 /// tables via <c>GenerateTableXml</c> + indexed views via <c>GenerateIndexedViewXml</c> (converted back
 /// through <c>ModelXmlSerializer.FromIngestXml</c>), producing the SAME package as the default JSON
-/// extraction — minus the <c>Extensions</c> bag, which the legacy encoding drops by design.
+/// extraction, extended properties included (B2, #353, made the legacy tier preserve them too).
 ///
 /// <para>Runs on the modern container: <c>FOR JSON</c> works at any compat there, so
 /// <c>Source:CompatEncoding=legacy</c> is the override lever that forces the XML path (mirroring the
-/// ingest-side B3 legacy-override test). The RED lever is the extended property: the JSON path carries it
-/// in <c>Extensions</c>, the XML path drops it — so a legacy extraction that still contains the extended
-/// property proves the XML wiring did not run.</para>
+/// ingest-side B3 legacy-override test). Correctness is proven by whole-package model-equality between the
+/// two encodings; B2 closed the former extended-property divergence (the legacy XML tier now carries the
+/// <c>Extensions</c> bag as the JSON tier does), which the extension assertions below now verify.</para>
 /// </summary>
 [Category("SqlServer")]
 public class SourceCompatEncodingExtractionTests
@@ -88,15 +88,18 @@ public class SourceCompatEncodingExtractionTests
             }
         }
 
-        // ----- RED lever: the XML (legacy) encoding drops Extensions; the JSON (modern) path keeps it. -----
-        // The extended property lands in the table's Extensions bag on the JSON path only. A legacy
-        // extraction that still contains it proves the XML wiring was skipped (Json kindle + GenerateTableJSON).
+        // ----- Extensions: BOTH tiers now carry them. B2 (#353) made the legacy (XML) tier preserve object
+        // extended properties too (GenerateTableXml emits them attribute-encoded; FromIngestXml rebuilds them),
+        // so the modern (JSON) and legacy (XML) extractions both land the extended property in the table's
+        // Extensions bag. This removes the former "extension drops on XML" RED lever (Extensions was the last
+        // documented XML/JSON divergence, and B2 closed it); the model-equality check below is the correctness
+        // gate, and the Source:CompatEncoding=legacy config forces the XML path regardless. -----
         var modernRich = ReadTableFile(modernPath, "Rich");
         var legacyRich = ReadTableFile(legacyPath, "Rich");
         Assert.That(modernRich, Does.Contain(ExtendedPropertyValue),
             "The modern (JSON) extraction must carry the extended property in Extensions.");
-        Assert.That(legacyRich, Does.Not.Contain(ExtendedPropertyValue),
-            "The legacy (XML) extraction must drop Extensions by design — proving the XML encoding path ran.");
+        Assert.That(legacyRich, Does.Contain(ExtendedPropertyValue),
+            "The legacy (XML) extraction must ALSO carry the extended property in Extensions (B2 — extended properties are preserved below the JSON cliff).");
 
         // ----- Correctness: every emitted table + indexed view is model-equal minus Extensions. -----
         var modernFiles = ReadPackageObjects(modernPath);
@@ -266,7 +269,8 @@ CREATE TABLE dbo.Rich (
         Exec(cmd, "CREATE XML INDEX XI_Secondary_Doc_Path ON dbo.Rich (Doc) USING XML INDEX XI_Primary_Doc FOR PATH");
         Exec(cmd, "CREATE FULLTEXT INDEX ON dbo.Rich (Name) KEY INDEX PK_Rich ON FT_Catalog WITH CHANGE_TRACKING = AUTO, STOPLIST = SL_Test");
 
-        // Extended property → captured in Extensions on the JSON path, dropped on the XML path. The RED lever.
+        // Extended property → captured in Extensions on BOTH the JSON and (post-B2) the XML path; the test
+        // asserts each extraction carries it.
         Exec(cmd, $"EXEC sys.sp_addextendedproperty 'MS_Description', '{ExtendedPropertyValue}', 'SCHEMA', [dbo], 'TABLE', [Rich], NULL, NULL");
 
         // An indexed view (covers the GenerateIndexedViewXml extraction edit). Its base table is a plain
