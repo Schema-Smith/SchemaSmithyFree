@@ -412,6 +412,76 @@ public class TokenHelperTests
         Assert.That(ex.Message, Does.Contain("No table name was provided"));
     }
 
+    [Test]
+    public void ResolveSpecificTableTokens_XmlTag_ResolvesToIngestXml()
+    {
+        // A2: <*SpecificTableXml*> resolves to the object's ingest XML (not JSON), so a below-cliff
+        // SQL Server can shred one table with XQuery.
+        var tokens = new Dictionary<string, string>
+        {
+            { "TableInfo", "<*SpecificTableXml*>dbo.MyTable" }
+        };
+        var tables = new List<Table> { CreateSqlServerTable("dbo", "MyTable") };
+
+        TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.DoesNotThrow(() => System.Xml.Linq.XElement.Parse(tokens["TableInfo"]));
+            Assert.That(tokens["TableInfo"], Does.StartWith("<Table>"));
+            Assert.That(tokens["TableInfo"], Does.Contain("MyTable"));
+        });
+    }
+
+    [Test]
+    public void ResolveSpecificTableTokens_XmlTag_MissingTable_ThrowsSameAsJson()
+    {
+        var tokens = new Dictionary<string, string>
+        {
+            { "TableInfo", "<*SpecificTableXml*>dbo.MissingTable" }
+        };
+        var tables = new List<Table> { CreateSqlServerTable("dbo", "MyTable") };
+
+        var ex = Assert.Throws<Exception>(() => TokenHelper.ResolveSpecificTableTokens(tokens, tables, Platform.SqlServer));
+        Assert.That(ex.Message, Does.Contain("missing table"));
+    }
+
+    [Test]
+    public void ResolveSpecificMaterializedViewTokens_XmlTag_ResolvesToIngestXml()
+    {
+        var tokens = new Dictionary<string, string>
+        {
+            { "MyView", "<*SpecificMaterializedViewXml*>public.my_view" }
+        };
+        var views = new List<PostgreSqlMaterializedView>
+        {
+            new() { Schema = "public", Name = "my_view", Definition = "SELECT 1" }
+        };
+
+        TokenHelper.ResolveSpecificMaterializedViewTokens(tokens, views);
+
+        Assert.That(tokens["MyView"], Does.StartWith("<MaterializedView>"));
+        Assert.That(tokens["MyView"], Does.Contain("my_view"));
+    }
+
+    [Test]
+    public void ResolveSpecificIndexedViewTokens_XmlTag_ResolvesToIngestXml()
+    {
+        var tokens = new Dictionary<string, string>
+        {
+            { "MyView", "<*SpecificIndexedViewXml*>dbo.vOrderSummary" }
+        };
+        var views = new List<SqlServerIndexedView>
+        {
+            new() { Schema = "[dbo]", Name = "[vOrderSummary]", Definition = "SELECT 1 AS Col1" }
+        };
+
+        TokenHelper.ResolveSpecificIndexedViewTokens(tokens, views);
+
+        Assert.That(tokens["MyView"], Does.StartWith("<IndexedView>"));
+        Assert.That(tokens["MyView"], Does.Contain("vOrderSummary"));
+    }
+
     #endregion
 
     #region SpecificMaterializedView Tests

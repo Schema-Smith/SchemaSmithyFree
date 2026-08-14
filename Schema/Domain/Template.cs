@@ -179,6 +179,13 @@ namespace Schema.Domain
         [JsonIgnore]
         public string TableSchema { get; set; } = "";
 
+        // A2: XML twin of TableSchema — the same model encoded as ingest XML, so an author can shred the
+        // model with XQuery (.nodes()/.value()) on a below-cliff SQL Server where OPENJSON parse-errors.
+        // Computed from TableSchema (the single source of truth), so it stays in step with the model.
+        [JsonIgnore]
+        public string TableXml => ModelXmlSerializer.ToIngestXml(
+            string.IsNullOrWhiteSpace(TableSchema) ? "[]" : TableSchema, "Tables", "Table");
+
         [JsonIgnore]
         public List<PostgreSqlMaterializedView> MaterializedViews { get; } = [];
 
@@ -186,10 +193,18 @@ namespace Schema.Domain
         public string MaterializedViewSchema { get; set; } = "[]";
 
         [JsonIgnore]
+        public string MaterializedViewXml => ModelXmlSerializer.ToIngestXml(
+            string.IsNullOrWhiteSpace(MaterializedViewSchema) ? "[]" : MaterializedViewSchema, "MaterializedViews", "MaterializedView");
+
+        [JsonIgnore]
         public List<SqlServerIndexedView> IndexedViews { get; } = [];
 
         [JsonIgnore]
         public string IndexedViewSchema { get; set; } = "[]";
+
+        [JsonIgnore]
+        public string IndexedViewXml => ModelXmlSerializer.ToIngestXml(
+            string.IsNullOrWhiteSpace(IndexedViewSchema) ? "[]" : IndexedViewSchema, "IndexedViews", "IndexedView");
 
         [JsonIgnore]
         public string FilePath { get; set; }
@@ -454,12 +469,17 @@ namespace Schema.Domain
 
             TableSchema = JArray.FromObject(Tables).ToString();
             tokens.Add(new("TableSchema", TableSchema.Replace("'", "''")));
+            // A2: XML twin, pre-escaped identically to the JSON sibling (added via the same non-escaping
+            // substitution path here, so it must pre-escape single quotes for safe SQL string embedding).
+            tokens.Add(new("TableXml", TableXml.Replace("'", "''")));
 
             MaterializedViewSchema = JArray.FromObject(MaterializedViews).ToString();
             tokens.Add(new("MaterializedViewSchema", MaterializedViewSchema.Replace("'", "''")));
+            tokens.Add(new("MaterializedViewXml", MaterializedViewXml.Replace("'", "''")));
 
             IndexedViewSchema = JArray.FromObject(IndexedViews).ToString();
             tokens.Add(new("IndexedViewSchema", IndexedViewSchema.Replace("'", "''")));
+            tokens.Add(new("IndexedViewXml", IndexedViewXml.Replace("'", "''")));
 
             if (ScriptFolders.Count == 0) ScriptFolders.AddRange(GetDefaultTemplateFolders(platform, IsSchemaTemplate));
 

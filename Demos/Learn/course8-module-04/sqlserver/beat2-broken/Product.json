@@ -1,5 +1,6 @@
 {
   "Name": "Shop",
+  "MinimumVersion": "2016",
   "ValidationScript": "SELECT CAST(1 AS BIT)",
   "TemplateOrder": [
     "Main"

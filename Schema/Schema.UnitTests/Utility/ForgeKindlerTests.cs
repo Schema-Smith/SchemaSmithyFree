@@ -136,6 +136,8 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_ForeignKeyQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_IndexOnlyQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_TableQuench.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexVisibility.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexExistence.sql"));
     }
 
     [Test]
@@ -176,17 +178,20 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 25 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
+        // SqlServer: 27 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
         // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine)
-        // + SchemaSmith.fn_SplitList (all-versions STRING_SPLIT replacement for the compat-100 XML path).
-        Assert.That(sqlServer.Length, Is.EqualTo(25));
+        // + SchemaSmith.fn_SplitList (all-versions STRING_SPLIT replacement for the compat-100 XML path)
+        // + SchemaSmith.DegradeUnsupportedColumnStore + SchemaSmith.DegradeUnsupportedFeatures (the emit-guard
+        //   degrade spine: the former drops below-2012/2014 columnstore from #Indexes, the latter is the single
+        //   choke point that neutralizes below-2016 temporal/masking/Always-Encrypted in the working set).
+        Assert.That(sqlServer.Length, Is.EqualTo(27));
         // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
         // + SchemaSmith.ColumnCompression (PG14-adaptive attcompression read) + SchemaSmith.StatisticsExpressionColumns
         // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade.
         Assert.That(postgres.Length, Is.EqualTo(34));
-        // MySQL: 35 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
+        // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor
         // helpers: SchemaSmith_JsonScalarInt + SchemaSmith_JsonScalarStr (null-safe JSON payload reads for the
@@ -196,8 +201,15 @@ public class ForgeKindlerTests
         // MariaDB 10.5.2; RENAME INDEX needs MariaDB 10.5.2 — below, emit CHANGE COLUMN / drop-recreate),
         // SchemaSmith_BuildIndexRenameClause (the version-adaptive index-rename clause builder), and
         // SchemaSmith_SupportsDescendingIndex (DESC key parts need MySQL 8.0 / MariaDB 10.8 — below, degrade to
-        // ascending idempotently).
-        Assert.That(mysql.Length, Is.EqualTo(35));
+        // ascending idempotently) + SchemaSmith_SupportsInvisibleIndex (INVISIBLE needs MySQL 8.0 / MariaDB 10.6
+        // — below, degrade to visible; the emit-guard invisible-index slice).
+        // +1 = SchemaSmith_SnapshotIndexVisibility (per-engine index-visibility snapshot procedure; MySQL reads
+        // IS_VISIBLE, the MariaDb override reads IGNORED — replaces the per-row SchemaSmith_IndexIsVisible call in
+        // the MissingIndexes/IndexOnly modified-index detection with a one-scan snapshot + join).
+        // +1 = SchemaSmith_SnapshotIndexExistence (engine-agnostic index-existence snapshot procedure; refreshes
+        // _SchemaSmith_IdxExist at each IndexOnlyQuench create/ownership point, replacing the per-declared-index
+        // live existence reads with a one-scan snapshot).
+        Assert.That(mysql.Length, Is.EqualTo(38));
     }
 
     [Test]

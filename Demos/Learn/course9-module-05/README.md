@@ -4,6 +4,8 @@ This is the capstone. Everything in the course — native packages, connection c
 
 The answer is expand / contract, and you're about to deploy it.
 
+> **Engine floor:** this capstone runs Catalog, Orders and Sessions together, and all three sides use DataDelivery — so on your own server the SQL Server service needs **2016+** and the MySQL service **8.0+** (`OPENJSON` / `JSON_TABLE`). PostgreSQL runs at any supported version. Course 9 spans three engines at once, so the Docker sandbox is the easier path here regardless.
+
 ## What you're learning
 
 **An independent release for one service.** Catalog (PostgreSQL) owns the canonical `shipping_region` reference table and manages it with DataDelivery. When Catalog needs to add a new region or retire an old one, it ships that change on its own timeline — Orders and Sessions don't move, don't coordinate, and don't even know it happened until they're ready.

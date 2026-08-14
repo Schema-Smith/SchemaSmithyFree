@@ -258,6 +258,10 @@
               "type": "string",
               "maxLength": 128,
               "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and identifies which array variant a DataTongs re-extraction reconciles."
+            },
+            "ContentEncoding": {
+              "type": "string",
+              "pattern": "Json|Xml"
             }
           },
           "additionalProperties": false
@@ -296,6 +300,10 @@
                 "type": "string",
                 "maxLength": 128,
                 "description": "Optional label for a conditional data-delivery variant — names the intent behind its ShouldApplyExpression, appears in deployment logging when the delivery applies, and identifies which array variant a DataTongs re-extraction reconciles."
+              },
+              "ContentEncoding": {
+                "type": "string",
+                "pattern": "Json|Xml"
               }
             },
             "additionalProperties": false

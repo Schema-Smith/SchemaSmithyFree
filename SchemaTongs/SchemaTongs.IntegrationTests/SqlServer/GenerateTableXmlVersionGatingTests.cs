@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using System.Text;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Utility;
@@ -74,10 +75,10 @@ public class GenerateTableXmlVersionGatingTests
 
         cmd.CommandText = "EXEC [SchemaSmith].GenerateTableXml @p_Schema = 'dbo', @p_Table = 'Masked'";
         using var reader = cmd.ExecuteReader();
-        var xml = "";
-        while (reader.Read()) xml += reader.GetValue(0)?.ToString();
+        var xml = new StringBuilder();
+        while (reader.Read()) xml.Append(reader.GetValue(0)?.ToString());
         conn.Close();
-        return xml;
+        return xml.ToString();
     }
 
     [OneTimeTearDown]

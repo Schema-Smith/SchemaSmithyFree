@@ -17,6 +17,7 @@ public static class Program
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
+        CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
 
         if (CommandLineParser.ContainsSwitch("WriteSchemasOnly"))
         {
@@ -66,6 +67,8 @@ public static class Program
 
         return PlatformExtensions.ParsePlatform(platformValue);
     }
+
+    private static readonly string[] KnownArguments = { "WriteSchemasOnly" };
 
     private static void ToolSpecificSwitches()
     {

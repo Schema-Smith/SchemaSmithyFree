@@ -353,6 +353,21 @@ See [Schema Packages -- Product.json](schema-packages.md#productjson) for the ac
 
 If a target's version cannot be determined, that is a hard error -- SchemaQuench never deploys blind against an unknown version. An unparseable `MinimumVersion` value fails at startup before any connections open.
 
+#### The detected version is reported in each engine's own form
+
+Pre-flight logs the version it detected for every server, and **that string is whatever the engine itself publishes** -- SchemaSmith does not reshape it into a common format. The four look quite different, and that is deliberate rather than an inconsistency to work around:
+
+| Platform | Detected version reads like | Why that precision |
+|----------|-----------------------------|--------------------|
+| SQL Server | `16.0.4260.1` (full build) | Servicing level is load-bearing: `CREATE OR ALTER` arrived in 2016 **SP1**, so `13.0.4001` and `13.0.1601` are the same major and behave differently. |
+| PostgreSQL | `16` (major) | PostgreSQL gates features on the major; the minor carries no capability difference to report. |
+| MySQL | `8.0.45` | Feature boundaries land mid-major -- CHECK constraints at **8.0.16**, so a major alone cannot answer the question. |
+| MariaDB | `11.4.12-MariaDB-ubu2404` | Same reason, plus the vendor/build tail the server appends -- `RENAME COLUMN` at **10.5.2**, native `UUID` at **10.7**. |
+
+Normalizing all four to a bare major would read tidier and tell you less: on three of the four engines it would discard the digits SchemaSmith's own version gates turn on, and a degrade you needed to diagnose would become invisible in the log. **The comparison is unaffected either way** -- the floor check and `MinimumVersion` both parse each engine's form correctly, so a passing or failing verdict never depends on how the string is printed.
+
+What you *declare* is a separate, friendlier grammar: `MinimumVersion` takes `16` or `2022` on SQL Server, `15` on PostgreSQL, `8.0` on MySQL, `10.6` on MariaDB. You never have to match the detected string's shape -- declare the floor you need and SchemaSmith compares it correctly against whatever the server reports.
+
 ### Version-adaptive code generation
 
 When the supported range across your targets diverges, SchemaSmith adapts the DDL it generates automatically. There is nothing to configure -- you deploy the same package to older and newer engine versions and SchemaSmith picks the right form for each target.
@@ -719,6 +734,8 @@ The same pattern works for views. Define the token, then pass it to the procedur
 
 You can also pass the full schema tokens (`{{TableSchema}}`, `{{IndexedViewSchema}}`, `{{MaterializedViewSchema}}`) to quench all objects of that type, but the specific-object pattern is more common in migration scripts where you need one table or view to exist before proceeding.
 
+> **Legacy SQL Server tier:** these tokens hand your script JSON, which the built-in quench procs shred with `OPENJSON` (compatibility level 130+). If you shred a model-payload token in *your own* SQL on a below-130 database, `OPENJSON` parse-errors — use the [XML twin](script-tokens.md#model-payload-xml-twins) (`{{AuditLogTableXml}}`-style per-object tags, or `{{TableXml}}`) and XQuery `.nodes()`/`.value()` instead, gated behind `{{CompatibilityLevel}}`. The XML shape shreds at every compatibility level.
+
 **Parameter reference:**
 
 | Parameter | TableQuench | IndexedViewQuench | MaterializedViewQuench |
@@ -1079,6 +1096,22 @@ The same primitive works one level up: a **script folder** can carry a `ShouldAp
 This turns "different folders for different flavors of a target" into a declarative property instead of pipeline branching: a `MariaDB/` folder gated on `SELECT CASE WHEN @@version LIKE '%MariaDB%' THEN 1 ELSE 0 END` beside a `MySQL/` folder gated on the negation, a `Jobs/` folder skipped on Azure SQL (`SELECT CASE WHEN SERVERPROPERTY('EngineEdition') <> 5 THEN 1 ELSE 0 END`), or a `TableData/TestData/` folder kept out of production by your environment predicate.
 
 > **Note:** A folder's `ShouldApplyExpression` must return a boolean. If it errors -- a SQL mistake, a missing function -- the deployment fails with a clear message naming the folder, rather than silently skipping it. A gate that quietly dropped schema folders would be the dangerous failure mode, so the engine fails closed.
+
+### Gating on the target version
+
+The most common gate is "apply this only on a new enough target." The `{{ServerMajorVersion}}` and `{{CompatibilityLevel}}` [script tokens](script-tokens.md#servermajorversion-and-compatibilitylevel) expose the version SchemaSmith already detects, so you write one portable integer comparison instead of each engine's native version SQL. The two are not interchangeable — **gate syntax on compatibility level, gate features on server version**:
+
+```jsonc
+// A folder whose scripts use OPENJSON / STRING_AGG — compat-130 syntax.
+// Gate on the DATABASE compatibility level, because a modern binary can still
+// host a compat-100 database where that syntax parse-errors.
+"ShouldApplyExpression": "{{CompatibilityLevel}} >= 130"
+
+// A folder that uses a server-version-only capability. Gate on the binary.
+"ShouldApplyExpression": "{{ServerMajorVersion}} >= 16"
+```
+
+The tokens resolve per target database, so the same folder deploys to a modern database and skips on a legacy one in a single run. The shipped `Demos/Conditional/SqlServer-CompatLevelGate` demonstrates the compatibility-level gate end to end. See [Script Tokens — {{ServerMajorVersion}} and {{CompatibilityLevel}}](script-tokens.md#servermajorversion-and-compatibilitylevel) for the full syntax-vs-feature explanation and the cross-engine `{{CompatibilityLevel}}` fallback.
 
 ---
 

@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
+using Newtonsoft.Json.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Utility;
@@ -103,6 +105,52 @@ public class ForgeKindlerXmlEncodingTests
         var ex = Assert.Throws<Exception>(() =>
             ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: true, IngestEncoding.Json));
         Assert.That(ex!.Message + ex.InnerException?.Message, Does.Contain("kindling").IgnoreCase);
+
+        conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableXml_RoundTripsObjectExtendedProperties_AtCompatibilityLevel100()
+    {
+        // B2: the legacy-tier extract must preserve object ExtendedProperties. EP names are arbitrary
+        // sysname (a name with a space cannot be an XML element name), so the proc emits them attribute-
+        // encoded and FromIngestXml rebuilds the dict. Prove the round trip on a real compat-100 database.
+        var db = CreateCompat100Database("XmlEP100");
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(DbConnectionString(db));
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: true, IngestEncoding.Xml);
+
+        cmd.CommandText = @"
+CREATE TABLE dbo.WidgetEP ([Id] INT NOT NULL CONSTRAINT PK_WidgetEP PRIMARY KEY, [Amount] DECIMAL(10,2) NULL);
+CREATE INDEX IX_WidgetEP_Amount ON dbo.WidgetEP ([Amount]);
+EXEC sys.sp_addextendedproperty @name=N'OwningTeam', @value=N'Billing', @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'WidgetEP';
+EXEC sys.sp_addextendedproperty @name=N'My Note', @value=N'a & b < c', @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'WidgetEP';
+EXEC sys.sp_addextendedproperty @name=N'Classification', @value=N'Financial', @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'WidgetEP', @level2type=N'COLUMN', @level2name=N'Amount';
+EXEC sys.sp_addextendedproperty @name=N'IdxNote', @value=N'hot', @level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', @level1name=N'WidgetEP', @level2type=N'INDEX', @level2name=N'IX_WidgetEP_Amount';";
+        cmd.ExecuteNonQuery();
+
+        // FOR XML PATH (no TYPE) returns the document in 2033-char chunks across rows; concatenate them
+        // (ExecuteScalar would read only the first chunk and truncate a larger document).
+        cmd.CommandText = "EXEC SchemaSmith.GenerateTableXml @p_Schema='dbo', @p_Table='WidgetEP'";
+        var sb = new System.Text.StringBuilder();
+        using (var reader = cmd.ExecuteReader())
+            while (reader.Read())
+                sb.Append(reader.GetValue(0)?.ToString());
+        var xml = sb.ToString();
+        Assert.That(xml, Does.Contain("</Table>"), "GenerateTableXml must return a complete table document");
+
+        var table = PlatformDeserializer.DeserializeTable(ModelXmlSerializer.FromIngestXml(xml), Platform.SqlServer);
+
+        static JToken Eps(DynamicBase o) => ((JObject)o.Extensions)?["ExtendedProperties"];
+        Assert.Multiple(() =>
+        {
+            var tableEps = Eps(table);
+            Assert.That((string)tableEps["OwningTeam"], Is.EqualTo("Billing"), "table EP");
+            Assert.That((string)tableEps["My Note"], Is.EqualTo("a & b < c"), "table EP with a spaced name + special-char value");
+            Assert.That((string)Eps(table.Columns.Single(c => c.Name == "[Amount]"))["Classification"], Is.EqualTo("Financial"), "column EP");
+            Assert.That((string)Eps(table.Indexes.Single(i => i.Name == "[IX_WidgetEP_Amount]"))["IdxNote"], Is.EqualTo("hot"), "index EP");
+        });
 
         conn.Close();
     }

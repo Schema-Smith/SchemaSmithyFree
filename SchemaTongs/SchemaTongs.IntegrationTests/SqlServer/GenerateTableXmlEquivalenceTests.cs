@@ -3,6 +3,7 @@
 using System;
 using System.Data;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Schema.DataAccess;
@@ -110,9 +111,9 @@ EXEC sys.sp_addextendedproperty 'MS_Description', 'A rich table', 'SCHEMA', [dbo
     {
         cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableJson @p_Schema = '{schema}', @p_Table = '{table}'";
         using var reader = cmd.ExecuteReader();
-        var json = "";
-        while (reader.Read()) json += $"{reader.GetString(0)}\r\n";
-        return json;
+        var json = new StringBuilder();
+        while (reader.Read()) json.Append(reader.GetString(0)).Append("\r\n");
+        return json.ToString();
     }
 
     // FOR XML output is split across rows once it exceeds ~2033 chars, so concatenate every row into the
@@ -121,9 +122,9 @@ EXEC sys.sp_addextendedproperty 'MS_Description', 'A rich table', 'SCHEMA', [dbo
     {
         cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableXml @p_Schema = '{schema}', @p_Table = '{table}'";
         using var reader = cmd.ExecuteReader();
-        var xml = "";
-        while (reader.Read()) xml += reader.GetValue(0)?.ToString();
-        return xml;
+        var xml = new StringBuilder();
+        while (reader.Read()) xml.Append(reader.GetValue(0)?.ToString());
+        return xml.ToString();
     }
 
     // Serialize the model to JSON, then drop (a) the Extensions bag — dropped on the legacy encoding by

@@ -1,7 +1,7 @@
 {
   "Name": "IdentityService",
   "ValidationScript": "",
-  "MinimumVersion": "8.0",
+  "MinimumVersion": "10.6",
   "TemplateOrder": ["Main"],
   "ScriptTokens": {},
   "ScriptFolders": [],

@@ -1,5 +1,6 @@
 {
   "Name": "Shop",
+  "MinimumVersion": "8.0",
   "ValidationScript": "SELECT 1",
   "TemplateOrder": [
     "Main"

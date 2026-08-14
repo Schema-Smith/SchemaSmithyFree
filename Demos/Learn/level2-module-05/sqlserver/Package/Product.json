@@ -1,5 +1,6 @@
 {
   "Name": "RefData",
+  "MinimumVersion": "2016",
   "ValidationScript": "SELECT CASE WHEN DB_ID('learn') IS NOT NULL THEN 1 ELSE 0 END",
   "TemplateOrder": ["Main"],
   "ScriptTokens": {},

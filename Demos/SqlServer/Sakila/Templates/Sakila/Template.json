@@ -18,6 +18,18 @@
       "ObjectType": "Views"
     },
     {
+      "FolderPath": "Views-Modern",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views",
+      "ShouldApplyExpression": "{{ServerMajorVersion}} >= 14 AND {{CompatibilityLevel}} >= 130"
+    },
+    {
+      "FolderPath": "Views-Legacy",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views",
+      "ShouldApplyExpression": "{{ServerMajorVersion}} < 14 OR {{CompatibilityLevel}} < 130"
+    },
+    {
       "FolderPath": "Triggers",
       "QuenchSlot": "AfterTablesObjects",
       "ObjectType": "Triggers"

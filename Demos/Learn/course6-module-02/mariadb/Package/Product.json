@@ -1,6 +1,6 @@
 {
   "Name": "Shop",
-  "MinimumVersion": "8.0",
+  "MinimumVersion": "10.6",
   "TemplateOrder": [
     "Main"
   ],

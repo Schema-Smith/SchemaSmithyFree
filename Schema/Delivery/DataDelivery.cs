@@ -19,6 +19,14 @@ public class DataDelivery
     [JsonProperty(Order = 2)]
     public string MergeType { get; set; }
 
+    // B1: the encoding of ContentFile — JSON (default, shredded with OPENJSON, requires SQL Server
+    // compatibility level 130+) or XML (shredded with .nodes()/.value(), applies at every compat level).
+    // The payload is user data in a shape SchemaSmith does not own, so this is an explicit author choice,
+    // never inferred. Blank/absent = Json.
+    [SchemaProperty(Pattern = "Json|Xml")]
+    [JsonProperty(Order = 10)]
+    public string ContentEncoding { get; set; }
+
     [SchemaProperty]
     [JsonProperty(Order = 3)]
     public string MatchColumns { get; set; }

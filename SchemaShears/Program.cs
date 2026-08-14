@@ -17,6 +17,7 @@ public static class Program
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         ConfigHelper.GetAppSettingsAndUserSecrets("SchemaShears", LogFactory.GetLogger("ProgressLog").Info);
+        CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
 
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
         var allowDropsRaw = CommandLineParser.ValueOfSwitch("AllowDrops", config["AllowDrops"]);
@@ -47,6 +48,8 @@ public static class Program
     {
         LogBackup.UnhandledExceptionLogger("SchemaShears", e);
     }
+
+    private static readonly string[] KnownArguments = { "Zip" };
 
     private static void ToolSpecificSwitches()
     {

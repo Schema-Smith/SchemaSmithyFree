@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -69,6 +70,45 @@ public abstract class FolderGateIntegrationTestsSharedTests
         using var cmd = conn.CreateCommand();
 
         Assert.That(FolderGate.ShouldApply(cmd, folder.ShouldApplyExpression), Is.True);
+    }
+
+    [Test]
+    public void VersionTokens_CompatibilityLevelFallsBackToServerVersion_OffSqlServer()
+    {
+        // A1 parity smoke: off SQL Server there is no compatibility-level concept, so detection returns
+        // a null CompatibilityLevel and {{CompatibilityLevel}} falls back to the detected server version.
+        // A folder gate comparing the two tokens is therefore true — one portable expression shape works
+        // across the per-platform packages. Uses the real detected version, so it asserts nothing engine-
+        // version-specific.
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        var info = TargetVersionDetector.Detect(cmd, Platform);
+        Assert.Multiple(() =>
+        {
+            Assert.That(info.CompatibilityLevel, Is.Null, "Off SQL Server there is no compatibility-level concept.");
+            Assert.That(info.ServerComparable, Is.GreaterThan(0));
+        });
+
+        var product = new Product { Name = "P", Platform = Platform };
+        var template = new Template { Name = "T" };
+        var folder = new TemplateFolder
+        {
+            FolderPath = "parity",
+            QuenchSlot = TemplateQuenchSlot.Before,
+            ShouldApplyExpression = "SELECT CASE WHEN {{CompatibilityLevel}} = {{ServerMajorVersion}} THEN 1 ELSE 0 END"
+        };
+        folder.Scripts.Add(new SqlScript { Name = "parity.sql" });
+        template.ScriptFolders.Add(folder);
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(info.ServerComparable, info.CompatibilityLevel);
+        quench.ApplyFolderGates(cmd);
+
+        Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "parity.sql" }));
     }
 
     private static string NonexistentBasePath() =>

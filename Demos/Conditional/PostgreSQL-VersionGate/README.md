@@ -4,7 +4,7 @@ One schema package. Two PostgreSQL versions. Different deployed shapes — drive
 
 ## What's in here
 
-A small SchemaSmith schema package — three tables (`Customers`, `Orders`, `OrderEvents`) — designed to deploy successfully against **PostgreSQL 15** (the SchemaSmith floor) and **PostgreSQL 18** (the current major) from the same package.
+A small SchemaSmith schema package — three tables (`Customers`, `Orders`, `OrderEvents`) — designed to deploy successfully against **PostgreSQL 15** and **PostgreSQL 18** (the current major) from the same package. 15 is this demo's lower rung, chosen to straddle the gate — not a SchemaSmith limit; SchemaSmith supports PostgreSQL 12 and up.
 
 The catch: `OrderEvents.Status` is a **virtual generated column** that extracts a path out of the `Payload` JSONB. Virtual generated columns landed in PostgreSQL 18; PG15 doesn't have them. So the column carries a `ShouldApplyExpression` the engine itself evaluates at deploy time:
 

@@ -1,7 +1,7 @@
 name: schemasmith-conditional-pg-demo
 
 # Conditional deployment demo: same schema package deploys against PostgreSQL 15
-# (the SchemaSmith floor) and PostgreSQL 18 (the current major). A virtual
+# (this demo's lower rung) and PostgreSQL 18 (the current major). A virtual
 # generated column on OrderEvents.Status is gated by
 # `current_setting('server_version_num')::int >= 180000` -- it skips on PG15
 # (virtual generated columns landed in PG18) and applies on PG18.
@@ -16,7 +16,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: conditional_demo
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d conditional_demo"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d conditional_demo"]
       interval: 2s
       timeout: 5s
       retries: 30
@@ -30,7 +30,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: conditional_demo
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d conditional_demo"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d conditional_demo"]
       interval: 2s
       timeout: 5s
       retries: 30

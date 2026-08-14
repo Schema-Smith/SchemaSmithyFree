@@ -1,5 +1,6 @@
 {
   "Name": "OrdersRef",
+  "MinimumVersion": "2016",
   "ValidationScript": "SELECT 1",
   "TemplateOrder": ["Main"],
   "ScriptTokens": {},

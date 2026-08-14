@@ -8,6 +8,8 @@ Your team is about to push a schema update to three tenant databases across a fl
 
 ## Before you start
 
+> **Engine floor:** this lab deliberately declares a floor *higher* than it needs (SQL Server `2019`, PostgreSQL `15`, MySQL `8.0`, MariaDB `10.6`) so that raising it can be shown failing. On your own server, either meet those or edit `Product.json` down — they are the lab's teaching values, not SchemaSmith limits.
+
 - The four-engine sandbox is up (`Demos/Learn/docker`) and `course6-setup` has been run — it seeds `shop_tenant_a`, `shop_tenant_b`, and `shop_tenant_c` on each engine.
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later). The `--TestConnection` and `--PreviewTargets` switches shipped in v2.2.0; if `schemaquench --help` does not list them, upgrade to v2.3.0 or later.
 
@@ -26,13 +28,15 @@ SQL Server output:
 ```
 Pre-flight diagnostics for Shop (--TestConnection)
 Testing connection to configured servers
-  localhost,11433 (a742c1f6fc50) connection succeeded
+  localhost,11433 (663cfb8abdfa) connection succeeded
 
+Validate server version floor
+  localhost,11433: detected SqlServer version 16.0.4260.1
 Validate Minimum Version
 RESULT: PASS (connections and minimum version validated)
 ```
 
-Exit code: `0`. PostgreSQL, MySQL, and MariaDB produce the same shape (`connection succeeded` line, then `RESULT: PASS`) with their respective connection identifiers.
+Exit code: `0`. Two version checks run: **Validate server version floor** is SchemaSmith's own intrinsic floor (and logs the detected version either way), **Validate Minimum Version** is the floor this package declares. PostgreSQL, MySQL, and MariaDB produce the same shape (`connection succeeded`, the detected-version line, then `RESULT: PASS`) with their respective connection identifiers and version strings.
 
 ## Scenario 2 — `--TestConnection` fail: raise the floor above the server
 
@@ -43,6 +47,7 @@ This scenario shows what the check looks like when the server is reachable but b
 - SQL Server: set `"MinimumVersion": "99"`
 - PostgreSQL: set `"MinimumVersion": "99"`
 - MySQL: set `"MinimumVersion": "9.9"`
+- MariaDB: set `"MinimumVersion": "99.9"`
 
 Re-run:
 
@@ -50,18 +55,20 @@ Re-run:
 schemaquench --ConfigFile:quench.settings.json --TestConnection
 ```
 
-SQL Server output (floor `99`, detected version `16`):
+SQL Server output (floor `99`, detected version `16.0.4260.1`):
 
 ```
+Validate server version floor
+  localhost,11433: detected SqlServer version 16.0.4260.1
 Validate Minimum Version
 Pre-flight FAILED: One or more target servers are below the product's declared MinimumVersion; aborting before any deployment:
-  localhost,11433: detected version 16 is below the product's declared MinimumVersion 99
+  localhost,11433: detected version 16.0.4260.1 is below the product's declared MinimumVersion 99
 ```
 
-PostgreSQL output (floor `99`, detected version `160013`):
+PostgreSQL output (floor `99`, detected version `16`):
 
 ```
-  localhost: detected version 160013 is below the product's declared MinimumVersion 99
+  localhost: detected version 16 is below the product's declared MinimumVersion 99
 ```
 
 MySQL output (floor `9.9`, detected version `8.0.45`):
@@ -70,9 +77,17 @@ MySQL output (floor `9.9`, detected version `8.0.45`):
   localhost: detected version 8.0.45 is below the product's declared MinimumVersion 9.9
 ```
 
+MariaDB output (floor `99.9`, detected version `11.4.12-MariaDB-ubu2404`):
+
+```
+  localhost: detected version 11.4.12-MariaDB-ubu2404 is below the product's declared MinimumVersion 99.9
+```
+
 Exit code: `2` on all four engines. The manifest names the server, the detected version, and the declared floor — enough information to act without opening a separate database client.
 
-**Restore `MinimumVersion`** to its original value before continuing (`2019` for SQL Server, `15` for PostgreSQL, `8.0` for MySQL).
+**Restore `MinimumVersion`** to its original value before continuing (`2019` for SQL Server, `15` for PostgreSQL, `8.0` for MySQL, `10.6` for MariaDB).
+
+Those originals are values *this lab declares* — deliberately well above what it needs, so Scenario 2 has room to fail against. They are not SchemaSmith's floors, which are SQL Server 2008, PostgreSQL 12, MySQL 5.7, and MariaDB 10.2. A real product declares the floor *it* needs.
 
 ## Scenario 3 — `--PreviewTargets` pass
 
@@ -166,12 +181,18 @@ The exit codes — 0 and 2 — are the contract. Whether the gate is GitHub Acti
 
 ## Per-engine notes
 
-| | SQL Server | PostgreSQL | MySQL |
-|---|---|---|---|
-| Connection | `localhost,11433` (sa) | `localhost:15432` (postgres) | `localhost:13306` (root) |
-| `DatabaseIdentificationScript` | `SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_%'` | `SELECT datname FROM pg_database WHERE datname LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` |
-| Detected version display | `16` | `160013` | `8.0.45` |
-| Pass floor used | `2019` | `15` | `8.0` |
+| | SQL Server | PostgreSQL | MySQL | MariaDB |
+|---|---|---|---|---|
+| Connection | `localhost,11433` (sa) | `localhost:15432` (postgres) | `localhost:13306` (root) | `localhost:13307` (root) |
+| `DatabaseIdentificationScript` | `SELECT [Name] FROM master.sys.databases WHERE [Name] LIKE 'shop_tenant_%'` | `SELECT datname FROM pg_database WHERE datname LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` | `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME LIKE 'shop_tenant_%'` |
+| Detected version display | `16.0.4260.1` | `16` | `8.0.45` | `11.4.12-MariaDB-ubu2404` |
+| Floor **this lab declares** | `2019` | `15` | `8.0` | `10.6` |
+
+Each engine reports its version in its own native form, so that row is what the sandbox's current images happen to return — yours will differ. The shapes vary because the precision does: SQL Server's full build number distinguishes 2016 **SP1** from 2016 RTM (`CREATE OR ALTER` is an SP1 feature), the MySQL family gates mid-major (CHECK at MySQL **8.0.16**, `RENAME COLUMN` at MariaDB **10.5.2**), and PostgreSQL gates on the major alone. SchemaSmith prints what the server publishes rather than trimming all four to a common shape, because the trimmed digits are the ones that explain a degrade.
+
+The declared floor is a separate, friendlier grammar — you never match the detected string's shape. This lab declares `2019` and passes against a server reporting `16.0.4260.1`.
+
+The last row is what each lab package declares in its own `Product.json`, chosen well above what the lab actually needs so Scenario 2 has something to fail against. It is **not** SchemaSmith's supported floor — those are SQL Server 2008, PostgreSQL 12, MySQL 5.7, and MariaDB 10.2.
 
 > *MariaDB is a fourth platform in the MySQL family — its own `Platform: MariaDb` selection and native package, not the MySQL package retargeted. Its dialect matches MySQL except for a few DDL specifics (invisible indexes, check-constraint drops, column-default reporting) that SchemaSmith handles for you.*
 

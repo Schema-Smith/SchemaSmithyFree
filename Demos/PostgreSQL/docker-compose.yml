@@ -88,8 +88,18 @@ services:
       POSTGRES_PASSWORD: ${PostGreSQL_PASSWORD}
       PGPASSWORD: ${PostGreSQL_PASSWORD}
     command: postgres -c max_connections=2000
+    volumes:
+      # Sentinel init script (99-*, runs last) — see healthcheck below.
+      - ./docker/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "psql -U ${PostGreSQL_USERNAME} -d TestMain -c \"SELECT 1 WHERE (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') >= 2000\" | grep -q 1"]
+      # Two independent guards against a false-green mid-init (a fresh/cold volume takes the official
+      # entrypoint through a temporary server that listens on the Unix socket only, with listen_addresses='',
+      # while the real server — the one the quench chain reaches over TCP — is not yet up):
+      #   1. -h 127.0.0.1 forces the probe onto TCP, the transport the dependent quenches actually use, so
+      #      the socket-only init server can never satisfy it.
+      #   2. _init_complete is created by the 99- init script as the LAST init step, so the query cannot
+      #      succeed until the entrypoint's init phase has fully finished (the pattern MySQL/MariaDB use).
+      test: ["CMD-SHELL", "psql -h 127.0.0.1 -U ${PostGreSQL_USERNAME} -d TestMain -c \"SELECT 1 FROM _init_complete LIMIT 1\" 2>/dev/null | grep -q 1"]
       interval: 5s
       timeout: 3s
       retries: 30

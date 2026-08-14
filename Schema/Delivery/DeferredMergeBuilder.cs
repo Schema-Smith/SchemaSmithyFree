@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
+using Schema.Utility;
 
 namespace Schema.Delivery;
 
@@ -19,10 +20,19 @@ internal static class DeferredMergeBuilder
     public static string Build(IMergeScriptHelper helper, IDbCommand cmd, string platform,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
         bool disableTriggers, List<string> deferredColumns,
-        bool disableRules = false, bool updateDescendents = false, int pgServerVersionNum = 0)
+        bool disableRules = false, bool updateDescendents = false, int pgServerVersionNum = 0,
+        string contentEncoding = "Json")
     {
+        var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
+
+        // B1: XML delivery is SQL-Server-only in this slice; a PG/MySQL delivery declaring Xml fails loudly
+        // rather than silently emitting a JSON shred (mirrors MergeScriptHelper.BuildMergeScript).
+        if (isXml && !platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException(
+                $"XML data-delivery encoding is not yet supported on {platform}; use JSON (its shred works at every supported version).");
+
         if (platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
-            return BuildSqlServer(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns);
+            return BuildSqlServer(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, isXml);
         if (platform.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
             return BuildPostgreSql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, disableRules, updateDescendents, pgServerVersionNum);
         if (platform.Equals("MySQL", StringComparison.OrdinalIgnoreCase))
@@ -35,32 +45,43 @@ internal static class DeferredMergeBuilder
 
     private static string BuildSqlServer(IMergeScriptHelper helper, IDbCommand cmd,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
-        bool disableTriggers, List<string> deferredColumns)
+        bool disableTriggers, List<string> deferredColumns, bool isXml = false)
     {
         var schema = schemaOrDb.Trim().Trim('[', ']');
         var table = tableName.Trim().Trim('[', ']');
         var deferredSet = new HashSet<string>(deferredColumns.Select(c => c.Trim().Trim('[', ']')), StringComparer.InvariantCultureIgnoreCase);
 
         var matchColumns = helper.GetMatchColumns(keyColumns);
-        var jsonColumns = helper.GetJsonColumnDefinitions(cmd, schemaOrDb, tableName);
         var insertColumns = helper.GetInsertColumns(cmd, schemaOrDb, tableName);
         var identityInsert = helper.NeedsIdentityInsert(cmd, schemaOrDb, tableName);
 
         var columns = helper.GetColumnMetadata(cmd, schemaOrDb, tableName);
-        var selectColumns = BuildDeferredSelectColumnsSqlServer(columns, deferredSet);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"DECLARE @v_json NVARCHAR(MAX) = '{tableData?.Replace("'", "''")}';");
+        // XML data type methods (.nodes()/.value()) require QUOTED_IDENTIFIER ON; emit it so the script is
+        // self-sufficient regardless of the executing session's setting (verified on SQL Server 2008 R2).
+        if (isXml) sb.AppendLine("SET QUOTED_IDENTIFIER ON;").AppendLine();
+        sb.AppendLine(isXml
+            ? $"DECLARE @v_xml XML = '{tableData?.Replace("'", "''")}';"
+            : $"DECLARE @v_json NVARCHAR(MAX) = '{tableData?.Replace("'", "''")}';");
         sb.AppendLine();
         if (disableTriggers) sb.AppendLine($"ALTER TABLE [{schema}].[{table}] DISABLE TRIGGER ALL;");
         if (identityInsert) sb.AppendLine($"SET IDENTITY_INSERT [{schema}].[{table}] ON;");
         sb.AppendLine($"MERGE INTO [{schema}].[{table}] AS Target");
         sb.AppendLine("USING (");
-        sb.AppendLine($"  SELECT {selectColumns}");
-        sb.AppendLine("    FROM OPENJSON(@v_json)");
-        sb.AppendLine("    WITH (");
-        sb.AppendLine($"{jsonColumns}");
-        sb.AppendLine("    )");
+        if (isXml)
+        {
+            sb.AppendLine($"  SELECT {BuildDeferredXmlSelectColumnsSqlServer(columns, deferredSet)}");
+            sb.AppendLine("    FROM @v_xml.nodes('/rows/row') AS Src(n)");
+        }
+        else
+        {
+            sb.AppendLine($"  SELECT {BuildDeferredSelectColumnsSqlServer(columns, deferredSet)}");
+            sb.AppendLine("    FROM OPENJSON(@v_json)");
+            sb.AppendLine("    WITH (");
+            sb.AppendLine($"{helper.GetJsonColumnDefinitions(cmd, schemaOrDb, tableName)}");
+            sb.AppendLine("    )");
+        }
         sb.AppendLine(") AS Source");
         sb.AppendLine($"ON {matchColumns}");
         sb.AppendLine();
@@ -88,6 +109,29 @@ internal static class DeferredMergeBuilder
             if (c.IsGeometry)
                 return $"{c.DataType.ToLowerInvariant()}::STGeomFromText([{c.Name}], [{c.Name}.STSrid]) AS [{c.Name}]";
             return $"[{c.Name}]";
+        }));
+    }
+
+    // B1: XML-shred twin of BuildDeferredSelectColumnsSqlServer — shreds the <c n="Col">value</c> delivery
+    // shape with .value() instead of reading OPENJSON WITH columns, keeping the deferred-FK NULLing and the
+    // per-type handling (geometry WKT+SRID, binary base64, xml as NVARCHAR(MAX)) identical.
+    private static string BuildDeferredXmlSelectColumnsSqlServer(List<MergeColumnInfo> columns, HashSet<string> deferredSet)
+    {
+        if (columns == null || columns.Count == 0) return "*";
+
+        static string Node(string name) => $"(c[@n=\"{name}\"]/text())[1]";
+
+        return string.Join(",", columns.Select(c =>
+        {
+            if (deferredSet.Contains(c.Name))
+                return $"CAST(NULL AS {c.JsonParseType}) AS [{c.Name}]";
+            if (c.IsGeometry)
+                return $"{c.DataType.ToLowerInvariant()}::STGeomFromText(Src.n.value('{Node(c.Name)}','NVARCHAR(4000)'), Src.n.value('{Node(c.Name + ".STSrid")}','INT')) AS [{c.Name}]";
+            if (c.IsBinary)
+                return $"Src.n.value('xs:base64Binary({Node(c.Name)})','{c.JsonParseType}') AS [{c.Name}]";
+            if (c.IsXml)
+                return $"Src.n.value('{Node(c.Name)}','NVARCHAR(MAX)') AS [{c.Name}]";
+            return $"Src.n.value('{Node(c.Name)}','{c.JsonParseType}') AS [{c.Name}]";
         }));
     }
 
@@ -256,17 +300,42 @@ internal static class DeferredMergeBuilder
 
         var jsonSource = BuildDeferredJsonRowSourceMySql(columns.Where(c => !c.IsComputed).ToList(), versionNum);
 
-        var sb = new StringBuilder();
-        sb.AppendLine($"SET @json_data = '{tableData?.Replace("'", "''")}';");
-        sb.AppendLine();
-        sb.AppendLine($"INSERT INTO `{db}`.`{table}` ({columnList})");
-        sb.AppendLine($"SELECT {selectExpressions}");
-        sb.AppendLine($"FROM {jsonSource}");
-
         var updateCols = columns.Where(c => !c.IsIdentity && !c.IsComputed).Select(c =>
             deferredSet.Contains(c.Name) ? $"`{c.Name}` = NULL" : $"`{c.Name}` = VALUES(`{c.Name}`)");
-        sb.AppendLine($"ON DUPLICATE KEY UPDATE {string.Join(", ", updateCols)};");
+        var onDuplicate = $"ON DUPLICATE KEY UPDATE {string.Join(", ", updateCols)};";
 
+        var sb = new StringBuilder();
+
+        // The pre-10.6 shred is quadratic in payload size (see MergeScriptHelper.MariaDbShredChunkRows),
+        // and this two-pass FK path shreds the same payload, so it needs the same slicing. Without it a
+        // large deferred table stalls here exactly as the single-pass path did. No delete half to worry
+        // about: pass 1 only inserts, so every chunk is independent.
+        var chunked = MergeScriptHelper.TryChunkMySqlPayload(
+            hasJsonTable: !jsonSource.Contains("_ss_seq"), tokenizeScripts: false, tableData, out var payloadRows);
+
+        if (!chunked)
+        {
+            sb.AppendLine($"SET @json_data = '{tableData?.Replace("'", "''")}';");
+            sb.AppendLine();
+            sb.AppendLine($"INSERT INTO `{db}`.`{table}` ({columnList})");
+            sb.AppendLine($"SELECT {selectExpressions}");
+            sb.AppendLine($"FROM {jsonSource}");
+            sb.AppendLine(onDuplicate);
+            return sb.ToString();
+        }
+
+        for (var offset = 0; offset < payloadRows.Count; offset += MergeScriptHelper.MariaDbShredChunkRows)
+        {
+            var chunk = new Newtonsoft.Json.Linq.JArray(
+                payloadRows.Skip(offset).Take(MergeScriptHelper.MariaDbShredChunkRows));
+            sb.AppendLine($"SET @json_data = '{chunk.ToString(Newtonsoft.Json.Formatting.None).Replace("'", "''")}';");
+            sb.AppendLine();
+            sb.AppendLine($"INSERT INTO `{db}`.`{table}` ({columnList})");
+            sb.AppendLine($"SELECT {selectExpressions}");
+            sb.AppendLine($"FROM {jsonSource}");
+            sb.AppendLine(onDuplicate);
+            sb.AppendLine();
+        }
         return sb.ToString();
     }
 

@@ -813,6 +813,151 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region Version / compatibility-level script tokens (A1)
+
+    private static DatabaseQuench RegularQuench(Product product, Template template) =>
+        new("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
+
+    [Test]
+    public void VersionTokens_FolderGate_RegularTemplate_SubstitutesServerMajorVersion()
+    {
+        // The primary use case + the regression this fixes: a REGULAR template's folder gate
+        // must have {{ServerMajorVersion}} substituted before evaluation. Pre-fix,
+        // ResolveFolderGateExpression returned the expression verbatim for regular templates.
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("modern", TemplateQuenchSlot.Before, "CHECK {{ServerMajorVersion}}", "modern.sql"));
+        var quench = RegularQuench(product, template);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(16, 130);
+
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("CHECK 16") ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "modern.sql" }));
+    }
+
+    [Test]
+    public void VersionTokens_FolderGate_RegularTemplate_SkipsWhenVersionBelowBoundary()
+    {
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("modern", TemplateQuenchSlot.Before, "CHECK {{ServerMajorVersion}}", "modern.sql"));
+        var quench = RegularQuench(product, template);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(10, 100); // SQL Server 2008 / compat 100
+
+        // The gate query carries "CHECK 10", not "CHECK 16" — folder is gated off.
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("CHECK 16") ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts, Is.Empty);
+    }
+
+    [Test]
+    public void VersionTokens_FolderGate_RegularTemplate_SubstitutesCompatibilityLevel()
+    {
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("compat", TemplateQuenchSlot.Before, "CHECK {{CompatibilityLevel}}", "compat.sql"));
+        var quench = RegularQuench(product, template);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(16, 100); // modern binary hosting a compat-100 database
+
+        // The compat token resolves to 100 (NOT the server version 16) — the footgun distinction.
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("CHECK 100") ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "compat.sql" }));
+    }
+
+    [Test]
+    public void VersionTokens_CompatibilityLevel_FallsBackToServerVersion_WhenNull()
+    {
+        // Off SQL Server there is no compatibility level; {{CompatibilityLevel}} falls back to the
+        // detected server version so the same expression stays portable across per-platform packages.
+        var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        template.ScriptFolders.Add(GatedFolder("pg", TemplateQuenchSlot.Before, "CHECK {{CompatibilityLevel}}", "pg.sql"));
+        var quench = RegularQuench(product, template);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(12, null); // PostgreSQL 12, no compat concept
+
+        quench.ApplyFolderGates(GateCommand(sql => sql.Contains("CHECK 12") ? 1 : 0));
+
+        Assert.That(quench.IterationBeforeScripts.Select(s => s.Name), Is.EqualTo(new[] { "pg.sql" }));
+    }
+
+    [Test]
+    public void VersionTokens_ScriptBody_RegularTemplate_SubstitutesDetectedLiteral()
+    {
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var folder = new TemplateFolder { FolderPath = "b", QuenchSlot = TemplateQuenchSlot.Before };
+        var script = new SqlScript { Name = "v.sql" };
+        script.Batches.Add("IF {{ServerMajorVersion}} >= 16 PRINT 'modern'");
+        folder.Scripts.Add(script);
+        template.ScriptFolders.Add(folder);
+        var quench = RegularQuench(product, template);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(16, 130);
+
+        quench.ApplyVersionScriptTokens();
+
+        var body = quench.IterationBeforeScripts.Single().Batches.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(body, Does.Contain("IF 16 >= 16"));
+            Assert.That(body, Does.Not.Contain("{{ServerMajorVersion}}"));
+        });
+    }
+
+    [Test]
+    public void VersionTokens_ScriptBody_NoVersionToken_KeepsSameReference()
+    {
+        // Conditional-clone: a tokenless script must remain the SAME SqlScript instance so the
+        // regular-template cross-DB HasBeenQuenched dedup (which relies on reference identity) is
+        // preserved bit-for-bit for the common case.
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var folder = new TemplateFolder { FolderPath = "b", QuenchSlot = TemplateQuenchSlot.Before };
+        var script = new SqlScript { Name = "plain.sql" };
+        script.Batches.Add("SELECT 1");
+        folder.Scripts.Add(script);
+        template.ScriptFolders.Add(folder);
+        var quench = RegularQuench(product, template);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(16, 130);
+
+        quench.ApplyVersionScriptTokens();
+
+        Assert.That(quench.IterationBeforeScripts.Single(), Is.SameAs(script));
+    }
+
+    [Test]
+    public void VersionTokens_TableSchemaPayload_RegularTemplate_Substitutes()
+    {
+        // Component-level ShouldApplyExpression / Default / CheckExpression live in the serialized
+        // model payload; version tokens must resolve there too, for regular templates.
+        var product = new Product { Name = "P", Platform = Platform.SqlServer };
+        var template = new Template
+        {
+            Name = "T",
+            TableSchema = "[{\"Name\":\"Audit\",\"ShouldApplyExpression\":\"{{ServerMajorVersion}} >= 13\"}]"
+        };
+        var quench = RegularQuench(product, template);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(16, 130);
+
+        quench.ApplyVersionScriptTokens();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(quench.IterationTableSchema, Does.Contain("16 >= 13"));
+            Assert.That(quench.IterationTableSchema, Does.Not.Contain("{{ServerMajorVersion}}"));
+        });
+    }
+
+    #endregion
+
     #region QuenchOneScript Tests
 
     [Test]

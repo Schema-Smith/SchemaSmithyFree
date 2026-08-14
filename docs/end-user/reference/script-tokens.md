@@ -129,11 +129,19 @@ SchemaSmith adds these tokens automatically. You don't define them -- they appea
 | `{{TableSchema}}` | Full serialized JSON of every table in the current template, with single quotes escaped (`''`) for safe embedding in SQL string literals | Template scripts |
 | `{{IndexedViewSchema}}` | Full serialized JSON of every indexed view in the current template (SQL Server) | Template scripts |
 | `{{MaterializedViewSchema}}` | Full serialized JSON of every materialized view in the current template (PostgreSQL) | Template scripts |
+| `{{TableXml}}` | XML twin of `{{TableSchema}}` — the same table model as ingest XML, for shredding with `.nodes()`/`.value()` on a below-compat-130 SQL Server where `OPENJSON` parse-errors. See [Model-payload XML twins](#model-payload-xml-twins) | Template scripts |
+| `{{IndexedViewXml}}` | XML twin of `{{IndexedViewSchema}}` | Template scripts |
+| `{{MaterializedViewXml}}` | XML twin of `{{MaterializedViewSchema}}` | Template scripts |
 | `{{TableSchema_<TemplateName>}}` | Same as `{{TableSchema}}` but reaches across templates -- name another template explicitly to read its table set | Any template |
 | `{{IndexedViewSchema_<TemplateName>}}` | Cross-template indexed view JSON | Any template |
 | `{{MaterializedViewSchema_<TemplateName>}}` | Cross-template materialized view JSON | Any template |
+| `{{TableXml_<TemplateName>}}` | Cross-template XML twin of `{{TableSchema_<TemplateName>}}` | Any template |
+| `{{IndexedViewXml_<TemplateName>}}` | Cross-template XML twin of `{{IndexedViewSchema_<TemplateName>}}` | Any template |
+| `{{MaterializedViewXml_<TemplateName>}}` | Cross-template XML twin of `{{MaterializedViewSchema_<TemplateName>}}` | Any template |
 | `{{ObjectScripts_<TemplateName>}}` | Cross-template inventory of programmable object scripts (functions, views, procedures, triggers) | Any template |
 | `{{QueryTokens_<TemplateName>}}` | Cross-template inventory of query-style tokens for sharing | Any template |
+| `{{ServerMajorVersion}}` | The detected target server major version — SQL Server `16` (2022) / `13` (2016) / `10` (2008); PostgreSQL `16`; MySQL `800` (8.0); MariaDB `1006` (10.6) | Template scripts + expression fields |
+| `{{CompatibilityLevel}}` | The SQL Server database compatibility level (e.g. `160`, `130`); on PostgreSQL / MySQL / MariaDB it resolves to the same value as `{{ServerMajorVersion}}` | Template scripts + expression fields |
 
 **Why this matters.** `{{TableSchema}}` is the entire current template's table model serialized as JSON, ready to drop into a stored procedure parameter, a `JSON_VALUE`/`json_each`/`JSON_TABLE` query, or an audit row. Combined with the [Custom Properties](custom-properties.md) feature, you can write a single migration script that introspects your table definitions and reads your team's custom metadata at deployment time -- without ever leaving SchemaSmith.
 
@@ -270,6 +278,66 @@ For a narrative walkthrough of schema templates end to end — authoring layout,
 
 ---
 
+## {{ServerMajorVersion}} and {{CompatibilityLevel}}
+
+Version-adaptive packages need to gate on what the target can actually do — apply a temporal-table migration only on SQL Server 2016+, keep a `STRING_AGG` rewrite off a legacy database, branch a `Before` script by engine version. SchemaSmith already detects the target version when it connects; these two tokens expose it so a `ShouldApplyExpression` (folder, component, or the [per-script sentinel](schemaquench.md#script-level-runtime-skip)) or a script body can gate on version without you hand-writing each engine's native version predicate.
+
+`{{ServerMajorVersion}}` is the detected server major version; `{{CompatibilityLevel}}` is the SQL Server database compatibility level. Both are set by the engine per target database — you don't define them in `ScriptTokens`, and they substitute as plain integer literals, so they drop straight into a comparison.
+
+### Gate syntax on compatibility level, gate features on server version
+
+These are two different questions, and confusing them is a real footgun. A modern binary can host a database left at an old compatibility level — a SQL Server 2022 server (`{{ServerMajorVersion}}` = `16`) with a database at compatibility level 100 (`{{CompatibilityLevel}}` = `100`). Compatibility-level-gated **syntax** — `STRING_AGG … WITHIN GROUP` and `STRING_SPLIT` (compat 130), `TRY_CONVERT` (compat 110), `OPENJSON` (compat 130) — parse-errors on that database even though the binary is brand new. So:
+
+- **Syntax availability** follows the database's compatibility level → gate on `{{CompatibilityLevel}}`.
+- **Server features** (a new engine capability, a version-only DDL form) follow the binary → gate on `{{ServerMajorVersion}}`.
+
+`SERVERPROPERTY('ProductMajorVersion') >= 16` is the gate authors reach for first, and it is the *wrong* gate for syntax: it passes on that compat-100 database and the SQL still fails.
+
+### Availability
+
+Both tokens resolve everywhere template-scoped tokens resolve — script bodies in every slot, and the `Default` / `CheckExpression` / `Expression` / `FilterExpression` / `ShouldApplyExpression` JSON fields — and they are resolved **per target database**, after SchemaSmith connects and detects the version. They are not available in product-level scripts (`Product.json` `BaselineValidationScript` / `VersionStampScript`), which run at server scope before any database is selected.
+
+> **SQL Server:** `CompatibilityLevel` is a SQL Server concept. On PostgreSQL, MySQL, and MariaDB there is no separate compatibility level, so `{{CompatibilityLevel}}` resolves to the same value as `{{ServerMajorVersion}}` — one portable expression shape works across the per-platform packages, and the syntax-vs-feature distinction above only bites on SQL Server.
+
+### Example — a version-gated folder
+
+The shipped `Demos/Conditional/SqlServer-CompatLevelGate` gates a `Programmability/Modern/` folder on the database compatibility level with a raw scalar query. The token form says the same thing more directly:
+
+```jsonc
+// Template.json — folder gate, raw SQL vs. the token form
+"ShouldApplyExpression": "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) >= 160"
+"ShouldApplyExpression": "{{CompatibilityLevel}} >= 160"
+```
+
+Pair each token with the matching version-gated script variant and you get one declarative, engine-detected gate instead of a wall of `SERVERPROPERTY` / `current_setting` SQL. For the folder-gate mechanics and the syntax-vs-feature rule in a deployment context, see [SchemaQuench — ShouldApplyExpression and Conditional Deployment](schemaquench.md#shouldapplyexpression-and-conditional-deployment).
+
+---
+
+## Model-payload XML twins
+
+The model-payload tokens (`{{TableSchema}}` and friends) hand your script the current model as JSON, ready for `OPENJSON` / `json_each` / `JSON_TABLE`. But `OPENJSON` requires SQL Server database compatibility level 130 — on a database left at an older level it parse-errors, so a self-service script that shreds `{{TableSchema}}` is unavailable on the legacy tier. Every model-payload token therefore has an **XML twin** that carries the *same* model as ingest XML, shreddable with XQuery (`.nodes()` / `.value()`) at every compatibility level. The author picks which to shred; both are always present.
+
+Each JSON token maps to a twin by replacing `Schema` with `Xml` (aggregate + cross-template forms), and each `<*Specific…*>` tag has a `<*Specific…Xml*>` counterpart:
+
+| JSON (shred with `OPENJSON`) | XML twin (shred with `.nodes()`/`.value()`) |
+|---|---|
+| `{{TableSchema}}` / `{{IndexedViewSchema}}` / `{{MaterializedViewSchema}}` | `{{TableXml}}` / `{{IndexedViewXml}}` / `{{MaterializedViewXml}}` |
+| `{{TableSchema_<TemplateName>}}` (+ IV/MV) | `{{TableXml_<TemplateName>}}` (+ IV/MV) |
+| `<*SpecificTable*>`, `<*SpecificIndexedView*>`, `<*SpecificMaterializedView*>` | `<*SpecificTableXml*>`, `<*SpecificIndexedViewXml*>`, `<*SpecificMaterializedViewXml*>` |
+
+The twin is the same model — a `<Tables><Table>…</Table></Tables>` document (or `<Table>…</Table>` for a single-object tag) — so an author pairs it with the JSON form behind version-gated script variants (using [`{{CompatibilityLevel}}`](#servermajorversion-and-compatibilitylevel)): the JSON script on the modern tier, the XML script on the legacy tier.
+
+```sql
+-- Legacy-tier variant (ShouldApplyExpression: {{CompatibilityLevel}} < 130) — shred the XML twin
+DECLARE @model xml = '{{TableXml}}';
+SELECT t.n.value('(Name)[1]', 'nvarchar(256)') AS TableName
+FROM @model.nodes('/Tables/Table') AS t(n);
+```
+
+> **SQL Server:** the encoding cliff is SQL-Server-only — PostgreSQL has JSON functions since 9.2 and MySQL/MariaDB since 5.7, so their `{{TableSchema}}` shreds at every supported version. The XML twins are produced on every engine for one portable authoring surface, but only SQL Server *needs* them.
+
+---
+
 ## Advanced Token Tags
 
 Here's where tokens go from "find and replace" to "deployment-time content engine." A token's *value* in `ScriptTokens` can start with a special tag that tells SchemaSmith to resolve it at deployment time -- by reading a file, by querying the live database, or by embedding a serialized object's JSON. The token name in your scripts stays a plain `{{TokenName}}`; the magic happens in how the value is computed before substitution.
@@ -285,6 +353,9 @@ The advanced tags:
 | `<*SpecificTable*>schema.tablename` | Replace the token value with the full serialized JSON of one specific table in the current template |
 | `<*SpecificIndexedView*>schema.viewname` | Same as `<*SpecificTable*>` but for SQL Server indexed views |
 | `<*SpecificMaterializedView*>schema.viewname` | Same as `<*SpecificTable*>` but for PostgreSQL materialized views |
+| `<*SpecificTableXml*>schema.tablename` | XML twin of `<*SpecificTable*>` — resolves to one table's ingest XML instead of its JSON (see [Model-payload XML twins](#model-payload-xml-twins)) |
+| `<*SpecificIndexedViewXml*>schema.viewname` | XML twin of `<*SpecificIndexedView*>` |
+| `<*SpecificMaterializedViewXml*>schema.viewname` | XML twin of `<*SpecificMaterializedView*>` |
 
 All resolution happens automatically. Your SQL scripts just see `{{TokenName}}` and the right value lands there at deployment time.
 

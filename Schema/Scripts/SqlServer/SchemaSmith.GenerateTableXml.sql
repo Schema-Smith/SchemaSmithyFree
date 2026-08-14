@@ -11,8 +11,12 @@
 -- Newtonsoft coerces them into the typed model. No fn_FormatJson/REPLACE wrapper is needed (FOR XML PATH
 -- emits well-formed, entity-encoded XML directly).
 --
--- Extensions bag is DROPPED on the legacy encoding (program design non-goal); the equivalence test asserts
--- model equality minus Extensions.
+-- Object ExtendedProperties round-trip on the legacy encoding too (B2). EP names are arbitrary sysname
+-- (spaces/special chars) so they cannot be XML element names — they are emitted attribute-encoded as
+-- <Extensions><ExtendedProperties><p n="Name">Value</p>...>, which ModelXmlSerializer.FromIngestXml rebuilds
+-- into the {Name: Value} dict the JSON proc produces. The <Extensions> element is omitted entirely when an
+-- object has no non-internal EP (a NULL FOR XML subquery column is dropped), matching the JSON proc where a
+-- NULL STRING_AGG collapses Extensions to absent.
 --
 -- 2016-era catalog reads are version-gated (Slice E) so this procedure CREATEs on a genuine pre-2016 binary,
 -- where a STATIC reference to any of them is an "invalid column"/"invalid object" error at CREATE time (not
@@ -33,6 +37,11 @@ SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
 DECLARE @v_ObjectId INT = OBJECT_ID(@p_Schema + '.' + @p_Table)
 DECLARE @v_IsTemporal BIT = 0
+
+-- Internal SchemaSmith ownership markers, excluded from the user Extensions/ExtendedProperties (mirrors the
+-- JSON proc). PreventDrop is surfaced as its own top-level property, not a user EP (#270).
+DECLARE @InternalEPNames TABLE ([Name] NVARCHAR(128))
+INSERT @InternalEPNames VALUES (N'ProductName'), (N'PreventDrop')
 
 CREATE TABLE #ColMeta
 (
@@ -112,7 +121,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        ISNULL(cm.EncryptionType, 'NONE') COLLATE DATABASE_DEFAULT AS EncryptionType,
                        ISNULL(cm.EncryptionKey, '') COLLATE DATABASE_DEFAULT AS EncryptionKey,
                        ISNULL(cm.EncryptionAlgorithm, '') COLLATE DATABASE_DEFAULT AS EncryptionAlgorithm,
-                       '' AS [OldName]
+                       '' AS [OldName],
+                       (SELECT ep.[Name] AS [@n], CONVERT(NVARCHAR(MAX), ep.[Value]) AS [*]
+                          FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Column', c.COLUMN_NAME) ep
+                          WHERE ep.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)
+                          FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
                   FROM INFORMATION_SCHEMA.COLUMNS c WITH (NOLOCK)
                   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = st.[object_id] AND sc.[name] = c.COLUMN_NAME
                   JOIN (SELECT CASE WHEN SCHEMA_NAME(typ.[schema_id]) IN ('sys', 'dbo')
@@ -151,7 +164,13 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.index_columns ic WITH (NOLOCK)
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 1
                   ORDER BY index_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [IncludeColumns],
-			   CASE WHEN has_filter = 1 THEN SchemaSmith.fn_StripParenWrapping(filter_definition) ELSE NULL END AS [FilterExpression]
+			   CASE WHEN has_filter = 1 THEN SchemaSmith.fn_StripParenWrapping(filter_definition) ELSE NULL END AS [FilterExpression],
+               (SELECT ep.[Name] AS [@n], CONVERT(NVARCHAR(MAX), ep.[Value]) AS [*]
+                  FROM (SELECT ISNULL(i.[Name], c.[Name]) AS [Name], RTRIM(COALESCE(CONVERT(NVARCHAR(MAX), c.[Value]) + ' ', '') + COALESCE(CONVERT(NVARCHAR(MAX), i.[Value]), '')) AS [Value]
+                          FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Index', si.[Name]) i
+                          FULL OUTER JOIN fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Constraint', si.[Name]) c ON i.[Name] = c.[Name]) ep
+                  WHERE ep.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)
+                  FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
           FROM sys.indexes si WITH (NOLOCK)
           WHERE si.[object_id] = st.[object_id]
             AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WITH (NOLOCK) WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
@@ -165,7 +184,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                '[' + COL_NAME(i.[Object_id], ic.column_id) + ']' AS [Column],
                CASE WHEN i.using_xml_index_id IS NULL THEN 'true' ELSE 'false' END AS [IsPrimary],
                (SELECT '[' + [Name] COLLATE DATABASE_DEFAULT + ']' FROM sys.xml_indexes i2 WHERE i2.[object_id] = i.[object_id] AND i2.index_id = i.using_xml_index_id AND i.using_xml_index_id IS NOT NULL) AS [PrimaryIndex],
-               i.secondary_type_desc COLLATE DATABASE_DEFAULT AS [SecondaryIndexType]
+               i.secondary_type_desc COLLATE DATABASE_DEFAULT AS [SecondaryIndexType],
+               (SELECT ep.[Name] AS [@n], CONVERT(NVARCHAR(MAX), ep.[Value]) AS [*]
+                  FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Index', i.[Name]) ep
+                  WHERE ep.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)
+                  FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
           FROM sys.xml_indexes i WITH (NOLOCK)
           JOIN sys.index_columns ic WITH (NOLOCK) ON i.[object_id] = ic.[object_id] AND i.index_id = ic.index_id
           WHERE i.[object_id] = st.[object_id]
@@ -184,7 +207,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                             WHERE fk.[object_id] = fc.[constraint_object_id]
                             ORDER BY fc.constraint_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [RelatedColumns],
                REPLACE(fk.delete_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT AS [DeleteAction],
-               REPLACE(fk.update_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT AS [UpdateAction]
+               REPLACE(fk.update_referential_action_desc, '_', ' ') COLLATE DATABASE_DEFAULT AS [UpdateAction],
+               (SELECT ep.[Name] AS [@n], CONVERT(NVARCHAR(MAX), ep.[Value]) AS [*]
+                  FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Constraint', fk.[Name]) ep
+                  WHERE ep.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)
+                  FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
           FROM sys.foreign_keys fk WITH (NOLOCK)
           WHERE fk.parent_object_id = st.[object_id]
           ORDER BY [Name]
@@ -195,7 +222,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.stats_columns sc WITH (NOLOCK)
                   WHERE s.[object_id] = sc.[object_id] AND s.stats_id = sc.stats_id
                   ORDER BY sc.stats_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
-               SchemaSmith.fn_StripParenWrapping([filter_definition]) AS FilterExpression
+               SchemaSmith.fn_StripParenWrapping([filter_definition]) AS FilterExpression,
+               (SELECT ep.[Name] AS [@n], CONVERT(NVARCHAR(MAX), ep.[Value]) AS [*]
+                  FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Statistic', s.[Name]) ep
+                  WHERE ep.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)
+                  FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
           FROM sys.stats s WITH (NOLOCK)
           WHERE [object_id] = st.[object_id]
             AND auto_created = 0
@@ -207,7 +238,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           FOR XML PATH('Statistics'), TYPE),
        (SELECT 'true' AS [@json:Array],
                '[' + [Name] + ']' AS [Name],
-               SchemaSmith.fn_StripParenWrapping([definition]) AS [Expression]
+               SchemaSmith.fn_StripParenWrapping([definition]) AS [Expression],
+               (SELECT ep.[Name] AS [@n], CONVERT(NVARCHAR(MAX), ep.[Value]) AS [*]
+                  FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, 'Constraint', cc.[Name]) ep
+                  WHERE ep.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)
+                  FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
           FROM sys.check_constraints cc WITH (NOLOCK)
           WHERE parent_object_id = st.[object_id]
             AND parent_column_id = 0
@@ -226,7 +261,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns]
           FROM sys.fulltext_indexes fi WITH (NOLOCK)
           WHERE fi.[object_id] = st.[object_id]
-          FOR XML PATH('FullTextIndex'), TYPE)
+          FOR XML PATH('FullTextIndex'), TYPE),
+       (SELECT ep.[Name] AS [@n], CONVERT(NVARCHAR(MAX), ep.[Value]) AS [*]
+          FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, default, default) ep
+          WHERE ep.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)
+          FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
   WHERE TABLE_NAME = @p_Table

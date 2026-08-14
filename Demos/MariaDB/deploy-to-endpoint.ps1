@@ -10,10 +10,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 
-# --- Preflight: mariadb must be present (the MariaDB client; `mysql` is a legacy symlink) ---
-if (-not (Get-Command mariadb -ErrorAction SilentlyContinue)) {
+# --- Preflight: the MariaDB client. Current releases ship `mariadb`; 10.2-10.4 ship only
+# `mysql`, so accept either rather than tell someone to install a client they already have. ---
+$MariaCli = if (Get-Command mariadb -ErrorAction SilentlyContinue) { 'mariadb' }
+            elseif (Get-Command mysql -ErrorAction SilentlyContinue) { 'mysql' }
+            else { $null }
+if (-not $MariaCli) {
   Write-Error @"
-mariadb is required but was not found on PATH.
+mariadb (or mysql, on MariaDB 10.2-10.4) is required but neither was found on PATH.
 Install the MariaDB client tools and re-open your shell:
   Windows : winget install MariaDB.Client   (or the MariaDB MSI 'Client Programs' feature)
   macOS   : brew install mariadb   (then add its bin to PATH)
@@ -31,8 +35,8 @@ $env:MYSQL_PWD = $Password
 function Invoke-Maria([string]$InFile, [string]$Db, [string]$Op) {
   $args = @('-h', $Server, '-P', $Port, '-u', $User, '-N', '-s')
   if ($Db) { $args += @('--init-command', "SET @db='$Db', @op='$Op'") }
-  $out = Get-Content $InFile -Raw | & mariadb @args
-  if ($LASTEXITCODE -ne 0) { throw "mariadb failed: $out" }
+  $out = Get-Content $InFile -Raw | & $MariaCli @args
+  if ($LASTEXITCODE -ne 0) { throw "$MariaCli failed: $out" }
   return $out
 }
 

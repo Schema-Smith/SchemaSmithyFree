@@ -4,7 +4,7 @@ One schema package. Two MariaDB versions. Different deployed shapes — driven b
 
 ## What's in here
 
-A small SchemaSmith schema package — two tables (`Assets`, `AssetIdentifiers`) — that deploys successfully against **MariaDB 10.6** (the SchemaSmith MariaDB floor) and **MariaDB 11.4** (current LTS) from the same package.
+A small SchemaSmith schema package — two tables (`Assets`, `AssetIdentifiers`) — that deploys successfully against **MariaDB 10.6** and **MariaDB 11.4** (current LTS) from the same package. 10.6 is this demo's lower rung, chosen to straddle the 10.7 gate — not a SchemaSmith limit; SchemaSmith supports MariaDB 10.2 and up.
 
 The catch: `AssetIdentifiers.ExternalUuid` uses MariaDB's native `UUID` data type, which landed in **MariaDB 10.7**. It does not exist in 10.6. So the column carries a `ShouldApplyExpression` the engine itself evaluates at deploy time:
 

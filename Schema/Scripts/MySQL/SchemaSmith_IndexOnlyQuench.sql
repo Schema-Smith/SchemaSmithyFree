@@ -64,6 +64,54 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- Detection snapshot: the live index picture read ONCE here so STEP 1 (rename) and STEP 2
+    -- (modified) join it instead of re-reading INFORMATION_SCHEMA.STATISTICS per declared index.
+    -- INFORMATION_SCHEMA is not a stored table on MySQL/MariaDB, so the original per-row reads cost
+    -- (declared indexes x whole-server scans). Pre-mutation state, which is what both passes read
+    -- (STEP 1 renames only where columns match; STEP 2 excludes just-renamed indexes). STEP 4
+    -- (create-missing) takes its own POST-drop snapshot. One row per index; NormColumns is the same
+    -- GROUP_CONCAT the correlated subqueries used, so composite index column lists compare byte-for-byte.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDetectSnap;
+    CREATE TEMPORARY TABLE _SchemaSmith_IdxDetectSnap (
+        TableName VARCHAR(128) NOT NULL,
+        IndexName VARCHAR(128) NOT NULL,
+        NonUnique TINYINT DEFAULT 0,
+        IndexType VARCHAR(32),
+        NormColumns TEXT,
+        PRIMARY KEY (TableName, IndexName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
+    SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
+           CONVERT(s.INDEX_NAME USING utf8mb4),
+           MAX(s.NON_UNIQUE),
+           CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
+           GROUP_CONCAT(
+               CONCAT('`', s.COLUMN_NAME, '`',
+                      CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+               ORDER BY s.SEQ_IN_INDEX
+               SEPARATOR ','
+           )
+      FROM INFORMATION_SCHEMA.STATISTICS s
+     WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+     GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+
+    -- Names-only copy: STEP 1 references the snapshot twice in one statement (main join + the
+    -- "new index name doesn't exist" NOT EXISTS), which MySQL/MariaDB forbid for a TEMPORARY table
+    -- (ER_CANT_REOPEN_TABLE 1137). The second reference reads this copy.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDetectNames;
+    CREATE TEMPORARY TABLE _SchemaSmith_IdxDetectNames (
+        TableName VARCHAR(128) NOT NULL,
+        IndexName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName, IndexName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INSERT INTO _SchemaSmith_IdxDetectNames (TableName, IndexName)
+    SELECT TableName, IndexName FROM _SchemaSmith_IdxDetectSnap;
+
+    -- Per-engine index-visibility snapshot (MySQL IS_VISIBLE / MariaDb IGNORED), one scan, for STEP 2's
+    -- modified-index visibility comparison -- replaces the per-candidate SchemaSmith_IndexIsVisible() call.
+    CALL SchemaSmith_SnapshotIndexVisibility(p_DatabaseName);
+
+    -- =========================================================================
     -- STEP 1: Detect index renames (same columns, different name)
     -- =========================================================================
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexRenames;
@@ -82,41 +130,27 @@ BEGIN
     INSERT INTO _SchemaSmith_IndexRenames (TableName, OldIndexName, NewIndexName)
     SELECT
         SchemaSmith_StripBacktickWrapping(i.TableName) AS TableName,
-        CONVERT(s.INDEX_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci AS OldIndexName,
+        snap.IndexName COLLATE utf8mb4_unicode_ci AS OldIndexName,
         SchemaSmith_StripBacktickWrapping(i.IndexName) AS NewIndexName
     FROM _SchemaSmith_Indexes i
-    JOIN INFORMATION_SCHEMA.STATISTICS s
-        ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-        AND s.SEQ_IN_INDEX = 1
+    JOIN _SchemaSmith_IdxDetectSnap snap
+        ON BINARY snap.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
     JOIN SchemaSmith_ProductOwnership po
         ON BINARY po.ProductName = BINARY p_ProductName
         AND BINARY po.ObjectSchema = BINARY p_DatabaseName
         AND po.ObjectType = 'INDEX'
-        AND BINARY po.ObjectName = BINARY CONCAT(CONVERT(s.TABLE_NAME USING utf8mb4), '.', CONVERT(s.INDEX_NAME USING utf8mb4))
+        AND BINARY po.ObjectName = BINARY CONCAT(snap.TableName, '.', snap.IndexName)
     WHERE i.IsPrimaryKey = 0
       -- New index name doesn't exist
       AND NOT EXISTS (
-          SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s2
-          WHERE BINARY s2.TABLE_SCHEMA = BINARY p_DatabaseName
-            AND BINARY s2.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-            AND BINARY s2.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+          SELECT 1 FROM _SchemaSmith_IdxDetectNames s2
+          WHERE BINARY s2.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+            AND BINARY s2.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
       )
       -- Old index exists with same columns (compare normalized column list)
-      AND BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) = BINARY (
-          SELECT GROUP_CONCAT(
-              CONCAT('`', sc.COLUMN_NAME, '`',
-                     CASE WHEN BINARY sc.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-              ORDER BY sc.SEQ_IN_INDEX
-              SEPARATOR ','
-          )
-          FROM INFORMATION_SCHEMA.STATISTICS sc
-          WHERE BINARY sc.TABLE_SCHEMA = BINARY p_DatabaseName
-            AND BINARY sc.TABLE_NAME = BINARY s.TABLE_NAME
-            AND BINARY sc.INDEX_NAME = BINARY s.INDEX_NAME
-      )
+      AND BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) = BINARY snap.NormColumns
       -- Same uniqueness
-      AND i.IsUnique = (s.NON_UNIQUE = 0);
+      AND i.IsUnique = (snap.NonUnique = 0);
 
     -- Handle renames
     IF p_WhatIf = 1 THEN
@@ -161,6 +195,22 @@ BEGIN
           AND po.ObjectType = 'INDEX';
     END IF;
 
+    -- STEP 1 executed its renames in the live branch, so each renamed index's OLD name is now gone from
+    -- the catalog. Drop those old names from the detection snapshots before STEP 2 -- otherwise a declared
+    -- index whose name equals a renamed-away old name (e.g. two indexes on one column, where one is renamed
+    -- and the other declared under the freed-up old name) would match a stale snapshot row and be wrongly
+    -- flagged as modified, generating a DROP for an index that no longer exists under that name. The
+    -- original read live INFORMATION_SCHEMA here, which already reflected the rename. WhatIf executes no
+    -- rename, so it must keep the old names to match that live-read behaviour -- hence the p_WhatIf guard.
+    IF p_WhatIf = 0 THEN
+        DELETE snap FROM _SchemaSmith_IdxDetectSnap snap
+            JOIN _SchemaSmith_IndexRenames r
+              ON BINARY r.TableName = BINARY snap.TableName AND BINARY r.OldIndexName = BINARY snap.IndexName;
+        DELETE nm FROM _SchemaSmith_IdxDetectNames nm
+            JOIN _SchemaSmith_IndexRenames r
+              ON BINARY r.TableName = BINARY nm.TableName AND BINARY r.OldIndexName = BINARY nm.IndexName;
+    END IF;
+
     -- =========================================================================
     -- STEP 2: Detect modified indexes (same name, different definition)
     -- =========================================================================
@@ -177,11 +227,12 @@ BEGIN
         SchemaSmith_StripBacktickWrapping(i.TableName) AS TableName,
         SchemaSmith_StripBacktickWrapping(i.IndexName) AS IndexName
     FROM _SchemaSmith_Indexes i
-    JOIN INFORMATION_SCHEMA.STATISTICS s
-        ON BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-        AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-        AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-        AND s.SEQ_IN_INDEX = 1
+    JOIN _SchemaSmith_IdxDetectSnap snap
+        ON BINARY snap.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+        AND BINARY snap.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+    LEFT JOIN _SchemaSmith_ExistingIndexVisibility viz
+        ON BINARY viz.TableName = BINARY snap.TableName
+        AND BINARY viz.IndexName = BINARY snap.IndexName
     WHERE i.IsPrimaryKey = 0
       -- Skip indexes that were just renamed
       AND NOT EXISTS (
@@ -192,26 +243,19 @@ BEGIN
       -- Check if definition differs (columns, uniqueness, or index type)
       AND (
           -- Columns differ
-          BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) != BINARY (
-              SELECT GROUP_CONCAT(
-                  CONCAT('`', sc.COLUMN_NAME, '`',
-                         CASE WHEN BINARY sc.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-                  ORDER BY sc.SEQ_IN_INDEX
-                  SEPARATOR ','
-              )
-              FROM INFORMATION_SCHEMA.STATISTICS sc
-              WHERE BINARY sc.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY sc.TABLE_NAME = BINARY s.TABLE_NAME
-                AND BINARY sc.INDEX_NAME = BINARY s.INDEX_NAME
-          )
+          BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) != BINARY snap.NormColumns
           -- Or uniqueness differs
-          OR i.IsUnique != (s.NON_UNIQUE = 0)
+          OR i.IsUnique != (snap.NonUnique = 0)
           -- Or index type differs (BTREE vs HASH)
-          OR (BINARY UPPER(COALESCE(i.IndexType, 'BTREE')) != BINARY UPPER(s.INDEX_TYPE)
-              AND NOT (BINARY UPPER(COALESCE(i.IndexType, 'BTREE')) = BINARY 'BTREE' AND BINARY UPPER(s.INDEX_TYPE) = BINARY 'BTREE'))
-          -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them)
-          OR (BINARY UPPER(s.INDEX_TYPE) != BINARY 'FULLTEXT'
-              AND i.IsVisible != SchemaSmith_IndexIsVisible(s.TABLE_SCHEMA, s.TABLE_NAME, s.INDEX_NAME))
+          OR (BINARY UPPER(COALESCE(i.IndexType, 'BTREE')) != BINARY UPPER(snap.IndexType)
+              AND NOT (BINARY UPPER(COALESCE(i.IndexType, 'BTREE')) = BINARY 'BTREE' AND BINARY UPPER(snap.IndexType) = BINARY 'BTREE'))
+          -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them). Below the
+          -- invisible-index floor (MySQL 8.0 / MariaDB 10.6) the keyword can't be emitted, so a declared
+          -- invisible index is stored visible; ignore the visibility difference there or it churns every run.
+          -- viz.IsVisible is the once-snapshotted per-engine visibility, replacing SchemaSmith_IndexIsVisible().
+          OR (BINARY UPPER(snap.IndexType) != BINARY 'FULLTEXT'
+              AND SchemaSmith_SupportsInvisibleIndex() = 1
+              AND i.IsVisible != viz.IsVisible)
       );
 
     -- Drop modified indexes (they'll be recreated later)
@@ -602,6 +646,9 @@ BEGIN
     -- =========================================================================
     -- STEP 4: Create missing indexes (non-primary)
     -- =========================================================================
+    -- Post-drop index-existence snapshot: after STEP 2's modified-index drops and STEP 3's unknown-index
+    -- drops, so a just-dropped index is seen as MISSING here and recreated (WhatIf: catalog unchanged).
+    CALL SchemaSmith_SnapshotIndexExistence(p_DatabaseName);
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -616,7 +663,7 @@ BEGIN
                       CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                            WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                            ELSE '' END,
-                      CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
+                      CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0
           AND NOT EXISTS (
@@ -625,10 +672,9 @@ BEGIN
                 AND BINARY r.NewIndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-              WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-                AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+              SELECT 1 FROM _SchemaSmith_IdxExist s
+              WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+                AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
@@ -643,10 +689,9 @@ BEGIN
                 AND BINARY r.NewIndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-              WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-                AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+              SELECT 1 FROM _SchemaSmith_IdxExist s
+              WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+                AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           );
 
         -- Fold each table's missing-index creates into one multi-clause ALTER, materialize, execute.
@@ -666,7 +711,7 @@ BEGIN
                               CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                                    WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                                    ELSE '' END,
-                              CASE WHEN i.IsVisible = 0 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
+                              CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
                           ORDER BY i.IndexName SEPARATOR ', '))
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0
@@ -676,10 +721,9 @@ BEGIN
                 AND BINARY r.NewIndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           )
           AND NOT EXISTS (
-              SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-              WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-                AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-                AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+              SELECT 1 FROM _SchemaSmith_IdxExist s
+              WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+                AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           )
         GROUP BY i.TableName;
 
@@ -698,15 +742,17 @@ BEGIN
     -- STEP 5: Update ProductOwnership for managed indexes
     -- =========================================================================
     IF p_WhatIf = 0 THEN
+        -- Post-create index-existence snapshot: ownership is written only for indexes that now exist
+        -- (STEP 4 created the missing ones), so rebuild the snapshot to the post-create state here.
+        CALL SchemaSmith_SnapshotIndexExistence(p_DatabaseName);
         INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
         SELECT p_ProductName, '', p_DatabaseName, 'INDEX',
                CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
         FROM _SchemaSmith_Indexes i
         WHERE EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-            WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-              AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
+            SELECT 1 FROM _SchemaSmith_IdxExist s
+            WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
+              AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
         );
     END IF;
 
@@ -773,6 +819,9 @@ BEGIN
     END IF;
 
     -- Create missing fulltext indexes
+    -- Post-ftdrop existence snapshot: after the fulltext drops just above, so a just-dropped fulltext
+    -- index is seen as MISSING by the create pass (WhatIf: no drops ran, reflects the unchanged catalog).
+    CALL SchemaSmith_SnapshotIndexExistence(p_DatabaseName);
     IF p_WhatIf = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing fulltext indexes');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -788,11 +837,10 @@ BEGIN
                            ELSE '' END)
         FROM _SchemaSmith_FullTextIndexes ft
         WHERE NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-            WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
-              AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
-              AND s.INDEX_TYPE = 'FULLTEXT'
+            SELECT 1 FROM _SchemaSmith_IdxExist s
+            WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
+              AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
+              AND s.IndexType = 'FULLTEXT'
         );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing fulltext indexes');
@@ -801,11 +849,10 @@ BEGIN
             CASE WHEN COALESCE(ft.VariantName, '') <> '' THEN CONCAT(' (variant: ', ft.VariantName, ')') ELSE '' END)
         FROM _SchemaSmith_FullTextIndexes ft
         WHERE NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-            WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
-              AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
-              AND s.INDEX_TYPE = 'FULLTEXT'
+            SELECT 1 FROM _SchemaSmith_IdxExist s
+            WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
+              AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
+              AND s.IndexType = 'FULLTEXT'
         );
 
         -- NOTE: InnoDB only supports adding one FULLTEXT index per ALTER TABLE statement, so unlike
@@ -826,11 +873,10 @@ BEGIN
                            ELSE '' END)
         FROM _SchemaSmith_FullTextIndexes ft
         WHERE NOT EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-            WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
-              AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
-              AND s.INDEX_TYPE = 'FULLTEXT'
+            SELECT 1 FROM _SchemaSmith_IdxExist s
+            WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
+              AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
+              AND s.IndexType = 'FULLTEXT'
         )
         ORDER BY ft.RowId;
 
@@ -844,16 +890,17 @@ BEGIN
         END WHILE;
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTCreateStmts;
 
-        -- Track fulltext indexes in ProductOwnership
+        -- Track fulltext indexes in ProductOwnership. Rebuild the existence snapshot to the post-ftcreate
+        -- state so ownership is written only for fulltext indexes that now exist.
+        CALL SchemaSmith_SnapshotIndexExistence(p_DatabaseName);
         INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
         SELECT p_ProductName, '', p_DatabaseName, 'INDEX',
                CONCAT(SchemaSmith_StripBacktickWrapping(ft.TableName), '.', SchemaSmith_StripBacktickWrapping(ft.IndexName))
         FROM _SchemaSmith_FullTextIndexes ft
         WHERE EXISTS (
-            SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-            WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-              AND BINARY s.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
-              AND BINARY s.INDEX_NAME = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
+            SELECT 1 FROM _SchemaSmith_IdxExist s
+            WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
+              AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
         );
     END IF;
 

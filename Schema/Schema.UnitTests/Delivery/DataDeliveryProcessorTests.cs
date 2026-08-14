@@ -158,6 +158,79 @@ public class DataDeliveryProcessorTests
     }
 
     [Test]
+    public void DeliverTables_SqlServerBelowJsonCliff_JsonDelivery_SkipsWithClearLog()
+    {
+        // A JSON (OPENJSON) delivery needs SQL Server compatibility level 130. On a compat-100 target
+        // the default policy (warn) skips that delivery with a clear message and runs no merge script.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Config", Schema = "dbo",
+                // ContentEncoding null => Json (the default encoding).
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "data.json" } }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SqlServerCompatibilityLevel = 100;
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts, Is.Empty, "A JSON delivery must not run below compatibility level 130.");
+        Assert.That(_logs, Has.Some.Contains("compatibility level 130"), "A clear skip message naming the cliff must be logged.");
+    }
+
+    [Test]
+    public void DeliverTables_SqlServerBelowJsonCliff_JsonDelivery_FailPolicy_Throws()
+    {
+        // Under Target:UnsupportedFeaturePolicy=fail the same below-cliff JSON delivery aborts the run.
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Config", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "data.json" } }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SqlServerCompatibilityLevel = 100;
+        context.UnsupportedFeaturePolicy = "fail";
+
+        Assert.Throws<NotSupportedException>(() => processor.DeliverTables(context));
+        Assert.That(_executedScripts, Is.Empty);
+    }
+
+    [Test]
+    public void DeliverTables_SqlServerBelowJsonCliff_XmlDelivery_StillDelivers()
+    {
+        // XML shredding (.nodes()/.value()) works at every compatibility level, so an Xml-encoded
+        // delivery is NOT skipped below the JSON cliff — it applies like any other.
+        _mockHelper.BuildMergeScript(Arg.Any<IDbCommand>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>())
+            .Returns(ci => $"MERGE INTO {ci.ArgAt<string>(2)}");
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Config", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery> { new DataDelivery { MergeType = "Insert", ContentFile = "data.xml", ContentEncoding = "Xml" } }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SqlServerCompatibilityLevel = 100;
+
+        processor.DeliverTables(context);
+
+        Assert.That(_executedScripts, Has.Count.EqualTo(1), "An XML delivery must still apply below the JSON cliff.");
+    }
+
+    [Test]
     public void DeliverTables_TwoDeliveriesOneTable_DeliversBothInOrder()
     {
         // Both deliveries carry a non-blank ShouldApplyExpression, so each is gate-evaluated

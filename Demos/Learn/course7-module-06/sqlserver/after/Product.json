@@ -1,5 +1,6 @@
 {
   "Name": "Shop",
+  "MinimumVersion": "2016",
   "ValidationScript": "SELECT CAST(CASE WHEN EXISTS(SELECT * FROM sys.databases WHERE [Name] LIKE 'fleet[_]tenant[_]%') THEN 1 ELSE 0 END AS BIT)",
   "TemplateOrder": [
     "Main"

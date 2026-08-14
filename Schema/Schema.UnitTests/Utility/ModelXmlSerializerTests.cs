@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Schema.Domain;
 using Schema.Utility;
@@ -9,6 +10,76 @@ namespace Schema.UnitTests.Utility
     [TestFixture]
     public class ModelXmlSerializerTests
     {
+        // B2: the legacy-tier extract emits object ExtendedProperties attribute-encoded
+        // (<ExtendedProperties><p n="Name">Value</p>...>) because EP names are arbitrary sysname and
+        // cannot be XML element names; FromIngestXml rebuilds the {Name: Value} dict the JSON proc produces.
+        private static JToken Ext(string extensionsInnerXml)
+        {
+            var xml = "<Table xmlns:json=\"http://james.newtonking.com/projects/json\">" +
+                      "<Name>[Widget]</Name>" + extensionsInnerXml + "</Table>";
+            return JObject.Parse(ModelXmlSerializer.FromIngestXml(xml))["Extensions"]?["ExtendedProperties"];
+        }
+
+        [Test]
+        public void FromIngestXml_ExtendedProperties_SingleProp_RebuildsArbitraryKeyDict()
+        {
+            var ep = Ext("<Extensions><ExtendedProperties><p n=\"MS_Description\">A widget</p></ExtendedProperties></Extensions>");
+            Assert.That((string)ep["MS_Description"], Is.EqualTo("A widget"));
+        }
+
+        [Test]
+        public void FromIngestXml_ExtendedProperties_MultipleProps_AllKeysPresent()
+        {
+            var ep = Ext("<Extensions><ExtendedProperties><p n=\"OwningTeam\">Billing</p><p n=\"DataClassification\">PII</p></ExtendedProperties></Extensions>");
+            Assert.Multiple(() =>
+            {
+                Assert.That((string)ep["OwningTeam"], Is.EqualTo("Billing"));
+                Assert.That((string)ep["DataClassification"], Is.EqualTo("PII"));
+            });
+        }
+
+        [Test]
+        public void FromIngestXml_ExtendedProperties_NameWithSpaceAndSpecialCharValue_Preserved()
+        {
+            // The whole point of the attribute-encoded form: a name a space breaks the element-name shortcut.
+            var ep = Ext("<Extensions><ExtendedProperties><p n=\"My Prop\">a &amp; b &lt; c</p></ExtendedProperties></Extensions>");
+            Assert.That((string)ep["My Prop"], Is.EqualTo("a & b < c"));
+        }
+
+        [Test]
+        public void FromIngestXml_ExtendedProperties_EmptyValue_BecomesEmptyString()
+        {
+            var ep = Ext("<Extensions><ExtendedProperties><p n=\"Flag\"></p></ExtendedProperties></Extensions>");
+            Assert.That((string)ep["Flag"], Is.EqualTo(""));
+        }
+
+        [Test]
+        public void FromIngestXml_ExtendedProperties_NestedOnColumn_AlsoRebuilt()
+        {
+            const string xml =
+                "<Table xmlns:json=\"http://james.newtonking.com/projects/json\">" +
+                "<Name>[Widget]</Name>" +
+                "<Columns json:Array=\"true\"><Name>[Amount]</Name><DataType>INT</DataType><Nullable>false</Nullable>" +
+                "<Extensions><ExtendedProperties><p n=\"Classification\">Financial</p></ExtendedProperties></Extensions></Columns>" +
+                "</Table>";
+            var col = JObject.Parse(ModelXmlSerializer.FromIngestXml(xml))["Columns"]![0];
+            Assert.That((string)col["Extensions"]!["ExtendedProperties"]!["Classification"], Is.EqualTo("Financial"));
+        }
+
+        [Test]
+        public void FromIngestXml_ExtendedProperties_MaterializesIntoTypedModel()
+        {
+            const string xml =
+                "<Table xmlns:json=\"http://james.newtonking.com/projects/json\">" +
+                "<Schema>[dbo]</Schema><Name>[Widget]</Name>" +
+                "<Columns json:Array=\"true\"><Name>[Id]</Name><DataType>INT</DataType><Nullable>false</Nullable></Columns>" +
+                "<Extensions><ExtendedProperties><p n=\"OwningTeam\">Billing</p></ExtendedProperties></Extensions>" +
+                "</Table>";
+            var table = PlatformDeserializer.DeserializeTable(ModelXmlSerializer.FromIngestXml(xml), Platform.SqlServer);
+            Assert.That(table.GetExtensionProperty("ExtendedProperties"), Is.Not.Null);
+            Assert.That((string)((JObject)table.Extensions)["ExtendedProperties"]!["OwningTeam"], Is.EqualTo("Billing"));
+        }
+
         // De-risk spike for the compare-side (GenerateTableXml) design: prove the two SerializeXNode sharp
         // edges are handled — (1) a SINGLE-element container still becomes a 1-element JSON array (via the
         // json:Array hint the proc emits), and (2) string-typed scalars ('true'/'80') coerce into the typed

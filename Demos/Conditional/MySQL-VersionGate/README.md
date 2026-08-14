@@ -4,7 +4,7 @@ One schema package. Two MySQL versions. Different deployed shapes — driven by 
 
 ## What's in here
 
-A small SchemaSmith schema package — two tables (`Documents`, `Embeddings`) — designed to deploy successfully against **MySQL 8.0** (the SchemaSmith floor) and **MySQL 9** (current) from the same package.
+A small SchemaSmith schema package — two tables (`Documents`, `Embeddings`) — designed to deploy successfully against **MySQL 8.0** and **MySQL 9** (current) from the same package. 8.0 is this demo's lower rung, chosen to straddle the gate — not a SchemaSmith limit; SchemaSmith supports MySQL 5.7 and up.
 
 The catch: `Embeddings.Embedding` is a `VECTOR(384)` column for storing model embeddings. The `VECTOR` data type landed in **MySQL 9** — it doesn't exist in MySQL 8.0. So the column carries a `ShouldApplyExpression` the engine itself evaluates at deploy time:
 

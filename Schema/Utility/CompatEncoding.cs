@@ -24,13 +24,16 @@ namespace Schema.Utility
         // The compatibility level at and above which OPENJSON / FOR JSON parse: SQL Server 2016.
         private const int JsonCompatFloor = 130;
 
-        // The server major version at and above which the JSON functions exist on the binary: SQL Server 2016.
-        private const int JsonServerMajorFloor = 13;
+        // The server major version at and above which the JSON *path* is usable. OPENJSON itself arrives
+        // with SQL Server 2016 (major 13), but the JSON-path scripts also aggregate with STRING_AGG, which
+        // is 2017 (major 14) -- so 2016 is a band where the compatibility level says yes and the binary
+        // says no. Selecting JSON there fails in kindling on SchemaSmith.BootstrapTableQuench.
+        private const int JsonServerMajorFloor = 14;
 
         /// <summary>
         /// Resolves the encoding. An explicit override ("legacy"/"modern", case-insensitive) wins; otherwise
         /// ("auto", the default) XML is chosen when the detected compatibility level is below 130 or the server
-        /// major is below 13 (JSON functions absent on the binary), else JSON.
+        /// major is below 14 (the JSON path's STRING_AGG is absent on the binary), else JSON.
         /// </summary>
         public static IngestEncoding Select(string overrideValue, int? compatibilityLevel, int serverMajor)
         {

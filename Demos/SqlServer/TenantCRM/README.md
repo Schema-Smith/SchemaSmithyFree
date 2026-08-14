@@ -33,7 +33,7 @@ package; hotfixes can target a single tenant for canary rollout.
 
 ## Prerequisites
 
-- Docker (for the local SQL Server container) or any SQL Server 2019+ instance.
+- Docker (for the local SQL Server container) or any SQL Server 2016+ instance (this package declares that floor because it uses automatic data delivery, which needs `OPENJSON`).
 - The SchemaSmith CLI (or use the bundled `docker compose up` flow from the
   parent `Demos/SqlServer/` directory).
 

@@ -50,10 +50,18 @@ public sealed class TokenCheck : ISchemaCheck
     //                           "{{repo_path}}/.git/HEAD"
     //  - BranchName             reserved token resolved outside the CLI's static view
     //                           (branch-name derivation), alongside repo_path above
+    //  - ServerMajorVersion     SchemaQuench/DatabaseQuench.cs: PrepareVersionScriptTokens (A1) — the
+    //                           detected target server major version, resolved per-target in Phase B
+    //  - CompatibilityLevel     SchemaQuench/DatabaseQuench.cs: PrepareVersionScriptTokens (A1) — the
+    //                           SQL Server database compatibility level (falls back to the server
+    //                           version off SQL Server), resolved per-target in Phase B
+    //  - TableXml / MaterializedViewXml / IndexedViewXml   Schema/Domain/Template.cs: XML twins of the
+    //                           *Schema tokens (A2), for shredding the model as XML on the legacy SQL Server tier
     private static readonly HashSet<string> BuiltInTokens = new(StringComparer.OrdinalIgnoreCase)
     {
         "ProductName", "TemplateName", "SchemaName", "TableSchema", "MaterializedViewSchema", "IndexedViewSchema",
-        "repo_path", "BranchName"
+        "TableXml", "MaterializedViewXml", "IndexedViewXml",
+        "repo_path", "BranchName", "ServerMajorVersion", "CompatibilityLevel"
     };
 
     // Table.GetCustomTokens(Extensions, baseName) prefixes an Extensions block's names with

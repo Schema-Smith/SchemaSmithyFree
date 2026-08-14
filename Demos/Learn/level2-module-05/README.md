@@ -21,6 +21,8 @@ Each engine folder (`sqlserver/`, `postgres/`, `mysql/`, `mariadb/`) ships the f
 
 ## Before you start
 
+> **Engine floor:** on your own server this lab needs **SQL Server 2016+** or **MySQL 8.0+** — it uses automatic data delivery, which needs `OPENJSON` / `JSON_TABLE`. PostgreSQL and MariaDB run it at any supported version. The Docker sandbox is already above the floor.
+
 - The [sandbox](../docker) is up (`docker compose up -d`) and verified (all four engines `PASS`).
 - The CLI is on your PATH (`schemaquench --version` reports `SchemaQuench - Version: 2.3.0.0` or later;
   `datatongs --version` is available too).

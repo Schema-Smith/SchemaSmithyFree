@@ -125,7 +125,13 @@ public class SchemaTemplateModeTests
             "           [Id] INT",            // GetJsonColumnDefinitions
             "        [Id]"                    // GetInsertColumns
         });
-        _command.ExecuteScalar().Returns(_ => sequence.Count > 0 ? sequence.Dequeue() : null);
+        // The compat-cliff metadata fallback probes compatibility_level before several metadata queries;
+        // answer those out-of-band (0 = modern / >= 130, the STRING_AGG path) so they don't consume the
+        // data sequence and this stub stays aligned regardless of how many probes fire.
+        _command.ExecuteScalar().Returns(_ =>
+            _command.CommandText?.Contains("compatibility_level", StringComparison.OrdinalIgnoreCase) == true
+                ? 0
+                : sequence.Count > 0 ? sequence.Dequeue() : null);
     }
 
     #region Mode detection

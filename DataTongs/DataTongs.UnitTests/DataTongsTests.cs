@@ -1416,4 +1416,56 @@ public class DataTongsTests
     }
 
     #endregion
+
+    #region XML delivery value fragments (B1 slice 3)
+
+    private static string Fragment(string name, string dataType) =>
+        global::DataTongs.DataTongs.BuildSqlServerXmlValueFragment(
+            new global::DataTongs.DataTongs.ColumnInfo { Name = name, DataType = dataType });
+
+    [Test]
+    public void XmlFragment_NormalColumn_ConvertsToText()
+    {
+        Assert.That(Fragment("Amount", "decimal"), Is.EqualTo("('Amount', CONVERT(NVARCHAR(MAX), t.[Amount]))"));
+    }
+
+    [Test]
+    public void XmlFragment_Datetime_UsesIso8601Style126()
+    {
+        Assert.That(Fragment("When", "datetime2"), Is.EqualTo("('When', CONVERT(NVARCHAR(MAX), t.[When], 126))"));
+    }
+
+    [Test]
+    public void XmlFragment_Binary_Base64Encodes()
+    {
+        Assert.That(Fragment("Blob", "varbinary"),
+            Does.Contain("xs:base64Binary(sql:column(\"t.[Blob]\"))"));
+    }
+
+    [Test]
+    public void XmlFragment_Geometry_EmitsWktPlusSridCompanion()
+    {
+        var frag = Fragment("Shape", "geometry");
+        Assert.That(frag, Does.Contain("('Shape', t.[Shape].STAsText())"));
+        Assert.That(frag, Does.Contain("('Shape.STSrid', CONVERT(NVARCHAR(MAX), t.[Shape].STSrid))"));
+    }
+
+    [Test]
+    public void XmlFragment_EscapesNameAndIdentifierDelimiters()
+    {
+        // A quote in the name is doubled for the SQL string literal; a bracket is doubled for the identifier.
+        Assert.That(Fragment("O'Brien]col", "int"),
+            Is.EqualTo("('O''Brien]col', CONVERT(NVARCHAR(MAX), t.[O'Brien]]col]))"));
+    }
+
+    [Test]
+    public void CountXmlRows_CountsRowElements_NotTheRootOrColumns()
+    {
+        const string xml = "<rows><row><c n=\"id\">1</c></row><row><c n=\"id\">2</c></row></rows>";
+        Assert.That(global::DataTongs.DataTongs.CountXmlRows(xml), Is.EqualTo(2));
+        Assert.That(global::DataTongs.DataTongs.CountXmlRows("<rows></rows>"), Is.EqualTo(0));
+        Assert.That(global::DataTongs.DataTongs.CountXmlRows(""), Is.EqualTo(0));
+    }
+
+    #endregion
 }

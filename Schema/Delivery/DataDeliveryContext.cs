@@ -49,6 +49,14 @@ public class DataDeliveryContext
     public int MySqlServerVersionNum { get; set; }
 
     /// <summary>
+    /// Detected SQL Server target database compatibility_level (e.g. 100, 130, 160). 0 = unknown/not-SQL-Server.
+    /// A JSON (OPENJSON) data delivery requires level 130; below that a JSON-encoded delivery degrades through
+    /// Target:UnsupportedFeaturePolicy (warn = skip that delivery, fail = abort). XML-encoded deliveries apply
+    /// at every level and are never gated by this. (B1 slice 2.)
+    /// </summary>
+    public int SqlServerCompatibilityLevel { get; set; }
+
+    /// <summary>
     /// Target:UnsupportedFeaturePolicy ('warn' default / 'fail'). Governs how an unsupported target is
     /// handled — e.g. automatic data delivery below MySQL 8.0: 'warn' skips with a clear log, 'fail' aborts.
     /// </summary>

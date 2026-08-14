@@ -57,6 +57,95 @@ public class DataTongsExtractionTests
         DropTestDatabase();
     }
 
+    #region XML Delivery Extraction (B1 slice 3)
+
+    [Test]
+    public void XmlExtraction_RoundTripsThroughTheShred_OnCompat100()
+    {
+        // Extract in the delivery XML encoding, then deploy it through the legacy-tier XML shred on a
+        // compatibility-level-100 database — every value (NULLs, bit, decimal, datetime, varbinary,
+        // XML-special characters) must survive the round trip, and NULL columns must be omitted.
+        var db = "dt_xmlrt_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        using (var master = _connection.CreateCommand())
+        {
+            master.CommandText = $"CREATE DATABASE [{db}]; ALTER DATABASE [{db}] SET COMPATIBILITY_LEVEL = 100;";
+            master.ExecuteNonQuery();
+        }
+        try
+        {
+            _connection.ChangeDatabase(db);
+            using (var c = _connection.CreateCommand())
+            {
+                c.CommandText = @"
+CREATE TABLE [dbo].[Src] (
+  [code] VARCHAR(20) NOT NULL PRIMARY KEY, [flag] BIT NULL, [amount] DECIMAL(10,2) NULL,
+  [note] NVARCHAR(100) NULL, [ts] DATETIME2 NULL, [bin] VARBINARY(MAX) NULL);
+INSERT INTO [dbo].[Src] VALUES
+  ('A001', 1, 7.25, N'a & b < c', '2026-08-11T06:00:00', 0xDEADBEEF),
+  ('B002', 0, NULL, NULL, NULL, NULL);";
+                c.ExecuteNonQuery();
+            }
+
+            string xml;
+            using (var c = _connection.CreateCommand())
+                xml = _dataTongs.GetTableDataXmlSqlServer(c, "dbo", "Src", "[code]", null);
+
+            Assert.That(xml, Does.Contain("<c n=\"code\">A001</c>"));
+            Assert.That(xml, Does.Contain("a &amp; b &lt; c"), "XML-special characters must be escaped.");
+            Assert.That(xml, Does.Contain("<c n=\"bin\">3q2+7w==</c>"), "Binary must be base64.");
+            Assert.That(xml, Does.Contain("<row><c n=\"code\">B002</c><c n=\"flag\">0</c></row>"),
+                "A row's NULL columns must be omitted entirely (absent <c> = NULL).");
+
+            using (var c = _connection.CreateCommand())
+            {
+                c.CommandText = @"CREATE TABLE [dbo].[Dst] (
+  [code] VARCHAR(20) NOT NULL PRIMARY KEY, [flag] BIT NULL, [amount] DECIMAL(10,2) NULL,
+  [note] NVARCHAR(100) NULL, [ts] DATETIME2 NULL, [bin] VARBINARY(MAX) NULL);";
+                c.ExecuteNonQuery();
+            }
+            using (var c = _connection.CreateCommand())
+            {
+                var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, c, "dbo", "Dst", xml, "[code]",
+                    mergeUpdate: true, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
+                    mergeFilter: null, contentEncoding: "Xml");
+                c.CommandText = script;
+                c.ExecuteNonQuery();
+            }
+
+            using (var c = _connection.CreateCommand())
+            {
+                c.CommandText = "SELECT [flag],[amount],[note],CONVERT(VARCHAR(33),[ts],126),CONVERT(VARCHAR(MAX),[bin],1) FROM [dbo].[Dst] WHERE [code]='A001'";
+                using var r = c.ExecuteReader();
+                Assert.That(r.Read(), Is.True);
+                Assert.That(r.GetBoolean(0), Is.True);
+                Assert.That(r.GetDecimal(1), Is.EqualTo(7.25m));
+                Assert.That(r.GetString(2), Is.EqualTo("a & b < c"));
+                Assert.That(r.GetString(3), Does.StartWith("2026-08-11T06:00:00"));
+                Assert.That(r.GetString(4), Is.EqualTo("0xDEADBEEF"));
+            }
+            using (var c = _connection.CreateCommand())
+            {
+                c.CommandText = "SELECT [flag],[amount],[note],[ts],[bin] FROM [dbo].[Dst] WHERE [code]='B002'";
+                using var r = c.ExecuteReader();
+                Assert.That(r.Read(), Is.True);
+                Assert.That(r.GetBoolean(0), Is.False);
+                Assert.That(r.IsDBNull(1), Is.True, "A NULL decimal must round-trip as NULL.");
+                Assert.That(r.IsDBNull(2), Is.True);
+                Assert.That(r.IsDBNull(3), Is.True);
+                Assert.That(r.IsDBNull(4), Is.True);
+            }
+        }
+        finally
+        {
+            _connection.ChangeDatabase(_integrationDb);
+            using var master = _connection.CreateCommand();
+            master.CommandText = $"IF DB_ID('{db}') IS NOT NULL BEGIN ALTER DATABASE [{db}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{db}]; END";
+            master.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
+
     #region TableExists Tests
 
     [Test]

@@ -1,7 +1,9 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Linq;
 using System.Xml.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Schema.Utility
 {
@@ -55,7 +57,50 @@ namespace Schema.Utility
         public static string FromIngestXml(string tableXml)
         {
             var root = XElement.Parse(tableXml);
-            return JsonConvert.SerializeXNode(root, Newtonsoft.Json.Formatting.None, omitRootObject: true);
+            var json = JsonConvert.SerializeXNode(root, Newtonsoft.Json.Formatting.None, omitRootObject: true);
+
+            // ExtendedProperties is an arbitrary-key dict (EP names are sysname — may contain spaces /
+            // special chars), which cannot be an XML element name, so the proc emits it attribute-encoded:
+            //   <Extensions><ExtendedProperties><p n="Name">Value</p>...</ExtendedProperties></Extensions>
+            // SerializeXNode keys JSON by element name, so that lands as {"ExtendedProperties":{"p":{...}|[...]}}.
+            // Rebuild the {Name: Value} dict the JSON-tier proc produces directly. Runs everywhere Extensions
+            // appears (table + nested columns/indexes/FKs/stats/checks). (B2 — legacy-tier EP round-trip.)
+            var obj = JObject.Parse(json);
+            RebuildExtendedProperties(obj);
+            return obj.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        private static void RebuildExtendedProperties(JToken node)
+        {
+            switch (node)
+            {
+                case JObject o:
+                    foreach (var prop in o.Properties().ToList())
+                    {
+                        if (prop.Name == "ExtendedProperties" && prop.Value is JObject ep && ep["p"] != null)
+                            prop.Value = BuildExtendedPropertyDict(ep["p"]);
+                        else
+                            RebuildExtendedProperties(prop.Value);
+                    }
+                    break;
+                case JArray a:
+                    foreach (var item in a)
+                        RebuildExtendedProperties(item);
+                    break;
+            }
+        }
+
+        private static JObject BuildExtendedPropertyDict(JToken p)
+        {
+            var dict = new JObject();
+            var entries = p as JArray ?? new JArray(p);
+            foreach (var e in entries.OfType<JObject>())
+            {
+                var name = (string)e["@n"];
+                if (name == null) continue;
+                dict[name] = e["#text"]?.ToString() ?? "";
+            }
+            return dict;
         }
     }
 }

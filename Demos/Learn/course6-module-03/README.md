@@ -8,6 +8,8 @@ Your schema lives in Git. Before anything reaches a database, you want two guara
 
 ## Before you start
 
+> **Engine floor:** this lab deliberately declares a floor *higher* than it needs (SQL Server `2019`, PostgreSQL `15`, MySQL `8.0`, MariaDB `10.6`) so that raising it can be shown failing. On your own server, either meet those or edit `Product.json` down — they are the lab's teaching values, not SchemaSmith limits.
+
 - This lab needs no sandbox and no running database — it validates JSON files against JSON Schema.
 - Each engine package under `sqlserver/`, `postgres/`, `mysql/`, and `mariadb/` already ships its generated `.json-schemas/` with a governance fragment applied. You can validate them as-is, or regenerate and re-apply to practice the workflow.
 - To validate locally you need Node. This lab uses `ajv-cli`: `npx ajv-cli@5 ...`. In CI, the `GrantBirki/json-yaml-validate` action does the same thing with no setup.

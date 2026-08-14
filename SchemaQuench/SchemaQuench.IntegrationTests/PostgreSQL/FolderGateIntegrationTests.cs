@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -65,6 +66,43 @@ public class FolderGateIntegrationTests
         using var cmd = conn.CreateCommand();
 
         Assert.That(FolderGate.ShouldApply(cmd, folder.ShouldApplyExpression), Is.True);
+    }
+
+    [Test]
+    public void VersionTokens_CompatibilityLevelFallsBackToServerVersion()
+    {
+        // A1 parity: PostgreSQL has no compatibility-level concept, so detection returns a null
+        // CompatibilityLevel and {{CompatibilityLevel}} falls back to the detected server version — a
+        // gate comparing the two tokens is true. PostgreSQL returns a native boolean here.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        var info = TargetVersionDetector.Detect(cmd, Platform.PostgreSQL);
+        Assert.Multiple(() =>
+        {
+            Assert.That(info.CompatibilityLevel, Is.Null, "PostgreSQL has no compatibility-level concept.");
+            Assert.That(info.ServerComparable, Is.GreaterThan(0));
+        });
+
+        var product = new Product { Name = "P", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        var folder = new TemplateFolder
+        {
+            FolderPath = "parity",
+            QuenchSlot = TemplateQuenchSlot.Before,
+            ShouldApplyExpression = "SELECT {{CompatibilityLevel}} = {{ServerMajorVersion}}"
+        };
+        folder.Scripts.Add(new SqlScript { Name = "parity.sql" });
+        template.ScriptFolders.Add(folder);
+
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
+        quench.PrepareIterationContent();
+        quench.PrepareVersionScriptTokens(info.ServerComparable, info.CompatibilityLevel);
+        quench.ApplyFolderGates(cmd);
+
+        Assert.That(quench.IterationBeforeScripts.Single().Name, Is.EqualTo("parity.sql"));
     }
 
     private static string NonexistentBasePath() =>
