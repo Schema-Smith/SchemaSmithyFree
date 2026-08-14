@@ -68,6 +68,14 @@ winget install SchemaSmith.SchemaSmith
 
 Installs all four CLI commands (`SchemaQuench`, `SchemaTongs`, `DataTongs`, `SchemaShears`) onto your PATH from the Authenticode-signed release zip.
 
+### Linux / macOS (install script)
+
+```bash
+curl -fsSL https://schemasmith.com/dl/install.sh | sh
+```
+
+Installs the CLI tools (`schemaquench`, `schematongs`, `datatongs`, `schemashears`) from the official release binaries — to `/usr/local/bin` as root, otherwise `~/.local/bin`. Resolves the latest release automatically; pin a version with `INSTALL_VERSION=x.y.z` or redirect with `INSTALL_DIR=<path>`. Targets glibc-based Linux and macOS (Alpine/musl isn't supported — use the `.deb` / `.rpm` packages or a glibc base image).
+
 ### GitHub Releases
 
 Download self-contained ZIP packages from the [latest release](https://github.com/Schema-Smith/SchemaSmith/releases/latest). Extract and run — no .NET runtime required.
