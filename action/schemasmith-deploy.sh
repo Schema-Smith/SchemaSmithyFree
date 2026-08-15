@@ -36,6 +36,8 @@ select_asset_url() {
 
 mode_switch() {
   case "$1" in
+    # deploy and whatif both run SchemaQuench directly with no extra CLI switch;
+    # whatif is applied as SmithySettings_WhatIfONLY in main(), not here.
     deploy|whatif) printf '\n' ;;
     validate) printf -- '--Validate\n' ;;
     test-connection) printf -- '--TestConnection\n' ;;
