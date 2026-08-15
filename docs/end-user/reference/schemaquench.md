@@ -498,7 +498,9 @@ Reach for WhatIf while you're debugging a tricky deployment or while you're stil
 
 ## Pre-Flight Diagnostics
 
-You don't have to quench to know whether your configuration is ready. Two CLI switches run targeted diagnostic passes against a live server and exit before touching any schema — so you can validate connectivity, version constraints, and per-environment target rosters as early as your pipeline allows, without deploying a single byte.
+You don't have to quench to know whether your configuration is ready. The two CLI switches documented here run targeted diagnostic passes against a live server and exit before touching any schema — so you can validate connectivity, version constraints, and per-environment target rosters as early as your pipeline allows, without deploying a single byte.
+
+They are the connection-based members of a larger pre-flight family. The third read-only switch, [`--Validate`](validate.md), needs no server at all — it lints the package straight from the files on disk, so it runs on every commit rather than only when a database is reachable. See [The pre-flight gate family](validate.md#the-pre-flight-gate-family) for how the four gates layer.
 
 ### --TestConnection
 
@@ -547,7 +549,7 @@ Template: TenantWorkspace [required]
 
 > **Tip:** Use `--PreviewTargets` to spot-check `TemplateTargets` configuration for a new environment before its first deployment. When the preview shows the right databases and schemas, the quench will target exactly those — nothing will surprise you at run time.
 
-> **Note:** Neither switch performs WhatIf analysis (no SQL generation, no schema diff). They validate connectivity and enumerate targets only. For a preview of the structural changes a quench would make, use `WhatIfONLY: true` — see [WhatIf Mode](#whatif-mode).
+> **Note:** Neither switch performs WhatIf analysis (no SQL generation, no schema diff), and neither inspects the package's contents — that's [`--Validate`](validate.md)'s job. They validate connectivity and enumerate targets only. For a preview of the structural changes a quench would make, use `WhatIfONLY: true` — see [WhatIf Mode](#whatif-mode).
 
 ---
 
@@ -1165,7 +1167,7 @@ For a narrative walkthrough and decision guide (when to use the sentinel vs. `Sh
 | Code | Meaning |
 |------|---------|
 | 0 | Successful quench (or passing pre-flight). All databases quenched, logs backed up. |
-| 2 | Failure. One or more database quenches failed; or a `--TestConnection` / `--PreviewTargets` pre-flight found a connection error, version violation, or required-template target miss. |
+| 2 | Failure. One or more database quenches failed; a `--TestConnection` / `--PreviewTargets` pre-flight found a connection error, version violation, or required-template target miss; or a `--Validate` pass found an Error-severity finding (warnings alone still exit `0`). |
 | 3 | Unhandled exception. An unexpected error occurred outside the normal quench flow. |
 | 4 | Unable to back up log files. |
 

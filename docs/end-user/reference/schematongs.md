@@ -320,7 +320,7 @@ SchemaTongs writes each table file under a canonical name derived from the table
 <schema>.<table>[.<VariantName>].json
 ```
 
-The optional `VariantName` segment comes after the schema and table, so a table's [conditional variants](schema-packages.md#conditional-application) sort together in source control and in a file listing. The schema segment is omitted for MySQL, MariaDB, and schema-template packages, which carry no per-table schema (`<table>[.<VariantName>].json`).
+The optional `VariantName` segment comes after the schema and table, so a table's [conditional variants](schema-packages.md#conditional-application) sort together in source control and in a file listing. The schema segment is omitted whenever the table's content carries no `Schema` (`<table>[.<VariantName>].json`): MySQL and MariaDB, which have no per-table schema; schema-template packages, where the schema is the iteration variable; and PostgreSQL tables in the default `public` schema, which SchemaTongs omits from the written content so the deploy re-resolves it. A PostgreSQL table in a *named* schema keeps both the content `Schema` and the filename prefix (`sales.order_lines.json`).
 
 A table's identity lives in its file *content* -- `Schema`, `Name`, and `VariantName` -- not in its filename. SchemaTongs matches an existing file to an extracted table by that content identity, so a file you renamed by hand is still found and refreshed in place rather than duplicated. The canonical name is a convention, not a contract: if a file's name drifts from canonical, the deploy still works and [`--Validate`](validate.md#file-naming) emits an `SS-FILE-NAME-003` warning pointing at the canonical name.
 

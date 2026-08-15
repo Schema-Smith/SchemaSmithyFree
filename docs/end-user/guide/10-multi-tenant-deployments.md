@@ -75,7 +75,7 @@ TenantCRM/
 
 The `data/` folder under `Shared/` holds `.tabledata` files -- DataDelivery content files (one JSON row per record) that DataTongs produced and SchemaQuench merges in FK order; see [FK-aware data delivery with DataTongs](09-power-workflows.md#fk-aware-data-delivery-with-datatongs) for the full mechanic. The `dbo.Countries` and `dbo.Plans` seed rows live here, referenced from their respective table JSON files via `DataDelivery.ContentFile` paths.
 
-Two things to notice about the file names. In `Shared/Tables/`, the files carry the schema prefix: `dbo.Tenants.json`, `dbo.Countries.json`. That's the standard convention for regular templates -- the filename tells SchemaQuench exactly which schema the table belongs to. In `TenantWorkspace/Tables/`, the files have no schema prefix: `Customers.json`, `Contacts.json`. The schema is the iteration variable. SchemaQuench applies `{{SchemaName}}` automatically when it reads these files, so the same `Customers.json` deploys into `tenant_acme.Customers`, `tenant_beta.Customers`, and every future tenant without any per-tenant copy.
+Two things to notice about the file names. In `Shared/Tables/`, the files carry the schema prefix: `dbo.Tenants.json`, `dbo.Countries.json`. That's the standard convention for regular templates -- the filename mirrors the table's own `Schema` property, so a glance at the folder tells you where each table lands. (The prefix is a convention, not an input: SchemaQuench reads the schema from the file's content. See [File naming](../reference/schema-packages.md#file-naming).) In `TenantWorkspace/Tables/`, the files have no schema prefix: `Customers.json`, `Contacts.json`. The schema is the iteration variable. SchemaQuench applies `{{SchemaName}}` automatically when it reads these files, so the same `Customers.json` deploys into `tenant_acme.Customers`, `tenant_beta.Customers`, and every future tenant without any per-tenant copy.
 
 One JSON file. Every tenant schema. Zero copy-paste.
 
@@ -121,7 +121,7 @@ schemaquench \
   --Target:Password <yourpassword>
 ```
 
-The deployment log shows three templates running in sequence:
+The deployment log shows three templates running in sequence -- the last of them, `TenantWorkspace`, fanning out across both tenant schemas:
 
 ```
 Quenching Template: Initialize

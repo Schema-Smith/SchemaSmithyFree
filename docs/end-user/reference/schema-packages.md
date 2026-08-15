@@ -365,19 +365,21 @@ MyProduct/
       <custom folders>              Anything you declared in ScriptFolders
 ```
 
-Table JSON files are named `schema.tablename.json` (e.g., `dbo.Customer.json`, `public.order_lines.json`). For MySQL and MariaDB the `schema` segment is the database/schema name. If a table or schema name contains filesystem-illegal characters, the encoded form is used in the filename (see [Filesystem-Illegal Character Encoding](#filesystem-illegal-character-encoding)).
+Table JSON files are named `schema.tablename.json` (e.g., `dbo.Customer.json`, `public.order_lines.json`). The `schema` segment mirrors the table's own `Schema` property, so it is omitted whenever the table carries no schema -- on MySQL and MariaDB (no per-table schema), and in schema templates, where the schema is the iteration variable. See [File naming](#file-naming) below. If a table or schema name contains filesystem-illegal characters, the encoded form is used in the filename (see [Filesystem-Illegal Character Encoding](#filesystem-illegal-character-encoding)).
 
 ### File naming
 
 How you name table JSON files depends on whether the template is a regular template or a schema template.
 
-**Regular templates** use schema-prefixed filenames. The prefix tells SchemaQuench which schema the table belongs to: `dbo.Customers.json`, `Sales.Orders.json`, `public.order_lines.json`. No prefix means no schema, which is an error on SQL Server and PostgreSQL.
+**Regular templates** use schema-prefixed filenames: `dbo.Customers.json`, `Sales.Orders.json`, `public.order_lines.json`. The prefix *mirrors* the table's `Schema` property -- it is a convention, not an input. A table's schema is read from its file content, never from its filename, so a file you renamed by hand still deploys to the same place; [`--Validate`](validate.md#file-naming) flags the drift as an `SS-FILE-NAME-003` warning rather than an error.
+
+Omitting `Schema` is not an error either -- it falls back to the platform default (`dbo` on SQL Server, `public` on PostgreSQL, none on MySQL and MariaDB). Because the filename mirrors content, a table that omits `Schema` has no prefix to mirror, and its canonical name is the bare `order_lines.json`. Both forms are correct so long as the filename and the content agree: declare `Schema: "public"` and name the file `public.order_lines.json` (what the shipped PostgreSQL demos do), or omit both. On extraction SchemaTongs writes the omitted form for a table in the platform default schema, and keeps the prefix for a named one.
 
 **Schema templates** use unqualified filenames. The schema is the iteration variable -- SchemaQuench resolves `{{SchemaName}}` at runtime for every iteration, so `Customers.json` deploys into `acme.Customers` for the `acme` tenant, `globex.Customers` for the `globex` tenant, and so on. Filenames with a schema prefix (e.g., `dbo.Customers.json`) inside a schema template's `Tables/` folder are rejected by the engine at load time.
 
-**Cross-schema exception.** A schema-prefix filename inside a schema template's `Tables/` folder means the schema template owns a table in that specific named schema rather than in the iteration schema -- for example, `dbo.SharedConfig.json` inside a `TenantWorkspace/Tables/` folder deploys a single `dbo.SharedConfig` table regardless of which tenant iteration is running. This pattern is legal but unusual; most cross-schema work belongs in the accompanying regular template that runs first in `TemplateOrder`.
+**Cross-schema tables.** A schema template cannot own a table in a specific named schema. Both routes to it are rejected at load time: a schema-prefixed filename in its `Tables/` folder (above), and a literal `Schema` value on the table itself -- a schema template requires `Schema` to be omitted, empty, or the literal `{{SchemaName}}` token, because the table lives in `{{SchemaName}}` by construction. Put shared, fixed-schema tables such as `dbo.SharedConfig` in the accompanying regular template that runs first in `TemplateOrder`.
 
-The accompanying **Shared** regular template (if present) follows the standard prefix convention: `dbo.Tenants.json`, `public.countries.json`. Its filenames are unchanged by the presence of a schema template in the same product.
+The accompanying **Shared** regular template (if present) follows the regular-template convention above: `dbo.Tenants.json` on SQL Server, `countries.json` for a PostgreSQL `public` table, `reference.countries.json` for one in a named schema. Its filenames are unchanged by the presence of a schema template in the same product.
 
 For a worked layout showing these conventions side by side, see [Multi-Tenant Deployments](../guide/10-multi-tenant-deployments.md).
 

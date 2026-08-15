@@ -153,10 +153,26 @@ Before a deployment run opens a single connection in anger, you can confirm the 
 
 **`--PreviewTargets`** does everything `--TestConnection` does, then prints a read-only per-template report of the databases and schemas the deployment would target -- the exact set of work units a full quench would process, without processing any of them. A template marked `RequireAtLeastOneTarget` that resolves nothing fails the preview, so a misconfigured environment is caught here rather than at run time. Same exit codes: `0` on pass, `2` on any connection failure, version violation, or required-template match miss.
 
-Because every switch in the family returns `0` for go and `2` for stop, they drop straight into a pipeline as a layered readiness gate ahead of the deploy step:
+Because every switch in the family returns `0` for go and `2` for stop, they drop straight into a pipeline as a layered readiness gate ahead of the deploy step.
+
+**Readiness gate (PowerShell / bash):**
+
+```powershell
+# Abort the deploy if any pre-flight check fails
+foreach ($gate in '--Validate', '--TestConnection', '--PreviewTargets') {
+    schemaquench $gate
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Pre-flight $gate failed - aborting deploy"
+        exit 1
+    }
+}
+
+# Only reached when every gate passes:
+schemaquench
+```
 
 ```bash
-# Readiness gate — abort the deploy if any pre-flight check fails
+# Abort the deploy if any pre-flight check fails
 schemaquench --Validate         || { echo "Package validation failed — aborting deploy"; exit 1; }
 schemaquench --TestConnection   || { echo "Pre-flight failed — aborting deploy"; exit 1; }
 schemaquench --PreviewTargets   || { echo "Target preview failed — aborting deploy"; exit 1; }
@@ -164,6 +180,8 @@ schemaquench --PreviewTargets   || { echo "Target preview failed — aborting de
 # Only reached when every gate passes:
 schemaquench
 ```
+
+> **Why `$LASTEXITCODE` and not `$?`.** `schemaquench` is a native executable, not a PowerShell cmdlet, so PowerShell reports its result through `$LASTEXITCODE` rather than through the terminating-error pipeline. Checking `$LASTEXITCODE` explicitly after each call is what makes the gate actually gate — a bare `schemaquench --Validate` on its own line will not stop the script on exit `2`.
 
 This complements the WhatIf-in-PR pattern below: `--Validate` catches structural problems in the package itself with no database at all, WhatIf validates *the change* against a disposable database during review, and `--TestConnection`/`--PreviewTargets` validate *the live target environment* immediately before a real deployment. For the full behavior of the connection-based switches -- secondary-server handling, the version-floor rules, and the target-report format -- see [SchemaQuench -- Pre-flight diagnostics](../reference/schemaquench.md#pre-flight-diagnostics).
 

@@ -170,7 +170,7 @@ The path can be absolute or relative to the current working directory.
 
 ## Environment Variables
 
-Environment variables give you a clean way to inject configuration without touching files on disk -- exactly what you need in CI/CD pipelines and containers. All three tools read environment variables prefixed with `SmithySettings_`. The prefix is stripped, and double underscores (`__`) map to hierarchy separators in the configuration structure.
+Environment variables give you a clean way to inject configuration without touching files on disk -- exactly what you need in CI/CD pipelines and containers. SchemaQuench, SchemaTongs, and DataTongs read environment variables prefixed with `SmithySettings_`. The prefix is stripped, and double underscores (`__`) map to hierarchy separators in the configuration structure.
 
 ### Mapping rules
 
@@ -328,6 +328,7 @@ Each tool writes two log files per run:
 | SchemaQuench | `SchemaQuench - Progress.log` | `SchemaQuench - Errors.log` |
 | SchemaTongs | `SchemaTongs - Progress.log` | `SchemaTongs - Errors.log` |
 | DataTongs | `DataTongs - Progress.log` | `DataTongs - Errors.log` |
+| SchemaShears | `SchemaShears - Progress.log` | `SchemaShears - Errors.log` |
 
 The **progress log** receives all informational output: the startup banner, active configuration, per-object progress, and completion status. Everything written to the progress log also appears on the console in real time.
 
