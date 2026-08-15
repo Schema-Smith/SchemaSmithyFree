@@ -106,7 +106,7 @@ Then work the courses normally. Each course has a setup script that creates that
 cd course3-setup && ./setup-environments.sh
 ```
 
-Four things are worth knowing:
+A few things are worth knowing:
 
 - **One engine at a time.** The activation is global to your shell, so a course runs against the
   engine you activated. Working through a course on a second engine? Source the script again with
@@ -122,6 +122,12 @@ Four things are worth knowing:
 - **Your databases are safe.** Setup scripts stamp what they create and will never drop or deploy
   into a same-named database they didn't create — they stop and tell you to rename or move it. The
   `--reset` switch each setup script carries honours the same rule.
+- **Older or hardened SQL Server?** If the modern driver can't complete the TLS handshake your server
+  offers, the connection fails before any deploy starts. Add `--NoEncrypt` to the `schemaquench`
+  command — it forces transport encryption off (setting the right property per engine), and it's the
+  escape hatch for exactly the older or hardened SQL Server that classic `sqlcmd` reaches but the
+  modern driver refuses. Full detail: the [configuration reference](https://github.com/Schema-Smith/SchemaSmith/blob/main/docs/end-user/reference/configuration.md)
+  under `--Encrypt` / `--NoEncrypt`.
 
 ### Will these labs run on my server?
 
