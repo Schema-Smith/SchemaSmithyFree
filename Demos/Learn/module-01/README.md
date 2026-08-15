@@ -28,7 +28,7 @@ schemaquench --version
 Expected:
 
 ```
-SchemaQuench - Version: 2.3.0.0
+SchemaQuench - Version: 2.4.0.0
 ```
 
 Your exact version may be `2.1.0.0` or later — any version line means the CLI is installed and on your PATH. If the command isn't found, revisit the install guide.
