@@ -17,7 +17,8 @@ points at is itself a table you query, not a literal value.
 - The fleet exists — run [`../course7-setup`](../course7-setup) once (creates `fleet_tenant_001`…`005` on
   each engine).
 - The registries exist — run [`./setup-registry.sh`](./setup-registry.sh) once. It creates
-  `FleetRegistry_Dev`, `FleetRegistry_Prod`, and `FleetRegistry_Empty` on each engine and seeds each one's
+  `FleetRegistry_Dev`, `FleetRegistry_Prod`, and `FleetRegistry_Empty` (lowercase `fleetregistry_*` on
+  PostgreSQL, MySQL, and MariaDB) on each engine and seeds each one's
   `Tenants` table (Dev and Prod list all five tenants — Dev has `005` inactive, Prod has it active; Empty
   gets the table with zero rows).
 - The CLI is on your PATH — `schemaquench --version` answers **2.4.0** or later.
