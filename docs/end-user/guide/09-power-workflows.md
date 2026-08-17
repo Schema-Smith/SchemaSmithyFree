@@ -125,6 +125,29 @@ The `Extensions` property is an open JSON bag that lives on every entity in the 
 
 See [Custom Properties](../reference/custom-properties.md) for the full mechanism -- scoping, nested objects, array flattening, preservation through SchemaTongs re-extraction, and the JSON Schema validation pattern for team governance.
 
+## Extensions as a source of truth
+
+The section above put custom metadata to work *gating* deployments -- a flag on a table decides whether an index gets built. But the same metadata is readable as a whole. A deploy-time script can read your *entire* model -- every table, every column, and every `Extensions` bag you hung on them -- and derive something new from it on each quench. This is where a schema package stops merely describing structure and becomes the single source of truth your other tooling reads from.
+
+The `{{TableSchema}}` token from [Script tokens](#script-tokens) above is the key: it hands a script the whole template's table model as JSON, every `Extensions` bag intact. Shred it in a deploy-time script -- `OPENJSON` on SQL Server, `json_each` / `JSON_TABLE` on PostgreSQL and MySQL -- and walk the tables, reading their metadata:
+
+```sql
+-- Read the whole model; keep only the tables your metadata flagged:
+SELECT t.[value]
+FROM OPENJSON(N'{{TableSchema}}') AS t
+WHERE JSON_VALUE(t.[value], '$.Extensions.ReplicationEnabled') = 'true';
+```
+
+Because the script runs on every deploy and reads the live model, whatever it builds can never drift from the schema it is derived from. Two patterns show the range:
+
+**A data dictionary.** Tag your tables and columns with the facts a governance team cares about -- a business domain, a data owner, a sensitivity level -- and a deploy-time script shreds the `Extensions` and `MERGE`s a queryable `DataDictionary` table on every quench. New column, new row; renamed column, updated row; dropped column, gone. It is *computed* from the schema, so it stays in step -- unlike the spreadsheet that was right the day it was made and wrong ever since. Works the same on every engine.
+
+**A provisioned replica.** Mark which tables replicate -- `"ReplicationEnabled": true` on the ones that belong on a reporting subscriber -- and a deploy-time script filters the model to the marked set and provisions the subscriber's schema to match. Changing what replicates is a one-flag edit on the model, not a hand-cut DDL script that falls behind. (SQL Server, where one connection can reach a second database.)
+
+The move is the same in both: declare the fact once, on the object it is true of, and let a script derive the rest on every deploy. Structure, governance metadata, replication intent -- all in the same file, under the same review, in the same source control.
+
+For the token that makes it work, see [Script Tokens](../reference/script-tokens.md); for the metadata carrier, see [Custom Properties](../reference/custom-properties.md).
+
 ## Conditional deployment with ShouldApplyExpression
 
 `ShouldApplyExpression` is how you declare "this thing only exists in certain places." It lives on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, full-text indexes -- every structural component. Before deploying any component with a `ShouldApplyExpression`, SchemaQuench resolves the tokens, runs the expression against the target database, and skips the component if the result is falsy.
