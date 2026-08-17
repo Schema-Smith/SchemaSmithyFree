@@ -27,6 +27,7 @@ if [ "$reset" -eq 1 ]; then
       echo "FAIL"
       echo "    '$db' exists but wasn't created by the labs, so it will not be dropped. Rename or move it, then re-run."
       fail=1
+      break
     fi
   done
 fi
