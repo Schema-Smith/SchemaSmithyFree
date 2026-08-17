@@ -1751,9 +1751,8 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
         var connectionStringOverride = CommandLineParser.ValueOfSwitch("ConnectionString", null);
-        var connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
         var connectionString = string.IsNullOrEmpty(connectionStringOverride)
-            ? ConnectionString.Build(_product.Platform, _server, _databaseName, config["Target:User"], config["Target:Password"], config["Target:Port"], connectionProperties)
+            ? TargetConnectionString.Build(_product.Platform, _server, _databaseName, config)
             : ConnectionString.RetargetDatabase(connectionStringOverride, _databaseName, _product.Platform);
         var factory = DbConnectionFactory.ForPlatform(_product.Platform);
         var connection = factory.GetDbConnection(connectionString);

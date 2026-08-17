@@ -4,6 +4,13 @@ All notable changes to SchemaSmith Community Edition are documented here.
 
 For full release details and download links, see [GitHub Releases](https://github.com/Schema-Smith/SchemaSmith/releases).
 
+## [Unreleased]
+
+### Fixed
+
+- **`Target:IntegratedSecurity` reached the connection test but not the deploy.** A SchemaQuench run that set `Target:IntegratedSecurity=true` while a `Target:User`/`Target:Password` was also configured — the exact scenario the setting exists for, layering Windows Authentication over a checked-in credential — connected successfully during the server connection test and then failed on every database with `Login failed for user '<user>'`. The server-level connection honored the flag; the per-database connection that does the deploying did not, and used the configured credential instead. Both now build through one shared connection builder, so an integrated-security run authenticates the same way end to end. SQL Server only. — #379
+- **`--Encrypt` / `--NoEncrypt` reached the connection test but not the deploy.** The same split affected the transport-encryption switch introduced in v2.4.0: the server connection test applied it, the per-database deploy connection ignored it. `--NoEncrypt` — the escape hatch for an older or hardened SQL Server whose TLS handshake the modern client library cannot complete — therefore produced a passing connection test followed by a failing deploy, and `--Encrypt` silently did not reach the connection doing the work. Cross-platform (SQL Server `Encrypt`, PostgreSQL `SSL Mode`, MySQL/MariaDB `SslMode`). — #384
+
 ## [v2.4.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.4.0) — 2026-08-14
 
 ### Added
