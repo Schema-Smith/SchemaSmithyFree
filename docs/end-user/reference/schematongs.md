@@ -57,6 +57,36 @@ This reads the `Platform` from `Product.json`, regenerates the schema files on t
 
 ---
 
+## Version Pre-Flight
+
+Before any extraction work begins, SchemaTongs detects the **source** server's version, logs it, and enforces SchemaSmith's intrinsic per-engine floor. The log line is written for every run:
+
+```
+Source SqlServer version 16.0.4260.1 (compatibility level 160)
+```
+
+The compatibility level is appended on SQL Server only; the other engines have no such concept. The version string is whatever the engine itself publishes — see [SchemaQuench — The detected version is reported in each engine's own form](schemaquench.md#the-detected-version-is-reported-in-each-engines-own-form) for why the four differ.
+
+**The floor is structural, not opt-in.** You declare nothing. It is the version below which the engine scripts do not run at all — SQL Server 2008, PostgreSQL 12, MySQL 5.7, MariaDB 10.2. A below-floor source aborts before extraction starts:
+
+```
+srv01: detected SqlServer version 9.00.5000.00 is below the minimum supported version
+2008 (major 10). SchemaSmith cannot run against it.
+```
+
+On SQL Server the **source database's** compatibility level is checked as well and must be `100` or higher. That is reported as a distinct case, because it is a different problem with a different fix:
+
+```
+srv01: database Northwind is at compatibility level 90; SchemaSmith requires 100
+(SQL Server 2008) or higher. Raise it with ALTER DATABASE ... SET COMPATIBILITY_LEVEL = 100.
+```
+
+Failing here is deliberate. Without the pre-flight, a below-floor source dies deep inside extraction with a raw engine error — on SQL Server, typically `'STRING_AGG' is not a recognized built-in function name`, which reads like a SchemaSmith bug rather than an unsupported server.
+
+> **This is not `Product.MinimumVersion`.** That is a separate, opt-in gate you declare per product to raise the floor *further*, and it is a deployment-time concern — see [SchemaQuench — MinimumVersion pre-flight gate](schemaquench.md#minimumversion-pre-flight-gate). The floor described here is always enforced and cannot be lowered or disabled.
+
+---
+
 ## Configuration Reference
 
 SchemaTongs reads configuration from multiple sources, merged in precedence order (highest priority last):

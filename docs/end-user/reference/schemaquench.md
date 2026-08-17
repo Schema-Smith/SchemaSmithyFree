@@ -360,7 +360,7 @@ Pre-flight logs the version it detected for every server, and **that string is w
 | Platform | Detected version reads like | Why that precision |
 |----------|-----------------------------|--------------------|
 | SQL Server | `16.0.4260.1` (full build) | Servicing level is load-bearing: `CREATE OR ALTER` arrived in 2016 **SP1**, so `13.0.4001` and `13.0.1601` are the same major and behave differently. |
-| PostgreSQL | `16` (major) | PostgreSQL gates features on the major; the minor carries no capability difference to report. |
+| PostgreSQL | `16` (major) | PostgreSQL gates features on the major; the minor carries no capability difference to report. The server reports `server_version_num` as a packed integer (`160013`); SchemaSmith normalizes it to the major for display. It is the one engine whose logged version is not the raw string the server published. |
 | MySQL | `8.0.45` | Feature boundaries land mid-major -- CHECK constraints at **8.0.16**, so a major alone cannot answer the question. |
 | MariaDB | `11.4.12-MariaDB-ubu2404` | Same reason, plus the vendor/build tail the server appends -- `RENAME COLUMN` at **10.5.2**, native `UUID` at **10.7**. |
 
