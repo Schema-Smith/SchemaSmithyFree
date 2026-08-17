@@ -355,7 +355,7 @@ If a target's version cannot be determined, that is a hard error -- SchemaQuench
 
 #### The detected version is reported in each engine's own form
 
-Pre-flight logs the version it detected for every server, and **that string is whatever the engine itself publishes** -- SchemaSmith does not reshape it into a common format. The four look quite different, and that is deliberate rather than an inconsistency to work around:
+Pre-flight logs the version it detected for every server, and -- **with one exception** -- that string is whatever the engine itself publishes; SchemaSmith does not reshape the four into a common format. They look quite different, and that is deliberate rather than an inconsistency to work around:
 
 | Platform | Detected version reads like | Why that precision |
 |----------|-----------------------------|--------------------|
