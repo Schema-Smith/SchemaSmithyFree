@@ -418,6 +418,7 @@ The schema model itself parses on every supported version — a version-agnostic
 | **Column rename** (`RENAME COLUMN`) | MySQL 8.0 / MariaDB 10.5.2 | reproduces the rename with `CHANGE COLUMN`, reconstructing the current column definition (same end state) |
 | **Index rename** (`RENAME INDEX`) | MariaDB 10.5.2 (MySQL 5.7 has it) | drops and recreates the index under the new name from its live definition (same end state) |
 | **CHECK constraints** | MySQL 8.0.16 (MariaDB: at the 10.2 floor) | emits the table *without* the check + records a downgrade (MySQL 5.7 parses-and-ignores CHECK, so it can neither be created nor detected) |
+| **Invisible index** (`INVISIBLE`; MariaDB `IGNORED`) | MySQL 8.0 / MariaDB 10.6 | stores the index *visible* — the visibility clause is suppressed — + records a downgrade. The modified-index compare ignores the visibility difference below the floor, so re-deploys stay idempotent instead of churning the index every run |
 | **Descending index key parts** (`… DESC`) | MySQL 8.0 / MariaDB 10.8 | stores the key part ascending (the engine silently does so anyway) + records a downgrade |
 | **Automatic table-data delivery** | MySQL 8.0 | on MariaDB 10.2 uses a recursive-CTE shred (full support); below the MySQL floor, skips delivery with a clear log — use manual data scripts |
 
