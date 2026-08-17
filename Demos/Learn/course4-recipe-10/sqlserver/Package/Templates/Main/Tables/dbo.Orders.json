@@ -1,0 +1,17 @@
+{
+  "Name": "[Orders]",
+  "Columns": [
+    { "Name": "[OrderId]", "DataType": "INT" },
+    { "Name": "[CustomerId]", "DataType": "INT" },
+    { "Name": "[Total]", "DataType": "DECIMAL(10,2)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Orders]", "PrimaryKey": true, "Unique": true, "IndexColumns": "[OrderId]", "Clustered": true }
+  ],
+  "ForeignKeys": [
+    { "Name": "[FK_Orders_Customers]", "Columns": "[CustomerId]", "RelatedTable": "[Customers]", "RelatedColumns": "[CustomerId]" }
+  ],
+  "CheckConstraints": [],
+  "Schema": "[dbo]",
+  "Extensions": { "ReplicationEnabled": true, "ReplicationTarget": "Shop_Replica" }
+}

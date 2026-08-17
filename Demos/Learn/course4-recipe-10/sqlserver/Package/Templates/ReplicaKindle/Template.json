@@ -1,0 +1,6 @@
+{
+  "Name": "ReplicaKindle",
+  "DatabaseIdentificationScript": "SELECT 'Shop_Replica'",
+  "ScriptFolders": [],
+  "ScriptTokens": {}
+}

@@ -1,0 +1,8 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT 'Shop_Primary'",
+  "ScriptFolders": [
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+  ],
+  "ScriptTokens": {}
+}

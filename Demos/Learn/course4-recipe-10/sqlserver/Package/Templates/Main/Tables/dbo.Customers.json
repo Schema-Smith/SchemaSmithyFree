@@ -1,0 +1,14 @@
+{
+  "Name": "[Customers]",
+  "Columns": [
+    { "Name": "[CustomerId]", "DataType": "INT" },
+    { "Name": "[Email]", "DataType": "NVARCHAR(256)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Customers]", "PrimaryKey": true, "Unique": true, "IndexColumns": "[CustomerId]", "Clustered": true }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Schema": "[dbo]",
+  "Extensions": { "ReplicationEnabled": true, "ReplicationTarget": "Shop_Replica" }
+}

@@ -1,0 +1,8 @@
+{
+  "Name": "Shop",
+  "MinimumVersion": "2017",
+  "TemplateOrder": [ "ReplicaKindle", "Main" ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}

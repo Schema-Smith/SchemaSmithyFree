@@ -1,0 +1,14 @@
+{
+  "Name": "[Inventory]",
+  "Columns": [
+    { "Name": "[Sku]", "DataType": "NVARCHAR(64)" },
+    { "Name": "[OnHand]", "DataType": "INT", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Inventory]", "PrimaryKey": true, "Unique": true, "IndexColumns": "[Sku]", "Clustered": true }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Schema": "[dbo]",
+  "Extensions": { "ReplicationEnabled": false }
+}
