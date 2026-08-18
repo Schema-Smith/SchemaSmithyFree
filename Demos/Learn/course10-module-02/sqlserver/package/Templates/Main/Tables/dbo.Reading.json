@@ -1,0 +1,54 @@
+{
+  "Schema": "dbo",
+  "Name": "Reading",
+  "Columns": [
+    {
+      "Name": "ReadingID",
+      "DataType": "INT"
+    },
+    {
+      "Name": "SensorID",
+      "DataType": "INT",
+      "Nullable": false,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    },
+    {
+      "Name": "TakenAt",
+      "DataType": "DATETIME2",
+      "Nullable": false,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    },
+    {
+      "Name": "Value",
+      "DataType": "DECIMAL(9,2)",
+      "Nullable": true,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_Reading",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "ReadingID"
+    },
+    {
+      "Name": "IX_Reading_TakenAt",
+      "IndexColumns": "TakenAt, SensorID",
+      "ShouldApplyExpression": "{{CompatibilityLevel}} >= 160",
+      "VariantName": "Modern (compat 160+)"
+    },
+    {
+      "Name": "IX_Reading_TakenAt",
+      "IndexColumns": "TakenAt",
+      "ShouldApplyExpression": "{{CompatibilityLevel}} < 160",
+      "VariantName": "Legacy (compat < 160)"
+    }
+  ]
+}

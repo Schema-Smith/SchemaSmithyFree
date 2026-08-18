@@ -1,0 +1,20 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT [name] FROM sys.databases WHERE [name] IN ('learn_2016', 'learn_2022')",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Programmability/Modern",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views",
+      "ShouldApplyExpression": "{{CompatibilityLevel}} >= 160"
+    },
+    {
+      "FolderPath": "Programmability/Legacy",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views",
+      "ShouldApplyExpression": "{{CompatibilityLevel}} < 160"
+    },
+    { "FolderPath": "MigrationScripts/After", "QuenchSlot": "After" }
+  ],
+  "ScriptTokens": {}
+}
