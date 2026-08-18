@@ -48,7 +48,7 @@ public static class Program
     internal static void WriteSchemasOnly()
     {
         var config = FactoryContainer.ResolveOrCreate<Microsoft.Extensions.Configuration.IConfigurationRoot>();
-        var productPath = config["Product:Path"] ?? ".";
+        var productPath = config[SettingsKeys.ProductKeys.Path] ?? ".";
         var productFile = Path.Combine(productPath, "Product.json");
 
         if (!FileWrapper.GetFromFactory().Exists(productFile))
@@ -63,7 +63,7 @@ public static class Program
     internal static Platform ResolvePlatform()
     {
         var config = FactoryContainer.ResolveOrCreate<Microsoft.Extensions.Configuration.IConfigurationRoot>();
-        var platformValue = config["Target:Platform"] ?? config["Source:Platform"];
+        var platformValue = config[SettingsKeys.Target.Platform] ?? config[SettingsKeys.Source.Platform];
         if (string.IsNullOrWhiteSpace(platformValue))
             throw new Exception("Platform is required. Set 'Target:Platform' or 'Source:Platform' in SchemaTongs.settings.json.");
 

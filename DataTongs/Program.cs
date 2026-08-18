@@ -35,7 +35,7 @@ public static class Program
     internal static Platform ResolvePlatform()
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var platformValue = config["Source:Platform"] ?? config["Target:Platform"];
+        var platformValue = config[SettingsKeys.Source.Platform] ?? config[SettingsKeys.Target.Platform];
         if (string.IsNullOrWhiteSpace(platformValue))
             throw new Exception("Platform is required. Set 'Source:Platform' or 'Target:Platform' in DataTongs.settings.json.");
 

@@ -22,6 +22,7 @@ using Schema.Checkpointing;
 using Schema.Delivery;
 using Schema.Isolators;
 using Schema.Utility;
+using Schema.Configuration;
 
 namespace SchemaQuench;
 
@@ -505,7 +506,7 @@ public class DatabaseQuench
                     // MySQL < 8.0 data-delivery gate. Resolved up front so both the deliver and WhatIf contexts
                     // below see them regardless of the per-engine switch.
                     _sqlServerCompatibilityLevel = versionInfo.CompatibilityLevel ?? 0;
-                    _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"];
+                    _unsupportedFeaturePolicy = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.UnsupportedFeaturePolicy];
                     switch (_product.Platform.GetBasePlatform())
                     {
                         case Platform.PostgreSQL:
@@ -522,7 +523,7 @@ public class DatabaseQuench
                                             (versionInfo.CompatibilityLevel is { } lvl ? $" (compatibility level {lvl})" : ""));
                             PreFlightVersionGuard.CheckOrThrow(versionInfo, _server, _databaseName);
                             _sqlServerMajorVersion = versionInfo.ServerComparable;
-                            var compatEncodingOverride = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:CompatEncoding"];
+                            var compatEncodingOverride = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.CompatEncoding];
                             _ingestEncoding = CompatEncoding.Select(compatEncodingOverride, versionInfo.CompatibilityLevel, versionInfo.ServerComparable);
                             break;
                     }
@@ -552,7 +553,7 @@ public class DatabaseQuench
                     // SQL Server bakes the detected server version + resolved unsupported-feature policy into the
                     // helper functions at kindle time (dropping the 2016+ SESSION_CONTEXT transport). Both are
                     // no-ops for PostgreSQL/MySQL (their scripts carry neither token; PG uses a runtime GUC).
-                    var kindlePolicy = string.Equals(FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Target:UnsupportedFeaturePolicy"],
+                    var kindlePolicy = string.Equals(FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.UnsupportedFeaturePolicy],
                         "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
                     ForgeKindler.KindleTheForge(effectiveSilentCmd, _product.Platform, _forceReKindle, _ingestEncoding,
                         _sqlServerMajorVersion, kindlePolicy);
@@ -1401,12 +1402,12 @@ public class DatabaseQuench
 
     internal string ResolveArtifactDirectory()
     {
-        var configured = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["ArtifactPath"];
+        var configured = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.ArtifactPath];
         return string.IsNullOrWhiteSpace(configured) ? Directory.GetCurrentDirectory() : configured;
     }
 
     internal bool ScrubArtifactsEnabled =>
-        FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["ScrubArtifacts"]?.ToLower() == "true";
+        FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.ScrubArtifacts]?.ToLower() == "true";
 
     internal IReadOnlyList<KeyValuePair<string, string>> SensitiveTokenValues()
     {
@@ -1773,14 +1774,14 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         // The SQL helper defaults to 'warn', so only an explicit 'fail' matters.
         if (_product.Platform.GetBasePlatform() == Platform.PostgreSQL)
         {
-            var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+            var policy = string.Equals(config[SettingsKeys.UnsupportedFeaturePolicy], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
             using var policyCmd = connection.CreateCommand();
             policyCmd.CommandText = $"SET schemasmith.unsupported_policy = '{policy}'";
             policyCmd.ExecuteNonQuery();
         }
         else if (_product.Platform.GetBasePlatform() == Platform.MySQL)
         {
-            var policy = string.Equals(config["Target:UnsupportedFeaturePolicy"], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
+            var policy = string.Equals(config[SettingsKeys.UnsupportedFeaturePolicy], "fail", StringComparison.OrdinalIgnoreCase) ? "fail" : "warn";
             using var policyCmd = connection.CreateCommand();
             policyCmd.CommandText = $"SET @schemasmith_unsupported_policy = '{policy}'";
             policyCmd.ExecuteNonQuery();
@@ -2273,7 +2274,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             }
             else if (_product != null)
             {
-                var verboseLogging = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["VerboseLogging"]?.ToLower() == "true";
+                var verboseLogging = FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.VerboseLogging]?.ToLower() == "true";
                 if (verboseLogging || err.State == 100)
                     SafeProgressLog($"      {err.Message}");
             }

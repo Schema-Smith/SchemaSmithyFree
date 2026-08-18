@@ -66,9 +66,8 @@ public static class SettingsContract
             SettingsKeys.KindleTheForge, SettingsKeys.ForceReKindle, SettingsKeys.CheckpointDirectory,
             SettingsKeys.DeliverData, SettingsKeys.VerboseLogging, SettingsKeys.FailureContextLines,
             SettingsKeys.BottleneckThresholdMs, SettingsKeys.TrackRunOnceMigrations,
-            SettingsKeys.PruneObsoleteMigrationTracking, SettingsKeys.MinimumVersion,
-            SettingsKeys.ArtifactPath, SettingsKeys.ScrubArtifacts, SettingsKeys.ScriptTokens,
-            SettingsKeys.CustomKey
+            SettingsKeys.PruneObsoleteMigrationTracking,
+            SettingsKeys.ArtifactPath, SettingsKeys.ScrubArtifacts, SettingsKeys.ScriptTokens
         ]), StringComparer.OrdinalIgnoreCase),
 
         [SettingsTool.SchemaTongs] = new(BaseSourceKeys().Concat(ShouldCastKeys()).Concat(

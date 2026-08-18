@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Schema.Configuration;
 
@@ -22,10 +23,22 @@ public class SettingsContractDriftTests
     private static readonly string[] ProductProjects =
         ["Schema", "SchemaQuench", "SchemaTongs", "DataTongs", "SchemaShears"];
 
-    // config["Key"] / _config["Key"] / Configuration["Key"], and GetSection("Key").
+    // Known ways product code reaches a configuration value by name. Any indexer whose literal is
+    // preceded by a `)` or an identifier covers config["k"], _config["k"], Resolve<...>()?["k"], and
+    // the like; GetSection / GetValue / ReadProperties cover the call forms.
     private static readonly Regex ConfigRead =
-        new(@"(?:_?[Cc]onfig(?:uration)?(?:Root)?\s*\[\s*""(?<key>[^""]+)""\s*\]|GetSection\(\s*""(?<key>[^""]+)""\s*\))",
+        new(@"_?[Cc]onfig(?:uration)?(?:Root)?\s*\??\[\s*""(?<key>[^""]+)""\s*\]"
+          + @"|IConfiguration(?:Root)?>\(\)\s*\??\[\s*""(?<key>[^""]+)""\s*\]"
+          + @"|GetSection\(\s*""(?<key>[^""]+)""\s*\)"
+          + @"|GetValue<[^>]+>\(\s*""(?<key>[^""]+)"""
+          + @"|ReadProperties\([^,]+,\s*""(?<key>[^""]+)"""
+          + @"|(?:ConfigBool|ReadFilterArray)\((?:[^,()]*,\s*)?""(?<key>[^""]+)""",
             RegexOptions.Compiled);
+
+    // A namespaced key ("Target:Server") is unmistakable — it never occurs as a folder name or other
+    // incidental string — so any literal equal to one is a config read whatever syntax surrounds it.
+    // Bare keys ("Tables", "Schemas") are deliberately excluded: they collide with ordinary strings.
+    private static readonly Regex AnyStringLiteral = new(@"""(?<key>[^""\\]*:[^""\\]*)""", RegexOptions.Compiled);
 
     // Documentation quotes config reads to explain them (this file does it too), so comments must not
     // be scanned or the contract would be asked to register examples.
@@ -57,13 +70,26 @@ public class SettingsContractDriftTests
                 if (file.Contains("Tests", StringComparison.OrdinalIgnoreCase)) continue;
                 if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
                     file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
+                // The contract's own files necessarily spell the keys out.
+                if (file.EndsWith("SettingsKeys.cs") || file.EndsWith("SettingsContract.cs")) continue;
 
-                foreach (Match m in ConfigRead.Matches(StripComments(File.ReadAllText(file))))
+                var text = StripComments(File.ReadAllText(file));
+                var relative = Path.GetRelativePath(root, file);
+
+                foreach (Match m in ConfigRead.Matches(text))
                 {
                     var key = m.Groups["key"].Value;
                     // Interpolated or composed keys cannot be checked statically.
                     if (key.Length == 0 || key.Contains('{')) continue;
-                    yield return (Path.GetRelativePath(root, file), key);
+                    yield return (relative, key);
+                }
+
+                // Any namespaced literal that IS a contract key, regardless of the syntax around it.
+                var contractKeys = SettingsContract.AllAcceptedKeys().ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (Match m in AnyStringLiteral.Matches(text))
+                {
+                    var key = m.Groups["key"].Value;
+                    if (contractKeys.Contains(key)) yield return (relative, key);
                 }
             }
         }
@@ -97,6 +123,94 @@ public class SettingsContractDriftTests
     private static bool IsScopedSubKey(string key) =>
         !key.Contains(':') &&
         key is "Databases" or "Schemas" or "Tables" or "CreateIfMissing";
+
+    /// <summary>
+    /// The invariant that makes the scan exhaustive rather than best-effort.
+    /// <para>A regex that hunts for config reads can only catch the shapes it knows; a read written
+    /// some other way slips through and its key goes unguarded. Requiring every read to name a
+    /// <see cref="SettingsKeys"/> constant inverts that: a raw literal is itself the failure, so
+    /// there is no shape for an unregistered key to hide in.</para>
+    /// </summary>
+    [Test]
+    public void NoProductCodeReadsConfigurationByStringLiteral()
+    {
+        var root = RepoRoot();
+        Assert.That(root, Is.Not.Null);
+
+        var literals = ProductConfigReads(root).Distinct().OrderBy(r => r.File).ThenBy(r => r.Key).ToList();
+
+        Assert.That(literals, Is.Empty,
+            "Configuration must be read through SettingsKeys constants, not string literals — a literal " +
+            "is a key the contract cannot see. Register it in SettingsKeys and read through it:" +
+            Environment.NewLine +
+            string.Join(Environment.NewLine, literals.Select(r => $"  \"{r.Key}\"   ({r.File})")));
+    }
+
+    /// <summary>
+    /// The other direction: a registered key nothing reads is dead weight that quietly accumulates,
+    /// and a contract carrying settings the tools ignore is exactly the unreliable promise this
+    /// mechanism exists to avoid.
+    /// </summary>
+    [Test]
+    public void EveryContractKeyIsActuallyReadByProductCode()
+    {
+        var root = RepoRoot();
+        Assert.That(root, Is.Not.Null);
+
+        var referenced = ReferencedKeyValues(root);
+        var dead = SettingsContract.AllAcceptedKeys()
+            .Where(k => !referenced.Contains(k))
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Assert.That(dead, Is.Empty,
+            "These keys are registered in the contract but no product code reads them, so the contract " +
+            "promises settings the tools ignore:" + Environment.NewLine +
+            string.Join(Environment.NewLine, dead.Select(k => "  " + k)));
+    }
+
+    // The literal values behind every SettingsKeys constant that product code actually references.
+    private static HashSet<string> ReferencedKeyValues(string root)
+    {
+        var byName = KeyConstantsByPath();
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var reference = new Regex(@"SettingsKeys(?:\.\w+)+", RegexOptions.Compiled);
+
+        foreach (var project in ProductProjects)
+        {
+            var projectDir = Path.Combine(root, project);
+            if (!Directory.Exists(projectDir)) continue;
+            foreach (var file in Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories))
+            {
+                if (file.Contains("Tests", StringComparison.OrdinalIgnoreCase)) continue;
+                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
+                    file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
+                if (file.EndsWith("SettingsKeys.cs") || file.EndsWith("SettingsContract.cs")) continue;
+
+                foreach (Match m in reference.Matches(StripComments(File.ReadAllText(file))))
+                    if (byName.TryGetValue(m.Value, out var value)) used.Add(value);
+            }
+        }
+        return used;
+    }
+
+    // "SettingsKeys.Target.Server" -> "Target:Server", by reflection over the constants themselves.
+    private static Dictionary<string, string> KeyConstantsByPath()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        void Walk(Type type, string prefix)
+        {
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Static))
+                if (field.IsLiteral && field.FieldType == typeof(string))
+                    map[$"{prefix}.{field.Name}"] = (string)field.GetRawConstantValue();
+            foreach (var nested in type.GetNestedTypes(BindingFlags.Public))
+                Walk(nested, $"{prefix}.{nested.Name}");
+        }
+
+        Walk(typeof(SettingsKeys), nameof(SettingsKeys));
+        return map;
+    }
 
     [Test]
     public void ContractKeysAreWellFormed()

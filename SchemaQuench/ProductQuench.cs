@@ -17,6 +17,7 @@ using Schema.Checkpointing;
 using Schema.Isolators;
 using Schema.Utility;
 using SchemaQuench.Reporting;
+using Schema.Configuration;
 
 namespace SchemaQuench;
 
@@ -117,30 +118,30 @@ public class ProductQuench
 
         _logHygiene = LogHygieneOptions.FromConfiguration(_config);
 
-        if (!int.TryParse(_config["MaxThreads"], out _maxThreads) || _maxThreads < 1 || _maxThreads > 20)
+        if (!int.TryParse(_config[SettingsKeys.MaxThreads], out _maxThreads) || _maxThreads < 1 || _maxThreads > 20)
             _maxThreads = 10;
-        _whatIfOnly = FormatWhatIfOnly(_config["WhatIfONLY"]?.ToLower() == "true");
-        _runScriptsTwice = _config["RunScriptsTwice"]?.ToLower() == "true";
-        _primaryServer = _config["Target:Server"] ?? "localhost";
-        _skipKindling = _config["KindleTheForge"]?.ToLower() == "false";
+        _whatIfOnly = FormatWhatIfOnly(_config[SettingsKeys.WhatIfOnly]?.ToLower() == "true");
+        _runScriptsTwice = _config[SettingsKeys.RunScriptsTwice]?.ToLower() == "true";
+        _primaryServer = _config[SettingsKeys.Target.Server] ?? "localhost";
+        _skipKindling = _config[SettingsKeys.KindleTheForge]?.ToLower() == "false";
         // CLI-overridable (unlike the other kindling flags): ForceReKindle is an ad-hoc operational
         // gesture run on demand, not a sticky pipeline default, so a command-line switch is the natural UX.
-        _forceReKindle = CommandLineParser.ContainsSwitch("ForceReKindle") || _config["ForceReKindle"]?.ToLower() == "true";
-        _updateTables = _config["UpdateTables"]?.ToLower() != "false";
-        _deliverData = _config["DeliverData"]?.ToLower() != "false";
-        _trackRunOnceMigrations = _config["TrackRunOnceMigrations"]?.ToLower() != "false";
-        _pruneObsoleteMigrationTracking = _config["PruneObsoleteMigrationTracking"]?.ToLower() != "false";
+        _forceReKindle = CommandLineParser.ContainsSwitch("ForceReKindle") || _config[SettingsKeys.ForceReKindle]?.ToLower() == "true";
+        _updateTables = _config[SettingsKeys.UpdateTables]?.ToLower() != "false";
+        _deliverData = _config[SettingsKeys.DeliverData]?.ToLower() != "false";
+        _trackRunOnceMigrations = _config[SettingsKeys.TrackRunOnceMigrations]?.ToLower() != "false";
+        _pruneObsoleteMigrationTracking = _config[SettingsKeys.PruneObsoleteMigrationTracking]?.ToLower() != "false";
         _protectedMode = ProtectedModeEnabled(_config);
-        _targetTemplates = ReadFilterArray("Target:Templates");
-        _targetDatabases = ReadFilterArray("Target:Databases");
-        _targetSchemas = ReadFilterArray("Target:Schemas");
+        _targetTemplates = ReadFilterArray(SettingsKeys.Target.Templates);
+        _targetDatabases = ReadFilterArray(SettingsKeys.Target.Databases);
+        _targetSchemas = ReadFilterArray(SettingsKeys.Target.Schemas);
         _templateTargets = ReadTemplateTargets(_config);
         _checkpointing = FileCheckpointManager.GetFromFactory();
 
         // Secondary servers are SqlServer-only (Availability Groups)
         if (_product.Platform == Platform.SqlServer)
         {
-            _secondaryServers.AddRange((_config["Target:SecondaryServers"] ?? "")
+            _secondaryServers.AddRange((_config[SettingsKeys.Target.SecondaryServers] ?? "")
                 .Split([','], StringSplitOptions.RemoveEmptyEntries)
                 .Where(s => !string.IsNullOrWhiteSpace(s)));
         }
@@ -196,7 +197,7 @@ public class ProductQuench
     // PreventDropSummary manifest, and the run completes normally (exit 0). Transient drop-then-
     // recreate that is part of applying a declared change is unaffected — protected mode touches
     // only the by-absence lever.
-    internal static bool ProtectedModeEnabled(IConfiguration config) => ConfigBool(config, "PreventDrop") == true;
+    internal static bool ProtectedModeEnabled(IConfiguration config) => ConfigBool(config, SettingsKeys.PreventDrop) == true;
 
     /// <summary>
     /// Reads <c>Target.TemplateTargets</c> from configuration into the per-template override map.
@@ -210,20 +211,20 @@ public class ProductQuench
     internal static IReadOnlyDictionary<string, TemplateTarget> ReadTemplateTargets(IConfiguration config)
     {
         var result = new Dictionary<string, TemplateTarget>(StringComparer.OrdinalIgnoreCase);
-        var section = config.GetSection("Target:TemplateTargets");
+        var section = config.GetSection(SettingsKeys.Target.TemplateTargets);
         foreach (var child in section.GetChildren())
         {
             var templateName = child.Key;
-            var createIfMissingSection = child.GetSection("CreateIfMissing");
+            var createIfMissingSection = child.GetSection(SettingsKeys.TemplateTarget.CreateIfMissing);
             var createIfMissingRaw = createIfMissingSection.Value;
             var target = new TemplateTarget
             {
-                Databases = child.GetSection("Databases").GetChildren()
+                Databases = child.GetSection(SettingsKeys.TemplateTarget.Databases).GetChildren()
                     .Select(c => c.Value)
                     .Where(v => !string.IsNullOrWhiteSpace(v))
                     .Select(v => v!.Trim())
                     .ToList(),
-                Schemas = child.GetSection("Schemas").GetChildren()
+                Schemas = child.GetSection(SettingsKeys.TemplateTarget.Schemas).GetChildren()
                     .Select(c => c.Value)
                     .Where(v => !string.IsNullOrWhiteSpace(v))
                     .Select(v => v!.Trim())
@@ -441,7 +442,7 @@ public class ProductQuench
         }
         catch (Exception e)
         {
-            throw new Exception($"Unable to connect to {server}{(!string.IsNullOrWhiteSpace(_config["Target:User"]) ? $" with user {_config["Target:User"]}" : "")}", e);
+            throw new Exception($"Unable to connect to {server}{(!string.IsNullOrWhiteSpace(_config[SettingsKeys.Target.User]) ? $" with user {_config[SettingsKeys.Target.User]}" : "")}", e);
         }
         var command = connection.CreateCommand();
         command.CommandTimeout = 0;
@@ -486,7 +487,7 @@ public class ProductQuench
         }
         catch (Exception e)
         {
-            throw new Exception($"Unable to connect to {server} [IdentificationDatabase: {ResolveIdentificationDatabase(template)}]{(!string.IsNullOrWhiteSpace(_config["Target:User"]) ? $" with user {_config["Target:User"]}" : "")}", e);
+            throw new Exception($"Unable to connect to {server} [IdentificationDatabase: {ResolveIdentificationDatabase(template)}]{(!string.IsNullOrWhiteSpace(_config[SettingsKeys.Target.User]) ? $" with user {_config[SettingsKeys.Target.User]}" : "")}", e);
         }
         var command = connection.CreateCommand();
         command.CommandTimeout = 0;
@@ -534,7 +535,7 @@ public class ProductQuench
         }
         catch (Exception e)
         {
-            throw new Exception($"Unable to connect to {server}{(!string.IsNullOrWhiteSpace(_config["Target:User"]) ? $" with user {_config["Target:User"]}" : "")}", e);
+            throw new Exception($"Unable to connect to {server}{(!string.IsNullOrWhiteSpace(_config[SettingsKeys.Target.User]) ? $" with user {_config[SettingsKeys.Target.User]}" : "")}", e);
         }
         var command = connection.CreateCommand();
         command.CommandTimeout = 0;
@@ -681,8 +682,8 @@ public class ProductQuench
 
         if (_protectedMode)
             _progressLog.Info("PreventDrop is ENABLED — this environment will skip every drop-by-absence and report the suppressed drops (no objects are dropped for being absent from the product).");
-        else if (!string.IsNullOrWhiteSpace(_config["PreventDrop"]) && ConfigBool(_config, "PreventDrop") == null)
-            _progressLog.Warn($"PreventDrop value '{_config["PreventDrop"]}' is not a recognized boolean (true/false) — the no-drop protection tier is NOT enabled.");
+        else if (!string.IsNullOrWhiteSpace(_config[SettingsKeys.PreventDrop]) && ConfigBool(_config, SettingsKeys.PreventDrop) == null)
+            _progressLog.Warn($"PreventDrop value '{_config[SettingsKeys.PreventDrop]}' is not a recognized boolean (true/false) — the no-drop protection tier is NOT enabled.");
 
         LogProductInfo();
 
@@ -894,7 +895,7 @@ public class ProductQuench
     }
 
     private int BottleneckThresholdMs() =>
-        int.TryParse(_config["BottleneckThresholdMs"], out var ms) && ms >= 0 ? ms : 30000;
+        int.TryParse(_config[SettingsKeys.BottleneckThresholdMs], out var ms) && ms >= 0 ? ms : 30000;
 
     // Mirrors CommandLineParser.ShowVersionAndExit's reflection so the deployment summary
     // reports the same tool version the CLI's --version switch shows.
@@ -1792,28 +1793,28 @@ public class ProductQuench
     private void RunOneWorkUnit(WorkUnit unit, Template template, bool suppressKindling)
     {
         var dropRemovedTables = FormatBooleanFlag(ResolveCascadedFlag(
-            ConfigBool(_config, "DropTablesRemovedFromProduct"), _product.DropTablesRemovedFromProduct,
+            ConfigBool(_config, SettingsKeys.DropTablesRemovedFromProduct), _product.DropTablesRemovedFromProduct,
             template.DropTablesRemovedFromProduct, defaultValue: true));
         var dropRemovedColumns = FormatBooleanFlag(ResolveCascadedFlag(
-            ConfigBool(_config, "DropColumnsRemovedFromProduct"), _product.DropColumnsRemovedFromProduct,
+            ConfigBool(_config, SettingsKeys.DropColumnsRemovedFromProduct), _product.DropColumnsRemovedFromProduct,
             template.DropColumnsRemovedFromProduct, defaultValue: true));
         var dropRemovedForeignKeys = FormatBooleanFlag(ResolveCascadedFlag(
-            ConfigBool(_config, "DropForeignKeysRemovedFromProduct"), _product.DropForeignKeysRemovedFromProduct,
+            ConfigBool(_config, SettingsKeys.DropForeignKeysRemovedFromProduct), _product.DropForeignKeysRemovedFromProduct,
             template.DropForeignKeysRemovedFromProduct, defaultValue: true));
         var dropRemovedCheckConstraints = FormatBooleanFlag(ResolveCascadedFlag(
-            ConfigBool(_config, "DropCheckConstraintsRemovedFromProduct"), _product.DropCheckConstraintsRemovedFromProduct,
+            ConfigBool(_config, SettingsKeys.DropCheckConstraintsRemovedFromProduct), _product.DropCheckConstraintsRemovedFromProduct,
             template.DropCheckConstraintsRemovedFromProduct, defaultValue: true));
         var dropRemovedExcludeConstraints = FormatBooleanFlag(ResolveCascadedFlag(
-            ConfigBool(_config, "DropExcludeConstraintsRemovedFromProduct"), _product.DropExcludeConstraintsRemovedFromProduct,
+            ConfigBool(_config, SettingsKeys.DropExcludeConstraintsRemovedFromProduct), _product.DropExcludeConstraintsRemovedFromProduct,
             template.DropExcludeConstraintsRemovedFromProduct, defaultValue: true));
         var dropRemovedStatistics = FormatBooleanFlag(ResolveCascadedFlag(
-            ConfigBool(_config, "DropStatisticsRemovedFromProduct"), _product.DropStatisticsRemovedFromProduct,
+            ConfigBool(_config, SettingsKeys.DropStatisticsRemovedFromProduct), _product.DropStatisticsRemovedFromProduct,
             template.DropStatisticsRemovedFromProduct, defaultValue: true));
         var dropRemovedIndexes = FormatBooleanFlag(ResolveCascadedFlag(
-            ConfigBool(_config, "DropIndexesRemovedFromProduct"), _product.DropIndexesRemovedFromProduct,
+            ConfigBool(_config, SettingsKeys.DropIndexesRemovedFromProduct), _product.DropIndexesRemovedFromProduct,
             template.DropIndexesRemovedFromProduct, defaultValue: true));
         var dropUnknownIndexes = ResolveCascadedFlag(
-            ConfigBool(_config, "DropUnknownIndexes"), _product.DropUnknownIndexes,
+            ConfigBool(_config, SettingsKeys.DropUnknownIndexes), _product.DropUnknownIndexes,
             template.DropUnknownIndexes, defaultValue: false);
         // No-drop protection tier (#270 Slice E): a protected environment never drops an object BY
         // ABSENCE. Force every Drop…RemovedFromProduct lever (and DropUnknownIndexes) false so the
@@ -1984,11 +1985,11 @@ public class ProductQuench
     /// </summary>
     private string ResolveArtifactDirectory()
     {
-        var configured = _config["ArtifactPath"];
+        var configured = _config[SettingsKeys.ArtifactPath];
         return string.IsNullOrWhiteSpace(configured) ? Directory.GetCurrentDirectory() : configured;
     }
 
-    private bool ScrubArtifactsEnabled => _config["ScrubArtifacts"]?.ToLower() == "true";
+    private bool ScrubArtifactsEnabled => _config[SettingsKeys.ScrubArtifacts]?.ToLower() == "true";
 
     private IReadOnlyList<KeyValuePair<string, string>> SensitiveTokenValues() =>
         _product.ScriptTokens

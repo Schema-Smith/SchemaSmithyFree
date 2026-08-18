@@ -33,7 +33,7 @@ public static class Program
         if (CommandLineParser.ContainsSwitch("Validate"))
         {
             var validator = new SchemaPackageValidator(PackageLoader.LoadPackage, ValidationCheckRegistry.Default());
-            var result = validator.Validate(config["SchemaPackagePath"] ?? ".");
+            var result = validator.Validate(config[SettingsKeys.SchemaPackagePath] ?? ".");
             foreach (var line in ValidationReporter.Render(result.Findings))
                 LogFactory.GetLogger("ProgressLog").Info(line);
             LogBackup.BackupLogsAndExit("SchemaQuench", result.HasErrors ? 2 : 0);
@@ -105,7 +105,7 @@ public static class Program
     {
         var dir = CommandLineParser.ValueOfSwitch("CheckpointDirectory");
         if (string.IsNullOrWhiteSpace(dir))
-            dir = FactoryContainer.Resolve<IConfigurationRoot>()?["CheckpointDirectory"];
+            dir = FactoryContainer.Resolve<IConfigurationRoot>()?[SettingsKeys.CheckpointDirectory];
         if (!string.IsNullOrWhiteSpace(dir))
             FactoryContainer.Register<ICheckpointing>(new FileCheckpointManager(dir));
     }

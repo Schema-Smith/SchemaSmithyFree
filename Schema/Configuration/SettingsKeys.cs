@@ -32,6 +32,17 @@ public static class SettingsKeys
         public const string TemplateTargets = "Target:TemplateTargets";
     }
 
+    /// <summary>
+    /// Members of a single <c>Target:TemplateTargets:&lt;Template&gt;</c> entry. Read relative to an
+    /// already-resolved per-template section, so these are bare names rather than full paths.
+    /// </summary>
+    public static class TemplateTarget
+    {
+        public const string Databases = "Databases";
+        public const string Schemas = "Schemas";
+        public const string CreateIfMissing = "CreateIfMissing";
+    }
+
     /// <summary>SchemaTongs / DataTongs extraction source.</summary>
     public static class Source
     {
@@ -136,7 +147,6 @@ public static class SettingsKeys
     public const string BottleneckThresholdMs = "BottleneckThresholdMs";
     public const string TrackRunOnceMigrations = "TrackRunOnceMigrations";
     public const string PruneObsoleteMigrationTracking = "PruneObsoleteMigrationTracking";
-    public const string MinimumVersion = "MinimumVersion";
     public const string UnsupportedFeaturePolicy = "Target:UnsupportedFeaturePolicy";
     public const string CompatEncoding = "Target:CompatEncoding";
     public const string SourceCompatEncoding = "Source:CompatEncoding";
@@ -158,6 +168,4 @@ public static class SettingsKeys
     public const string Zip = "Zip";
     public const string AllowDrops = "AllowDrops";
 
-    // ---- Test/diagnostic ------------------------------------------------------------------------
-    public const string CustomKey = "CustomKey";
 }

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Schema.Domain;
 using Schema.Utility;
+using Schema.Configuration;
 
 namespace Schema.DataAccess;
 
@@ -22,7 +23,7 @@ public static class TargetConnectionString
     public static string Build(Platform platform, string server, string database, IConfigurationRoot config)
     {
         return ConnectionString.Build(platform, server, database,
-            config["Target:User"], config["Target:Password"], config["Target:Port"],
+            config[SettingsKeys.Target.User], config[SettingsKeys.Target.Password], config[SettingsKeys.Target.Port],
             ReadConnectionProperties(platform, config),
             integratedSecurity: IsIntegratedSecurity(config));
     }
@@ -34,7 +35,7 @@ public static class TargetConnectionString
     /// </summary>
     public static Dictionary<string, string> ReadConnectionProperties(Platform platform, IConfigurationRoot config)
     {
-        var props = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+        var props = ConnectionString.ReadProperties(config, SettingsKeys.Target.ConnectionProperties);
         CommandLineParser.ApplyTransportSecuritySwitch(platform, props);
         return props;
     }
@@ -44,5 +45,5 @@ public static class TargetConnectionString
     // credential a settings file carries (setting an env var to empty deletes it on Windows), so a
     // checked-in "User": "sa" would otherwise block Windows Authentication. SQL Server only.
     public static bool IsIntegratedSecurity(IConfigurationRoot config) =>
-        string.Equals(config["Target:IntegratedSecurity"], "true", StringComparison.OrdinalIgnoreCase);
+        string.Equals(config[SettingsKeys.Target.IntegratedSecurity], "true", StringComparison.OrdinalIgnoreCase);
 }

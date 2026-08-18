@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Schema.Domain;
+using Schema.Configuration;
 
 namespace SchemaTongs;
 
@@ -25,7 +26,7 @@ public class FolderMappingConfig
         foreach (var folder in defaults.Where(f => f.ObjectType != ScriptObjectType.None))
             _mappings[folder.ObjectType] = folder.FolderPath;
 
-        var section = config.GetSection("FolderMapping");
+        var section = config.GetSection(SettingsKeys.FolderMapping);
         if (!section.Exists()) return;
 
         foreach (var child in section.GetChildren())
