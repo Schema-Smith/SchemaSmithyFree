@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 
 namespace Schema.Configuration;
@@ -124,6 +126,44 @@ public static class SettingsContract
     public static IReadOnlyCollection<string> AllAcceptedKeys() =>
         ToolKeys.Values.SelectMany(v => v).Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// Sections whose children are operator-supplied values rather than setting names. Exposed so a
+    /// consumer can reproduce the "is this a real setting?" decision without re-deriving the rule.
+    /// </summary>
+    public static IReadOnlyCollection<string> OpenSectionNames() => OpenSections.ToList();
+
+    /// <summary>Settings bound positionally from a JSON array.</summary>
+    public static IReadOnlyCollection<string> ArrayKeyNames() => ArrayPrefixes.ToList();
+
+    /// <summary>
+    /// The contract as JSON, for a consumer that cannot reference this assembly — and as the source of
+    /// the committed <c>settings-contract.json</c>, which a test pins to this output so the published
+    /// artifact can never describe a surface the code no longer has.
+    /// </summary>
+    public static string ToJson()
+    {
+        var doc = new SettingsContractDocument
+        {
+            Description = "Machine-readable projection of the SchemaSmith settings contract. " +
+                          "Generated from Schema.Configuration.SettingsContract — do not hand-edit; " +
+                          "a unit test fails if this file and the code disagree.",
+            Tools = Enum.GetValues<SettingsTool>()
+                .ToDictionary(t => t.ToString(), t => AcceptedKeys(t).ToArray()),
+            Open = OpenSectionNames().OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToArray(),
+            Arrays = ArrayKeyNames().OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToArray()
+        };
+
+        return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private sealed class SettingsContractDocument
+    {
+        [JsonPropertyName("description")] public string Description { get; set; }
+        [JsonPropertyName("tools")] public Dictionary<string, string[]> Tools { get; set; }
+        [JsonPropertyName("openSections")] public string[] Open { get; set; }
+        [JsonPropertyName("arrayKeys")] public string[] Arrays { get; set; }
+    }
 
     public static bool IsOpenSection(string key) =>
         OpenSections.Any(s => key.StartsWith(s + ":", StringComparison.OrdinalIgnoreCase) ||

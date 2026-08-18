@@ -30,6 +30,9 @@
 		<EmbeddedResource Include="Scripts\PostgreSQL\*.json" />
 		<EmbeddedResource Include="Scripts\MySQL\*.json" />
 		<EmbeddedResource Include="Scripts\MariaDb\*.json" />
+		<!-- Ships in SchemaSmith.Schema so a consumer can read the settings contract without
+		     referencing the assembly. SettingsContract.ToJson() produces the same content. -->
+		<EmbeddedResource Include="Configuration\settings-contract.json" />
 	</ItemGroup>
 
 	<ItemGroup>
