@@ -114,12 +114,23 @@ public abstract class SchemaTongsSharedTests
             var config = SetupConfig();
             config["ShouldCast:Procedures"] = "true";
 
+            string script = null;
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Procedures") && s.EndsWithIgnoringCase("TestProcedure.sql")), Arg.Any<string>()))
+                .Do(ci => script = ci.ArgAt<string>(1));
+
             var tongs = new SchemaTongs(Platform);
             tongs.CastTemplate();
 
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Procedures") && s.EndsWithIgnoringCase("TestProcedure.sql")), Arg.Any<string>());
+
+            // Assert on content, not just that a file was written: a NULL in the script-building
+            // concatenation yields an empty file, which the per-row extraction counter reports as a
+            // success. The parameter check also guards the signature against a stray return row.
+            Assert.That(script, Is.Not.Null.And.Not.Empty, "TestProcedure.sql was written empty");
+            Assert.That(script, Does.Contain("CREATE PROCEDURE"));
+            Assert.That(script, Does.Contain("(IN param "));
 
             config["ShouldCast:Procedures"] = "false";
             FactoryContainer.Clear();
@@ -145,12 +156,24 @@ public abstract class SchemaTongsSharedTests
             var config = SetupConfig();
             config["ShouldCast:Functions"] = "true";
 
+            string script = null;
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Functions") && s.EndsWithIgnoringCase("TestFunction.sql")), Arg.Any<string>()))
+                .Do(ci => script = ci.ArgAt<string>(1));
+
             var tongs = new SchemaTongs(Platform);
             tongs.CastTemplate();
 
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Functions") && s.EndsWithIgnoringCase("TestFunction.sql")), Arg.Any<string>());
+
+            // See ShouldCastStoredProcedures. "(param " additionally pins the signature: a function's
+            // return value is a parameter row with a NULL name, and including it would emit a phantom
+            // leading parameter.
+            Assert.That(script, Is.Not.Null.And.Not.Empty, "TestFunction.sql was written empty");
+            Assert.That(script, Does.Contain("CREATE FUNCTION"));
+            Assert.That(script, Does.Contain("(param "));
+            Assert.That(script, Does.Contain("RETURNS "));
 
             config["ShouldCast:Functions"] = "false";
             FactoryContainer.Clear();

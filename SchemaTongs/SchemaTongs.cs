@@ -2471,6 +2471,10 @@ SELECT mv.schemaname, mv.matviewname
     private void ScriptMySqlFunctions(IDbCommand command, string targetSchema)
     {
         _progressLog.Info("Casting Function Scripts");
+        // EXTERNAL_LANGUAGE is NULL on MariaDB for SQL routines (MySQL reports 'SQL'), and one NULL
+        // operand nulls the whole || chain, yielding an empty script file. ORDINAL_POSITION 0 is the
+        // function's return value, excluded explicitly rather than relying on GROUP_CONCAT skipping
+        // its NULL PARAMETER_NAME — which is why the parameter columns must NOT be COALESCEd.
         command.CommandText = $@"
 SELECT 'Functions' AS Folder,
        ROUTINE_NAME AS FullName,
@@ -2480,8 +2484,9 @@ SELECT 'Functions' AS Folder,
                    FROM INFORMATION_SCHEMA.PARAMETERS p
                    WHERE p.SPECIFIC_NAME = r.ROUTINE_NAME
                      AND p.ROUTINE_TYPE = r.ROUTINE_TYPE
-                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA), '') || ')\n  RETURNS ' || DTD_IDENTIFIER ||
-       '\n' || '  LANGUAGE ' || EXTERNAL_LANGUAGE ||
+                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA
+                     AND p.ORDINAL_POSITION > 0), '') || ')\n  RETURNS ' || DTD_IDENTIFIER ||
+       '\n' || '  LANGUAGE ' || COALESCE(EXTERNAL_LANGUAGE, 'SQL') ||
        '\n' || CASE WHEN IS_DETERMINISTIC = 'Yes' THEN '  DETERMINISTIC' ELSE '  NOT DETERMINISTIC' END ||
        CASE WHEN NULLIF(SQL_DATA_ACCESS, '') IS NOT NULL THEN '\n  ' || SQL_DATA_ACCESS ELSE '' END ||
        '\n' || '  SQL SECURITY ' || SECURITY_TYPE ||
@@ -2511,6 +2516,8 @@ SELECT 'Views' AS Folder,
     private void ScriptMySqlProcedures(IDbCommand command, string targetSchema)
     {
         _progressLog.Info("Casting Stored Procedure Scripts");
+        // See ScriptMySqlFunctions: EXTERNAL_LANGUAGE is NULL on MariaDB and would null the whole
+        // || chain, writing a 0-byte script.
         command.CommandText = $@"
 SELECT 'Procedures' AS Folder,
        ROUTINE_NAME AS FullName,
@@ -2520,8 +2527,9 @@ SELECT 'Procedures' AS Folder,
                    FROM INFORMATION_SCHEMA.PARAMETERS p
                    WHERE p.SPECIFIC_NAME = r.ROUTINE_NAME
                      AND p.ROUTINE_TYPE = r.ROUTINE_TYPE
-                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA), '') || ')' ||
-       '\n' || '  LANGUAGE ' || EXTERNAL_LANGUAGE ||
+                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA
+                     AND p.ORDINAL_POSITION > 0), '') || ')' ||
+       '\n' || '  LANGUAGE ' || COALESCE(EXTERNAL_LANGUAGE, 'SQL') ||
        '\n' || CASE WHEN IS_DETERMINISTIC = 'Yes' THEN '  DETERMINISTIC' ELSE '  NOT DETERMINISTIC' END ||
        CASE WHEN NULLIF(SQL_DATA_ACCESS, '') IS NOT NULL THEN '\n  ' || SQL_DATA_ACCESS ELSE '' END ||
        '\n' || '  SQL SECURITY ' || SECURITY_TYPE ||
