@@ -164,7 +164,7 @@ public class DatabaseQuench
     private int _postgreSqlServerVersionNum; // 0 until detected; only meaningful when Platform == PostgreSQL
     private int _mySqlServerVersionNum; // 0 until detected (major*100+minor); only meaningful for MySQL/MariaDb
     private int _sqlServerCompatibilityLevel; // 0 until detected; SQL-Server-only; gates JSON data delivery below 130 (B1 slice 2)
-    private string _unsupportedFeaturePolicy; // Target:UnsupportedFeaturePolicy; governs the MySQL data-delivery gate
+    private string _unsupportedFeaturePolicy; // Target:UnsupportedFeaturePolicy (warn | fail, default warn); general all-engine policy, not just the MySQL data-delivery gate
 
     // A1: the per-target version script tokens ({{ServerMajorVersion}} / {{CompatibilityLevel}}),
     // built from the detected TargetVersionInfo in Phase B (post-connection) and applied wherever

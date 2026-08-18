@@ -229,7 +229,7 @@ Where the counts are the summary, `details[]` is the itemized list — one row p
 
 - **`statistic`** — a statistics object created (SQL Server and PostgreSQL).
 - **`xmlIndex`** — an XML index created (SQL Server).
-- **`fullTextIndex`** — a full-text index created (SQL Server). MySQL and MariaDB support full-text indexes too, but their audit records them under the generic `index` type rather than a dedicated one.
+- **`fullTextIndex`** — a full-text index created or dropped (SQL Server, MySQL, MariaDB).
 - **`constraint`** — includes exclude constraints (PostgreSQL), which land in the generic constraint type.
 
 These appear as `details[]` rows with their real `objectType` and `action` even though no top-level count field aggregates them — the detail is preserved even where the summary doesn't bucket it.
@@ -245,7 +245,7 @@ These appear as `details[]` rows with their real `objectType` and `action` even 
 
 ## Cross-platform
 
-The report shape is identical on SQL Server, PostgreSQL, MySQL, and MariaDB — same keys, same nesting, same enum values. The `platform` field tells you which engine produced it, and a few `details[]` object types are engine-specific (statistics on SQL Server and PostgreSQL, the XML and full-text index types on SQL Server, exclude constraints on PostgreSQL), but the contract is one shape across all four. A dashboard that parses a SQL Server report parses a MySQL or MariaDB one unchanged.
+The report shape is identical on SQL Server, PostgreSQL, MySQL, and MariaDB — same keys, same nesting, same enum values. The `platform` field tells you which engine produced it, and a few `details[]` object types are engine-specific (statistics on SQL Server and PostgreSQL, XML indexes on SQL Server, full-text indexes on SQL Server / MySQL / MariaDB, exclude constraints on PostgreSQL), but the contract is one shape across all four. A dashboard that parses a SQL Server report parses a MySQL or MariaDB one unchanged.
 
 ## What's next
 
