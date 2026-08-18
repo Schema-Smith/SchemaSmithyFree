@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using Microsoft.Extensions.Configuration;
 using Schema.Isolators;
+using Schema.Configuration;
 using Schema.Utility;
 
 namespace SchemaShears;
@@ -20,6 +21,7 @@ public static class Program
         CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
 
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
+        SettingsContract.WarnOnUnrecognizedKeys(config, SettingsTool.SchemaShears, LogFactory.GetLogger("ProgressLog").Warn);
         var allowDropsRaw = CommandLineParser.ValueOfSwitch("AllowDrops", config["AllowDrops"]);
         var allowDrops = (allowDropsRaw ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

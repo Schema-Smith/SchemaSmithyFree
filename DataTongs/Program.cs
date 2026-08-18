@@ -3,6 +3,7 @@
 using System;
 using Schema.Domain;
 using Schema.Isolators;
+using Schema.Configuration;
 using Schema.Utility;
 using Microsoft.Extensions.Configuration;
 
@@ -16,8 +17,9 @@ public static class Program
 
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
-        ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", LogFactory.GetLogger("ProgressLog").Info);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("DataTongs", LogFactory.GetLogger("ProgressLog").Info);
         CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
+        SettingsContract.WarnOnUnrecognizedKeys(config, SettingsTool.DataTongs, LogFactory.GetLogger("ProgressLog").Warn);
 
         var platform = ResolvePlatform();
 

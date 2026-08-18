@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Schema.Checkpointing;
 using Schema.Domain;
 using Schema.Isolators;
+using Schema.Configuration;
 using Schema.Utility;
 using Schema.Validation;
 
@@ -21,6 +22,7 @@ public static class Program
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
         CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
+        SettingsContract.WarnOnUnrecognizedKeys(config, SettingsTool.SchemaQuench, LogFactory.GetLogger("ProgressLog").Warn);
 
         RegisterCheckpointing();
 

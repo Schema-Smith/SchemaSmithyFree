@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using Schema.Domain;
 using Schema.Isolators;
+using Schema.Configuration;
 using Schema.Utility;
 
 namespace SchemaTongs;
@@ -16,8 +17,9 @@ public static class Program
 
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
-        ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
         CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
+        SettingsContract.WarnOnUnrecognizedKeys(config, SettingsTool.SchemaTongs, LogFactory.GetLogger("ProgressLog").Warn);
 
         if (CommandLineParser.ContainsSwitch("WriteSchemasOnly"))
         {

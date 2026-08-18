@@ -24,7 +24,6 @@
         "MergeUpdate": true, // Include UPDATE clause in merge scripts
         "MergeDelete": false, // Include DELETE clause in merge scripts
         "ConfigureDataDelivery": false, // Auto-configure data delivery settings on Table JSON files after extraction
-        "MergeType": "Insert/Update", // Default merge type: None, Insert, Insert/Update, Insert/Update/Delete
 
         // PostgreSQL only
         "DisableRules": false, // Disable rules during data delivery
