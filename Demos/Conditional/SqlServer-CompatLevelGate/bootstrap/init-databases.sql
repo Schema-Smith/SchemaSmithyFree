@@ -16,7 +16,8 @@ GO
 ALTER DATABASE AppDb_Modern SET COMPATIBILITY_LEVEL = 160;
 GO
 
--- 130 is SchemaSmith's SQL Server compatibility-level floor, so this is the oldest
--- database the tool will deploy to at all.
+-- 130 is this demo's chosen lower rung -- high enough that GENERATE_SERIES (compat 160)
+-- is the only variable, without also crossing SchemaSmith's JSON->XML model-ingest cliff
+-- below compat 130. SchemaSmith's actual SQL Server floor is compatibility level 100.
 ALTER DATABASE AppDb_Legacy SET COMPATIBILITY_LEVEL = 130;
 GO
