@@ -1,0 +1,45 @@
+{
+  "Schema": "dbo",
+  "Name": "OrderSummary",
+  "Columns": [
+    {
+      "Name": "OrderSummaryID",
+      "DataType": "INT"
+    },
+    {
+      "Name": "CustomerId",
+      "DataType": "INT",
+      "Nullable": false
+    },
+    {
+      "Name": "PlacedAt",
+      "DataType": "DATETIME2",
+      "Nullable": false
+    },
+    {
+      "Name": "OrderTotal",
+      "DataType": "DECIMAL(18,2)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_OrderSummary",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "OrderSummaryID"
+    },
+    {
+      "Name": "IX_OrderSummary_Placed",
+      "IndexColumns": "PlacedAt, CustomerId",
+      "ShouldApplyExpression": "{{CompatibilityLevel}} >= 160",
+      "VariantName": "Modern (compat 160+)"
+    },
+    {
+      "Name": "IX_OrderSummary_Placed",
+      "IndexColumns": "PlacedAt",
+      "ShouldApplyExpression": "{{CompatibilityLevel}} < 160",
+      "VariantName": "Legacy (compat < 160)"
+    }
+  ]
+}

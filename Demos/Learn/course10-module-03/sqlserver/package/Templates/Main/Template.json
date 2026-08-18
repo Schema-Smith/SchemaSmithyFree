@@ -1,0 +1,6 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT [name] FROM sys.databases WHERE [name] IN ('learn_2022', 'learn_2016', 'learn_2008')",
+  "ScriptFolders": [],
+  "ScriptTokens": {}
+}

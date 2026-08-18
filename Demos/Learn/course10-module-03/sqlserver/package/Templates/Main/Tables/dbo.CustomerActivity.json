@@ -1,0 +1,33 @@
+{
+  "Schema": "dbo",
+  "Name": "CustomerActivity",
+  "Columns": [
+    {
+      "Name": "CustomerActivityID",
+      "DataType": "INT"
+    },
+    {
+      "Name": "CustomerId",
+      "DataType": "INT",
+      "Nullable": false
+    },
+    {
+      "Name": "LastSeenAt",
+      "DataType": "DATETIME2",
+      "Nullable": false
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_CustomerActivity",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "CustomerActivityID"
+    },
+    {
+      "Name": "IX_CustomerActivity_LastSeen",
+      "IndexColumns": "LastSeenAt, CustomerId",
+      "ShouldApplyExpression": "EXISTS (SELECT 1 FROM dbo.RolloutControl WHERE feature = 'CustomerActivityIndex' AND status = 'Ready')"
+    }
+  ]
+}
