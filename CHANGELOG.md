@@ -6,6 +6,10 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ## [Unreleased]
 
+### Added
+
+- **`Template.SkipIfReadOnly` now does what it says.** The setting has been present in `Template.json` and the generated `.schema` files — and documented — but nothing ever read it, so a template marked `SkipIfReadOnly: true` still attempted to deploy to a read-only database and failed. It is now honored on all four engines: a read-only target is skipped with a log line naming the target and template, and the run continues. The motivating case is a SQL Server Availability Group readable secondary, where a template that must still *validate* against the secondary should not try to *apply* there; a PostgreSQL hot standby and a MySQL/MariaDB replica are the same situation. Detection is per engine — `DATABASEPROPERTYEX(..., 'Updateability')` on SQL Server (covering both an AG readable secondary and a database explicitly `SET READ_ONLY`), `pg_is_in_recovery()` / `transaction_read_only` on PostgreSQL, and `@@read_only` on MySQL and MariaDB (MySQL also checks `@@super_read_only`, which does not exist on MariaDB). A skipped target still counts as a discovered target, so `RequireAtLeastOneTarget` is unaffected.
+
 ### Fixed
 
 - **`Target:IntegratedSecurity` reached the connection test but not the deploy.** A SchemaQuench run that set `Target:IntegratedSecurity=true` while a `Target:User`/`Target:Password` was also configured — the exact scenario the setting exists for, layering Windows Authentication over a checked-in credential — connected successfully during the server connection test and then failed on every database with `Login failed for user '<user>'`. The server-level connection honored the flag; the per-database connection that does the deploying did not, and used the configured credential instead. Both now build through one shared connection builder, so an integrated-security run authenticates the same way end to end. SQL Server only. — #379

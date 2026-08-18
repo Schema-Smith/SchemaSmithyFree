@@ -435,6 +435,19 @@ public class DatabaseQuench
             using var command = connection.CreateCommand();
             command.CommandTimeout = 0;
 
+            // SkipIfReadOnly: the target still resolved and counted toward RequireAtLeastOneTarget,
+            // so the template validates normally — it just does not apply here. A read-only target
+            // (Availability Group secondary, hot standby, replica) cannot take DDL, and skipping is
+            // the intended outcome rather than a failure. Checked before the extra connections are
+            // opened so a skipped unit costs one connection, not four.
+            if (_template.SkipIfReadOnly && ReadOnlyTargetDetector.IsReadOnly(command, _product.Platform))
+            {
+                _progressLog.Info($"[{_server}].[{_databaseName}] is read-only; skipping template '{_template.Name}' (SkipIfReadOnly)");
+                QuenchSuccessful = true;
+                WasSkipped = true;
+                return;
+            }
+
             // SQL Server and PostgreSQL use multiple connections for parallel operations
             IDbConnection tableConnection = null;
             IDbCommand tableCommand = null;
