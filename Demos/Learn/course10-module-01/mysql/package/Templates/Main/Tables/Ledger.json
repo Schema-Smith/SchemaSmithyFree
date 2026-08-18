@@ -1,0 +1,31 @@
+{
+  "Name": "`Ledger`",
+  "Engine": "InnoDB",
+  "Columns": [
+    {
+      "Name": "`Id`",
+      "DataType": "INT",
+      "Nullable": false,
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`Amount`",
+      "DataType": "DECIMAL(12,2)",
+      "Nullable": false,
+      "Default": "0"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "IndexColumns": "`Id`"
+    }
+  ],
+  "CheckConstraints": [
+    {
+      "Name": "CK_Ledger_Amount",
+      "Expression": "`Amount` >= 0"
+    }
+  ]
+}

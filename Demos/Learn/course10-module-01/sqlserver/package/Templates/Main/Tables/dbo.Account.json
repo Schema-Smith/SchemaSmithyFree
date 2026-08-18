@@ -1,0 +1,27 @@
+{
+  "Schema": "dbo",
+  "Name": "Account",
+  "Columns": [
+    {
+      "Name": "AccountID",
+      "DataType": "INT"
+    },
+    {
+      "Name": "Email",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": true,
+      "DataMaskFunction": "email()",
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_Account",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "AccountID"
+    }
+  ]
+}

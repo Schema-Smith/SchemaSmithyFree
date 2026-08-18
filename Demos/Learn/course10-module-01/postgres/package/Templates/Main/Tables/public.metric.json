@@ -1,0 +1,32 @@
+{
+  "Schema": "public",
+  "Name": "metric",
+  "Columns": [
+    {
+      "Name": "Id",
+      "DataType": "INT"
+    },
+    {
+      "Name": "amount",
+      "DataType": "NUMERIC(12,2)",
+      "Nullable": true,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_metric",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "Id"
+    }
+  ],
+  "Statistics": [
+    {
+      "Name": "ST_metric_expr",
+      "StatisticsColumns": "(\"Id\" / 1)"
+    }
+  ]
+}

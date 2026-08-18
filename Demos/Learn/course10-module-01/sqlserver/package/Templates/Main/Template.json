@@ -1,0 +1,14 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT [Name] FROM sys.databases WHERE [Name] = 'learn_2008'",
+  "ScriptFolders": [
+    { "FolderPath": "Before Scripts" },
+    { "FolderPath": "Schemas", "QuenchSlot": "Objects", "ObjectType": "Schemas" },
+    { "FolderPath": "Functions", "QuenchSlot": "Objects", "ObjectType": "Functions" },
+    { "FolderPath": "Views", "QuenchSlot": "Objects", "ObjectType": "Views" },
+    { "FolderPath": "Procedures", "QuenchSlot": "Objects", "ObjectType": "Procedures" },
+    { "FolderPath": "Table Data", "QuenchSlot": "TableData" },
+    { "FolderPath": "After Scripts", "QuenchSlot": "After" }
+  ],
+  "ScriptTokens": {}
+}

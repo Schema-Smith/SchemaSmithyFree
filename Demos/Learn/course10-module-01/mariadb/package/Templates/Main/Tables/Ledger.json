@@ -1,0 +1,39 @@
+{
+  "Name": "`Ledger`",
+  "Engine": "InnoDB",
+  "Columns": [
+    {
+      "Name": "`Id`",
+      "DataType": "INT",
+      "Nullable": false,
+      "AutoIncrement": true
+    },
+    {
+      "Name": "`Amount`",
+      "DataType": "DECIMAL(12,2)",
+      "Nullable": false,
+      "Default": "0"
+    },
+    {
+      "Name": "`Region`",
+      "DataType": "VARCHAR(40)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PRIMARY",
+      "PrimaryKey": true,
+      "IndexColumns": "`Id`"
+    },
+    {
+      "Name": "IX_Ledger_Amount_Desc",
+      "IndexColumns": "`Amount` DESC"
+    },
+    {
+      "Name": "IX_Ledger_Region_Hidden",
+      "IndexColumns": "`Region`",
+      "Visible": false
+    }
+  ]
+}
