@@ -9,6 +9,7 @@ current ones, plus three SQL Server tiers on one instance.
 | Tier | SQL Server | PostgreSQL | MySQL | MariaDB |
 | --- | --- | --- | --- | --- |
 | **Current** | `learn_2022` (compat 160) | `16` | `8.0` | `11.4` |
+| **Mid** (SQL Server only) | `learn_2016` (compat 130) | — | — | — |
 | **Floor** | `learn_2008` (compat 100) | `12` | `5.7` | `10.2` |
 
 SQL Server is the one engine that does *not* get a second container. Instead, three databases
