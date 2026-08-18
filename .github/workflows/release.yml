@@ -29,7 +29,10 @@ jobs:
       - name: Verify CI passed
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
         run: |
+          set -uo pipefail
           # Check names must match the CI job names exactly. The PostgreSQL, MySQL, and MariaDB
           # integration jobs are each a matrix over latest + the supported floor, so every leg is a
           # separate check (e.g. "Integration Tests (PostgreSQL 14)") and all must have passed. A
@@ -46,15 +49,62 @@ jobs:
             "Coverage Gate"
             "check-headers"
           )
+
+          # A path that cannot change any test outcome. Everything else — all product code, engine
+          # scripts, test projects, TestProducts, Demos (their .json-schemas are asserted by the
+          # --Validate staleness check), and continuous-integration.yml itself, since changing CI
+          # changes what "passed" means — is product for this purpose. The list is deliberately
+          # conservative: a wrong "non-product" weakens the release gate, while a wrong "product"
+          # only costs a CI re-run.
+          is_non_product() {
+            case "$1" in
+              docs/*|*.md|.github/workflows/release.yml|.github/workflows/distribution-publish.yml|.github/ISSUE_TEMPLATE/*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # Build the set of commits whose green checks still hold for this tree: the release commit,
+          # plus each ancestor that differs from it ONLY in non-product paths. Equivalence is computed
+          # from the actual commit diff — never from a workflow trigger path-filter, and never by
+          # stubbing a required check green, which would report success without the tests having run.
+          TRUSTED_SHAS=("$RELEASE_SHA")
+          CANDIDATE="$RELEASE_SHA"
+          for _ in $(seq 1 25); do
+            PARENT=$(git rev-parse --verify -q "${CANDIDATE}^") || break
+            EQUIVALENT=1
+            while IFS= read -r changed; do
+              [ -z "$changed" ] && continue
+              if ! is_non_product "$changed"; then EQUIVALENT=0; break; fi
+            done < <(git diff --name-only "$PARENT" "$RELEASE_SHA")
+            [ "$EQUIVALENT" -eq 1 ] || break
+            TRUSTED_SHAS+=("$PARENT")
+            CANDIDATE="$PARENT"
+          done
+
+          if [ "${#TRUSTED_SHAS[@]}" -gt 1 ]; then
+            echo "Release commit differs from ${#TRUSTED_SHAS[@]} ancestor tree(s) only in non-product paths;"
+            echo "their CI results still describe this product tree and are accepted:"
+            for s in "${TRUSTED_SHAS[@]:1}"; do echo "  - $s"; done
+          fi
+
+          check_result_on() {
+            gh api "repos/${REPO}/commits/$1/check-runs" \
+              --jq "[.check_runs[] | select(.name == \"$2\")] | sort_by(.completed_at) | last | .conclusion"
+          }
+
           FAILED=0
           for check in "${REQUIRED_CHECKS[@]}"; do
-            RESULT=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs \
-              --jq "[.check_runs[] | select(.name == \"$check\")] | sort_by(.completed_at) | last | .conclusion")
-            if [ "$RESULT" != "success" ]; then
-              echo "::error::Required CI check '$check' has not passed on this commit (result: ${RESULT:-not found}). Run CI first."
+            PASSED_ON=""
+            for sha in "${TRUSTED_SHAS[@]}"; do
+              if [ "$(check_result_on "$sha" "$check")" = "success" ]; then PASSED_ON="$sha"; break; fi
+            done
+            if [ -z "$PASSED_ON" ]; then
+              echo "::error::Required CI check '$check' has not passed on this commit or any product-identical ancestor. Run CI first."
               FAILED=1
-            else
+            elif [ "$PASSED_ON" = "$RELEASE_SHA" ]; then
               echo "  ✓ $check"
+            else
+              echo "  ✓ $check (on product-identical ancestor ${PASSED_ON:0:8})"
             fi
           done
           if [ "$FAILED" -eq 1 ]; then
