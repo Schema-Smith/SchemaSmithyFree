@@ -2,14 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
--- TRANSITIONAL (slice 3 audit B1 of schema-templates)
--- Reads/INSERT-existence checks use permissive `template_name IN (legacy, current)` so
--- pre-extension legacy rows (template_name = '') still match same-template lookups.
--- Writes use the actual template name. DELETE is STRICT on `template_name = p_TemplateName`
--- so a multi-template product never deletes another templates ownership rows during the
--- per-template prune pass. Legacy blank-template rows are left as harmless historical
--- residue, matching the slice 2 CompletedMigrationScripts pattern. Tracked in the Community
--- roadmap under Slice 3 transitional aids -- ProductOwnership template_name extension.
+-- Ownership is scoped per template throughout: reads, INSERT-existence checks, and the DELETE
+-- all match on `template_name = p_TemplateName`, so a multi-template product never sees or
+-- deletes another template's ownership rows during the per-template prune pass.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."FixupTableOwnership"
 (p_ProductName VARCHAR(50),
  p_WhatIf BOOLEAN = FALSE,

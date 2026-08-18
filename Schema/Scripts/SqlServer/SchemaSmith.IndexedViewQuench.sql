@@ -2,14 +2,11 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
--- TRANSITIONAL (slice 3 audit B5 of schema-templates) @TemplateName and @SchemaName
--- default to empty for backward compatibility. New callers pass the active template
--- name + iteration schema so the existing-indexed-views lookup that drives the drop
--- cursor is scoped to that schema. Regular templates pass @SchemaName = '' and the
--- lookup falls through to today's all-schemas behavior. Without this scoping, parallel
--- schema-template iterations treat sibling iterations' indexed views as
--- "removed from product" and race to drop each other's objects. Tracked in the
--- Community roadmap under "Slice 3 audit B5".
+-- Callers pass the active template name + iteration schema so the existing-indexed-views
+-- lookup that drives the drop cursor is scoped to that schema. A regular template passes
+-- @SchemaName = '' and the lookup covers all schemas. Without this scoping, parallel
+-- schema-template iterations treat sibling iterations' indexed views as "removed from
+-- product" and race to drop each other's objects.
 IF OBJECT_ID('[SchemaSmith].[IndexedViewQuench]', 'P') IS NOT NULL DROP PROCEDURE [SchemaSmith].[IndexedViewQuench]
 GO
 CREATE PROCEDURE [SchemaSmith].[IndexedViewQuench]
@@ -17,8 +14,8 @@ CREATE PROCEDURE [SchemaSmith].[IndexedViewQuench]
     @IndexedViewSchema NVARCHAR(MAX),
     @WhatIf BIT = 0,
     @UpdateFillFactor BIT = 0,
-    @TemplateName NVARCHAR(256) = '',
-    @SchemaName NVARCHAR(256) = ''
+    @TemplateName NVARCHAR(256),
+    @SchemaName NVARCHAR(256)
 AS
 BEGIN
     SET NOCOUNT ON;

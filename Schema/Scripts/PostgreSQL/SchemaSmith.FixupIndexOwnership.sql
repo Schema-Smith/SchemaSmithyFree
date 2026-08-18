@@ -2,9 +2,7 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
--- TRANSITIONAL (slice 3 audit B1 of schema-templates) same template_name scoping as
--- FixupTableOwnership -- see that file for the rationale. Tracked in the Community
--- roadmap under Slice 3 transitional aids -- ProductOwnership template_name extension.
+-- Same template_name scoping as FixupTableOwnership -- see that file for the rationale.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."FixupIndexOwnership"
 (p_ProductName VARCHAR(50),
  p_WhatIf BOOLEAN = FALSE,
@@ -24,7 +22,7 @@ BEGIN
                           WHERE po."Schema" = ti."TableSchema"
                             AND po."TableName" = ti."TableName"
                             AND po."IndexName" = ti."Name"
-                            AND po.template_name IN ('', p_TemplateName));
+                            AND po.template_name = p_TemplateName);
 
   -- Per-iteration scope (see FixupTableOwnership for rationale).
   RAISE NOTICE 'Remove Product Ownership for Obsolete Indexes';

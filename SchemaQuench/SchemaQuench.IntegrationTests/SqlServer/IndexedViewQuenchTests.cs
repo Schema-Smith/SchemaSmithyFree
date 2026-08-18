@@ -516,7 +516,9 @@ WHERE s.name = 'Test' AND v.name = 'vTestSummary2'";
     @ProductName = '{_productName}',
     @IndexedViewSchema = '{indexedViewJson.Replace("'", "''")}',
     @WhatIf = 0,
-    @UpdateFillFactor = 0";
+    @UpdateFillFactor = 0,
+    @TemplateName = N'Main',
+    @SchemaName = N''";
         cmd.ExecuteNonQuery();
     }
 
