@@ -150,7 +150,7 @@ to every supported version) applies instead — the `any_value()` form would hav
 ## Up next
 
 Module 3 — **two shapes of one query.** Here you gated on the *engine* (version, compat level).
-Next: two variants of one procedure that are both correct — one faster on the new engine, one on
-the old — converging automatically as each server upgrades, with `VariantName` in the log as the
-receipt for which one fired. Then change the question to something the target *can't* detect — a
-rollout-approval row — and the same seam gates on state instead of version.
+Next: two shapes that are both correct — one faster on the new engine, one on the old —
+converging automatically as each server upgrades, no human in the loop. Then change the question
+to something the target *can't* detect — a rollout-approval row someone flips per tenant — and the
+same seam gates on state instead of version.
