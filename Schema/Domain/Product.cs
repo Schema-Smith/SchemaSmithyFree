@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Configuration;
@@ -62,6 +63,7 @@ namespace Schema.Domain
         public CheckConstraintStyle CheckConstraintStyle { get; set; }
 
         [JsonProperty(Order = 15)]
+        [DefaultValue(true)]
         public bool DropTablesRemovedFromProduct { get; set; } = true;
 
         [JsonProperty(Order = 16)]
