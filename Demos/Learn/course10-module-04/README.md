@@ -76,6 +76,7 @@ itself proves which variant fired.
 
 ```sql
 DECLARE @model NVARCHAR(MAX) = N'{{TableSchema}}';   -- resolves to a JSON array [{...},{...}]
+DELETE FROM dbo.TableCatalog;   -- [ALWAYS] script: clear then repopulate, so a re-run stays idempotent
 INSERT INTO dbo.TableCatalog (TableName, ColumnName, IsNullable, Encoding)
 SELECT tbl.[Name], col.[ColumnName], col.[IsNullable], N'JSON (OPENJSON)'
 FROM OPENJSON(@model) WITH ([Name] NVARCHAR(128) '$.Name', [Columns] NVARCHAR(MAX) '$.Columns' AS JSON) AS tbl
@@ -86,6 +87,7 @@ CROSS APPLY OPENJSON(tbl.[Columns]) WITH ([ColumnName] NVARCHAR(128) '$.Name', [
 
 ```sql
 DECLARE @model xml = N'{{TableXml}}';                -- resolves to <Tables><Table>...</Table></Tables>
+DELETE FROM dbo.TableCatalog;   -- [ALWAYS] script: clear then repopulate, so a re-run stays idempotent
 INSERT INTO dbo.TableCatalog (TableName, ColumnName, IsNullable, Encoding)
 SELECT t.n.value('(Name/text())[1]', 'nvarchar(128)'),
        c.col.value('(Name/text())[1]', 'nvarchar(128)'),
@@ -107,15 +109,15 @@ sqlcmd -S localhost,11433 -U sa -P "Learn!Passw0rd" -C -d learn_2022 -Q "SELECT 
 ```
 TableName     ColumnName   IsNullable  Encoding
 ------------  -----------  ----------  ---------------
-Widget        WidgetId     0           JSON (OPENJSON)
-Widget        Name         0           JSON (OPENJSON)
-Widget        IsActive     1           JSON (OPENJSON)
-Widget        Notes        1           JSON (OPENJSON)
 TableCatalog  CatalogId    0           JSON (OPENJSON)
 TableCatalog  TableName    0           JSON (OPENJSON)
 TableCatalog  ColumnName   0           JSON (OPENJSON)
 TableCatalog  IsNullable   1           JSON (OPENJSON)
 TableCatalog  Encoding     0           JSON (OPENJSON)
+Widget        WidgetId     0           JSON (OPENJSON)
+Widget        Name         0           JSON (OPENJSON)
+Widget        IsActive     1           JSON (OPENJSON)
+Widget        Notes        1           JSON (OPENJSON)
 ```
 
 ### `learn_2008` (compat 100) ran the Legacy shred
@@ -135,15 +137,15 @@ sqlcmd -S localhost,11433 -U sa -P "Learn!Passw0rd" -C -d learn_2008 -Q "SELECT 
 
 TableName     ColumnName   IsNullable  Encoding
 ------------  -----------  ----------  --------------------
-Widget        WidgetId     0           XML (.nodes/.value)
-Widget        Name         0           XML (.nodes/.value)
-Widget        IsActive     1           XML (.nodes/.value)
-Widget        Notes        1           XML (.nodes/.value)
 TableCatalog  CatalogId    0           XML (.nodes/.value)
 TableCatalog  TableName    0           XML (.nodes/.value)
 TableCatalog  ColumnName   0           XML (.nodes/.value)
 TableCatalog  IsNullable   1           XML (.nodes/.value)
 TableCatalog  Encoding     0           XML (.nodes/.value)
+Widget        WidgetId     0           XML (.nodes/.value)
+Widget        Name         0           XML (.nodes/.value)
+Widget        IsActive     1           XML (.nodes/.value)
+Widget        Notes        1           XML (.nodes/.value)
 ```
 Row-for-row identical to the compat-160 readback — only the `Encoding` tag differs.
 
