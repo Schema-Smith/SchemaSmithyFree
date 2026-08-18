@@ -56,6 +56,24 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: bash packaging/docker/docker-publish.sh
 
+      # GHCR creates a brand-new package PRIVATE by default, and the push still reports success — so
+      # a rename or a second image would publish "successfully" and be unpullable anonymously, with
+      # nothing in the run to say so. Visibility persists across pushes, so this is a no-op once a
+      # package is public; it exists to stop the trap recurring on the next new package.
+      - name: Ensure GHCR package is public
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api --method PATCH \
+               -H "Accept: application/vnd.github+json" \
+               "/orgs/${{ github.repository_owner }}/packages/container/schemaquench" \
+               -f visibility=public >/dev/null 2>&1; then
+            echo "GHCR package visibility set to public."
+          else
+            echo "::warning::Could not set GHCR package visibility to public. Verify it manually — a private package is not anonymously pullable."
+          fi
+
   winget:
     # Submit/update the SchemaSmith.SchemaSmith manifest in microsoft/winget-pkgs from the
     # published Windows release zips. Skipped when WINGET_PAT is absent.
