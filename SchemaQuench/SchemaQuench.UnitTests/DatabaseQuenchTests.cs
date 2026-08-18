@@ -355,7 +355,8 @@ public class DatabaseQuenchTests
 
         var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "");
         Assert.That(sql, Does.Contain("WITH (NOLOCK)"));
-        Assert.That(sql, Does.Contain("[template_name] IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("[template_name] = 'T'"));
+        Assert.That(sql, Does.Not.Contain("IN ('',"), "the completed-scripts read is scoped strictly to the active template");
         Assert.That(sql, Does.Contain("[schema_name] = ''"));
     }
 
@@ -369,7 +370,8 @@ public class DatabaseQuenchTests
         var sql = quench.GetSelectCompletedScriptsSql("MyProduct", "Before", "T", "tenant_acme");
         Assert.That(sql, Does.Not.Contain("NOLOCK"));
         Assert.That(sql, Does.Contain("\"SchemaSmith\".\"CompletedMigrationScripts\""));
-        Assert.That(sql, Does.Contain("template_name IN ('', 'T')"));
+        Assert.That(sql, Does.Contain("template_name = 'T'"));
+        Assert.That(sql, Does.Not.Contain("IN ('',"), "the completed-scripts read is scoped strictly to the active template");
         Assert.That(sql, Does.Contain("schema_name = 'tenant_acme'"));
     }
 
@@ -413,73 +415,9 @@ public class DatabaseQuenchTests
         Assert.That(sql, Does.Contain("`schema_name`"));
     }
 
-    [Test]
-    public void GetClaimLegacyTrackingRowsSql_SqlServer_BracketedPredicateAndInList()
-    {
-        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
-        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
 
-        var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
-            new[] { "scripts/a.sql", "scripts/b.sql" });
 
-        Assert.That(sql, Does.Contain("UPDATE SchemaSmith.CompletedMigrationScripts"));
-        Assert.That(sql, Does.Contain("SET [template_name] = 'Main'"));
-        Assert.That(sql, Does.Contain("[template_name] = ''"));    // only legacy rows
-        Assert.That(sql, Does.Contain("[schema_name] = ''"));
-        Assert.That(sql, Does.Contain("[ScriptPath] IN ('scripts/a.sql','scripts/b.sql')"));
-    }
 
-    [Test]
-    public void GetClaimLegacyTrackingRowsSql_PostgreSQL_QuotedPredicateAndInList()
-    {
-        var product = new Product { Name = "Test", Platform = Platform.PostgreSQL };
-        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "false", false, "false", "false", "false", "false", "false", "false", "false", "false", false, false, null);
-
-        var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
-            new[] { "scripts/a.sql", "scripts/b.sql" });
-
-        Assert.That(sql, Does.Contain("UPDATE \"SchemaSmith\".\"CompletedMigrationScripts\""));
-        Assert.That(sql, Does.Contain("SET template_name = 'Main'"));
-        Assert.That(sql, Does.Contain("template_name = ''"));
-        Assert.That(sql, Does.Contain("schema_name = ''"));
-        Assert.That(sql, Does.Contain("\"ScriptPath\" IN ('scripts/a.sql','scripts/b.sql')"));
-    }
-
-    [Test]
-    public void GetClaimLegacyTrackingRowsSql_MySQL_BacktickedPredicateAndInList()
-    {
-        var product = new Product { Name = "Test", Platform = Platform.MySQL };
-        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
-
-        var sql = quench.GetClaimLegacyTrackingRowsSql("MyProduct", "Before", "Main", "",
-            new[] { "scripts/a.sql", "scripts/b.sql" });
-
-        Assert.That(sql, Does.Contain("UPDATE `SchemaSmith_CompletedMigrationScripts`"));
-        Assert.That(sql, Does.Contain("SET `template_name` = 'Main'"));
-        Assert.That(sql, Does.Contain("`template_name` = ''"));
-        Assert.That(sql, Does.Contain("`schema_name` = ''"));
-        Assert.That(sql, Does.Contain("`ScriptPath` IN ('scripts/a.sql','scripts/b.sql')"));
-    }
-
-    [Test]
-    public void GetClaimLegacyTrackingRowsSql_EscapesSingleQuotesInLiteralValues()
-    {
-        var product = new Product { Name = "Test", Platform = Platform.SqlServer };
-        var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
-            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
-
-        var sql = quench.GetClaimLegacyTrackingRowsSql("O'Brien", "Before's", "Tem'plate", "schem'a",
-            new[] { "scripts/O'Brien.sql" });
-
-        Assert.That(sql, Does.Contain("O''Brien"));
-        Assert.That(sql, Does.Contain("Before''s"));
-        Assert.That(sql, Does.Contain("Tem''plate"));
-        Assert.That(sql, Does.Contain("schem''a"));
-        Assert.That(sql, Does.Contain("scripts/O''Brien.sql"));
-    }
 
     [TestCase(Platform.SqlServer)]
     [TestCase(Platform.PostgreSQL)]
@@ -1826,7 +1764,7 @@ public class DatabaseQuenchTests
             quench.ProductName, "Before", "TenantBody", quench.SchemaName);
 
         Assert.That(sql, Does.Contain("[schema_name] = 'tenant_acme'"));
-        Assert.That(sql, Does.Contain("[template_name] IN ('', 'TenantBody')"));
+        Assert.That(sql, Does.Contain("[template_name] = 'TenantBody'"));
     }
 
     [Test]

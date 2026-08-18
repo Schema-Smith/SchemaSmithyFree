@@ -1374,14 +1374,15 @@ public class DatabaseQuench
     };
 
     /// <summary>
-    /// Gets the SELECT SQL for completed migration scripts per platform. Same scope-aware
-    /// predicate shape as the DELETE builder — permissive template_name, strict schema_name.
+    /// Gets the SELECT SQL for completed migration scripts per platform. Scoped strictly to the
+    /// active (template, schema) — per-template ownership is the design intent, and a run-once
+    /// script is complete for the template that ran it, not for every template sharing its name.
     /// </summary>
     internal string GetSelectCompletedScriptsSql(string productName, string slot, string templateName, string schemaName) => _product.Platform.GetBasePlatform() switch
     {
-        Platform.SqlServer => $"SELECT [ScriptPath] FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [template_name] IN ('', '{EscapeSqlLiteral(templateName)}') AND [schema_name] = '{EscapeSqlLiteral(schemaName)}'",
-        Platform.PostgreSQL => $"SELECT \"ScriptPath\" FROM \"SchemaSmith\".\"CompletedMigrationScripts\" WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND template_name IN ('', '{EscapeSqlLiteral(templateName)}') AND schema_name = '{EscapeSqlLiteral(schemaName)}'",
-        Platform.MySQL => $"SELECT `ScriptPath` FROM `SchemaSmith_CompletedMigrationScripts` WHERE `ProductName` = '{EscapeSqlLiteral(productName)}' AND `QuenchSlot` = '{EscapeSqlLiteral(slot)}' AND `template_name` IN ('', '{EscapeSqlLiteral(templateName)}') AND `schema_name` = '{EscapeSqlLiteral(schemaName)}'",
+        Platform.SqlServer => $"SELECT [ScriptPath] FROM SchemaSmith.CompletedMigrationScripts WITH (NOLOCK) WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [template_name] = '{EscapeSqlLiteral(templateName)}' AND [schema_name] = '{EscapeSqlLiteral(schemaName)}'",
+        Platform.PostgreSQL => $"SELECT \"ScriptPath\" FROM \"SchemaSmith\".\"CompletedMigrationScripts\" WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND template_name = '{EscapeSqlLiteral(templateName)}' AND schema_name = '{EscapeSqlLiteral(schemaName)}'",
+        Platform.MySQL => $"SELECT `ScriptPath` FROM `SchemaSmith_CompletedMigrationScripts` WHERE `ProductName` = '{EscapeSqlLiteral(productName)}' AND `QuenchSlot` = '{EscapeSqlLiteral(slot)}' AND `template_name` = '{EscapeSqlLiteral(templateName)}' AND `schema_name` = '{EscapeSqlLiteral(schemaName)}'",
         _ => throw new ArgumentOutOfRangeException()
     };
 
@@ -1397,31 +1398,6 @@ public class DatabaseQuench
         Platform.MySQL => $"INSERT INTO `SchemaSmith_CompletedMigrationScripts` (`ScriptPath`, `ProductName`, `QuenchSlot`, `template_name`, `schema_name`) VALUES('{EscapeSqlLiteral(scriptPath)}', '{EscapeSqlLiteral(productName)}', '{EscapeSqlLiteral(slot)}', '{EscapeSqlLiteral(templateName)}', '{EscapeSqlLiteral(schemaName)}')",
         _ => throw new ArgumentOutOfRangeException()
     };
-
-    /// <summary>
-    /// TRANSITIONAL (slice 2 of schema-templates): claim ownership of legacy blank-template
-    /// tracking rows for the current (template, schema) scope. UPDATEs template_name from
-    /// '' to @template on rows whose ScriptPath is in the provided list (the current template's
-    /// on-disk script set). Scoping to on-disk paths prevents mis-attributing a row that was
-    /// originally tracking another template's work.
-    /// </summary>
-    /// <remarks>
-    /// Pairs with the permissive template_name IN ('', @template) SELECT. Both mechanisms
-    /// are transitional aids for pre-extension data; both go away once the legacy data is
-    /// migrated. Tracking item in the Community roadmap under "Schema templates — slice 2
-    /// legacy-data migration cleanup".
-    /// </remarks>
-    internal string GetClaimLegacyTrackingRowsSql(string productName, string slot, string templateName, string schemaName, IReadOnlyList<string> scriptPaths)
-    {
-        var inList = string.Join(",", scriptPaths.Select(p => $"'{EscapeSqlLiteral(p)}'"));
-        return _product.Platform.GetBasePlatform() switch
-        {
-            Platform.SqlServer => $"UPDATE SchemaSmith.CompletedMigrationScripts SET [template_name] = '{EscapeSqlLiteral(templateName)}' WHERE [ProductName] = '{EscapeSqlLiteral(productName)}' AND [QuenchSlot] = '{EscapeSqlLiteral(slot)}' AND [template_name] = '' AND [schema_name] = '{EscapeSqlLiteral(schemaName)}' AND [ScriptPath] IN ({inList})",
-            Platform.PostgreSQL => $"UPDATE \"SchemaSmith\".\"CompletedMigrationScripts\" SET template_name = '{EscapeSqlLiteral(templateName)}' WHERE \"ProductName\" = '{EscapeSqlLiteral(productName)}' AND \"QuenchSlot\" = '{EscapeSqlLiteral(slot)}' AND template_name = '' AND schema_name = '{EscapeSqlLiteral(schemaName)}' AND \"ScriptPath\" IN ({inList})",
-            Platform.MySQL => $"UPDATE `SchemaSmith_CompletedMigrationScripts` SET `template_name` = '{EscapeSqlLiteral(templateName)}' WHERE `ProductName` = '{EscapeSqlLiteral(productName)}' AND `QuenchSlot` = '{EscapeSqlLiteral(slot)}' AND `template_name` = '' AND `schema_name` = '{EscapeSqlLiteral(schemaName)}' AND `ScriptPath` IN ({inList})",
-            _ => throw new ArgumentOutOfRangeException()
-        };
-    }
 
     internal string ResolveArtifactDirectory()
     {
@@ -2049,8 +2025,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
     private void QuenchTemplateScriptsWithCheckpoint(IDbCommand destCmd, string slot, List<SqlScript> scripts, DatabaseScriptSlot checkpointSlot)
     {
-        var onDiskRelativePaths = scripts.Select(s => GetRelativeScriptPath(s.LogPath)).ToList();
-        var alreadyRan = _trackRunOnceMigrations ? GetCompletedEntriesBySlot(destCmd, slot, onDiskRelativePaths) : [];
+        var alreadyRan = _trackRunOnceMigrations ? GetCompletedEntriesBySlot(destCmd, slot) : [];
         foreach (var script in scripts.Where(s => !s.HasBeenQuenched))
         {
             if (ShouldAlwaysRun(script.Name) || !alreadyRan.Contains(GetRelativeScriptPath(script.LogPath)))
@@ -2097,7 +2072,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
 
     internal static bool ShouldAlwaysRun(string scriptName) => Path.GetFileNameWithoutExtension(scriptName).EndsWith("[ALWAYS]");
 
-    private List<string> GetCompletedEntriesBySlot(IDbCommand destCmd, string slot, IReadOnlyList<string> onDiskRelativePaths = null)
+    private List<string> GetCompletedEntriesBySlot(IDbCommand destCmd, string slot)
     {
         var entries = new List<string>();
         try
@@ -2112,41 +2087,6 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         {
             // Table may not exist yet (MySQL) or on first run
             return entries;
-        }
-
-        // TRANSITIONAL (slice 2 of schema-templates): claim ownership of any legacy
-        // blank-template tracking rows whose ScriptPath is also present on the current
-        // template's disk. Without this, a legacy row whose script is later removed AND
-        // replaced with a new file using the same filename would silently shadow the new
-        // file. Scoped to on-disk paths so we don't mis-attribute a row that was originally
-        // tracking some other template's work.
-        //
-        // Pre-extension behavior treated such shared-filename rows as "complete for all
-        // templates," which was itself a silent bug — two scripts that should both have
-        // run would mark as complete after only the first one. Per-template ownership is
-        // the design intent; this code is the transitional aid that gets us there safely.
-        //
-        // ROADMAP: remove this AND the permissive template_name IN ('', @template) read
-        // once legacy data is reasonably presumed migrated. Tracked in the Community roadmap
-        // under "Schema templates — slice 2 legacy-data migration cleanup".
-        if (onDiskRelativePaths is { Count: > 0 } && entries.Count > 0)
-        {
-            try
-            {
-                var legacyClaimable = entries
-                    .Where(e => onDiskRelativePaths.Contains(e, StringComparer.OrdinalIgnoreCase))
-                    .ToList();
-                if (legacyClaimable.Count > 0)
-                {
-                    destCmd.CommandText = GetClaimLegacyTrackingRowsSql(
-                        _product.Name, slot, _template.Name, DbScope.SchemaName ?? "", legacyClaimable);
-                    destCmd.ExecuteNonQuery();
-                }
-            }
-            catch
-            {
-                // Best-effort transitional aid; failure here must not gate the actual quench.
-            }
         }
 
         return entries;
