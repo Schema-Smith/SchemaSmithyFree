@@ -34,7 +34,7 @@ SERVERPROPERTY('ProductMajorVersion') >= 16
 Rule of thumb: **gate syntax on compatibility level, gate features on server version.** They are
 different questions, and only SQL Server makes you ask both. SchemaSmith 2.4.0 gives you a token
 for each — `{{CompatibilityLevel}}` and `{{ServerMajorVersion}}` — usable in any
-`ShouldApplyExpression`; the raw forms above are what they expand to.
+`ShouldApplyExpression`. The tokens expand to plain integers before the gate runs -- the target's actual compatibility level and server major (`{{CompatibilityLevel}} >= 160` becomes `160 >= 160`); the raw forms above are the hand-written equivalents.
 
 ## Prerequisites
 
