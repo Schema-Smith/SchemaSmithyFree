@@ -1,0 +1,10 @@
+{
+  "Name": "OldestTier",
+  "ValidationScript": "SELECT TRUE",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "PostgreSQL"
+}

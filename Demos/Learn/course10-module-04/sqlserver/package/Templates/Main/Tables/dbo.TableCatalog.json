@@ -1,0 +1,14 @@
+{
+  "Schema": "dbo",
+  "Name": "TableCatalog",
+  "Columns": [
+    { "Name": "CatalogId", "DataType": "INT IDENTITY(1,1)", "Nullable": false },
+    { "Name": "TableName", "DataType": "NVARCHAR(128)", "Nullable": false },
+    { "Name": "ColumnName", "DataType": "NVARCHAR(128)", "Nullable": false },
+    { "Name": "IsNullable", "DataType": "BIT", "Nullable": true },
+    { "Name": "Encoding", "DataType": "NVARCHAR(32)", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PK_TableCatalog", "PrimaryKey": true, "Clustered": true, "IndexColumns": "CatalogId" }
+  ]
+}

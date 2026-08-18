@@ -1,0 +1,12 @@
+{
+  "Name": "`Widget`",
+  "Engine": "InnoDB",
+  "Columns": [
+    { "Name": "`WidgetId`", "DataType": "INT", "Nullable": false, "AutoIncrement": true },
+    { "Name": "`Name`", "DataType": "VARCHAR(100)", "Nullable": false },
+    { "Name": "`IsActive`", "DataType": "TINYINT(1)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "IndexColumns": "`WidgetId`" }
+  ]
+}

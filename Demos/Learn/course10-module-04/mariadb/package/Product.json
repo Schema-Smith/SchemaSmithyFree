@@ -1,0 +1,10 @@
+{
+  "Name": "OldestTier",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "MariaDb"
+}

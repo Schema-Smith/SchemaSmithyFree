@@ -1,0 +1,13 @@
+{
+  "Schema": "dbo",
+  "Name": "Widget",
+  "Columns": [
+    { "Name": "WidgetId", "DataType": "INT IDENTITY(1,1)", "Nullable": false },
+    { "Name": "Name", "DataType": "NVARCHAR(100)", "Nullable": false },
+    { "Name": "IsActive", "DataType": "BIT", "Nullable": true },
+    { "Name": "Notes", "DataType": "NVARCHAR(500)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PK_Widget", "PrimaryKey": true, "Clustered": true, "IndexColumns": "WidgetId" }
+  ]
+}
