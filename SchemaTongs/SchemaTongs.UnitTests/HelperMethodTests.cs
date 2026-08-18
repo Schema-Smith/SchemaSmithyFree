@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using Schema.Domain;
+using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 
 namespace SchemaTongs.UnitTests;
@@ -348,6 +349,104 @@ public class HelperMethodTests
         SchemaTongs.PromoteCheckConstraintsToTableLevel(table, []);
 
         Assert.That(((SqlServerColumn)table.Columns[0]).CheckExpression, Is.Null);
+        Assert.That(table.CheckConstraints, Is.Empty);
+    }
+
+    #endregion
+
+    #region DemoteSingleColumnChecksToColumnLevel Tests (PostgreSQL)
+
+    private static PostgreSqlTable OrdersWithChecks(params (string Name, string Expression)[] constraints)
+    {
+        var table = new PostgreSqlTable
+        {
+            Name = "Orders",
+            Columns =
+            [
+                new PostgreSqlColumn { Name = "Status" },
+                new PostgreSqlColumn { Name = "Quantity" }
+            ]
+        };
+        foreach (var (name, expression) in constraints)
+            table.CheckConstraints.Add(new CheckConstraint { Name = name, Expression = expression });
+        return table;
+    }
+
+    [Test]
+    public void DemoteSingleColumnChecks_GeneratedName_MovesOntoColumn()
+    {
+        var table = OrdersWithChecks(("CK_Orders_Status", "\"Status\" >= 0"));
+
+        SchemaTongs.DemoteSingleColumnChecksToColumnLevel(table,
+            new Dictionary<string, string> { ["CK_Orders_Status"] = "Status" });
+
+        Assert.That(((PostgreSqlColumn)table.Columns[0]).CheckExpression, Is.EqualTo("\"Status\" >= 0"));
+        Assert.That(table.CheckConstraints, Is.Empty, "the constraint moved onto the column, so it must not remain table-level");
+    }
+
+    [Test]
+    public void DemoteSingleColumnChecks_UserNamedConstraint_StaysTableLevel()
+    {
+        // PostgreSQL records no marker for how a constraint was declared, so referencing one column
+        // is not evidence it was authored column-level. Demoting a user-named constraint would
+        // rename it to the generated form on the next apply — a drop/recreate on every deploy.
+        var table = OrdersWithChecks(("chk_status_positive", "\"Status\" >= 0"));
+
+        SchemaTongs.DemoteSingleColumnChecksToColumnLevel(table,
+            new Dictionary<string, string> { ["chk_status_positive"] = "Status" });
+
+        Assert.That(((PostgreSqlColumn)table.Columns[0]).CheckExpression, Is.Null.Or.Empty);
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(1));
+        Assert.That(table.CheckConstraints[0].Name, Is.EqualTo("chk_status_positive"), "the author's name must survive the round-trip");
+    }
+
+    [Test]
+    public void DemoteSingleColumnChecks_MultiColumnCheck_IsNotOffered_AndStaysTableLevel()
+    {
+        // conkey length > 1 is filtered out by the query, so a multi-column check never appears in
+        // the map — it has no single column to belong to.
+        var table = OrdersWithChecks(("CK_Orders_Span", "\"Status\" >= 0 AND \"Quantity\" > 0"));
+
+        SchemaTongs.DemoteSingleColumnChecksToColumnLevel(table, new Dictionary<string, string>());
+
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DemoteSingleColumnChecks_UnknownColumnOrConstraint_IsIgnored()
+    {
+        var table = OrdersWithChecks(("CK_Orders_Status", "\"Status\" >= 0"));
+
+        Assert.DoesNotThrow(() => SchemaTongs.DemoteSingleColumnChecksToColumnLevel(table,
+            new Dictionary<string, string> { ["CK_Orders_Missing"] = "Missing" }));
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DemoteSingleColumnChecks_EmptyOrNullMap_IsNoOp()
+    {
+        var table = OrdersWithChecks(("CK_Orders_Status", "\"Status\" >= 0"));
+
+        SchemaTongs.DemoteSingleColumnChecksToColumnLevel(table, null);
+        SchemaTongs.DemoteSingleColumnChecksToColumnLevel(table, new Dictionary<string, string>());
+
+        Assert.That(table.CheckConstraints, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void DemoteSingleColumnChecks_QuotedIdentifiers_AreMatchedUnwrapped()
+    {
+        var table = new PostgreSqlTable
+        {
+            Name = "\"Orders\"",
+            Columns = [new PostgreSqlColumn { Name = "\"Status\"" }]
+        };
+        table.CheckConstraints.Add(new CheckConstraint { Name = "CK_Orders_Status", Expression = "\"Status\" >= 0" });
+
+        SchemaTongs.DemoteSingleColumnChecksToColumnLevel(table,
+            new Dictionary<string, string> { ["CK_Orders_Status"] = "Status" });
+
+        Assert.That(((PostgreSqlColumn)table.Columns[0]).CheckExpression, Is.EqualTo("\"Status\" >= 0"));
         Assert.That(table.CheckConstraints, Is.Empty);
     }
 

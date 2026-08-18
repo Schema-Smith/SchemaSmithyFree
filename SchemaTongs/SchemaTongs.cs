@@ -2062,6 +2062,30 @@ SELECT t.schemaname, t.tablename
             // worse, round-tripping a non-default-schema table as public.<name> on the next deploy.
             var tableObj = PlatformDeserializer.DeserializeTable(tableJson, _platform);
 
+            if (_checkConstraintStyle == CheckConstraintStyle.ColumnLevel && tableObj is PostgreSqlTable columnLevelTable)
+            {
+                // The generator emits every check table-level; conkey is what attributes a
+                // single-column one back to its column. array_length = 1 excludes multi-column
+                // checks, which have no single column to belong to.
+                command.CommandText = $@"
+SELECT con.conname AS ""Name"",
+       a.attname AS ""ColumnName""
+  FROM pg_catalog.pg_constraint con
+  JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
+ WHERE con.conrelid = '""{EscapeSql(schema)}"".""{EscapeSql(table)}""'::regclass
+   AND con.contype = 'c'
+   AND array_length(con.conkey, 1) = 1
+ ORDER BY con.conname";
+
+                var singleColumnChecks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                using (var ccReader = command.ExecuteReader())
+                {
+                    while (ccReader.Read())
+                        singleColumnChecks[$"{ccReader["Name"]}"] = $"{ccReader["ColumnName"]}";
+                }
+                DemoteSingleColumnChecksToColumnLevel(columnLevelTable, singleColumnChecks);
+            }
+
             // Regular mode: omit the PostgreSQL default schema (public) from content so the package
             // follows the default-schema-omission convention (deploy re-resolves an unset Schema to
             // public). A named non-default schema is kept. The write target then derives from this
@@ -2868,6 +2892,42 @@ SELECT cc.name AS [Name],
             col.CheckExpression = null;
 
         table.CheckConstraints = allConstraints;
+    }
+
+    /// <summary>
+    /// Routes a PostgreSQL single-column check back onto its column, so a column-level
+    /// <c>CheckExpression</c> survives an extract instead of returning as a table-level constraint.
+    /// <paramref name="singleColumnChecks"/> maps constraint name to column name, taken from
+    /// <c>pg_constraint.conkey</c>.
+    /// <para>Only a check already named <c>CK_&lt;table&gt;_&lt;column&gt;</c> is demoted — the name
+    /// SchemaSmith itself generates from a column-level <c>CheckExpression</c>. PostgreSQL, unlike
+    /// SQL Server, records no marker for how a constraint was *declared* (its docs call a column
+    /// constraint "only a notational convenience", stored identically to a table constraint), so
+    /// referencing one column is not evidence it was authored column-level. Demoting on column
+    /// count alone would discard a user's chosen constraint name and rename it to the generated form
+    /// on the next apply — a drop/recreate on every deploy. Anything otherwise named stays
+    /// table-level, which is both faithful and churn-free.</para>
+    /// </summary>
+    internal static void DemoteSingleColumnChecksToColumnLevel(PostgreSqlTable table, Dictionary<string, string> singleColumnChecks)
+    {
+        if (singleColumnChecks == null || singleColumnChecks.Count == 0) return;
+
+        var tableName = StringHelper.StripIdentifierWrapper(table.Name);
+
+        foreach (var (constraintName, columnName) in singleColumnChecks)
+        {
+            if (!string.Equals(constraintName, $"CK_{tableName}_{columnName}", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var constraint = table.CheckConstraints
+                .FirstOrDefault(c => string.Equals(StringHelper.StripIdentifierWrapper(c.Name), constraintName, StringComparison.OrdinalIgnoreCase));
+            var column = table.Columns.OfType<PostgreSqlColumn>()
+                .FirstOrDefault(c => string.Equals(StringHelper.StripIdentifierWrapper(c.Name), columnName, StringComparison.OrdinalIgnoreCase));
+            if (constraint == null || column == null) continue;
+
+            column.CheckExpression = constraint.Expression;
+            table.CheckConstraints.Remove(constraint);
+        }
     }
 
     internal static string EscapeSql(string value) => value.Replace("'", "''");

@@ -2,6 +2,7 @@
 
 using System.Data;
 using System;
+using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -261,6 +262,83 @@ public class SchemaTongsTests
             FactoryContainer.Clear();
             LogFactory.Clear();
         }
+    }
+
+    /// <summary>
+    /// A column-level CheckExpression must survive an extract instead of coming back table-level —
+    /// otherwise a cast → quench → cast cycle is not idempotent at the JSON level.
+    /// <para>PostgreSQL records no marker for how a constraint was declared, so the generated
+    /// <c>CK_&lt;table&gt;_&lt;column&gt;</c> name is the only evidence a check was authored
+    /// column-level. A user-named single-column check must therefore stay table-level and keep its
+    /// name — demoting it would rename it on the next apply and churn a drop/recreate every deploy.
+    /// Both halves are asserted here because only asserting the first would let that regression in.</para>
+    /// </summary>
+    [Test]
+    public void ShouldRoundTripColumnLevelCheckExpression_AndPreserveUserNamedTableLevelCheck()
+    {
+        var errorLog = Substitute.For<ILog>();
+        var progressLog = Substitute.For<ILog>();
+        var environment = Substitute.For<IEnvironment>();
+        var file = Substitute.For<IFile>();
+        var directory = Substitute.For<IDirectory>();
+        lock (FactoryContainer.SharedLockObject)
+        {
+            ExecuteOnIntegrationDb(@"
+ALTER TABLE ""Test"".""TestTable"" ADD CONSTRAINT ""CK_TestTable_Column1"" CHECK (""Column1"" >= 0);
+ALTER TABLE ""Test"".""TestTable"" ADD CONSTRAINT ""chk_column2_not_blank"" CHECK (""Column2"" <> '');");
+            try
+            {
+                LogFactory.Register("ErrorLog", errorLog);
+                LogFactory.Register("ProgressLog", progressLog);
+                FactoryContainer.Register(environment);
+                FactoryContainer.Register(file);
+                FactoryContainer.Register(directory);
+                var config = SetupConfig();
+                config["ShouldCast:Tables"] = "true";
+
+                string tableJson = null;
+                file.When(f => f.WriteAllText(
+                        Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Tables", "Test.TestTable.json"))),
+                        Arg.Any<string>()))
+                    .Do(ci => tableJson = ci.ArgAt<string>(1));
+
+                new SchemaTongs(Platform.PostgreSQL).CastTemplate();
+
+                Assert.That(tableJson, Is.Not.Null.And.Not.Empty, "the table JSON was not written");
+                var table = (Schema.Domain.PostgreSQL.PostgreSqlTable)PlatformDeserializer.DeserializeTable(tableJson, Platform.PostgreSQL);
+
+                var column1 = table.Columns.OfType<Schema.Domain.PostgreSQL.PostgreSqlColumn>()
+                    .Single(c => StringHelper.StripIdentifierWrapper(c.Name) == "Column1");
+                Assert.That(column1.CheckExpression, Is.Not.Null.And.Not.Empty,
+                    "a CK_<table>_<column> check must round-trip onto its column");
+                Assert.That(table.CheckConstraints.Any(c => StringHelper.StripIdentifierWrapper(c.Name) == "CK_TestTable_Column1"),
+                    Is.False, "the demoted check must not also remain table-level");
+
+                Assert.That(table.CheckConstraints.Any(c => StringHelper.StripIdentifierWrapper(c.Name) == "chk_column2_not_blank"),
+                    Is.True, "a user-named single-column check must stay table-level and keep its name");
+
+                config["ShouldCast:Tables"] = "false";
+            }
+            finally
+            {
+                ExecuteOnIntegrationDb(@"
+ALTER TABLE ""Test"".""TestTable"" DROP CONSTRAINT IF EXISTS ""CK_TestTable_Column1"";
+ALTER TABLE ""Test"".""TestTable"" DROP CONSTRAINT IF EXISTS ""chk_column2_not_blank"";");
+                FactoryContainer.Clear();
+                LogFactory.Clear();
+            }
+        }
+    }
+
+    private void ExecuteOnIntegrationDb(string sql)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_integrationDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.ExecuteNonQuery();
+        conn.Close();
     }
 
     [OneTimeTearDown]
