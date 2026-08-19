@@ -1,0 +1,3 @@
+CREATE OR ALTER VIEW dbo.vCompatProbe
+AS
+SELECT CAST('Modern' AS VARCHAR(10)) AS Variant;

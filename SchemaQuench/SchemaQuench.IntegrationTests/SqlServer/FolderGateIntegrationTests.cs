@@ -4,8 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Microsoft.Extensions.Configuration;
+using NSubstitute;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.IntegrationTests;
 using Schema.Isolators;
 using Schema.Utility;
 
@@ -22,6 +24,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 public class FolderGateIntegrationTests
 {
     private readonly string _connectionString;
+    private readonly IEnvironment _environment = Substitute.For<IEnvironment>();
 
     public FolderGateIntegrationTests()
     {
@@ -71,4 +74,98 @@ public class FolderGateIntegrationTests
 
     private static string NonexistentBasePath() =>
         Path.Combine(Path.GetTempPath(), "ss-folder-gate-" + Guid.NewGuid().ToString("N"));
+
+    [Test]
+    public void FolderGate_SamePackageTwoCompatLevels_DeploysTheMatchingVariantToEach()
+    {
+        var highDb = $"FGCompatHigh_{Guid.NewGuid():N}".Substring(0, 24);
+        var lowDb = $"FGCompatLow_{Guid.NewGuid():N}".Substring(0, 24);
+
+        lock (FactoryContainer.SharedLockObject)
+        {
+            var highLevel = CreateDatabaseAtMaxCompatLevel(highDb);
+            CreateDatabaseAtCompatLevel(lowDb, 130);
+            try
+            {
+                var config = FactoryContainer.Resolve<IConfigurationRoot>();
+                config["SchemaPackagePath"] =
+                    TestHelper.GetTestProductPath("SqlServer", "FolderGateCompatSplitProduct");
+                config["ScriptTokens:HighCompatDB"] = highDb;
+                config["ScriptTokens:LowCompatDB"] = lowDb;
+                config["ScriptTokens:CompatBoundary"] = highLevel.ToString();
+
+                // Program.Main ends by calling Environment.Exit via LogBackup; a substituted
+                // IEnvironment stops that from tearing down the test host.
+                FactoryContainer.Register(_environment);
+                Program.Main(System.Array.Empty<string>());
+
+                Assert.Multiple(() =>
+                {
+                    Assert.That(ReadProbeVariant(highDb), Is.EqualTo("Modern"),
+                        "The high-compat database must get the Modern folder.");
+                    Assert.That(ReadProbeVariant(lowDb), Is.EqualTo("Legacy"),
+                        "The low-compat database must get the Legacy folder.");
+                });
+            }
+            finally
+            {
+                FactoryContainer.Unregister<IEnvironment>();
+                DropDatabase(highDb);
+                DropDatabase(lowDb);
+            }
+        }
+    }
+
+    private int CreateDatabaseAtMaxCompatLevel(string dbName)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"CREATE DATABASE [{dbName}];";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = "SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS INT) * 10;";
+        var maxLevel = Convert.ToInt32(cmd.ExecuteScalar());
+
+        cmd.CommandText = $"ALTER DATABASE [{dbName}] SET COMPATIBILITY_LEVEL = {maxLevel};";
+        cmd.ExecuteNonQuery();
+
+        conn.ChangeDatabase(dbName);
+        ForgeKindler.KindleTheForge(cmd, Platform.SqlServer);
+        return maxLevel;
+    }
+
+    private void CreateDatabaseAtCompatLevel(string dbName, int level)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"CREATE DATABASE [{dbName}]; ALTER DATABASE [{dbName}] SET COMPATIBILITY_LEVEL = {level};";
+        cmd.ExecuteNonQuery();
+
+        conn.ChangeDatabase(dbName);
+        ForgeKindler.KindleTheForge(cmd, Platform.SqlServer);
+    }
+
+    private string ReadProbeVariant(string dbName)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(dbName);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Variant FROM dbo.vCompatProbe;";
+        return (string)cmd.ExecuteScalar();
+    }
+
+    private void DropDatabase(string dbName)
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+IF DB_ID('{dbName}') IS NOT NULL
+  ALTER DATABASE [{dbName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+DROP DATABASE IF EXISTS [{dbName}];";
+        cmd.ExecuteNonQuery();
+    }
 }

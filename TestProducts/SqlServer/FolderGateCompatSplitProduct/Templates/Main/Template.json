@@ -1,0 +1,18 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT name FROM sys.databases WHERE name IN ('{{HighCompatDB}}', '{{LowCompatDB}}')",
+  "ScriptFolders": [
+    {
+      "FolderPath": "Programmability/Modern",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views",
+      "ShouldApplyExpression": "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) >= {{CompatBoundary}}"
+    },
+    {
+      "FolderPath": "Programmability/Legacy",
+      "QuenchSlot": "Objects",
+      "ObjectType": "Views",
+      "ShouldApplyExpression": "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) < {{CompatBoundary}}"
+    }
+  ]
+}

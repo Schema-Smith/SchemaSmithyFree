@@ -1,0 +1,12 @@
+{
+  "Name": "FolderGateCompatSplitProduct",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [ "Main" ],
+  "ScriptTokens": {
+    "HighCompatDB": "SetByTest",
+    "LowCompatDB": "SetByTest",
+    "CompatBoundary": "0"
+  },
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}
