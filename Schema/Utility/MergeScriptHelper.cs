@@ -558,10 +558,11 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     {
         var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
 
-        // B1: XML delivery shreds the payload with .nodes()/.value() (every SQL Server compat level) instead
-        // of OPENJSON (compat 130+). SQL Server is the only engine wired for it in this slice; a PG/MySQL
-        // delivery that declares Xml fails loudly rather than silently emitting a JSON shred.
-        if (isXml && platform.GetBasePlatform() != Platform.SqlServer)
+        // B1: XML delivery shreds the payload with .nodes()/.value() on SQL Server (every compat level) and
+        // xmltable() on PostgreSQL (every version at/above the floor — no version gate needed) instead of
+        // OPENJSON/JSON_ARRAY_ELEMENTS. MySQL/MariaDB aren't wired yet; a delivery that declares Xml on them
+        // fails loudly rather than silently emitting a JSON shred.
+        if (isXml && platform.GetBasePlatform() is not (Platform.SqlServer or Platform.PostgreSQL))
             throw new NotSupportedException(
                 $"XML data-delivery encoding is not yet supported on {platform.GetBasePlatform()}; use JSON (its shred works at every supported version).");
 
@@ -574,7 +575,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, isXml),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum),
+                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum, isXml),
             Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
                 mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, dataKeys, mySqlServerVersionNum),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
@@ -946,7 +947,7 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
     private static string BuildMergeScriptPostgreSql(IDbCommand cmd, string tableSchema, string tableName,
         bool updateDescendents, string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool disableRules, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null, int pgServerVersionNum = 0)
+        string destSchemaOverride = null, int pgServerVersionNum = 0, bool isXml = false)
     {
         tableSchema = tableSchema.Trim().Trim('"');
         tableName = tableName.Trim().Trim('"');
@@ -961,7 +962,17 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
         var unsupportedComments = GetUnsupportedColumnCommentsPostgreSql(cmd, tableSchema, tableName);
         var matchColumns = BuildPostgreSqlMatchColumns(keyColumns);
         var identAndSeq = GetIdentityColumnAndSequencePostgreSql(cmd, tableSchema, tableName);
-        var jsonColumns = GetJsonColumnDefinitionsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
+        // B1: the row source is the only thing that differs by encoding — xmltable() is PostgreSQL's
+        // structural twin of JSON_ARRAY_ELEMENTS + jsonColumns, addressed by the same <c n="Col"> shape the
+        // SQL Server XML shred reads. Column set comes from GetColumnMetadataPostgreSql (shared with the
+        // deferred-merge path) rather than the STRING_AGG-based jsonColumns query. geometry/bytea/array
+        // columns are extracted as text and cast in the wrapping SELECT (BuildXmlColumnExpressionsPostgreSql)
+        // via the same classification/expressions GetJsonColumnDefinitionsPostgreSql uses, so the two row
+        // sources cannot drift.
+        var jsonColumns = isXml ? null : GetJsonColumnDefinitionsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
+        var xmlShredColumns = isXml ? GetColumnMetadataPostgreSql(cmd, tableSchema, tableName, jsonKeys) : null;
+        var xmlColumnList = isXml ? BuildXmlColumnsPostgreSql(xmlShredColumns) : null;
+        var xmlColumnExprs = isXml ? BuildXmlColumnExpressionsPostgreSql(xmlShredColumns) : null;
 
         // PostgreSQL does not support DISABLE/ENABLE RULE ALL — each rule must be named individually.
         // Rules cannot be disabled inside PL/pgSQL blocks, so these statements go outside the DO $$ block.
@@ -991,23 +1002,28 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
         {
             mergeSQL = BuildPostgreSqlLegacyUpsert(cmd, tableSchema, tableName, destSchema, updateDescendents,
                 mergeUpdate, disableTriggers, jsonValue, jsonColumns, keyColumns, identAndSeq,
-                unsupportedComments, disableRuleStatements, enableRuleStatements, jsonKeys);
+                unsupportedComments, disableRuleStatements, enableRuleStatements, jsonKeys, isXml, xmlColumnList, xmlColumnExprs);
         }
         else
         {
+        var jsonDeclareLine = isXml ? "" : $"  v_json JSON = '{jsonValue}';\n";
+        var rowSource = isXml
+            ? $@"SELECT {xmlColumnExprs} FROM xmltable('/rows/row' PASSING XMLPARSE(DOCUMENT '{jsonValue}')
+             COLUMNS {xmlColumnList}) AS ""x"""
+            : $@"WITH my_tables(arr) AS (VALUES(v_json::JSON))
+    SELECT {jsonColumns}
+      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem";
+
         mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
             + (string.IsNullOrEmpty(disableRuleStatements) ? "" : disableRuleStatements + "\n") + $@"
 DO $$
 DECLARE
-  v_json JSON = '{jsonValue}';
-  nextval BIGINT;
+{jsonDeclareLine}  nextval BIGINT;
 BEGIN
 {(disableTriggers ? $"ALTER TABLE {(updateDescendents ? "" : "ONLY ")}\"{destSchema}\".\"{tableName}\" DISABLE TRIGGER ALL;" : "")}
 MERGE INTO {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
 USING (
-    WITH my_tables(arr) AS (VALUES(v_json::JSON))
-    SELECT {jsonColumns}
-      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
+    {rowSource}
 ) AS ""Source""
 ON {matchColumns}
 ";
@@ -1073,8 +1089,8 @@ END $$ LANGUAGE plpgsql;
         {
             // PG < 17 has no MERGE WHEN NOT MATCHED BY SOURCE. Emit a standalone DELETE outside the
             // DO $$ block targeting rows with no matching source row, keyed on the same columns the
-            // MERGE matched on, honoring the same mergeFilter. Source is the JSON array reprojected
-            // identically to the MERGE USING clause so key correspondence is exact.
+            // MERGE matched on, honoring the same mergeFilter. Source is the payload reprojected
+            // identically to the MERGE USING clause (JSON or XML) so key correspondence is exact.
             // Per-key correspondence mirrors BuildPostgreSqlMatchColumns' *-prefix NULL-safe
             // handling (source of truth — keep in sync). A leading '*' is a user-config NULL-safe
             // marker: strip it and emit the (l = r OR (l IS NULL AND r IS NULL)) form.
@@ -1091,13 +1107,21 @@ END $$ LANGUAGE plpgsql;
                         : $"{l} = {r}";
                 }));
 
+            // No PL/pgSQL variable scope out here (this DELETE stands outside the DO $$ block), so the
+            // payload is embedded as a literal in both encodings — mirrors the JSON reprojection's
+            // '{jsonValue}'::JSON literal immediately below.
+            var deleteSource = isXml
+                ? $@"(SELECT {xmlColumnExprs} FROM xmltable('/rows/row' PASSING XMLPARSE(DOCUMENT '{jsonValue}')
+             COLUMNS {xmlColumnList}) AS ""x"") AS ""DeleteSource"""
+                : $@"(WITH my_tables(arr) AS (VALUES('{jsonValue}'::JSON))
+           SELECT {jsonColumns}
+             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""DeleteSource""";
+
             mergeSQL += $@"
 DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
  WHERE {(string.IsNullOrWhiteSpace(mergeFilter) ? "" : $"({mergeFilter}) AND ")}NOT EXISTS (
    SELECT 1
-     FROM (WITH my_tables(arr) AS (VALUES('{jsonValue}'::JSON))
-           SELECT {jsonColumns}
-             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""DeleteSource""
+     FROM {deleteSource}
     WHERE {deleteKeyPredicate}
  );";
         }
@@ -1118,13 +1142,17 @@ DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}""
     private static string BuildPostgreSqlLegacyUpsert(IDbCommand cmd, string tableSchema, string tableName,
         string destSchema, bool updateDescendents, bool mergeUpdate, bool disableTriggers, string jsonValue,
         string jsonColumns, string keyColumns, string identAndSeq,
-        string unsupportedComments, string disableRuleStatements, string enableRuleStatements, HashSet<string> jsonKeys)
+        string unsupportedComments, string disableRuleStatements, string enableRuleStatements, HashSet<string> jsonKeys,
+        bool isXml = false, string xmlColumnList = null, string xmlColumnExprs = null)
     {
         var only = updateDescendents ? "" : "ONLY ";
         // NULL-safe key predicate (same as the MERGE ON clause) — handles '*'-prefixed nullable keys and
-        // needs no unique/exclusion constraint. "Target" is the table, "Source" the reprojected JSON.
+        // needs no unique/exclusion constraint. "Target" is the table, "Source" the reprojected payload.
         var matchColumns = BuildPostgreSqlMatchColumns(keyColumns);
-        var source = $@"(WITH my_tables(arr) AS (VALUES(v_json::JSON))
+        var source = isXml
+            ? $@"(SELECT {xmlColumnExprs} FROM xmltable('/rows/row' PASSING XMLPARSE(DOCUMENT '{jsonValue}')
+             COLUMNS {xmlColumnList}) AS ""x"") AS ""Source"""
+            : $@"(WITH my_tables(arr) AS (VALUES(v_json::JSON))
           SELECT {jsonColumns}
             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""Source""";
 
@@ -1164,12 +1192,12 @@ UPDATE {only}""{destSchema}"".""{tableName}"" AS ""Target""
             ? ""
             : $"OVERRIDING {identAndSeq.Split("=")[2]} VALUE\n  ";
 
+        var jsonDeclareLine = isXml ? "" : $"  v_json JSON = '{jsonValue}';\n";
         return (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
             + (string.IsNullOrEmpty(disableRuleStatements) ? "" : disableRuleStatements + "\n") + $@"
 DO $$
 DECLARE
-  v_json JSON = '{jsonValue}';
-  nextval BIGINT;
+{jsonDeclareLine}  nextval BIGINT;
 BEGIN
 {(disableTriggers ? $"ALTER TABLE {only}\"{destSchema}\".\"{tableName}\" DISABLE TRIGGER ALL;" : "")}{updateSql}
 INSERT INTO ""{destSchema}"".""{tableName}"" (
@@ -1291,6 +1319,49 @@ SELECT STRING_AGG(
 ";
         return cmd.ExecuteScalar()?.ToString() ?? "";
     }
+
+    // B1: xmltable()'s COLUMNS list — the PostgreSQL twin of BuildXmlShredSelectColumnsSqlServer. Each
+    // column is addressed by the same <c n="Col"> shape the SQL Server XML shred reads. Geometry/bytea/
+    // array columns (RequiresXmlColumnTransformPostgreSql) are extracted as text here — their real type
+    // gets applied by BuildXmlColumnExpressionPostgreSql in the wrapping SELECT instead, because a base64
+    // bytea value or a '*,*'-delimited array cannot be cast to its target type directly by xmltable's
+    // COLUMNS typing (silent data corruption for bytea, a parse error for arrays). Everything else is
+    // typed directly here with the same JsonParseType the JSON row source casts to.
+    private static string BuildXmlColumnsPostgreSql(List<MergeColumnInfo> columns) =>
+        string.Join(",\n         ", columns.Select(c =>
+            RequiresXmlColumnTransformPostgreSql(c)
+                ? $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'"
+                : $"\"{c.Name}\" {c.JsonParseType} PATH 'c[@n=\"{c.Name}\"]/text()'"));
+
+    // B1: same udt_name test GetJsonColumnDefinitionsPostgreSql uses for the array case
+    // (LEFT(udt_name,1)='_' — PostgreSQL's own array-of-type naming convention), ported to C# rather than
+    // duplicated with a different type-name list. Geometry/bytea reuse MergeColumnInfo.IsGeometry/IsBinary,
+    // which are themselves already the JSON path's C#-side mirrors (IsGeometryTypePostgreSql/
+    // IsByteaTypePostgreSql). internal: shared with DeferredMergeBuilder so the 2-pass path classifies
+    // columns identically rather than drifting.
+    internal static bool RequiresXmlColumnTransformPostgreSql(MergeColumnInfo c) =>
+        c.IsGeometry || c.IsBinary || c.DataType.StartsWith("_", StringComparison.Ordinal);
+
+    // B1: the per-type expression GetJsonColumnDefinitionsPostgreSql applies to `elem ->> 'col'`,
+    // reapplied here to xmltable()'s text output for the same three cases — ST_GeomFromText, decode(...,
+    // 'base64'), and STRING_TO_ARRAY with the identical '*,*' delimiter and '*NULL_VALUE_REPRESENTATION*'
+    // sentinel — so the two row sources cannot drift. A column that needs no transform is already
+    // correctly typed by BuildXmlColumnsPostgreSql's direct PATH form and just passes through.
+    internal static string BuildXmlColumnExpressionPostgreSql(MergeColumnInfo c, string sourceAlias)
+    {
+        var raw = $"\"{sourceAlias}\".\"{c.Name}\"";
+        if (c.IsGeometry) return $"ST_GeomFromText({raw})";
+        if (c.IsBinary) return $"decode({raw}, 'base64')";
+        if (c.DataType.StartsWith("_", StringComparison.Ordinal))
+            return $"STRING_TO_ARRAY({raw}, '*,*', '*NULL_VALUE_REPRESENTATION*')::{c.JsonParseType}";
+        return raw;
+    }
+
+    // B1: the outer SELECT list wrapping xmltable() in the direct (non-deferred) MERGE path — applies
+    // BuildXmlColumnExpressionPostgreSql to every column, including the pass-through case, so the FROM-item
+    // always projects exactly the column set BuildXmlColumnsPostgreSql declared.
+    private static string BuildXmlColumnExpressionsPostgreSql(List<MergeColumnInfo> columns) =>
+        string.Join(",\n         ", columns.Select(c => $"{BuildXmlColumnExpressionPostgreSql(c, "x")} AS \"{c.Name}\""));
 
     private static string GetInsertColumnsPostgreSql(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys = null)
     {

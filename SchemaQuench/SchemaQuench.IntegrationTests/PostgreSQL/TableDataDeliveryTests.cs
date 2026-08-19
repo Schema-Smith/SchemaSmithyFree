@@ -324,6 +324,132 @@ public class TableDataDeliveryTests
         }
     }
 
+    // B1: XML/JSON equivalence is the assertion that matters here — the two encodings carrying the same
+    // rows must produce identical table contents. The qty INT column is deliberate: a text-only payload
+    // would hide type-coercion drift between xmltable()'s COLUMNS typing and the JSON row source's casts.
+    [Test]
+    public void DataDelivery_PostgreSql_XmlEncoding_MatchesJsonEncodingRowForRow()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"pgxml_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        File.WriteAllText(Path.Combine(tempDir, "json.tabledata"),
+            @"[{""code"":""A001"",""name"":""Anvil"",""qty"":7}]");
+        File.WriteAllText(Path.Combine(tempDir, "xml.tabledata"),
+            @"<rows><row><c n=""code"">A001</c><c n=""name"">Anvil</c><c n=""qty"">7</c></row></rows>");
+
+        var jsonTable = $"_test_pgxml_json_{Guid.NewGuid():N}".Substring(0, 30);
+        var xmlTable = $"_test_pgxml_xml_{Guid.NewGuid():N}".Substring(0, 30);
+        try
+        {
+            DeliverOneEncoding(tempDir, "json.tabledata", null, jsonTable);
+            DeliverOneEncoding(tempDir, "xml.tabledata", "Xml", xmlTable);
+
+            using var c = _connection.CreateCommand();
+
+            // Positive assertion first: the two EXCEPT checks below are equivalence proofs, and two
+            // empty tables are trivially equivalent — without this, a gated-off delivery or a swallowed
+            // failure that left both tables empty would pass the equivalence checks while proving the XML
+            // shred delivered nothing. Assert on the XML table specifically (the path under test), and
+            // assert qty as an integer so the type-coercion point the payload was designed to exercise is
+            // actually checked, not just present.
+            c.CommandText = $@"SELECT code, name, qty FROM ""{SchemaName}"".""{xmlTable}""";
+            using (var reader = c.ExecuteReader())
+            {
+                Assert.That(reader.Read(), Is.True, "The XML delivery must have inserted its row.");
+                Assert.Multiple(() =>
+                {
+                    Assert.That(reader.GetString(0), Is.EqualTo("A001"));
+                    Assert.That(reader.GetString(1), Is.EqualTo("Anvil"));
+                    Assert.That(reader.GetInt32(2), Is.EqualTo(7),
+                        "qty must round-trip as an integer through xmltable()'s COLUMNS typing.");
+                });
+                Assert.That(reader.Read(), Is.False, "The XML delivery must not have inserted extra rows.");
+            }
+
+            c.CommandText = $@"
+                SELECT COUNT(*) FROM (
+                    SELECT code, name, qty FROM ""{SchemaName}"".""{jsonTable}""
+                    EXCEPT
+                    SELECT code, name, qty FROM ""{SchemaName}"".""{xmlTable}""
+                ) diff";
+            Assert.That(Convert.ToInt32(c.ExecuteScalar()), Is.EqualTo(0),
+                "Every JSON-delivered row must be reproduced exactly by the XML delivery.");
+
+            c.CommandText = $@"
+                SELECT COUNT(*) FROM (
+                    SELECT code, name, qty FROM ""{SchemaName}"".""{xmlTable}""
+                    EXCEPT
+                    SELECT code, name, qty FROM ""{SchemaName}"".""{jsonTable}""
+                ) diff";
+            Assert.That(Convert.ToInt32(c.ExecuteScalar()), Is.EqualTo(0),
+                "The XML delivery must not introduce rows the JSON delivery did not produce.");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+            using var dropCmd = _connection.CreateCommand();
+            dropCmd.CommandText = $@"DROP TABLE IF EXISTS ""{SchemaName}"".""{jsonTable}"", ""{SchemaName}"".""{xmlTable}"";";
+            dropCmd.ExecuteNonQuery();
+        }
+    }
+
+    // Mirrors SqlServer/TableDataDeliveryTests.cs's slice-2 DataDeliveryContext shape — Platform =
+    // "PostgreSQL", a PostgreSQL-flavored ScriptHelper, and PostgreSqlServerVersionNum threaded from the
+    // live container (rather than defaulting to 0 = modern) so this exercises the version-correct MERGE
+    // vs. manual-upsert path on whatever PG major the integration container is actually running.
+    private void DeliverOneEncoding(string tempDir, string contentFile, string contentEncoding, string tableName)
+    {
+        using (var createCmd = _connection.CreateCommand())
+        {
+            createCmd.CommandText = $@"
+                CREATE TABLE ""{SchemaName}"".""{tableName}"" (
+                    ""code"" VARCHAR(20) NOT NULL PRIMARY KEY,
+                    ""name"" VARCHAR(100) NOT NULL,
+                    ""qty"" INT NOT NULL
+                )";
+            createCmd.ExecuteNonQuery();
+        }
+
+        var table = new PostgreSqlTable
+        {
+            Name = tableName,
+            Schema = SchemaName,
+            Columns =
+            [
+                new Column { Name = "code", DataType = "VARCHAR(20)" },
+                new Column { Name = "name", DataType = "VARCHAR(100)" },
+                new Column { Name = "qty", DataType = "INT" }
+            ],
+            DataDelivery =
+            [
+                new DataDelivery { MergeType = "Insert", ContentFile = contentFile, ContentEncoding = contentEncoding }
+            ]
+        };
+
+        using var deliverCmd = _connection.CreateCommand();
+        var context = new DataDeliveryContext
+        {
+            Tables = new List<IDeliverableTable> { table },
+            Platform = "PostgreSQL",
+            Command = deliverCmd,
+            DatabaseName = _testDb,
+            TemplateRootPath = tempDir,
+            ScriptHelper = new MergeScriptHelperAdapter(Platform.PostgreSQL),
+            ReadFileContent = File.ReadAllText,
+            ExecuteScript = (_, script) =>
+            {
+                using var ec = _connection.CreateCommand();
+                ec.CommandText = script;
+                ec.ExecuteNonQuery();
+            },
+            ProgressLog = _ => { },
+            ProgressLogError = _ => { },
+            PostgreSqlServerVersionNum = _pgServerVersionNum
+        };
+
+        DataDeliveryProcessor.GetFromFactory().DeliverTables(context);
+    }
+
     #region FK Dependency Ordering Tests
 
     [Test]

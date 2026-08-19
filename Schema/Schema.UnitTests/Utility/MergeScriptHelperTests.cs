@@ -16,22 +16,17 @@ public class MergeScriptHelperTests
     #region B1 — XML delivery encoding guard
 
     [Test]
-    public void BuildMergeScript_XmlEncoding_OnNonSqlServer_ThrowsNotSupported()
+    public void BuildMergeScript_XmlEncoding_OnMySql_ThrowsNotSupported()
     {
-        // B1: XML delivery encoding is SQL-Server-only in this slice; a PG/MySQL delivery declaring Xml must
-        // fail loudly (before any catalog access) rather than silently emit a JSON shred.
+        // B1: XML delivery encoding is wired for SQL Server and PostgreSQL; a MySQL/MariaDB delivery
+        // declaring Xml must still fail loudly (before any catalog access) rather than silently emit a
+        // JSON shred. PostgreSQL's guard is exercised by the BuildMergeScript_PostgreSql_XmlEncoding_*
+        // tests below now that it no longer throws.
         var cmd = Substitute.For<IDbCommand>();
-        Assert.Multiple(() =>
-        {
-            Assert.Throws<NotSupportedException>(() =>
-                MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd, "public", "t", "<rows/>", "\"id\"",
-                    mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
-                    mergeFilter: null, contentEncoding: "Xml"));
-            Assert.Throws<NotSupportedException>(() =>
-                MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd, "db", "t", "<rows/>", "`id`",
-                    mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
-                    mergeFilter: null, contentEncoding: "Xml"));
-        });
+        Assert.Throws<NotSupportedException>(() =>
+            MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd, "db", "t", "<rows/>", "`id`",
+                mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
+                mergeFilter: null, contentEncoding: "Xml"));
     }
 
     #endregion
@@ -642,6 +637,131 @@ public class MergeScriptHelperTests
             tokenizeScripts: true, mergeFilter: null);
 
         Assert.That(result, Does.Contain("{{public.test_table.tabledata}}"));
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_EmitsXmltableRowSource()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: "\"Name\"", insertCols: "        \"Id\",\r\n        \"Name\"");
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Widget",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Name\">Anvil</c></row></rows>",
+            "\"Id\"", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("xmltable("), "PostgreSQL shreds XML with xmltable.");
+            Assert.That(script, Does.Contain("'/rows/row'"), "Row path matches the SQL Server shred.");
+            // JSON_ARRAY_ELEMENTS is the real PostgreSQL JSON row-source function (verified in
+            // GetJsonColumnDefinitionsPostgreSql's caller) — an XML delivery must not fall back to it.
+            Assert.That(script, Does.Not.Contain("JSON_ARRAY_ELEMENTS"),
+                "An XML delivery must not fall back to the JSON row source.");
+        });
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_NoLongerThrows()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: "\"Name\"", insertCols: "        \"Id\",\r\n        \"Name\"");
+
+        Assert.DoesNotThrow(() => MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Widget",
+            "<rows><row><c n=\"Id\">1</c></row></rows>",
+            "\"Id\"", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml"));
+    }
+
+    // B1 fix round 1: geometry/bytea/array columns must get the same per-type transform the JSON row
+    // source applies (GetJsonColumnDefinitionsPostgreSql) — a plain PATH-typed cast is wrong for all
+    // three (WKT text isn't a valid geometry literal, base64 text isn't valid bytea escape/hex format,
+    // and the '*,*'-delimited text isn't a valid PG array literal). These three tests are the coverage
+    // that was missing when the gap shipped.
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_GeometryColumn_UsesStGeomFromText()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: null, insertCols: "        \"Id\",\r\n        \"Geom\"",
+            metadataColumns:
+            [
+                ("Id", "integer", "int4", "pg_catalog", null, false),
+                ("Geom", "USER-DEFINED", "geometry", "public", null, true)
+            ]);
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Shapes",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Geom\">POINT(1 2)</c></row></rows>",
+            "\"Id\"", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("\"Geom\" text PATH"),
+                "A geometry column must be shredded as text, not cast directly by xmltable's COLUMNS typing.");
+            Assert.That(script, Does.Contain("ST_GeomFromText(\"x\".\"Geom\")"),
+                "Same function GetJsonColumnDefinitionsPostgreSql applies to the JSON row source.");
+        });
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_ByteaColumn_UsesDecodeBase64()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: null, insertCols: "        \"Id\",\r\n        \"Data\"",
+            metadataColumns:
+            [
+                ("Id", "integer", "int4", "pg_catalog", null, false),
+                ("Data", "bytea", "bytea", "pg_catalog", null, true)
+            ]);
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Blobs",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Data\">QQ==</c></row></rows>",
+            "\"Id\"", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("\"Data\" text PATH"),
+                "A bytea column must be shredded as text — casting base64 text straight to bytea corrupts the bytes.");
+            Assert.That(script, Does.Contain("decode(\"x\".\"Data\", 'base64')"),
+                "Same function GetJsonColumnDefinitionsPostgreSql applies to the JSON row source.");
+        });
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_ArrayColumn_UsesStringToArrayWithSameDelimiter()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: null, insertCols: "        \"Id\",\r\n        \"Tags\"",
+            metadataColumns:
+            [
+                ("Id", "integer", "int4", "pg_catalog", null, false),
+                ("Tags", "ARRAY", "_int4", "pg_catalog", null, true)
+            ]);
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Tagged",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Tags\">1*,*2</c></row></rows>",
+            "\"Id\"", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("\"Tags\" text PATH"),
+                "An array column must be shredded as text — the '*,*'-delimited form is not a PG array literal.");
+            Assert.That(script,
+                Does.Contain("STRING_TO_ARRAY(\"x\".\"Tags\", '*,*', '*NULL_VALUE_REPRESENTATION*')::_int4"),
+                "Same function, delimiter, and NULL sentinel GetJsonColumnDefinitionsPostgreSql applies to the JSON row source.");
+        });
     }
 
     #endregion
@@ -1636,6 +1756,75 @@ public class MergeScriptHelperTests
         cmd.ExecuteReader().Returns(reader);
 
         return cmd;
+    }
+
+    /// <summary>
+    /// PostgreSQL mock command for the XML row-source path. Unlike CreatePostgreSqlMockCommand, the XML
+    /// path reads column metadata via GetColumnMetadataPostgreSql (ExecuteReader) instead of the
+    /// STRING_AGG-based jsonColumns query, so ExecuteReader is routed by CommandText rather than fed a
+    /// single fixed reader. ExecuteScalar order: 1. GetUnsupportedColumnComments,
+    /// 2. GetIdentityColumnAndSequence, 3. GetUpdateColumns, 4. GetXmlColumns (both mergeUpdate-only),
+    /// 5. GetInsertColumns. ExecuteReader: GetColumnMetadataPostgreSql (its pg_attribute/attidentity join
+    /// distinguishes it) returns metadataColumns (defaults to a fixed Id int4 / Name varchar(100) shape —
+    /// see CreatePostgreSqlColumnMetadataReader); GetJsonColumnsPostgreSql (mergeUpdate-only) returns no
+    /// rows (no json/jsonb-typed target columns).
+    /// </summary>
+    private static IDbCommand CreatePostgreSqlXmlMockCommand(
+        string unsupportedComments, string identAndSeq, string updateCols, string insertCols,
+        (string Name, string DataType, string UdtName, string UdtSchema, int? MaxLen, bool Nullable)[] metadataColumns = null)
+    {
+        var cmd = Substitute.For<IDbCommand>();
+        var sequence = new List<object> { unsupportedComments, identAndSeq };
+        if (updateCols != null)
+        {
+            sequence.Add(updateCols);
+            sequence.Add(null); // GetXmlColumnsPostgreSql: no xml-typed target columns
+        }
+        sequence.Add(insertCols);
+
+        var callCount = 0;
+        cmd.ExecuteScalar().Returns(ci =>
+        {
+            var idx = callCount++;
+            return idx < sequence.Count ? sequence[idx] : null;
+        });
+
+        cmd.ExecuteReader().Returns(ci =>
+            cmd.CommandText != null && cmd.CommandText.Contains("attidentity")
+                ? CreatePostgreSqlColumnMetadataReader(metadataColumns)
+                : CreateEmptyMockReader());
+
+        return cmd;
+    }
+
+    private static IDataReader CreatePostgreSqlColumnMetadataReader(
+        (string Name, string DataType, string UdtName, string UdtSchema, int? MaxLen, bool Nullable)[] columns = null)
+    {
+        columns ??= new (string Name, string DataType, string UdtName, string UdtSchema, int? MaxLen, bool Nullable)[]
+        {
+            ("Id", "integer", "int4", "pg_catalog", null, false),
+            ("Name", "character varying", "varchar", "pg_catalog", 100, true)
+        };
+
+        var reader = Substitute.For<IDataReader>();
+        var idx = -1;
+        reader.Read().Returns(ci => { idx++; return idx < columns.Length; });
+        reader.GetString(0).Returns(ci => columns[idx].Name);
+        reader.GetString(1).Returns(ci => columns[idx].DataType);
+        reader.GetString(2).Returns(ci => columns[idx].UdtName);
+        reader.GetString(3).Returns(ci => columns[idx].UdtSchema);
+        reader.IsDBNull(4).Returns(ci => columns[idx].MaxLen is null);
+        reader.GetValue(4).Returns(ci => (object)columns[idx].MaxLen ?? DBNull.Value);
+        reader.IsDBNull(5).Returns(true);
+        reader.GetValue(5).Returns(DBNull.Value);
+        reader.IsDBNull(6).Returns(true);
+        reader.GetValue(6).Returns(DBNull.Value);
+        reader.IsDBNull(7).Returns(true);
+        reader.GetValue(7).Returns(DBNull.Value);
+        reader.GetString(8).Returns(ci => columns[idx].Nullable ? "YES" : "NO");
+        reader.GetValue(9).Returns(false);
+        reader.GetValue(10).Returns(false);
+        return reader;
     }
 
     #endregion
