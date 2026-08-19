@@ -58,42 +58,43 @@ public class SettingsContractDriftTests
 
     private static IEnumerable<(string File, string Key)> ProductConfigReads(string root)
     {
-        foreach (var project in ProductProjects)
+        var contractKeys = SettingsContract.AllAcceptedKeys().ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in ScannableProductFiles(root))
         {
-            var projectDir = Path.Join(root, project);
-            if (!Directory.Exists(projectDir)) continue;
+            var text = StripComments(File.ReadAllText(file));
+            var relative = Path.GetRelativePath(root, file);
 
-            foreach (var file in Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories))
-            {
-                // Test projects live beneath the product project directories; they legitimately use
-                // harness-only keys (SqlServer:Server, PostgreSQL:Password, …) that are not settings.
-                if (file.Contains("Tests", StringComparison.OrdinalIgnoreCase)) continue;
-                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-                    file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
-                // The contract's own files necessarily spell the keys out.
-                if (file.EndsWith("SettingsKeys.cs") || file.EndsWith("SettingsContract.cs")) continue;
+            // Interpolated or composed keys cannot be checked statically.
+            var reads = ConfigRead.Matches(text)
+                .Select(m => m.Groups["key"].Value)
+                .Where(k => k.Length > 0 && !k.Contains('{'));
 
-                var text = StripComments(File.ReadAllText(file));
-                var relative = Path.GetRelativePath(root, file);
+            // Any namespaced literal that IS a contract key, regardless of the syntax around it.
+            var literals = AnyStringLiteral.Matches(text)
+                .Select(m => m.Groups["key"].Value)
+                .Where(contractKeys.Contains);
 
-                foreach (Match m in ConfigRead.Matches(text))
-                {
-                    var key = m.Groups["key"].Value;
-                    // Interpolated or composed keys cannot be checked statically.
-                    if (key.Length == 0 || key.Contains('{')) continue;
-                    yield return (relative, key);
-                }
-
-                // Any namespaced literal that IS a contract key, regardless of the syntax around it.
-                var contractKeys = SettingsContract.AllAcceptedKeys().ToHashSet(StringComparer.OrdinalIgnoreCase);
-                foreach (Match m in AnyStringLiteral.Matches(text))
-                {
-                    var key = m.Groups["key"].Value;
-                    if (contractKeys.Contains(key)) yield return (relative, key);
-                }
-            }
+            foreach (var key in reads.Concat(literals))
+                yield return (relative, key);
         }
     }
+
+    private static IEnumerable<string> ScannableProductFiles(string root) =>
+        ProductProjects
+            .Select(project => Path.Join(root, project))
+            .Where(Directory.Exists)
+            .SelectMany(dir => Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+            .Where(IsScannable);
+
+    private static bool IsScannable(string file) =>
+        // Test projects live beneath the product project directories; they legitimately use
+        // harness-only keys (SqlServer:Server, PostgreSQL:Password, …) that are not settings.
+        !file.Contains("Tests", StringComparison.OrdinalIgnoreCase) &&
+        !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") &&
+        !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+        // The contract's own files necessarily spell the keys out.
+        !file.EndsWith("SettingsKeys.cs") && !file.EndsWith("SettingsContract.cs");
 
     [Test]
     public void EveryConfigurationKeyReadByProductCode_IsRegisteredInTheContract()
@@ -176,21 +177,13 @@ public class SettingsContractDriftTests
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var reference = new Regex(@"SettingsKeys(?:\.\w+)+", RegexOptions.Compiled);
 
-        foreach (var project in ProductProjects)
-        {
-            var projectDir = Path.Join(root, project);
-            if (!Directory.Exists(projectDir)) continue;
-            foreach (var file in Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories))
-            {
-                if (file.Contains("Tests", StringComparison.OrdinalIgnoreCase)) continue;
-                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-                    file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
-                if (file.EndsWith("SettingsKeys.cs") || file.EndsWith("SettingsContract.cs")) continue;
+        var referenced = ScannableProductFiles(root)
+            .SelectMany(file => reference.Matches(StripComments(File.ReadAllText(file))))
+            .Select(m => m.Value);
 
-                foreach (Match m in reference.Matches(StripComments(File.ReadAllText(file))))
-                    if (byName.TryGetValue(m.Value, out var value)) used.Add(value);
-            }
-        }
+        foreach (var path in referenced)
+            if (byName.TryGetValue(path, out var value)) used.Add(value);
+
         return used;
     }
 

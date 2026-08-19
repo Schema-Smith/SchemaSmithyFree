@@ -673,10 +673,9 @@ namespace Schema.Domain
             foreach (var table in Tables)
             {
                 var migrated = new List<string>();
-                foreach (var column in table.Columns.OfType<MySqlColumn>())
+                foreach (var column in table.Columns.OfType<MySqlColumn>()
+                             .Where(c => !string.IsNullOrWhiteSpace(c.CheckExpression)))
                 {
-                    if (string.IsNullOrWhiteSpace(column.CheckExpression)) continue;
-
                     var constraintName = $"CK_{StringHelper.StripIdentifierWrapper(table.Name)}_{StringHelper.StripIdentifierWrapper(column.Name)}";
 
                     // An explicit table-level constraint of the same name wins — the author has
