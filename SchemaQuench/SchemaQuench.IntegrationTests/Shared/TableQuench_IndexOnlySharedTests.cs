@@ -291,6 +291,67 @@ public abstract class TableQuench_IndexOnlySharedTests
     }
 
     [Test]
+    public void IndexOnlyQuench_PrefixLengthIndex_IsIdempotent_AcrossRepeatedDeploys()
+    {
+        // Arrange - a prefix-length index (`code`(5)) already exists exactly as declared, and is
+        // owned by the product. Regression coverage for a bug where the declared side and the
+        // catalog-snapshot side normalized index columns differently, so a prefix index could never
+        // compare equal to itself and was dropped + recreated on every single deploy.
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"CREATE INDEX `idx_prefix_stable` ON `{_testDb}`.`{_testTableName}` (`code`(5))";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $@"
+            INSERT INTO `{MainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
+            VALUES ('TestProduct', '', '{_testDb}', 'INDEX', '{_testTableName}.idx_prefix_stable')";
+        command.ExecuteNonQuery();
+
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_prefix_stable`"",
+                    ""IndexColumns"": ""`code`(5)"",
+                    ""Unique"": false,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""BTREE""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        // Act - first pass may legitimately do work. The SECOND pass must do nothing at all -- that
+        // convergence is exactly what the prefix mismatch breaks.
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        command.CommandText = "DELETE FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID()";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        // Assert - no rebuild/rename status line on the re-deploy. These are the exact phrases the
+        // non-WhatIf branches log (see STEP 1/2/4 in SchemaSmith_IndexOnlyQuench.sql); a modified
+        // index logs "Drop and recreate index:", not a bare "Drop index:".
+        command.CommandText = $@"
+            SELECT COUNT(*) FROM SchemaSmith_StatusMessages
+            WHERE SessionId = CONNECTION_ID()
+              AND (Message LIKE '%Drop and recreate index%' OR Message LIKE '%Create index%' OR Message LIKE '%Rename index%')";
+        var actionCount = Convert.ToInt32(command.ExecuteScalar());
+        Assert.That(actionCount, Is.EqualTo(0),
+            "A prefix-length index that already matches the declared definition must be left alone on a re-deploy.");
+
+        command.CommandText = $@"
+            SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_prefix_stable'";
+        var subPart = Convert.ToInt32(command.ExecuteScalar());
+        Assert.That(subPart, Is.EqualTo(5), "The prefix length must survive re-deploy.");
+    }
+
+    [Test]
     public void IndexOnlyQuench_ShouldModifyIndex_WhenColumnsChange()
     {
         // Arrange - Create an index on just 'code'

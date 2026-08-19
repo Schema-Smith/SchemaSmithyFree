@@ -188,6 +188,7 @@ BEGIN
            CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
            GROUP_CONCAT(
                CONCAT('`', s.COLUMN_NAME, '`',
+                      IF(s.SUB_PART IS NOT NULL, CONCAT('(', s.SUB_PART, ')'), ''),
                       CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
                ORDER BY s.SEQ_IN_INDEX
                SEPARATOR ','
