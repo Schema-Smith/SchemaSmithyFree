@@ -201,7 +201,7 @@ TRUNCATE TABLE SchemaSmith.TestLog";
             cmd.CommandText = @$"
 TRUNCATE TABLE SchemaSmith.CompletedMigrationScripts
 TRUNCATE TABLE SchemaSmith.TestLog
-INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot]) VALUES('MigrationScripts/Before/MigrationScript0.sql', 'ValidProduct', 'Before')
+INSERT SchemaSmith.CompletedMigrationScripts ([ScriptPath], [ProductName], [QuenchSlot], [template_name], [schema_name]) VALUES('MigrationScripts/Before/MigrationScript0.sql', 'ValidProduct', 'Before', 'Main', '')
 ";
             cmd.ExecuteNonQuery();
             conn.ChangeDatabase(_secondaryDb);

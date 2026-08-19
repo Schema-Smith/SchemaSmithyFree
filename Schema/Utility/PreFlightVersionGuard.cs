@@ -24,7 +24,7 @@ namespace Schema.Utility
 
         /// <summary>
         /// Throws when <paramref name="info"/> is below the engine floor, or (SQL Server) when its
-        /// detected database compatibility level is below 130. <paramref name="databaseLabel"/> names
+        /// detected database compatibility level is below 100. <paramref name="databaseLabel"/> names
         /// the database in the compatibility-level message.
         /// </summary>
         public static void CheckOrThrow(TargetVersionInfo info, string serverLabel, string databaseLabel = null)

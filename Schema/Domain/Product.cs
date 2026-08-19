@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Configuration;
@@ -9,6 +10,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Schema.Isolators;
 using Schema.Utility;
+using Schema.Configuration;
 
 namespace Schema.Domain
 {
@@ -62,6 +64,7 @@ namespace Schema.Domain
         public CheckConstraintStyle CheckConstraintStyle { get; set; }
 
         [JsonProperty(Order = 15)]
+        [DefaultValue(true)]
         public bool DropTablesRemovedFromProduct { get; set; } = true;
 
         [JsonProperty(Order = 16)]
@@ -115,7 +118,7 @@ namespace Schema.Domain
         public static Product Load()
         {
             var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-            var schemaPackagePath = config["SchemaPackagePath"] ?? "";
+            var schemaPackagePath = config[SettingsKeys.SchemaPackagePath] ?? "";
 
             if (ZipFileWrapper.IsValidZipFile(schemaPackagePath))
             {
@@ -155,7 +158,7 @@ namespace Schema.Domain
 
         private static IEnumerable<KeyValuePair<string, string>> GetScriptTokensFromAppConfig(IConfigurationRoot config)
         {
-            return config.GetSection("ScriptTokens")
+            return config.GetSection(SettingsKeys.ScriptTokens)
                 .AsEnumerable()
                 .Where(x => x.Value != null)
                 .Select(x => new KeyValuePair<string, string>(x.Key.Replace("ScriptTokens:", ""), x.Value ?? ""));

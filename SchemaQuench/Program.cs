@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Schema.Checkpointing;
 using Schema.Domain;
 using Schema.Isolators;
+using Schema.Configuration;
 using Schema.Utility;
 using Schema.Validation;
 
@@ -21,6 +22,7 @@ public static class Program
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
         var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaQuench", LogFactory.GetLogger("ProgressLog").Info);
         CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
+        SettingsContract.WarnOnUnrecognizedKeys(config, SettingsTool.SchemaQuench, LogFactory.GetLogger("ProgressLog").Warn);
 
         RegisterCheckpointing();
 
@@ -31,7 +33,7 @@ public static class Program
         if (CommandLineParser.ContainsSwitch("Validate"))
         {
             var validator = new SchemaPackageValidator(PackageLoader.LoadPackage, ValidationCheckRegistry.Default());
-            var result = validator.Validate(config["SchemaPackagePath"] ?? ".");
+            var result = validator.Validate(config[SettingsKeys.SchemaPackagePath] ?? ".");
             foreach (var line in ValidationReporter.Render(result.Findings))
                 LogFactory.GetLogger("ProgressLog").Info(line);
             LogBackup.BackupLogsAndExit("SchemaQuench", result.HasErrors ? 2 : 0);
@@ -103,7 +105,7 @@ public static class Program
     {
         var dir = CommandLineParser.ValueOfSwitch("CheckpointDirectory");
         if (string.IsNullOrWhiteSpace(dir))
-            dir = FactoryContainer.Resolve<IConfigurationRoot>()?["CheckpointDirectory"];
+            dir = FactoryContainer.Resolve<IConfigurationRoot>()?[SettingsKeys.CheckpointDirectory];
         if (!string.IsNullOrWhiteSpace(dir))
             FactoryContainer.Register<ICheckpointing>(new FileCheckpointManager(dir));
     }

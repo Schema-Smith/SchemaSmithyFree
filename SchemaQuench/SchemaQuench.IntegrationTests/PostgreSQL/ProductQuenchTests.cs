@@ -144,7 +144,7 @@ DROP TABLE IF EXISTS ""SchemaSmith"".""TestLog"";
             cmd.CommandText = @$"
 TRUNCATE TABLE ""SchemaSmith"".""CompletedMigrationScripts"";
 DROP TABLE IF EXISTS ""SchemaSmith"".""TestLog"";
-INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"") VALUES('Before Scripts/MigrationScript0.sql', 'ValidProduct', 'Before');
+INSERT INTO ""SchemaSmith"".""CompletedMigrationScripts"" (""ScriptPath"", ""ProductName"", ""QuenchSlot"", template_name, schema_name) VALUES('Before Scripts/MigrationScript0.sql', 'ValidProduct', 'Before', 'Main', '');
 ";
             cmd.ExecuteNonQuery();
 

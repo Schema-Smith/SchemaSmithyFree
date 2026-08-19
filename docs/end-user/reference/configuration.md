@@ -166,6 +166,35 @@ SchemaQuench --ConfigFile:C:\configs\production.json
 
 The path can be absolute or relative to the current working directory.
 
+### Unrecognised settings are reported
+
+A mistyped setting is otherwise invisible. `Target:Sever` binds nothing, so the run proceeds exactly as though you had never set it -- and a deployment that silently ignores half your configuration is worse than one that refuses to start.
+
+Each tool therefore checks the settings it was given against the settings it actually reads, and warns about anything it does not recognise:
+
+```
+WARN  Configuration key 'Target:Sever' is not read by SchemaQuench and will have no effect. Check for a typo.
+```
+
+This is the same treatment `--NoSuchSwitch` already gets on the command line, and it covers every configuration source -- settings file, `SmithySettings_` environment variables, and CLI overrides all land in the same configuration and are all checked.
+
+Three things are deliberately **not** reported:
+
+- **Sections the tool does not own.** SchemaQuench says nothing about a `Source:` section, and neither Tongs tool comments on `Target:`. A file may serve more than one tool, or carry settings for a version you have not installed yet.
+- **Open sections**, where you choose the names: `ScriptTokens`, `Target:ConnectionProperties`, `Source:ConnectionProperties`, `Target:TemplateTargets`, and `FolderMapping`. Anything beneath these is your value, not a setting name.
+- **Array elements** such as `Target:Databases:0`.
+
+It is a warning, not an error -- the run continues. Treat one as a typo until proven otherwise.
+
+### The settings surface is enumerable
+
+The set of settings each tool reads is not just documentation -- it is data, and the tools enforce it. That same set is available to anything that wraps or validates a SchemaSmith configuration:
+
+- **From .NET:** reference `SchemaSmith.Schema` and call `SettingsContract.AcceptedKeys(SettingsTool.SchemaQuench)`, or `SettingsContract.ToJson()` for the whole shape.
+- **Without .NET:** read `settings-contract.json`, published inside the `SchemaSmith.Schema` package. It lists every accepted key per tool, plus the open sections and array-valued settings.
+
+Both come from the same source the tools check against, so a wrapper can validate a settings file the way SchemaQuench does without maintaining its own copy of the key list.
+
 ---
 
 ## Environment Variables

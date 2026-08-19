@@ -263,6 +263,42 @@ namespace Schema.UnitTests.Domain
             Assert.That(product.DropTablesRemovedFromProduct, Is.True);
         }
 
+        // The read side above was covered from the start; the write side was not, which is how a
+        // false value could be silently discarded on save. JsonHelper serializes with
+        // DefaultValueHandling.Ignore, so without [DefaultValue(true)] Newtonsoft compares against
+        // the type default (false) and omits the only value anyone would ever set.
+        [Test]
+        public void DropTablesRemovedFromProduct_SerializeFalse_WritesProperty()
+        {
+            var product = new Product { Name = "Test", Platform = Platform.SqlServer, DropTablesRemovedFromProduct = false };
+
+            var json = JsonHelper.Serialize(product);
+
+            Assert.That(json, Does.Contain("\"DropTablesRemovedFromProduct\""));
+            Assert.That(json, Does.Contain("false"));
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_SerializeTrue_OmitsProperty()
+        {
+            var product = new Product { Name = "Test", Platform = Platform.SqlServer, DropTablesRemovedFromProduct = true };
+
+            var json = JsonHelper.Serialize(product);
+
+            Assert.That(json, Does.Not.Contain("DropTablesRemovedFromProduct"));
+        }
+
+        [Test]
+        public void DropTablesRemovedFromProduct_JsonRoundTrip_PreservesFalse()
+        {
+            var product = new Product { Name = "Test", Platform = Platform.SqlServer, DropTablesRemovedFromProduct = false };
+
+            var reloaded = JsonConvert.DeserializeObject<Product>(JsonHelper.Serialize(product));
+
+            Assert.That(reloaded.DropTablesRemovedFromProduct, Is.False,
+                "turning off product-level table drops must survive a save/reload");
+        }
+
         [Test]
         public void DropUnknownIndexes_AbsentInJson_IsNull()
         {

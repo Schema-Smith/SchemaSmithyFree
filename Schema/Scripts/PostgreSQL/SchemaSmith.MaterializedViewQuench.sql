@@ -2,13 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
--- TRANSITIONAL (slice 3 audit B1 of schema-templates) p_TemplateName defaults
--- to empty for backward compatibility. New callers pass the active template
--- name so ProductOwnership reads/writes are scoped to that template. Inline
--- view-removed-from-product detection joins permissively on template_name
--- against the current and legacy-empty values. Tracked in the Community
--- roadmap under Slice 3 transitional aids -- ProductOwnership template_name
--- extension.
+-- ProductOwnership reads and writes are scoped to p_TemplateName, including the inline
+-- view-removed-from-product detection, so one template's prune pass never considers another
+-- template's materialized views.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."MaterializedViewQuench"
   (p_ProductName VARCHAR(50),
    p_ViewDefinitions TEXT,

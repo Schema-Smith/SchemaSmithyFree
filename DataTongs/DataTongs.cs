@@ -13,6 +13,7 @@ using Schema.Delivery;
 using Schema.Domain;
 using Schema.Isolators;
 using Schema.Utility;
+using Schema.Configuration;
 
 namespace DataTongs;
 
@@ -44,15 +45,15 @@ public class DataTongs
         }
 
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var server = config["Source:Server"] ?? config["Target:Server"];
-        var user = config["Source:User"] ?? config["Target:User"];
-        var password = config["Source:Password"] ?? config["Target:Password"];
-        var port = config["Source:Port"] ?? config["Target:Port"];
-        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        var server = config[SettingsKeys.Source.Server] ?? config[SettingsKeys.Target.Server];
+        var user = config[SettingsKeys.Source.User] ?? config[SettingsKeys.Target.User];
+        var password = config[SettingsKeys.Source.Password] ?? config[SettingsKeys.Target.Password];
+        var port = config[SettingsKeys.Source.Port] ?? config[SettingsKeys.Target.Port];
+        var connectionProperties = ConnectionString.ReadProperties(config, SettingsKeys.Source.ConnectionProperties);
         if (connectionProperties.Count == 0)
-            connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+            connectionProperties = ConnectionString.ReadProperties(config, SettingsKeys.Target.ConnectionProperties);
         CommandLineParser.ApplyTransportSecuritySwitch(_platform, connectionProperties);
-        var integratedSecurity = string.Equals(config["Source:IntegratedSecurity"] ?? config["Target:IntegratedSecurity"], "true", StringComparison.OrdinalIgnoreCase);
+        var integratedSecurity = string.Equals(config[SettingsKeys.Source.IntegratedSecurity] ?? config[SettingsKeys.Target.IntegratedSecurity], "true", StringComparison.OrdinalIgnoreCase);
 
         var connectionString = ConnectionString.Build(_platform, server, targetDb, user, password, port, connectionProperties, integratedSecurity: integratedSecurity);
         var connectionFactory = GetConnectionFactory();
@@ -76,28 +77,28 @@ public class DataTongs
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
 
-        var disableTriggers = config["ShouldCast:DisableTriggers"]?.ToLower() == "true";
-        var tokenizeScripts = config["ShouldCast:TokenizeScripts"]?.ToLower() != "false";
-        var mergeUpdate = config["ShouldCast:MergeUpdate"]?.ToLower() != "false";
-        var mergeDelete = config["ShouldCast:MergeDelete"]?.ToLower() != "false";
+        var disableTriggers = config[SettingsKeys.ShouldCast.DisableTriggers]?.ToLower() == "true";
+        var tokenizeScripts = config[SettingsKeys.ShouldCast.TokenizeScripts]?.ToLower() != "false";
+        var mergeUpdate = config[SettingsKeys.ShouldCast.MergeUpdate]?.ToLower() != "false";
+        var mergeDelete = config[SettingsKeys.ShouldCast.MergeDelete]?.ToLower() != "false";
 
         // PostgreSQL-specific options
-        var disableRules = config["ShouldCast:DisableRules"]?.ToLower() == "true";
-        var updateDescendents = config["ShouldCast:UpdateDescendents"]?.ToLower() != "false";
+        var disableRules = config[SettingsKeys.ShouldCast.DisableRules]?.ToLower() == "true";
+        var updateDescendents = config[SettingsKeys.ShouldCast.UpdateDescendents]?.ToLower() != "false";
 
-        var outputContents = config["ShouldCast:OutputContentFiles"]?.ToLower() != "false";
-        var outputScripts = config["ShouldCast:OutputScripts"]?.ToLower() != "false";
-        var contentsPath = config["ContentPath"] ?? ".";
-        var scriptPath = config["ScriptPath"] ?? ".";
+        var outputContents = config[SettingsKeys.ShouldCast.OutputContentFiles]?.ToLower() != "false";
+        var outputScripts = config[SettingsKeys.ShouldCast.OutputScripts]?.ToLower() != "false";
+        var contentsPath = config[SettingsKeys.ContentPath] ?? ".";
+        var scriptPath = config[SettingsKeys.ScriptPath] ?? ".";
         var configureDataDelivery = CommandLineParser.ContainsSwitch("ConfigureDataDelivery")
-            || config["ShouldCast:ConfigureDataDelivery"]?.ToLower() == "true";
+            || config[SettingsKeys.ShouldCast.ConfigureDataDelivery]?.ToLower() == "true";
 
         // B1 slice 3: a global switch to extract delivery content in the XML encoding (default Json),
         // so a package can be authored to deploy on a legacy-compatibility SQL Server (below the
         // OPENJSON cliff). SQL Server only — XML delivery deploys there alone; on the other engines
         // JSON shreds at every supported version, so an Xml request is warned-and-ignored.
         var deliveryEncoding = CommandLineParser.ValueOfSwitch("DeliveryEncoding", null)
-            ?? config["ShouldCast:DeliveryEncoding"] ?? "Json";
+            ?? config[SettingsKeys.ShouldCast.DeliveryEncoding] ?? "Json";
         var extractAsXml = deliveryEncoding.Trim().Equals("Xml", StringComparison.OrdinalIgnoreCase);
         if (extractAsXml && _platform.GetBasePlatform() != Platform.SqlServer)
         {
@@ -106,8 +107,8 @@ public class DataTongs
             extractAsXml = false;
         }
         var templatePath = CommandLineParser.ValueOfSwitch("TemplatePath", null)
-            ?? config["TemplatePath"];
-        var sourceSchemaSetting = config["Source:Schema"] ?? "";
+            ?? config[SettingsKeys.TemplatePath];
+        var sourceSchemaSetting = config[SettingsKeys.Source.Schema] ?? "";
 
         // Always resolve template root — schema-template mode detection (§8.1) must run even
         // when Source.Schema is unset, so we can error out cleanly if the user pointed at a
@@ -149,10 +150,10 @@ public class DataTongs
         if (outputContents) DirectoryWrapper.GetFromFactory().CreateDirectory(contentsPath);
         if (outputScripts) DirectoryWrapper.GetFromFactory().CreateDirectory(scriptPath);
 
-        var sourceDb = config["Source:Database"];
+        var sourceDb = config[SettingsKeys.Source.Database];
         if (string.IsNullOrEmpty(sourceDb)) throw new Exception("Source database is required");
 
-        var tables = config.GetSection("Tables")
+        var tables = config.GetSection(SettingsKeys.TablesToExtract)
             .GetChildren()
             .Select(t => new TableConfig
             {

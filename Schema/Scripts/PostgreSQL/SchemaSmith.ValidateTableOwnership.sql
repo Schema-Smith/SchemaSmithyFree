@@ -2,15 +2,10 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
--- TRANSITIONAL (slice 3 audit B1 of schema-templates) temp_product_ownership is populated
--- STRICTLY on template_name = p_TemplateName so a multi-template products
--- ModifiedTableQuench drop-candidates query only sees rows owned by the CURRENT template.
--- Without this, every template iterations drop pass would see every other templates
--- owned tables as drop candidates. Legacy pre-extension rows have template_name = ''
--- and only appear in iterations whose template_name is also '' (i.e. callers that have
--- not yet been updated to pass a template name) -- they are otherwise harmless residue.
--- Tracked in the Community roadmap under Slice 3 transitional aids -- ProductOwnership
--- template_name extension.
+-- temp_product_ownership is populated strictly on template_name = p_TemplateName so a
+-- multi-template product's ModifiedTableQuench drop-candidates query only sees rows owned by
+-- the CURRENT template. Without this, every template iteration's drop pass would see every
+-- other template's owned tables as drop candidates.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."ValidateTableOwnership"
 (p_ProductName VARCHAR(50),
  p_WhatIf BOOLEAN = FALSE,

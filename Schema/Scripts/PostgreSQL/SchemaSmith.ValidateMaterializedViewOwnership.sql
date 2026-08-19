@@ -2,11 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
--- TRANSITIONAL (slice 3 audit B1 of schema-templates): same template_name scoping note as
--- ValidateTableOwnership. The conflict-detection JOIN intentionally does NOT filter on
--- template_name — a cross-product conflict is a cross-product conflict regardless of which
--- template was claiming the materialized view. Tracked in the Community roadmap under
--- "Slice 3 transitional aids — ProductOwnership template_name extension".
+-- Same template_name scoping as ValidateTableOwnership. The conflict-detection JOIN
+-- intentionally does NOT filter on template_name — a cross-product conflict is a cross-product
+-- conflict regardless of which template was claiming the materialized view.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."ValidateMaterializedViewOwnership"
 (p_ProductName VARCHAR(50),
  p_WhatIf BOOLEAN = FALSE,

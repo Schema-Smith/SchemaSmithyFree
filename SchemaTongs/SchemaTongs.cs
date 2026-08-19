@@ -20,6 +20,7 @@ using MySqlConnector;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Utility;
+using Schema.Configuration;
 
 namespace SchemaTongs;
 
@@ -214,15 +215,15 @@ public class SchemaTongs
         }
 
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var server = config["Source:Server"] ?? config["Target:Server"];
-        var user = config["Source:User"] ?? config["Target:User"];
-        var password = config["Source:Password"] ?? config["Target:Password"];
-        var port = config["Source:Port"] ?? config["Target:Port"];
-        var connectionProperties = ConnectionString.ReadProperties(config, "Source:ConnectionProperties");
+        var server = config[SettingsKeys.Source.Server] ?? config[SettingsKeys.Target.Server];
+        var user = config[SettingsKeys.Source.User] ?? config[SettingsKeys.Target.User];
+        var password = config[SettingsKeys.Source.Password] ?? config[SettingsKeys.Target.Password];
+        var port = config[SettingsKeys.Source.Port] ?? config[SettingsKeys.Target.Port];
+        var connectionProperties = ConnectionString.ReadProperties(config, SettingsKeys.Source.ConnectionProperties);
         if (connectionProperties.Count == 0)
-            connectionProperties = ConnectionString.ReadProperties(config, "Target:ConnectionProperties");
+            connectionProperties = ConnectionString.ReadProperties(config, SettingsKeys.Target.ConnectionProperties);
         CommandLineParser.ApplyTransportSecuritySwitch(_platform, connectionProperties);
-        var integratedSecurity = string.Equals(config["Source:IntegratedSecurity"] ?? config["Target:IntegratedSecurity"], "true", StringComparison.OrdinalIgnoreCase);
+        var integratedSecurity = string.Equals(config[SettingsKeys.Source.IntegratedSecurity] ?? config[SettingsKeys.Target.IntegratedSecurity], "true", StringComparison.OrdinalIgnoreCase);
 
         var connectionString = ConnectionString.Build(_platform, server, targetDb, user, password, port, connectionProperties, integratedSecurity: integratedSecurity);
         var connectionFactory = GetConnectionFactory();
@@ -252,8 +253,8 @@ public class SchemaTongs
     public void PreFlightSourceVersion()
     {
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var targetDb = config["Source:Database"] ?? config["Source:Schema"];
-        var server = config["Source:Server"] ?? config["Target:Server"] ?? "source";
+        var targetDb = config[SettingsKeys.Source.Database] ?? config[SettingsKeys.Source.Schema];
+        var server = config[SettingsKeys.Source.Server] ?? config[SettingsKeys.Target.Server] ?? "source";
         using var connection = GetConnection(targetDb);
         using var command = connection.CreateCommand();
         var info = TargetVersionDetector.Detect(command, _platform,
@@ -267,27 +268,27 @@ public class SchemaTongs
     {
         _stopwatch.Start();
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var targetDb = config["Source:Database"] ?? config["Source:Schema"];
+        var targetDb = config[SettingsKeys.Source.Database] ?? config[SettingsKeys.Source.Schema];
         if (string.IsNullOrEmpty(targetDb)) throw new Exception("Source database is required. Set 'Source:Database' in appsettings.json.");
-        _productPath = Path.Combine(config["Product:Path"] ?? ".");
+        _productPath = Path.Join(config[SettingsKeys.ProductKeys.Path] ?? ".");
 
         LoadShouldCastSettings(config);
 
-        _objectsToCast = (config["ShouldCast:ObjectList"]?.ToLower() ?? "").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+        _objectsToCast = (config[SettingsKeys.ShouldCast.ObjectList]?.ToLower() ?? "").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
 
-        var configStyle = Enum.TryParse<CheckConstraintStyle>(config["Product:CheckConstraintStyle"], true, out var style)
+        var configStyle = Enum.TryParse<CheckConstraintStyle>(config[SettingsKeys.ProductKeys.CheckConstraintStyle], true, out var style)
             ? style : (CheckConstraintStyle?)null;
 
         var productFile = Path.Combine(_productPath, "Product.json");
         var productIsNew = !FileWrapper.GetFromFactory().Exists(productFile);
 
-        RepositoryHelper.UpdateOrInitRepository(_productPath, config["Product:Name"], config["Template:Name"], targetDb, _platform,
+        RepositoryHelper.UpdateOrInitRepository(_productPath, config[SettingsKeys.ProductKeys.Name], config[SettingsKeys.TemplateKeys.Name], targetDb, _platform,
             isSchemaTemplate: _isSchemaTemplate);
 
         ApplyCheckConstraintStyle(productFile, productIsNew, configStyle);
 
         _templatePath = RepositoryHelper.UpdateOrInitTemplate(
-            _productPath, config["Template:Name"], targetDb, _platform,
+            _productPath, config[SettingsKeys.TemplateKeys.Name], targetDb, _platform,
             sourceSchema: _isSchemaTemplate ? _sourceSchema : null,
             userSchemaIdentificationScript: _isSchemaTemplate
                 ? (string.IsNullOrWhiteSpace(_schemaIdentificationScript) ? null : _schemaIdentificationScript)
@@ -480,58 +481,58 @@ public class SchemaTongs
 
     private void LoadShouldCastSettings(IConfigurationRoot config)
     {
-        _orphanHandlingMode = Enum.TryParse<OrphanHandlingMode>(config["OrphanHandling:Mode"], true, out var mode)
+        _orphanHandlingMode = Enum.TryParse<OrphanHandlingMode>(config[SettingsKeys.OrphanHandling.Mode], true, out var mode)
             ? mode : OrphanHandlingMode.Detect;
 
-        _validateScripts = config["ShouldCast:ValidateScripts"]?.ToLower() == "true";
-        _saveInvalidScripts = config["ShouldCast:SaveInvalidScripts"]?.ToLower() != "false";
+        _validateScripts = config[SettingsKeys.ShouldCast.ValidateScripts]?.ToLower() == "true";
+        _saveInvalidScripts = config[SettingsKeys.ShouldCast.SaveInvalidScripts]?.ToLower() != "false";
 
-        _includeTables = config["ShouldCast:Tables"]?.ToLower() != "false";
-        _includeViews = config["ShouldCast:Views"]?.ToLower() != "false";
+        _includeTables = config[SettingsKeys.ShouldCast.Tables]?.ToLower() != "false";
+        _includeViews = config[SettingsKeys.ShouldCast.Views]?.ToLower() != "false";
 
         // Schema-template extraction mode (design §7.1). MySQL excluded — no schema-inside-database concept (design §2).
-        _sourceSchema = _platform.GetBasePlatform() != Platform.MySQL ? (config["Source:Schema"] ?? "") : "";
-        var rawSourceSchema = config["Source:Schema"];
+        _sourceSchema = _platform.GetBasePlatform() != Platform.MySQL ? (config[SettingsKeys.Source.Schema] ?? "") : "";
+        var rawSourceSchema = config[SettingsKeys.Source.Schema];
         if (_platform.GetBasePlatform() == Platform.MySQL && !string.IsNullOrWhiteSpace(rawSourceSchema))
             _progressLog.Warn($"MySQL: Source.Schema='{rawSourceSchema}' is set but ignored as schema-template activator — running in regular mode.");
-        _schemaIdentificationScript = config["Template:SchemaIdentificationScript"] ?? "";
+        _schemaIdentificationScript = config[SettingsKeys.TemplateKeys.SchemaIdentificationScript] ?? "";
         _isSchemaTemplate = !string.IsNullOrWhiteSpace(_sourceSchema);
 
         switch (_platform.GetBasePlatform())
         {
             case Platform.SqlServer:
-                _includeSchemas = config["ShouldCast:Schemas"]?.ToLower() != "false";
-                _includeUserDefinedTypes = config["ShouldCast:UserDefinedTypes"]?.ToLower() != "false";
-                _includeUserDefinedFunctions = config["ShouldCast:Functions"]?.ToLower() != "false";
-                _includeStoredProcedures = config["ShouldCast:Procedures"]?.ToLower() != "false";
-                _includeTableTriggers = config["ShouldCast:TableTriggers"]?.ToLower() != "false";
-                _includeFullTextCatalogs = config["ShouldCast:Catalogs"]?.ToLower() != "false";
-                _includeFullTextStopLists = config["ShouldCast:StopLists"]?.ToLower() != "false";
-                _includeDDLTriggers = config["ShouldCast:DDLTriggers"]?.ToLower() != "false";
-                _includeXmlSchemaCollections = config["ShouldCast:XMLSchemaCollections"]?.ToLower() != "false";
-                _scriptDynamicDependencyRemovalForFunctions = config["ShouldCast:ScriptDynamicDependencyRemovalForFunctions"]?.ToLower() == "true";
-                _includeIndexedViews = config["ShouldCast:IndexedViews"]?.ToLower() != "false";
+                _includeSchemas = config[SettingsKeys.ShouldCast.Schemas]?.ToLower() != "false";
+                _includeUserDefinedTypes = config[SettingsKeys.ShouldCast.UserDefinedTypes]?.ToLower() != "false";
+                _includeUserDefinedFunctions = config[SettingsKeys.ShouldCast.Functions]?.ToLower() != "false";
+                _includeStoredProcedures = config[SettingsKeys.ShouldCast.Procedures]?.ToLower() != "false";
+                _includeTableTriggers = config[SettingsKeys.ShouldCast.TableTriggers]?.ToLower() != "false";
+                _includeFullTextCatalogs = config[SettingsKeys.ShouldCast.Catalogs]?.ToLower() != "false";
+                _includeFullTextStopLists = config[SettingsKeys.ShouldCast.StopLists]?.ToLower() != "false";
+                _includeDDLTriggers = config[SettingsKeys.ShouldCast.DdlTriggers]?.ToLower() != "false";
+                _includeXmlSchemaCollections = config[SettingsKeys.ShouldCast.XmlSchemaCollections]?.ToLower() != "false";
+                _scriptDynamicDependencyRemovalForFunctions = config[SettingsKeys.ShouldCast.ScriptDynamicDependencyRemovalForFunctions]?.ToLower() == "true";
+                _includeIndexedViews = config[SettingsKeys.ShouldCast.IndexedViews]?.ToLower() != "false";
                 break;
 
             case Platform.PostgreSQL:
-                _includeSchemas = config["ShouldCast:Schemas"]?.ToLower() != "false";
-                _includeDomainTypes = config["ShouldCast:DomainTypes"]?.ToLower() != "false";
-                _includeEnumTypes = config["ShouldCast:EnumTypes"]?.ToLower() != "false";
-                _includeCompositeTypes = config["ShouldCast:CompositeTypes"]?.ToLower() != "false";
-                _includeFunctions = config["ShouldCast:Functions"]?.ToLower() != "false";
-                _includeAggregates = config["ShouldCast:Aggregates"]?.ToLower() != "false";
-                _includeProcedures = config["ShouldCast:Procedures"]?.ToLower() != "false";
-                _includeSequences = config["ShouldCast:Sequences"]?.ToLower() != "false";
-                _includeRules = config["ShouldCast:Rules"]?.ToLower() != "false";
-                _includeTriggers = config["ShouldCast:TableTriggers"]?.ToLower() != "false";
-                _includeMaterializedViews = config["ShouldCast:MaterializedViews"]?.ToLower() != "false";
+                _includeSchemas = config[SettingsKeys.ShouldCast.Schemas]?.ToLower() != "false";
+                _includeDomainTypes = config[SettingsKeys.ShouldCast.DomainTypes]?.ToLower() != "false";
+                _includeEnumTypes = config[SettingsKeys.ShouldCast.EnumTypes]?.ToLower() != "false";
+                _includeCompositeTypes = config[SettingsKeys.ShouldCast.CompositeTypes]?.ToLower() != "false";
+                _includeFunctions = config[SettingsKeys.ShouldCast.Functions]?.ToLower() != "false";
+                _includeAggregates = config[SettingsKeys.ShouldCast.Aggregates]?.ToLower() != "false";
+                _includeProcedures = config[SettingsKeys.ShouldCast.Procedures]?.ToLower() != "false";
+                _includeSequences = config[SettingsKeys.ShouldCast.Sequences]?.ToLower() != "false";
+                _includeRules = config[SettingsKeys.ShouldCast.Rules]?.ToLower() != "false";
+                _includeTriggers = config[SettingsKeys.ShouldCast.TableTriggers]?.ToLower() != "false";
+                _includeMaterializedViews = config[SettingsKeys.ShouldCast.MaterializedViews]?.ToLower() != "false";
                 break;
 
             case Platform.MySQL:
-                _includeUserDefinedFunctions = config["ShouldCast:Functions"]?.ToLower() != "false";
-                _includeStoredProcedures = config["ShouldCast:Procedures"]?.ToLower() != "false";
-                _includeTableTriggers = config["ShouldCast:TableTriggers"]?.ToLower() != "false";
-                _includeEvents = config["ShouldCast:Events"]?.ToLower() != "false";
+                _includeUserDefinedFunctions = config[SettingsKeys.ShouldCast.Functions]?.ToLower() != "false";
+                _includeStoredProcedures = config[SettingsKeys.ShouldCast.Procedures]?.ToLower() != "false";
+                _includeTableTriggers = config[SettingsKeys.ShouldCast.TableTriggers]?.ToLower() != "false";
+                _includeEvents = config[SettingsKeys.ShouldCast.Events]?.ToLower() != "false";
                 break;
         }
 
@@ -986,7 +987,7 @@ public class SchemaTongs
                 _ingestEncoding = info == null
                     ? IngestEncoding.Json
                     : CompatEncoding.Select(
-                        FactoryContainer.ResolveOrCreate<IConfigurationRoot>()["Source:CompatEncoding"],
+                        FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.SourceCompatEncoding],
                         info.CompatibilityLevel, info.ServerComparable);
                 sourceMajor = info?.ServerComparable ?? 0;
             }
@@ -2062,6 +2063,30 @@ SELECT t.schemaname, t.tablename
             // worse, round-tripping a non-default-schema table as public.<name> on the next deploy.
             var tableObj = PlatformDeserializer.DeserializeTable(tableJson, _platform);
 
+            if (_checkConstraintStyle == CheckConstraintStyle.ColumnLevel && tableObj is PostgreSqlTable columnLevelTable)
+            {
+                // The generator emits every check table-level; conkey is what attributes a
+                // single-column one back to its column. array_length = 1 excludes multi-column
+                // checks, which have no single column to belong to.
+                command.CommandText = $@"
+SELECT con.conname AS ""Name"",
+       a.attname AS ""ColumnName""
+  FROM pg_catalog.pg_constraint con
+  JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
+ WHERE con.conrelid = '""{EscapeSql(schema)}"".""{EscapeSql(table)}""'::regclass
+   AND con.contype = 'c'
+   AND array_length(con.conkey, 1) = 1
+ ORDER BY con.conname";
+
+                var singleColumnChecks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                using (var ccReader = command.ExecuteReader())
+                {
+                    while (ccReader.Read())
+                        singleColumnChecks[$"{ccReader["Name"]}"] = $"{ccReader["ColumnName"]}";
+                }
+                DemoteSingleColumnChecksToColumnLevel(columnLevelTable, singleColumnChecks);
+            }
+
             // Regular mode: omit the PostgreSQL default schema (public) from content so the package
             // follows the default-schema-omission convention (deploy re-resolves an unset Schema to
             // public). A named non-default schema is kept. The write target then derives from this
@@ -2471,6 +2496,10 @@ SELECT mv.schemaname, mv.matviewname
     private void ScriptMySqlFunctions(IDbCommand command, string targetSchema)
     {
         _progressLog.Info("Casting Function Scripts");
+        // EXTERNAL_LANGUAGE is NULL on MariaDB for SQL routines (MySQL reports 'SQL'), and one NULL
+        // operand nulls the whole || chain, yielding an empty script file. ORDINAL_POSITION 0 is the
+        // function's return value, excluded explicitly rather than relying on GROUP_CONCAT skipping
+        // its NULL PARAMETER_NAME — which is why the parameter columns must NOT be COALESCEd.
         command.CommandText = $@"
 SELECT 'Functions' AS Folder,
        ROUTINE_NAME AS FullName,
@@ -2480,8 +2509,9 @@ SELECT 'Functions' AS Folder,
                    FROM INFORMATION_SCHEMA.PARAMETERS p
                    WHERE p.SPECIFIC_NAME = r.ROUTINE_NAME
                      AND p.ROUTINE_TYPE = r.ROUTINE_TYPE
-                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA), '') || ')\n  RETURNS ' || DTD_IDENTIFIER ||
-       '\n' || '  LANGUAGE ' || EXTERNAL_LANGUAGE ||
+                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA
+                     AND p.ORDINAL_POSITION > 0), '') || ')\n  RETURNS ' || DTD_IDENTIFIER ||
+       '\n' || '  LANGUAGE ' || COALESCE(EXTERNAL_LANGUAGE, 'SQL') ||
        '\n' || CASE WHEN IS_DETERMINISTIC = 'Yes' THEN '  DETERMINISTIC' ELSE '  NOT DETERMINISTIC' END ||
        CASE WHEN NULLIF(SQL_DATA_ACCESS, '') IS NOT NULL THEN '\n  ' || SQL_DATA_ACCESS ELSE '' END ||
        '\n' || '  SQL SECURITY ' || SECURITY_TYPE ||
@@ -2511,6 +2541,8 @@ SELECT 'Views' AS Folder,
     private void ScriptMySqlProcedures(IDbCommand command, string targetSchema)
     {
         _progressLog.Info("Casting Stored Procedure Scripts");
+        // See ScriptMySqlFunctions: EXTERNAL_LANGUAGE is NULL on MariaDB and would null the whole
+        // || chain, writing a 0-byte script.
         command.CommandText = $@"
 SELECT 'Procedures' AS Folder,
        ROUTINE_NAME AS FullName,
@@ -2520,8 +2552,9 @@ SELECT 'Procedures' AS Folder,
                    FROM INFORMATION_SCHEMA.PARAMETERS p
                    WHERE p.SPECIFIC_NAME = r.ROUTINE_NAME
                      AND p.ROUTINE_TYPE = r.ROUTINE_TYPE
-                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA), '') || ')' ||
-       '\n' || '  LANGUAGE ' || EXTERNAL_LANGUAGE ||
+                     AND p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA
+                     AND p.ORDINAL_POSITION > 0), '') || ')' ||
+       '\n' || '  LANGUAGE ' || COALESCE(EXTERNAL_LANGUAGE, 'SQL') ||
        '\n' || CASE WHEN IS_DETERMINISTIC = 'Yes' THEN '  DETERMINISTIC' ELSE '  NOT DETERMINISTIC' END ||
        CASE WHEN NULLIF(SQL_DATA_ACCESS, '') IS NOT NULL THEN '\n  ' || SQL_DATA_ACCESS ELSE '' END ||
        '\n' || '  SQL SECURITY ' || SECURITY_TYPE ||
@@ -2860,6 +2893,40 @@ SELECT cc.name AS [Name],
             col.CheckExpression = null;
 
         table.CheckConstraints = allConstraints;
+    }
+
+    /// <summary>
+    /// Routes a PostgreSQL single-column check back onto its column, so a column-level
+    /// <c>CheckExpression</c> survives an extract instead of returning as a table-level constraint.
+    /// <paramref name="singleColumnChecks"/> maps constraint name to column name, taken from
+    /// <c>pg_constraint.conkey</c>.
+    /// <para>Only a check already named <c>CK_&lt;table&gt;_&lt;column&gt;</c> is demoted — the name
+    /// SchemaSmith itself generates from a column-level <c>CheckExpression</c>. PostgreSQL, unlike
+    /// SQL Server, records no marker for how a constraint was *declared* (its docs call a column
+    /// constraint "only a notational convenience", stored identically to a table constraint), so
+    /// referencing one column is not evidence it was authored column-level. Demoting on column
+    /// count alone would discard a user's chosen constraint name and rename it to the generated form
+    /// on the next apply — a drop/recreate on every deploy. Anything otherwise named stays
+    /// table-level, which is both faithful and churn-free.</para>
+    /// </summary>
+    internal static void DemoteSingleColumnChecksToColumnLevel(PostgreSqlTable table, Dictionary<string, string> singleColumnChecks)
+    {
+        if (singleColumnChecks == null || singleColumnChecks.Count == 0) return;
+
+        var tableName = StringHelper.StripIdentifierWrapper(table.Name);
+
+        foreach (var (constraintName, columnName) in singleColumnChecks
+                     .Where(c => string.Equals(c.Key, $"CK_{tableName}_{c.Value}", StringComparison.OrdinalIgnoreCase)))
+        {
+            var constraint = table.CheckConstraints
+                .FirstOrDefault(c => string.Equals(StringHelper.StripIdentifierWrapper(c.Name), constraintName, StringComparison.OrdinalIgnoreCase));
+            var column = table.Columns.OfType<PostgreSqlColumn>()
+                .FirstOrDefault(c => string.Equals(StringHelper.StripIdentifierWrapper(c.Name), columnName, StringComparison.OrdinalIgnoreCase));
+            if (constraint == null || column == null) continue;
+
+            column.CheckExpression = constraint.Expression;
+            table.CheckConstraints.Remove(constraint);
+        }
     }
 
     internal static string EscapeSql(string value) => value.Replace("'", "''");

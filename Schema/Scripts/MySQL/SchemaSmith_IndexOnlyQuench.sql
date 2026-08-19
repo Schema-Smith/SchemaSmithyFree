@@ -760,7 +760,9 @@ BEGIN
     -- STEP 6: Handle fulltext indexes
     -- =========================================================================
     -- Drop fulltext indexes that no longer exist in definition
-    IF p_DropUnknownIndexes = 1 AND p_WhatIf = 0 THEN
+    -- Candidate detection runs under WhatIf too: a WhatIf run must report a fulltext drop it would
+    -- make, and record the wouldDrop audit row, the same as every other object type.
+    IF p_DropUnknownIndexes = 1 THEN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop unknown fulltext indexes');
 
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTIndexesToDrop;
@@ -796,25 +798,39 @@ BEGIN
                       '` ON `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
         FROM _SchemaSmith_FTIndexesToDrop;
 
-        -- Fold each table's fulltext-index drops into one multi-clause ALTER, materialize, execute.
-        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTDropStmts;
-        CREATE TEMPORARY TABLE _SchemaSmith_FTDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
-            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        INSERT INTO _SchemaSmith_FTDropStmts (Stmt)
-        SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
-                      GROUP_CONCAT(CONCAT('DROP INDEX `', IndexName, '`') ORDER BY IndexName SEPARATOR ', '))
-        FROM _SchemaSmith_FTIndexesToDrop
-        GROUP BY TableName;
+        IF p_WhatIf = 1 THEN
+            -- #363 pattern: an audit insert is not DDL, so it is safe inside the WhatIf branch.
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'fullTextIndex', CONCAT(TableName, '.', IndexName), 'wouldDrop'
+            FROM _SchemaSmith_FTIndexesToDrop;
+        ELSE
+            -- Fold each table's fulltext-index drops into one multi-clause ALTER, materialize, execute.
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTDropStmts;
+            CREATE TEMPORARY TABLE _SchemaSmith_FTDropStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO _SchemaSmith_FTDropStmts (Stmt)
+            SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
+                          GROUP_CONCAT(CONCAT('DROP INDEX `', IndexName, '`') ORDER BY IndexName SEPARATOR ', '))
+            FROM _SchemaSmith_FTIndexesToDrop
+            GROUP BY TableName;
 
-        SET @v_ftdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FTDropStmts);
-        WHILE @v_ftdrop_id IS NOT NULL DO
-            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_FTDropStmts WHERE RowId = @v_ftdrop_id;
-            PREPARE stmt FROM @exec_sql;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
-            SET @v_ftdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FTDropStmts WHERE RowId > @v_ftdrop_id);
-        END WHILE;
-        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTDropStmts;
+            SET @v_ftdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FTDropStmts);
+            WHILE @v_ftdrop_id IS NOT NULL DO
+                SELECT Stmt INTO @exec_sql FROM _SchemaSmith_FTDropStmts WHERE RowId = @v_ftdrop_id;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+                SET @v_ftdrop_id := (SELECT MIN(RowId) FROM _SchemaSmith_FTDropStmts WHERE RowId > @v_ftdrop_id);
+            END WHILE;
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTDropStmts;
+
+            -- Object-change audit (#243 E5). Set-based after the loop: the drops are folded per table
+            -- into one multi-clause ALTER, so there is no per-index EXECUTE to hang an insert off.
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'fullTextIndex', CONCAT(TableName, '.', IndexName), 'dropped'
+            FROM _SchemaSmith_FTIndexesToDrop;
+        END IF;
+
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTIndexesToDrop;
     END IF;
 
@@ -842,6 +858,18 @@ BEGIN
               AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
               AND s.IndexType = 'FULLTEXT'
         );
+
+        -- #363: WhatIf twin of the ELSE-branch 'fullTextIndex'/'created' audit; same predicate.
+        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT CONNECTION_ID(), 'fullTextIndex',
+               CONCAT(SchemaSmith_StripBacktickWrapping(ft.TableName), '.', SchemaSmith_StripBacktickWrapping(ft.IndexName)), 'wouldCreate'
+        FROM _SchemaSmith_FullTextIndexes ft
+        WHERE NOT EXISTS (
+            SELECT 1 FROM _SchemaSmith_IdxExist s
+            WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(ft.TableName)
+              AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(ft.IndexName)
+              AND s.IndexType = 'FULLTEXT'
+        );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing fulltext indexes');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -859,9 +887,9 @@ BEGIN
         -- the other loops in this file these do NOT fold multiple rows into one multi-clause ALTER —
         -- each row materializes as its own standalone ALTER TABLE ... ADD FULLTEXT INDEX statement.
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FTCreateStmts;
-        CREATE TEMPORARY TABLE _SchemaSmith_FTCreateStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT)
+        CREATE TEMPORARY TABLE _SchemaSmith_FTCreateStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, Stmt TEXT, AuditName VARCHAR(257))
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        INSERT INTO _SchemaSmith_FTCreateStmts (Stmt)
+        INSERT INTO _SchemaSmith_FTCreateStmts (Stmt, AuditName)
         SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', ft.TableName,
                       ' ADD FULLTEXT INDEX ', ft.IndexName,
                       ' (', ft.Columns, ')',
@@ -870,7 +898,8 @@ BEGIN
                            ELSE '' END,
                       CASE WHEN ft.Parser IS NOT NULL AND ft.Parser != ''
                            THEN CONCAT(' WITH PARSER ', ft.Parser)
-                           ELSE '' END)
+                           ELSE '' END),
+               CONCAT(SchemaSmith_StripBacktickWrapping(ft.TableName), '.', SchemaSmith_StripBacktickWrapping(ft.IndexName))
         FROM _SchemaSmith_FullTextIndexes ft
         WHERE NOT EXISTS (
             SELECT 1 FROM _SchemaSmith_IdxExist s
@@ -882,9 +911,11 @@ BEGIN
 
         SET @v_ftcreate_id := (SELECT MIN(RowId) FROM _SchemaSmith_FTCreateStmts);
         WHILE @v_ftcreate_id IS NOT NULL DO
-            SELECT Stmt INTO @exec_sql FROM _SchemaSmith_FTCreateStmts WHERE RowId = @v_ftcreate_id;
+            SELECT Stmt, AuditName INTO @exec_sql, @ss_auditname FROM _SchemaSmith_FTCreateStmts WHERE RowId = @v_ftcreate_id;
             PREPARE stmt FROM @exec_sql;
             EXECUTE stmt;
+            -- Object-change audit (#243 E5): after EXECUTE, before DEALLOCATE (crash-safe #337 point).
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (CONNECTION_ID(), 'fullTextIndex', @ss_auditname, 'created');
             DEALLOCATE PREPARE stmt;
             SET @v_ftcreate_id := (SELECT MIN(RowId) FROM _SchemaSmith_FTCreateStmts WHERE RowId > @v_ftcreate_id);
         END WHILE;

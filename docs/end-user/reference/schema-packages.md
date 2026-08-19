@@ -23,7 +23,7 @@ The `Product.json` file sits at the root of the schema package and is the top-le
 | `VersionStampScript` | string | | No | SQL executed once after all templates complete successfully. Typically records the release version on the server. |
 | `DropUnknownIndexes` | bool | `false` | No | When `true`, the table quench drops indexes on managed tables that aren't defined in the table JSON. |
 | `MinimumVersion` | string | | No | Minimum target server version floor. Optional; omit to deploy against any version. If any resolved target is below the floor, SchemaQuench aborts before touching anything. See [Settings intent](#settings-intent) below. |
-| `CheckConstraintStyle` | string | `"ColumnLevel"` | No | Controls how SchemaTongs writes check constraints during extraction: `"ColumnLevel"` (inline `CheckExpression` on the column) or `"TableLevel"` (named constraints in the `CheckConstraints` array). |
+| `CheckConstraintStyle` | string | `"ColumnLevel"` | No | Controls how SchemaTongs writes check constraints during extraction: `"ColumnLevel"` (inline `CheckExpression` on the column) or `"TableLevel"` (named constraints in the `CheckConstraints` array). SQL Server and PostgreSQL only -- MySQL and MariaDB always extract table-level (see [Check Constraints](#check-constraints)). |
 | `ScriptFolders` | array | `[]` | No | Optional product-level folder definitions. Used to add custom folder paths or assign secondary-server filtering. See [Custom Script Folders](#custom-script-folders). |
 | `BranchNameFile` | string | `"{{repo_path}}/.git/HEAD"` | No | Path to the file SchemaSmith reads to derive the `{{BranchName}}` automatic token. Default points at Git's `HEAD`. Use any VCS that exposes the current branch as a single-line file (Mercurial's `.hg/branch`, Subversion working-copy markers, etc.); the only requirement is that the file exists and contains the branch identifier somewhere on its first line. |
 | `BeforeBranchNameMask` | string | `"ref: refs/heads/"` | No | Prefix to strip from the line read out of `BranchNameFile`. Default matches Git's `ref: refs/heads/<branch>` format. Set to `""` for VCSs whose branch file already contains the bare branch name. |
@@ -113,7 +113,7 @@ Each template directory under `Templates/` must contain a `Template.json` file. 
 | `IndexOnlyTableQuenches` | bool | `false` | No | When `true`, the table quench only manages indexes, statistics, XML/full-text indexes. Skips table creation, column changes, and foreign key management. Tables that don't exist are silently skipped. |
 | `BaselineValidationScript` | string | | No | SQL validation executed per database before quenching that database. |
 | `RequireAtLeastOneTarget` | bool | `true` | No | When `true`, deployment fails if discovery returns no targets -- zero matching databases for a regular template, or zero matching `(database, schema)` pairs for a schema template. Catches misconfigured identification scripts that silently skip an entire template. Replaces the prior `Required` field (renamed in v2.1). |
-| `SkipIfReadOnly` | bool | `false` | No | When `true`, databases that are read-only are silently skipped instead of failing the quench. Enables Availability Group secondary handling on SQL Server and replica handling on other platforms. |
+| `SkipIfReadOnly` | bool | `false` | No | When `true`, a read-only database is skipped -- with a log line naming the target and template -- instead of failing the quench. Enables Availability Group secondary handling on SQL Server and replica handling on other platforms. |
 | `ScriptFolders` | array | `[]` | No | Optional list of `TemplateFolder` definitions. When empty, the platform's default folder set is used. When non-empty, this array fully replaces the defaults -- so include every folder you want active. See [Custom Script Folders](#custom-script-folders). |
 | `ScriptTokens` | object | `{}` | No | Key-value pairs that override matching product-level tokens for this template. Template tokens take precedence over product tokens with the same key. |
 | `SchemaIdentificationScript` | string | | No | **SQL Server / PostgreSQL:** query returning one column, N rows; each row is a schema name to iterate over — presence activates schema-template mode (see [Schema Templates](#schema-templates)). **MySQL:** has no in-database schema axis (a schema *is* a database), so schema templates don't apply; the field is instead accepted as a **deprecated backward-compat alias** for `DatabaseIdentificationScript` — on load its value migrates into `DatabaseIdentificationScript` (only when that is empty) and a deprecation warning advises renaming. Use `DatabaseIdentificationScript` directly on MySQL. |
@@ -142,7 +142,7 @@ The value is token-resolvable (`"IdentificationDatabase": "{{ControlDb}}"`), so 
 
 > **PostgreSQL:** this is the only way to read a registry table at enumeration time. A PostgreSQL connection is bound to a single database and cannot cross-database-query, so without `IdentificationDatabase` a registry-table roster is unreachable -- the init database (`postgres`) has no access to a table in another database.
 
-**SkipIfReadOnly** -- Enables graceful handling of read-only replicas. On SQL Server, this is the Availability Group secondary handling. On PostgreSQL, MySQL, and MariaDB, the same flag covers logical/physical replicas exposed as databases. With `SkipIfReadOnly: true`, read-only databases are silently skipped and the deployment continues with the writable primaries. Independent of `RequireAtLeastOneTarget` -- a template can require at least one target while still skipping individual read-only databases within the result set.
+**SkipIfReadOnly** -- Enables graceful handling of read-only replicas. On SQL Server, this is the Availability Group secondary handling. On PostgreSQL, MySQL, and MariaDB, the same flag covers logical/physical replicas exposed as databases. With `SkipIfReadOnly: true`, a read-only database is skipped -- logged, not silent, so an operator can see which targets were passed over -- and the deployment continues with the writable primaries. Read-only is detected per engine: `DATABASEPROPERTYEX(..., 'Updateability')` on SQL Server (which covers both an Availability Group readable secondary and a database explicitly `SET READ_ONLY`), `pg_is_in_recovery()` / `transaction_read_only` on PostgreSQL, and `@@read_only` on MySQL and MariaDB (MySQL additionally checks `@@super_read_only`). Independent of `RequireAtLeastOneTarget` -- the read-only target still counts as a discovered target, so a template can require at least one target while still skipping individual read-only databases within the result set.
 
 **IndexOnlyTableQuenches** -- Lets you manage indexes on tables you don't own. Two primary use cases: different indexing on replicated databases (tuned for the consumer's workload, not the producer's), and adding indexes to third-party products where you can't modify the table structure. Scripted objects (procedures, views, functions) still deploy when this flag is on -- so you can deploy custom views and procedures alongside supplementary indexes.
 
@@ -878,6 +878,22 @@ Table-level check constraints in the `CheckConstraints` array. Used when `CheckC
 | `Extensions` | object | `null` | Custom metadata. |
 
 When `CheckConstraintStyle` is `"ColumnLevel"` (the default), single-column check constraints are written as `CheckExpression` on the column instead. Multi-column constraints always use the `CheckConstraints` array.
+
+### Per-platform behavior
+
+A column-level check is a **round-trip** concern, not just a formatting preference: what a `cast` writes must survive a `quench` and come back the same way on the next `cast`. Each engine's catalog supports that differently.
+
+| Engine | Column-level `CheckExpression` | Notes |
+|---|---|---|
+| SQL Server | Authored and extracted | `sys.check_constraints.parent_column_id` records that a check was declared on a column, so the split is exact. |
+| PostgreSQL | Authored and extracted | A check named `CK_<table>_<column>` referencing exactly one column extracts onto that column. |
+| MySQL / MariaDB | Table-level only | The catalog cannot attribute a check to a column. |
+
+**PostgreSQL -- why the name matters.** PostgreSQL stores a column constraint and a table constraint identically (its documentation calls the column form "only a notational convenience"), so referencing one column is not evidence a check was *authored* column-level. Extraction therefore routes a single-column check onto its column only when it already carries the generated `CK_<table>_<column>` name. A check you named yourself -- `chk_status_positive` -- stays in `CheckConstraints` and keeps that name. This is deliberate: demoting it would rename it to the generated form on the next deploy, dropping and recreating the constraint on every run.
+
+**MySQL / MariaDB -- table-level only.** `INFORMATION_SCHEMA.CHECK_CONSTRAINTS` exposes a constraint's name and clause with no link back to a column, so a column-level check cannot be extracted as one -- it would come back table-level and change the package's shape on every cast. Author MySQL and MariaDB checks in the `CheckConstraints` array.
+
+> A column `CheckExpression` in an existing MySQL or MariaDB package still works: it is migrated to a `CK_<table>_<column>` table-level constraint when the package loads, with a warning naming the columns to move. The deployed result is identical. The property is deprecated on these engines and will be removed -- move it to `CheckConstraints` at your convenience.
 
 ---
 

@@ -372,11 +372,13 @@ public class ProductUpdateTests
                 `ScriptPath` VARCHAR(500) NOT NULL,
                 `ProductName` VARCHAR(100) NOT NULL,
                 `QuenchSlot` VARCHAR(50) NOT NULL,
+                `template_name` VARCHAR(255) NOT NULL DEFAULT '',
+                `schema_name` VARCHAR(255) NOT NULL DEFAULT '',
                 PRIMARY KEY (`ScriptPath`, `ProductName`)
             );
             TRUNCATE TABLE `{dbName}`.`SchemaSmith_CompletedMigrationScripts`;
-            INSERT INTO `{dbName}`.`SchemaSmith_CompletedMigrationScripts` (`ScriptPath`, `ProductName`, `QuenchSlot`)
-            VALUES ('MigrationScripts/Before/MigrationScript0.sql', '{productName}', 'Before');
+            INSERT INTO `{dbName}`.`SchemaSmith_CompletedMigrationScripts` (`ScriptPath`, `ProductName`, `QuenchSlot`, `template_name`, `schema_name`)
+            VALUES ('MigrationScripts/Before/MigrationScript0.sql', '{productName}', 'Before', 'Main', '');
         ";
         cmd.ExecuteNonQuery();
 

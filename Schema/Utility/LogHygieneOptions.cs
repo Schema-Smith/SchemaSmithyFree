@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Configuration;
+using Schema.Configuration;
 
 namespace Schema.Utility;
 
@@ -23,7 +24,7 @@ public sealed class LogHygieneOptions
 
     public static LogHygieneOptions FromConfiguration(IConfiguration config)
     {
-        var section = config.GetSection("LogHygiene");
+        var section = config.GetSection(SettingsKeys.LogHygiene);
         var options = new LogHygieneOptions { LogTokens = section["LogTokens"]?.ToLower() != "false" };
         foreach (var t in ReadArray(section, "ScrubTokens")) options.ScrubTokens.Add(t);
         options.ScrubPatterns.AddRange(ReadArray(section, "ScrubPatterns"));

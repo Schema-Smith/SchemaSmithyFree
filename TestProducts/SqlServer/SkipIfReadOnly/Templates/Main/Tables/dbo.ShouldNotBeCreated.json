@@ -1,0 +1,20 @@
+{
+    "Schema": "[dbo]",
+    "Name": "[ShouldNotBeCreated]",
+    "Columns": [
+        {
+            "Name": "[Id]",
+            "DataType": "INT",
+            "Nullable": false
+        }
+    ],
+    "Indexes": [
+        {
+            "Name": "[PK_ShouldNotBeCreated]",
+            "PrimaryKey": true,
+            "Unique": true,
+            "Clustered": true,
+            "IndexColumns": "[Id]"
+        }
+    ]
+}

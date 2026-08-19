@@ -49,9 +49,9 @@ namespace SchemaQuench.IntegrationTests.SqlServer
 
                 // Distinct product names: IndexedViewQuench drops product-owned views absent from the
                 // payload, so a shared product would make the second run reap the first run's view.
-                Exec(conn, "EXEC SchemaSmith.IndexedViewQuench @ProductName = 'IvEqJson', @IndexedViewSchema = @p",
+                Exec(conn, "EXEC SchemaSmith.IndexedViewQuench @ProductName = 'IvEqJson', @IndexedViewSchema = @p, @TemplateName = N'Main', @SchemaName = N''",
                     ("@p", PayloadJson(jv)));
-                Exec(conn, "EXEC SchemaSmith.IndexedViewQuenchXmlTest @ProductName = 'IvEqXml', @IndexedViewSchema = @p",
+                Exec(conn, "EXEC SchemaSmith.IndexedViewQuenchXmlTest @ProductName = 'IvEqXml', @IndexedViewSchema = @p, @TemplateName = N'Main', @SchemaName = N''",
                     ("@p", ModelXmlSerializer.ToIngestXml(PayloadJson(xv), "IndexedViews", "IndexedView")));
 
                 var jsonState = ViewState(conn, jv);

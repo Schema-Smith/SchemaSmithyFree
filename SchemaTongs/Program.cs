@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using Schema.Domain;
 using Schema.Isolators;
+using Schema.Configuration;
 using Schema.Utility;
 
 namespace SchemaTongs;
@@ -16,8 +17,9 @@ public static class Program
 
         AppDomain.CurrentDomain.UnhandledException += UnhandledException;
         LogFactory.LogInitializer = ConfigHelper.ConfigureLog4Net;
-        ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
+        var config = ConfigHelper.GetAppSettingsAndUserSecrets("SchemaTongs", LogFactory.GetLogger("ProgressLog").Info);
         CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
+        SettingsContract.WarnOnUnrecognizedKeys(config, SettingsTool.SchemaTongs, LogFactory.GetLogger("ProgressLog").Warn);
 
         if (CommandLineParser.ContainsSwitch("WriteSchemasOnly"))
         {
@@ -46,7 +48,7 @@ public static class Program
     internal static void WriteSchemasOnly()
     {
         var config = FactoryContainer.ResolveOrCreate<Microsoft.Extensions.Configuration.IConfigurationRoot>();
-        var productPath = config["Product:Path"] ?? ".";
+        var productPath = config[SettingsKeys.ProductKeys.Path] ?? ".";
         var productFile = Path.Combine(productPath, "Product.json");
 
         if (!FileWrapper.GetFromFactory().Exists(productFile))
@@ -61,7 +63,7 @@ public static class Program
     internal static Platform ResolvePlatform()
     {
         var config = FactoryContainer.ResolveOrCreate<Microsoft.Extensions.Configuration.IConfigurationRoot>();
-        var platformValue = config["Target:Platform"] ?? config["Source:Platform"];
+        var platformValue = config[SettingsKeys.Target.Platform] ?? config[SettingsKeys.Source.Platform];
         if (string.IsNullOrWhiteSpace(platformValue))
             throw new Exception("Platform is required. Set 'Target:Platform' or 'Source:Platform' in SchemaTongs.settings.json.");
 

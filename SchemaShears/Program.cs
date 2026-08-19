@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using Microsoft.Extensions.Configuration;
 using Schema.Isolators;
+using Schema.Configuration;
 using Schema.Utility;
 
 namespace SchemaShears;
@@ -20,17 +21,18 @@ public static class Program
         CommandLineParser.WarnOnUnrecognizedArguments(KnownArguments, LogFactory.GetLogger("ProgressLog").Warn);
 
         var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
-        var allowDropsRaw = CommandLineParser.ValueOfSwitch("AllowDrops", config["AllowDrops"]);
+        SettingsContract.WarnOnUnrecognizedKeys(config, SettingsTool.SchemaShears, LogFactory.GetLogger("ProgressLog").Warn);
+        var allowDropsRaw = CommandLineParser.ValueOfSwitch("AllowDrops", config[SettingsKeys.AllowDrops]);
         var allowDrops = (allowDropsRaw ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         var request = new PatchBuildRequest
         {
-            SourcePath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Source", config["SourcePath"])),
-            ManifestPath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Manifest", config["ManifestPath"])),
-            AlwaysIncludePath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("AlwaysInclude", config["AlwaysIncludePath"])),
-            OutputPath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Output", config["OutputPath"])),
-            Zip = CommandLineParser.ContainsSwitch("Zip") || string.Equals(config["Zip"], "true", StringComparison.OrdinalIgnoreCase),
+            SourcePath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Source", config[SettingsKeys.SourcePath])),
+            ManifestPath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Manifest", config[SettingsKeys.ManifestPath])),
+            AlwaysIncludePath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("AlwaysInclude", config[SettingsKeys.AlwaysIncludePath])),
+            OutputPath = ResolveToFullPath(CommandLineParser.ValueOfSwitch("Output", config[SettingsKeys.OutputPath])),
+            Zip = CommandLineParser.ContainsSwitch("Zip") || string.Equals(config[SettingsKeys.Zip], "true", StringComparison.OrdinalIgnoreCase),
             AllowDrops = allowDrops
         };
 

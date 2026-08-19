@@ -1,0 +1,6 @@
+{
+    "Name": "Main",
+    "SkipIfReadOnly": true,
+    "DatabaseIdentificationScript": "SELECT [name] FROM master.dbo.sysdatabases WHERE [name] = '{{ProbeDB}}'",
+    "ScriptFolders": []
+}
