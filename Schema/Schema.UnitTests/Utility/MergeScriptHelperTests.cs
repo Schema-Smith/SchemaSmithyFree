@@ -42,6 +42,64 @@ public class MergeScriptHelperTests
 
     #endregion
 
+    #region B4b — JsonPayloadToXml converter (non-SQL-Server DeliveryEncoding=Xml extraction)
+
+    [Test]
+    public void JsonPayloadToXml_RoundTripsWithXmlPayloadToJson()
+    {
+        const string json = @"[{""code"":""A001"",""name"":""An \""odd\"" name"",""qty"":""7""}]";
+        var xml = MergeScriptHelper.JsonPayloadToXml(json);
+        Assert.That(MergeScriptHelper.XmlPayloadToJson(xml), Is.EqualTo(json));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_OmitsNullColumnsRatherThanEmittingEmptyElements()
+    {
+        var xml = MergeScriptHelper.JsonPayloadToXml(@"[{""code"":""A001"",""note"":null}]");
+        Assert.That(xml, Does.Not.Contain("note"));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_EscapesXmlMetacharacters()
+    {
+        var xml = MergeScriptHelper.JsonPayloadToXml(@"[{""name"":""a < b & c""}]");
+        Assert.That(MergeScriptHelper.XmlPayloadToJson(xml), Is.EqualTo(@"[{""name"":""a < b & c""}]"));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_BooleanColumn_WritesZeroOrOneNotTrueFalse()
+    {
+        // The shred casts <c> text straight to the target SQL type via XQuery .value(); a literal
+        // "true"/"false" string fails a BIT cast there, so a JSON boolean must normalize to "0"/"1" —
+        // matching exactly what GetTableDataXmlSqlServer itself emits for a bit column.
+        var xml = MergeScriptHelper.JsonPayloadToXml(@"[{""active"":true},{""active"":false}]");
+        Assert.That(xml, Does.Contain("<c n=\"active\">1</c>"));
+        Assert.That(xml, Does.Contain("<c n=\"active\">0</c>"));
+        Assert.That(xml, Does.Not.Contain("true").IgnoreCase);
+        Assert.That(xml, Does.Not.Contain("false").IgnoreCase);
+    }
+
+    [Test]
+    public void JsonPayloadToXml_EmptyOrNullPayload_ReturnsEmptyString()
+    {
+        // Mirrors GetTableDataXmlSqlServer's own "no data" result, so DataTongs' existing
+        // IsNullOrEmpty(tableData) empty-content check recognizes it without any new special-casing.
+        Assert.That(MergeScriptHelper.JsonPayloadToXml(""), Is.EqualTo(""));
+        Assert.That(MergeScriptHelper.JsonPayloadToXml("null"), Is.EqualTo(""));
+        Assert.That(MergeScriptHelper.JsonPayloadToXml("[]"), Is.EqualTo(""));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_MultipleRows_EachRowEmittedSeparately()
+    {
+        var xml = MergeScriptHelper.JsonPayloadToXml(
+            @"[{""code"":""A001""},{""code"":""B002"",""qty"":""3""}]");
+        Assert.That(MergeScriptHelper.XmlPayloadToJson(xml),
+            Is.EqualTo(@"[{""code"":""A001""},{""code"":""B002"",""qty"":""3""}]"));
+    }
+
+    #endregion
+
     #region MariaDB 10.2-10.5 chunked shred
 
     private static string BuildPayload(int rows) =>

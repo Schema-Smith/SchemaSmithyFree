@@ -107,7 +107,7 @@ The typical placement inside a schema package is `ScriptPath` pointing at `Templ
 | `ShouldCast:MergeType` | string | `Insert/Update` | Default `DataDelivery:MergeType` for tables that don't set it explicitly. Values: `None`, `Insert`, `Insert/Update`, `Insert/Update/Delete`. Used when writing `DataDelivery` blocks via `--ConfigureDataDelivery`. |
 | `ShouldCast:ConfigureDataDelivery` | bool | `false` | After extraction, write a `DataDelivery` block into each matching table's JSON file. See [--ConfigureDataDelivery](#--configuredatadelivery). |
 | `ShouldCast:TokenizeScripts` | bool | `true` | **SQL Server only.** Replaces the source database name with script tokens in the generated merge scripts, matching SchemaTongs' tokenization behavior. Set to `false` to disable tokenization and keep the literal database name in generated scripts. |
-| `ShouldCast:DeliveryEncoding` | string | `Json` | **SQL Server only.** `Xml` extracts each table's content in the XML delivery encoding (so a package can deploy on a legacy-compatibility SQL Server, below the `OPENJSON` cliff) and stamps `"ContentEncoding": "Xml"` on the configured `DataDelivery`. Also settable per run with `--DeliveryEncoding=Xml`. See [Delivery encoding](#delivery-encoding-xml-for-legacy-sql-server). |
+| `ShouldCast:DeliveryEncoding` | string | `Json` | `Xml` extracts each table's content in the XML delivery encoding (so a package can deploy on a legacy-compatibility SQL Server, below the `OPENJSON` cliff), on any source engine, and stamps `"ContentEncoding": "Xml"` on the configured `DataDelivery`. Also settable per run with `--DeliveryEncoding=Xml`. See [Delivery encoding](#delivery-encoding-xml-for-legacy-sql-server). |
 | `ShouldCast:DisableRules` | bool | `false` | **PostgreSQL only.** Wraps the delivery in `ALTER TABLE ... DISABLE RULE` / `ENABLE RULE`. |
 | `ShouldCast:UpdateDescendents` | bool | `true` | **PostgreSQL only.** When `false`, the generated `MERGE` uses `MERGE INTO ... ONLY` so partitioned-table writes do not propagate to descendant tables. |
 
@@ -437,7 +437,7 @@ For every table that produces output, DataTongs opens `Tables/<schema>.<table>.j
 | `MergeDisableTriggers` | Mirrors `ShouldCast:DisableTriggers`. |
 | `MergeDisableRules` | **PostgreSQL.** Mirrors `ShouldCast:DisableRules`. |
 | `MergeUpdateDescendents` | **PostgreSQL.** Mirrors `ShouldCast:UpdateDescendents` (default `true`). |
-| `ContentEncoding` | **SQL Server.** `Xml` when extracting with `--DeliveryEncoding=Xml` (omitted for the default JSON). See [Delivery encoding](#delivery-encoding-xml-for-legacy-sql-server). |
+| `ContentEncoding` | `Xml` when extracting with `--DeliveryEncoding=Xml`, on any source engine (omitted for the default JSON). See [Delivery encoding](#delivery-encoding-xml-for-legacy-sql-server). |
 
 Tables whose JSON file doesn't exist in the template are skipped with a warning. No file is created from scratch -- this tool configures existing tables, it doesn't scaffold new ones (use SchemaTongs for that).
 
@@ -457,7 +457,7 @@ A per-table `MergeType` on the `Tables[]` entry always wins over the derived def
 
 ## Delivery encoding (XML for legacy SQL Server)
 
-**SQL Server only.** By default DataTongs extracts a table's data as a raw JSON array, which SchemaQuench delivers with `OPENJSON` -- a path that requires **SQL Server compatibility level 130** (SQL Server 2016+). To produce a package that also deploys on an older target (compatibility level 100--120), extract in the XML delivery encoding instead:
+By default DataTongs extracts a table's data as a raw JSON array. On SQL Server, SchemaQuench delivers that with `OPENJSON` -- a path that requires **SQL Server compatibility level 130** (SQL Server 2016+). To produce a package that also deploys on an older SQL Server target (compatibility level 100--120), extract in the XML delivery encoding instead:
 
 ```bash
 DataTongs --DeliveryEncoding=Xml
@@ -472,7 +472,9 @@ or in `DataTongs.settings.json`:
 
 With `Xml`, DataTongs writes each `.tabledata` file in the [XML delivery shape](schema-packages.md#content-encoding) -- `<rows><row><c n="Col">value</c>...</row></rows>`, with the database's native text forms (binary base64, geometry WKT + an SRID companion, ISO-8601 dates) and `NULL` columns omitted -- and, when `--ConfigureDataDelivery` is on, stamps `"ContentEncoding": "Xml"` on the reconciled `DataDelivery` entry so the extract → deploy round-trip works against a compatibility-level-100 database.
 
-The switch is **ignored with a warning on PostgreSQL and MySQL/MariaDB** -- those engines shred their delivery data at every supported version, so there is no legacy encoding to fall back to.
+**Available on every source engine.** SQL Server extracts XML natively. PostgreSQL, MySQL, and MariaDB have no native XML producer, so DataTongs extracts the engine's normal JSON and converts it to the identical shape above -- one delivery XML dialect regardless of source engine, not a per-engine variant. That parity is useful even when the deployment target is never SQL Server: the `.tabledata` file is a standalone artifact, and `Xml` is a reasonable choice whenever a downstream consumer -- a third-party system, a hand-off package -- wants XML rather than JSON, independent of whether SchemaSmith ever reads the file back.
+
+**Known limitation: geometry/geography SRID.** The WKT + `col.STSrid` companion element pattern above is what the SQL Server shred needs to reconstruct a spatial value. PostgreSQL's and MySQL's own JSON extraction only capture the WKT (`ST_AsText()`) -- neither engine's extraction query captures the SRID today -- so a geometry/geography column extracted as XML from PostgreSQL or MySQL is missing its `.STSrid` element. The value still extracts and is valid, well-formed XML; it just isn't sufficient on its own to reconstruct the exact spatial reference system on a SQL Server deploy target. Non-spatial columns (including binary, dates, and NULLs) are fully portable.
 
 ### Template root discovery
 

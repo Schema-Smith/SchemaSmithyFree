@@ -93,19 +93,15 @@ public class DataTongs
         var configureDataDelivery = CommandLineParser.ContainsSwitch("ConfigureDataDelivery")
             || config[SettingsKeys.ShouldCast.ConfigureDataDelivery]?.ToLower() == "true";
 
-        // B1 slice 3: a global switch to extract delivery content in the XML encoding (default Json),
-        // so a package can be authored to deploy on a legacy-compatibility SQL Server (below the
-        // OPENJSON cliff). SQL Server only — XML delivery deploys there alone; on the other engines
-        // JSON shreds at every supported version, so an Xml request is warned-and-ignored.
+        // B1 slice 3 / B4b: a global switch to extract delivery content in the XML encoding (default
+        // Json) — most commonly so a package can be authored to deploy on a legacy-compatibility SQL
+        // Server (below the OPENJSON cliff), but the .tabledata file is also a standalone artifact useful
+        // to any downstream consumer that wants XML rather than JSON. SQL Server extracts XML natively;
+        // every other engine extracts its normal JSON and converts it to the identical delivery XML shape
+        // in C# (MergeScriptHelper.JsonPayloadToXml), so the file is the same dialect on every engine.
         var deliveryEncoding = CommandLineParser.ValueOfSwitch("DeliveryEncoding", null)
             ?? config[SettingsKeys.ShouldCast.DeliveryEncoding] ?? "Json";
         var extractAsXml = deliveryEncoding.Trim().Equals("Xml", StringComparison.OrdinalIgnoreCase);
-        if (extractAsXml && _platform.GetBasePlatform() != Platform.SqlServer)
-        {
-            _progressLog.Warn($"  DeliveryEncoding=Xml is SQL Server only (XML data delivery deploys on SQL Server alone; " +
-                              $"{_platform} shreds its JSON delivery at every supported version). Extracting as JSON.");
-            extractAsXml = false;
-        }
         var templatePath = CommandLineParser.ValueOfSwitch("TemplatePath", null)
             ?? config[SettingsKeys.TemplatePath];
         var sourceSchemaSetting = config[SettingsKeys.Source.Schema] ?? "";
@@ -270,14 +266,17 @@ public class DataTongs
 
                 string tableData;
                 string selectColumns = null;
-                if (extractAsXml)
+                if (extractAsXml && _platform.GetBasePlatform() == Platform.SqlServer)
                 {
-                    // SQL-Server-only (guarded above). Emits the delivery XML shape the legacy-tier shred consumes.
+                    // Native producer — emits the delivery XML shape the legacy-tier shred consumes directly.
                     tableData = GetTableDataXmlSqlServer(cmd, tableSchema, tableName, orderColumns, table.Filter);
                 }
                 else if (_platform.GetBasePlatform() == Platform.MySQL)
                 {
                     tableData = GetTableDataJsonMySql(cmd, querySchema, tableName, orderColumns, table.Filter, table.SelectColumns);
+                    // B4b: no native XML producer on this engine — convert the same JSON the Json path would
+                    // have extracted into the delivery XML shape, so the file deploys through the SQL Server shred.
+                    if (extractAsXml) tableData = MergeScriptHelper.JsonPayloadToXml(tableData);
                 }
                 else
                 {
@@ -285,6 +284,7 @@ public class DataTongs
                         ? GetSelectColumns(cmd, querySchema, tableName)
                         : table.SelectColumns;
                     tableData = GetTableDataJson(cmd, selectColumns, tableSchema, tableName, orderColumns, table.Filter);
+                    if (extractAsXml) tableData = MergeScriptHelper.JsonPayloadToXml(tableData);
                 }
 
                 // Empty markers differ by encoding: XML delivery shreds <rows></rows>, JSON shreds [].
@@ -749,7 +749,8 @@ ORDER BY {orderColumns};";
     // omitted (absent <c> = NULL). Per-type text forms match the shred's typed .value(): bit -> 0/1,
     // datetime -> ISO-8601 (style 126), geometry -> WKT + a <c n="Col.STSrid"> companion, binary ->
     // base64 (xs:base64Binary decodes it in-shred). The whole shape was verified round-trip on a live
-    // instance. SQL Server only — XML delivery deploys on SQL Server alone (see the caller's guard).
+    // instance. Native producer used only when extracting FROM SQL Server (see the caller's platform
+    // check) — every other engine extracts JSON and converts via MergeScriptHelper.JsonPayloadToXml (B4b).
     internal string GetTableDataXmlSqlServer(IDbCommand cmd, string tableSchema, string tableName,
         string orderColumns, string filter)
     {

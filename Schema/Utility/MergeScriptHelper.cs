@@ -96,6 +96,40 @@ public static class MergeScriptHelper
         return rows.ToString(Newtonsoft.Json.Formatting.None);
     }
 
+    // B4b: the inverse of XmlPayloadToJson, used by DataTongs extraction on PostgreSQL/MySQL/MariaDB to
+    // produce the same delivery XML shape GetTableDataXmlSqlServer emits natively, so a package extracted
+    // on any engine deploys through the same SQL Server shred. A JSON null property is dropped rather than
+    // emitted as an empty <c> — the reference producer omits NULL columns entirely (absent <c> = NULL). A
+    // JSON boolean is written as "0"/"1" rather than .NET's "True"/"False": the shred casts a <c> element's
+    // text straight to the target SQL type via XQuery .value(), and a literal "true"/"false" string fails a
+    // BIT cast there (see ParseTableXmlIntoTempTables.sql's identical problem with schema-definition
+    // booleans), while "0"/"1" is exactly what GetTableDataXmlSqlServer itself emits for a bit column.
+    // XElement/XDocument handle XML-metacharacter escaping — the mirror of JObject's JSON escaping above.
+    // Public (unlike XmlPayloadToJson): DataTongs, in a separate project, calls this at extraction time —
+    // the same cross-project visibility GetKeyColumns/BuildMergeScript already use below.
+    public static string JsonPayloadToXml(string tableData)
+    {
+        if (string.IsNullOrWhiteSpace(tableData) || tableData == "null") return "";
+        var array = JArray.Parse(tableData);
+        if (array.Count == 0) return "";
+
+        var rows = new System.Xml.Linq.XElement("rows");
+        foreach (var rowToken in array)
+        {
+            var row = new System.Xml.Linq.XElement("row");
+            foreach (var prop in ((JObject)rowToken).Properties())
+            {
+                if (prop.Value.Type == JTokenType.Null) continue;
+                var text = prop.Value.Type == JTokenType.Boolean
+                    ? (prop.Value.Value<bool>() ? "1" : "0")
+                    : prop.Value.ToString();
+                row.Add(new System.Xml.Linq.XElement("c", new System.Xml.Linq.XAttribute("n", prop.Name), text));
+            }
+            rows.Add(row);
+        }
+        return rows.ToString(System.Xml.Linq.SaveOptions.DisableFormatting);
+    }
+
     // B1: the SQL Server data-delivery metadata helpers below aggregate column lists with
     // STRING_AGG … WITHIN GROUP, which requires database compatibility level 130+. On a compat-100
     // target (the lowered floor), that parse-errors during the merge BUILD — so each helper detects the

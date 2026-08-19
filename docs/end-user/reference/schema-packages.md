@@ -738,7 +738,7 @@ The XML row shape is a documented, stable contract -- one `<c>` element per colu
 - An **absent `<c>`** is `NULL` (row `B002` above has no `price`).
 - **Binary** columns are base64; **geometry/geography** is WKT with a companion `<c n="Column.STSrid">` carrying the SRID; **dates** are ISO-8601.
 
-You don't have to hand-author this shape on SQL Server: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you. That extraction helper is SQL Server only (see [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server)) -- a PostgreSQL, MySQL, or MariaDB package that wants `Xml` encoding hand-authors the `.tabledata` file in the shape above.
+You don't have to hand-author this shape: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you, on every source engine (see [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server)) -- SQL Server extracts XML natively, and PostgreSQL/MySQL/MariaDB convert their normal JSON extraction into the identical shape. One caveat: PostgreSQL and MySQL extraction doesn't currently capture the `.STSrid` companion for geometry/geography columns, so a spatial column from those engines extracts as WKT alone.
 
 ### Multiple Deliveries
 

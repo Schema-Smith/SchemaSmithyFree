@@ -91,6 +91,55 @@ public class DataTongsExtractionTests
 
     #endregion
 
+    #region XML Delivery Extraction (B4b)
+
+    [Test]
+    public void XmlDeliveryExtraction_ConvertsExtractedJsonToTheDeliveryXmlShape()
+    {
+        // No native XML producer on PostgreSQL: DataTongs extracts the same JSON the Json path would
+        // have, then MergeScriptHelper.JsonPayloadToXml converts it — this proves that conversion holds
+        // for real PostgreSQL-shaped JSON (boolean literals, encode()'d bytea, NULLs), not just the
+        // hand-written JSON literals the unit tests use.
+        var tableName = $"TestXmlDelivery_{Guid.NewGuid():N}".Substring(0, 30);
+        using (var command = _connection.CreateCommand())
+        {
+            command.CommandText = $@"
+CREATE TABLE public.""{tableName}"" (
+    ""code"" VARCHAR(20) NOT NULL PRIMARY KEY, ""flag"" BOOLEAN, ""amount"" DECIMAL(10,2),
+    ""note"" VARCHAR(100), ""ts"" TIMESTAMP, ""bin"" BYTEA);
+INSERT INTO public.""{tableName}"" VALUES
+    ('A001', TRUE, 7.25, 'a & b < c', '2026-08-11 06:00:00', decode('DEADBEEF', 'hex')),
+    ('B002', FALSE, NULL, NULL, NULL, NULL);";
+            command.ExecuteNonQuery();
+        }
+
+        try
+        {
+            string xml;
+            using (var command = _connection.CreateCommand())
+            {
+                var selectColumns = _dataTongs.GetSelectColumns(command, "public", tableName);
+                var json = _dataTongs.GetTableDataJson(command, selectColumns, "public", tableName, "\"code\"", null);
+                xml = MergeScriptHelper.JsonPayloadToXml(json);
+            }
+
+            Assert.That(xml, Does.Contain("<c n=\"code\">A001</c>"));
+            Assert.That(xml, Does.Contain("<c n=\"flag\">1</c>"), "A PostgreSQL boolean must normalize to 1, not 'true'.");
+            Assert.That(xml, Does.Contain("a &amp; b &lt; c"), "XML-special characters must be escaped.");
+            Assert.That(xml, Does.Contain("<c n=\"bin\">3q2+7w==</c>"), "Binary must be base64, matching the SQL Server reference producer's encoding.");
+            Assert.That(xml, Does.Contain("<row><c n=\"code\">B002</c><c n=\"flag\">0</c></row>"),
+                "B002's NULL columns (amount/note/ts/bin) must be omitted entirely, and its FALSE flag must be '0'.");
+        }
+        finally
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = $"DROP TABLE IF EXISTS public.\"{tableName}\"";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
+
     #region GetSelectColumns Tests
 
     [Test]
