@@ -70,6 +70,32 @@ public static class MergeScriptHelper
         }
     }
 
+    // B3: MySQL/MariaDB reject dynamic XPath outright, so there is no in-engine XML shred at the floor.
+    // Instead an Xml-encoded delivery is converted to the same shape a hand-authored JSON payload would
+    // have and run through the already-tuned, version-adaptive JSON row source unchanged. XDocument
+    // decodes XML entities on parse and JObject/JArray serialize proper JSON escaping on the way out, so
+    // a value round-trips byte-for-byte through both hops without any hand-built string concatenation.
+    // A <c> element absent from a <row> stays absent from that row's JObject (never null/""), matching
+    // GetJsonDataKeys' "keys present in the data" contract used for column filtering.
+    internal static string XmlPayloadToJson(string tableData)
+    {
+        if (string.IsNullOrWhiteSpace(tableData)) return "[]";
+        var doc = System.Xml.Linq.XDocument.Parse(tableData);
+        var rows = new JArray();
+        foreach (var row in doc.Descendants("row"))
+        {
+            var obj = new JObject();
+            foreach (var c in row.Elements("c"))
+            {
+                var name = (string)c.Attribute("n");
+                if (!string.IsNullOrEmpty(name))
+                    obj.Add(name, c.Value);
+            }
+            rows.Add(obj);
+        }
+        return rows.ToString(Newtonsoft.Json.Formatting.None);
+    }
+
     // B1: the SQL Server data-delivery metadata helpers below aggregate column lists with
     // STRING_AGG … WITHIN GROUP, which requires database compatibility level 130+. On a compat-100
     // target (the lowered floor), that parse-errors during the merge BUILD — so each helper detects the
@@ -558,17 +584,22 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     {
         var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
 
-        // B1: XML delivery shreds the payload with .nodes()/.value() on SQL Server (every compat level) and
-        // xmltable() on PostgreSQL (every version at/above the floor — no version gate needed) instead of
-        // OPENJSON/JSON_ARRAY_ELEMENTS. MySQL/MariaDB aren't wired yet; a delivery that declares Xml on them
-        // fails loudly rather than silently emitting a JSON shred.
-        if (isXml && platform.GetBasePlatform() is not (Platform.SqlServer or Platform.PostgreSQL))
-            throw new NotSupportedException(
-                $"XML data-delivery encoding is not yet supported on {platform.GetBasePlatform()}; use JSON (its shred works at every supported version).");
+        // B1/B3: XML delivery shreds the payload with .nodes()/.value() on SQL Server (every compat level)
+        // and xmltable() on PostgreSQL (every version at/above the floor — no version gate needed). MySQL
+        // and MariaDB reject dynamic XPath outright, so there is no in-engine shred there; instead the
+        // payload is converted to JSON once, up front, and run through the unchanged, already
+        // version-adaptive JSON row source exactly as a hand-authored JSON payload would be. Tokenized
+        // scripts replace the payload with a placeholder at runtime, so there is nothing real to convert.
+        var mySqlIsXml = isXml && platform.GetBasePlatform() == Platform.MySQL && !tokenizeScripts;
+        var mySqlTableData = mySqlIsXml ? XmlPayloadToJson(tableData) : tableData;
 
-        // Extract the data keys to filter columns — only include columns present in the data.
-        // For tokenized scripts, data is replaced at runtime so we include all columns.
-        var dataKeys = tokenizeScripts ? null : (isXml ? GetXmlDataKeys(tableData) : GetJsonDataKeys(tableData));
+        // Extract the data keys to filter columns — only include columns present in the data. The MySQL
+        // XML route filters from the converted JSON so the keys match what is actually being shredded,
+        // not the original XML shape. For tokenized scripts, data is replaced at runtime so we include
+        // all columns.
+        var dataKeys = tokenizeScripts ? null
+            : mySqlIsXml ? GetJsonDataKeys(mySqlTableData)
+            : isXml ? GetXmlDataKeys(tableData) : GetJsonDataKeys(tableData);
 
         return platform.GetBasePlatform() switch
         {
@@ -576,7 +607,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
                 mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, isXml),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
                 mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum, isXml),
-            Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
+            Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, mySqlTableData, keyColumns,
                 mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, dataKeys, mySqlServerVersionNum),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
         };

@@ -13,20 +13,31 @@ namespace Schema.UnitTests.Utility;
 [TestFixture]
 public class MergeScriptHelperTests
 {
-    #region B1 — XML delivery encoding guard
+    #region B3 — XmlPayloadToJson converter (MySQL/MariaDB XML delivery route)
 
     [Test]
-    public void BuildMergeScript_XmlEncoding_OnMySql_ThrowsNotSupported()
+    public void XmlPayloadToJson_ProducesTheJsonRowSourceEquivalent()
     {
-        // B1: XML delivery encoding is wired for SQL Server and PostgreSQL; a MySQL/MariaDB delivery
-        // declaring Xml must still fail loudly (before any catalog access) rather than silently emit a
-        // JSON shred. PostgreSQL's guard is exercised by the BuildMergeScript_PostgreSql_XmlEncoding_*
-        // tests below now that it no longer throws.
-        var cmd = Substitute.For<IDbCommand>();
-        Assert.Throws<NotSupportedException>(() =>
-            MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd, "db", "t", "<rows/>", "`id`",
-                mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
-                mergeFilter: null, contentEncoding: "Xml"));
+        var json = MergeScriptHelper.XmlPayloadToJson(
+            "<rows><row><c n=\"code\">A001</c><c n=\"qty\">7</c></row></rows>");
+        Assert.That(json, Is.EqualTo(@"[{""code"":""A001"",""qty"":""7""}]"));
+    }
+
+    [Test]
+    public void XmlPayloadToJson_EscapesJsonMetacharactersFromXmlText()
+    {
+        var json = MergeScriptHelper.XmlPayloadToJson(
+            "<rows><row><c n=\"name\">He said \"hi\" \\ bye</c></row></rows>");
+        Assert.That(json, Does.Contain(@"\""hi\"""));
+        Assert.That(json, Does.Contain(@"\\"));
+    }
+
+    [Test]
+    public void XmlPayloadToJson_PreservesAnAbsentElementAsAbsent()
+    {
+        var json = MergeScriptHelper.XmlPayloadToJson(
+            "<rows><row><c n=\"code\">A001</c></row><row><c n=\"code\">B002</c><c n=\"qty\">3</c></row></rows>");
+        Assert.That(json, Is.EqualTo(@"[{""code"":""A001""},{""code"":""B002"",""qty"":""3""}]"));
     }
 
     #endregion
@@ -1116,6 +1127,69 @@ public class MergeScriptHelperTests
         // Non-JSON column should use simple assignment
         Assert.That(result, Does.Contain("`name` = VALUES(`name`)"));
         Assert.That(result, Does.Not.Contain("IF(JSON_EXTRACT(VALUES(`name`)"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_XmlEncoding_NoLongerThrows()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null)
+        });
+
+        Assert.DoesNotThrow(() => MergeScriptHelper.BuildMergeScript(
+            Platform.MySQL, cmd, "testdb", "testtable",
+            "<rows><row><c n=\"id\">1</c></row></rows>", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_XmlEncoding_RoutesThroughTheUnchangedJsonRowSource()
+    {
+        // B3: dynamic XPath is rejected outright on MySQL/MariaDB, so an Xml delivery is converted to
+        // JSON in C# and shredded exactly the way a hand-authored JSON payload would be — same
+        // JSON_TABLE row source, no XML-specific shred path exists on this platform.
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable",
+            "<rows><row><c n=\"id\">1</c><c n=\"name\">Anvil</c></row></rows>", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.That(result, Does.Contain("JSON_TABLE("));
+        Assert.That(result, Does.Not.Contain("xmltable"));
+        Assert.That(result, Does.Not.Contain(".nodes("));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_XmlEncoding_ExcludesColumnsNotInTheConvertedData()
+    {
+        // Column filtering must key off the JSON produced by the conversion, not the original XML —
+        // otherwise a column present in the XML but dropped by the converter (or vice versa) could
+        // desync the filter from what is actually being shredded.
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null),
+            new("rowguid", "char", 36L, null, null, null, "char(36)", "", null)
+        });
+
+        // The payload only carries "id" and "name" — "rowguid" must be excluded.
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable",
+            "<rows><row><c n=\"id\">1</c><c n=\"name\">Anvil</c></row></rows>", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.That(result, Does.Contain("`id`"));
+        Assert.That(result, Does.Contain("`name`"));
+        Assert.That(result, Does.Not.Contain("`rowguid`"));
     }
 
     #endregion

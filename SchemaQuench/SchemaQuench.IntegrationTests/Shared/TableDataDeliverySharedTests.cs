@@ -202,6 +202,87 @@ public abstract class TableDataDeliverySharedTests
         Assert.That(reader.GetDecimal(1), Is.EqualTo(5.00m));
     }
 
+    // B3: dynamic XPath is rejected outright on MySQL/MariaDB, so an Xml-encoded delivery is converted to
+    // JSON in C# and shredded through the same row source a JSON delivery uses. XML/JSON equivalence is
+    // the assertion that matters here, mirroring PostgreSQL's DataDelivery_PostgreSql_XmlEncoding_
+    // MatchesJsonEncodingRowForRow: the qty INT column exercises the string-to-INT coercion the converter
+    // relies on, and the embedded double quote in name exercises the XML->JSON escaping hop live rather
+    // than only in the unit test. Runs on both MySQL and MariaDb — this base class is shared by both.
+    [Test]
+    public void DataDelivery_XmlEncoding_MatchesJsonEncodingRowForRow()
+    {
+        if (!SupportsDataDelivery)
+            Assert.Ignore("Data delivery requires MySQL 8.0; skipped below the floor.");
+
+        using var command = _connection.CreateCommand();
+        var jsonTable = $"_test_xjson_{Guid.NewGuid():N}".Substring(0, 30);
+        var xmlTable = $"_test_xxml_{Guid.NewGuid():N}".Substring(0, 30);
+        try
+        {
+            foreach (var t in new[] { jsonTable, xmlTable })
+            {
+                command.CommandText = $@"
+                    CREATE TABLE `{_testDb}`.`{t}` (
+                        code VARCHAR(20) NOT NULL PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        qty INT NOT NULL
+                    )";
+                command.ExecuteNonQuery();
+            }
+
+            var jsonData = "[{\"code\":\"A001\",\"name\":\"He said \\\"hi\\\"\",\"qty\":7}]";
+            var xmlData = "<rows><row><c n=\"code\">A001</c><c n=\"name\">He said \"hi\"</c><c n=\"qty\">7</c></row></rows>";
+
+            var jsonScript = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, jsonTable,
+                jsonData, "`code`", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null, mySqlServerVersionNum: _serverVersionNum);
+            ExecuteScript(command, jsonScript);
+
+            var xmlScript = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, xmlTable,
+                xmlData, "`code`", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null, mySqlServerVersionNum: _serverVersionNum,
+                contentEncoding: "Xml");
+            ExecuteScript(command, xmlScript);
+
+            // Positive assertion first: the anti-join checks below are equivalence proofs, and two empty
+            // tables are trivially equivalent — without this, a gated-off delivery or a swallowed failure
+            // that left both tables empty would pass while proving the XML route delivered nothing.
+            command.CommandText = $"SELECT code, name, qty FROM `{_testDb}`.`{xmlTable}`";
+            using (var reader = command.ExecuteReader())
+            {
+                Assert.That(reader.Read(), Is.True, "The XML delivery must have inserted its row.");
+                Assert.Multiple(() =>
+                {
+                    Assert.That(reader.GetString(0), Is.EqualTo("A001"));
+                    Assert.That(reader.GetString(1), Is.EqualTo("He said \"hi\""));
+                    Assert.That(reader.GetInt32(2), Is.EqualTo(7),
+                        "qty must round-trip as an integer through the converted-JSON row source.");
+                });
+                Assert.That(reader.Read(), Is.False, "The XML delivery must not have inserted extra rows.");
+            }
+
+            // MySQL has no EXCEPT — an anti-join proves the same row-for-row equivalence in both directions.
+            command.CommandText = $@"
+                SELECT COUNT(*) FROM `{_testDb}`.`{jsonTable}` j
+                LEFT JOIN `{_testDb}`.`{xmlTable}` x ON j.code = x.code AND j.name = x.name AND j.qty = x.qty
+                WHERE x.code IS NULL";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0),
+                "Every JSON-delivered row must be reproduced exactly by the XML delivery.");
+
+            command.CommandText = $@"
+                SELECT COUNT(*) FROM `{_testDb}`.`{xmlTable}` x
+                LEFT JOIN `{_testDb}`.`{jsonTable}` j ON x.code = j.code AND x.name = j.name AND x.qty = j.qty
+                WHERE j.code IS NULL";
+            Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0),
+                "The XML delivery must not introduce rows the JSON delivery did not produce.");
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{jsonTable}`, `{_testDb}`.`{xmlTable}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
     [Test]
     public void DeliverTableData_ViaTemplate_ProcessesTablesWithMergeType()
     {

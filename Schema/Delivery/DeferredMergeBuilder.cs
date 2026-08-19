@@ -25,20 +25,18 @@ internal static class DeferredMergeBuilder
     {
         var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
 
-        // B1: XML delivery is wired for SQL Server and PostgreSQL in this slice; a MySQL/MariaDB delivery
-        // declaring Xml fails loudly rather than silently emitting a JSON shred (mirrors
-        // MergeScriptHelper.BuildMergeScript).
-        if (isXml && !platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase)
-                  && !platform.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
-            throw new NotSupportedException(
-                $"XML data-delivery encoding is not yet supported on {platform}; use JSON (its shred works at every supported version).");
-
         if (platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
             return BuildSqlServer(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, isXml);
         if (platform.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
             return BuildPostgreSql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, disableRules, updateDescendents, pgServerVersionNum, isXml);
         if (platform.Equals("MySQL", StringComparison.OrdinalIgnoreCase))
-            return BuildMySql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, deferredColumns);
+        {
+            // B3: MySQL/MariaDB reject dynamic XPath outright, so an Xml-encoded deferred pass is
+            // converted to JSON once, up front, and shredded through the same unchanged JSON row source
+            // BuildMySql already uses for a hand-authored JSON payload.
+            var mySqlTableData = isXml ? MergeScriptHelper.XmlPayloadToJson(tableData) : tableData;
+            return BuildMySql(helper, cmd, schemaOrDb, tableName, mySqlTableData, keyColumns, deferredColumns);
+        }
 
         throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform));
     }
