@@ -173,13 +173,7 @@ BEGIN
                   THEN CASE WHEN c.domain_schema != 'pg_catalog' THEN '"' || c.domain_schema || '".' ELSE '' END || '"' || c.domain_name || '"'
                   ELSE CASE WHEN c.udt_schema != 'pg_catalog' THEN c.udt_schema || '.' ELSE '' END || REGEXP_REPLACE(c.udt_name, 'bpchar', 'CHAR', 'i')
                   END ||
-             CASE WHEN c.domain_name IS NULL AND UPPER(c.udt_name) LIKE '%CHAR'
-                  THEN CASE WHEN COALESCE(c.character_maximum_length, -1) = -1 THEN '' ELSE '(' || c.character_maximum_length || ')' END
-                  WHEN c.domain_name IS NULL AND UPPER(c.udt_name) IN ('NUMERIC', 'DECIMAL') AND c.numeric_precision IS NOT NULL
-                  THEN '(' || c.numeric_precision || CASE WHEN COALESCE(c.numeric_scale, 0) != 0 THEN ', ' || c.numeric_scale ELSE '' END || ')'
-                  WHEN c.domain_name IS NULL AND UPPER(c.udt_name) = 'TIMESTAMP' AND COALESCE(c.datetime_precision, 6) != 6
-                  THEN '(' || c.datetime_precision || ')'
-                  ELSE '' END AS "DataType",
+             "SchemaSmith"."ColumnTypeArguments"(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision) AS "DataType",
              CAST(CASE WHEN c.is_nullable = 'YES' THEN TRUE ELSE FALSE END AS BOOLEAN) AS "Nullable",
              c.column_default AS "Default",
              c.collation_name AS "Collation",

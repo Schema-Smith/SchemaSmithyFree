@@ -2,6 +2,7 @@
 
 using System.Data;
 using System;
+using System.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Domain.PostgreSQL;
@@ -291,6 +292,33 @@ CREATE TABLE public.""TestColumns"" (
         Assert.That(column.DataType, Is.EqualTo(dataType), $"Type of {name}");
         Assert.That(column.Nullable, Is.EqualTo(nullable), $"Nullability of {name}");
         Assert.That(column.Default, Is.EqualTo(defaultValue), $"Default of {name}");
+    }
+
+    [Test]
+    public void ShouldPreserveFractionalSecondsPrecisionOnExtraction()
+    {
+        // timestamptz(3)/time(3) precision-loss regression: the extraction CASE special-cased only
+        // 'timestamp' among PostgreSQL's fractional-seconds-precision types, so timestamptz(3) and
+        // time(3) both fell through to no argument at all — the declared precision was silently
+        // dropped. Bare time (default precision 6) is covered by ShouldGenerateCorrectJsonForColumns;
+        // this locks in the explicit-precision case for both siblings.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE public.""TestFractionalSecondsPrecision"" (
+    ""MyInt"" INT NOT NULL PRIMARY KEY,
+    ""MyTimestampTzPrecise"" TIMESTAMPTZ(3) NULL,
+    ""MyTimePrecise"" TIME(3) NULL
+);
+";
+        cmd.ExecuteNonQuery();
+        var result = GenerateTable(cmd, "public", "TestFractionalSecondsPrecision");
+        Assert.That(result.Columns, Has.Count.EqualTo(3));
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "MyTimestampTzPrecise"), "MyTimestampTzPrecise", "timestamptz(3)", true, null);
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "MyTimePrecise"), "MyTimePrecise", "time(3)", true, null);
+
+        conn.Close();
     }
 
     [Test]

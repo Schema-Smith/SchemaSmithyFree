@@ -55,20 +55,17 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{prod}');
 
     protected static string GetColumnDataType(IDbCommand cmd, string tableSchema, string tableName, string columnName)
     {
+        // Calls the same "SchemaSmith"."ColumnTypeArguments" the product extraction/drift-comparison
+        // procs use, rather than re-implementing the type-argument CASE a third time here — a fourth
+        // hand-maintained copy is exactly the pattern that let timestamptz(3)/time(3) go unnoticed.
         cmd.CommandText = @$"
 SELECT CASE WHEN c.domain_name IS NOT NULL
                   THEN CASE WHEN c.domain_schema != 'pg_catalog' THEN '""' || c.domain_schema || '"".' ELSE '' END || '""' || c.domain_name || '""'
                   ELSE CASE WHEN c.udt_schema != 'pg_catalog' THEN c.udt_schema || '.' ELSE '' END || c.udt_name
                   END ||
-       CASE WHEN UPPER(c.udt_name) LIKE '%CHAR'
-            THEN CASE WHEN COALESCE(c.character_maximum_length, -1) = -1 THEN '' ELSE '(' || c.character_maximum_length || ')' END
-            WHEN UPPER(c.udt_name) IN ('NUMERIC', 'DECIMAL')
-            THEN  '(' || c.numeric_precision || ', ' || c.numeric_scale || ')'
-            WHEN UPPER(c.udt_name) = 'TIMESTAMP' AND COALESCE(c.datetime_precision, 6) != 6
-            THEN  '(' || c.datetime_precision || ')'
-            ELSE '' END
-  FROM information_schema.columns c 
-  WHERE table_schema = '{tableSchema}' 
+       ""SchemaSmith"".""ColumnTypeArguments""(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision)
+  FROM information_schema.columns c
+  WHERE table_schema = '{tableSchema}'
     AND table_name = '{tableName}'
     AND column_name = '{columnName}'";
         return cmd.ExecuteScalar()?.ToString()?.ToUpper() ?? "UNKNOWN";

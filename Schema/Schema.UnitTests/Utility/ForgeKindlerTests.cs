@@ -178,19 +178,24 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 27 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
+        // SqlServer: 28 = 27 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
         // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine)
         // + SchemaSmith.fn_SplitList (all-versions STRING_SPLIT replacement for the compat-100 XML path)
         // + SchemaSmith.DegradeUnsupportedColumnStore + SchemaSmith.DegradeUnsupportedFeatures (the emit-guard
         //   degrade spine: the former drops below-2012/2014 columnstore from #Indexes, the latter is the single
-        //   choke point that neutralizes below-2016 temporal/masking/Always-Encrypted in the working set).
-        Assert.That(sqlServer.Length, Is.EqualTo(27));
-        // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
+        //   choke point that neutralizes below-2016 temporal/masking/Always-Encrypted in the working set)
+        // + SchemaSmith.fn_ColumnTypeArguments (single source of a column's parenthesized DataType argument,
+        //   shared by GenerateTableJson/GenerateTableXml/ModifiedTableQuench — replaces the hand-copied CASE
+        //   that dropped TIME(n)/DATETIMEOFFSET(n) precision).
+        Assert.That(sqlServer.Length, Is.EqualTo(28));
+        // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
         // + SchemaSmith.ColumnCompression (PG14-adaptive attcompression read) + SchemaSmith.StatisticsExpressionColumns
-        // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade.
-        Assert.That(postgres.Length, Is.EqualTo(34));
+        // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade
+        // + SchemaSmith.ColumnTypeArguments (the PostgreSQL twin of the SQL Server helper above — replaces the
+        //   hand-copied CASE that dropped timestamptz(n)/time(n)/timetz(n) precision).
+        Assert.That(postgres.Length, Is.EqualTo(35));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor

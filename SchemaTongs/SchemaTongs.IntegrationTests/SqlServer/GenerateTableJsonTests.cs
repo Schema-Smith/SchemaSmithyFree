@@ -2,6 +2,7 @@
 
 using System.Data;
 using System;
+using System.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
@@ -384,7 +385,10 @@ EXEC sys.sp_addextendedproperty 'Description', 'An integer column', 'SCHEMA', [d
         AssertColumnProperties(result.Columns[22], "MySmallint", "SMALLINT", true, null, null);
         AssertColumnProperties(result.Columns[23], "MyString", "VARCHAR(200)", true, null, null);
         AssertColumnProperties(result.Columns[24], "MySysname", "SYSNAME", true, null, null);
-        AssertColumnProperties(result.Columns[25], "MyTime", "TIME", true, null, null);
+        // Bare TIME defaults to precision 7 -- extraction always renders it explicitly (matching
+        // DATETIME2's established behavior and the canonicalization ParseTableJsonIntoTempTables.sql
+        // applies to a bare-declared JSON DataType in this family), so it round-trips as TIME(7).
+        AssertColumnProperties(result.Columns[25], "MyTime", "TIME(7)", true, null, null);
         AssertColumnProperties(result.Columns[26], "MyTinyint", "TINYINT", true, null, null);
         AssertColumnProperties(result.Columns[27], "MyUniqueIdentifier", "UNIQUEIDENTIFIER", true, null, null);
         AssertColumnProperties(result.Columns[28], "MyXml", "XML", true, null, null);
@@ -420,6 +424,33 @@ EXEC sys.sp_addextendedproperty 'Description', 'An integer column', 'SCHEMA', [d
         Assert.That(sqlColumn.Nullable, Is.EqualTo(nullable), $"Nullability of {name}");
         Assert.That(sqlColumn.Default, Is.EqualTo(defaultValue), $"Default of {name}");
         Assert.That(sqlColumn.CheckExpression, Is.EqualTo(check), $"Check of {name}");
+    }
+
+    [Test]
+    public void ShouldPreserveFractionalSecondsPrecisionOnExtraction()
+    {
+        // TIME(3)/DATETIMEOFFSET(3) precision-loss regression: the extraction CASE covered DATETIME2
+        // among the fractional-seconds-precision types but not its two siblings, so both extracted as
+        // the bare type name — the declared precision was silently dropped. Bare TIME (default
+        // precision 7) is covered by ShouldGenerateCorrectJsonForColumns; this locks in the explicit-
+        // precision case for both siblings.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.TestFractionalSecondsPrecision (
+    MyInt INT NOT NULL PRIMARY KEY,
+    MyTimePrecise TIME(3) NULL,
+    MyDateTimeOffsetPrecise DATETIMEOFFSET(3) NULL
+)
+";
+        cmd.ExecuteNonQuery();
+        var result = GenerateTable(cmd, "dbo", "TestFractionalSecondsPrecision");
+        Assert.That(result.Columns, Has.Count.EqualTo(3));
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "[MyDateTimeOffsetPrecise]"), "MyDateTimeOffsetPrecise", "DATETIMEOFFSET(3)", true, null, null);
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "[MyTimePrecise]"), "MyTimePrecise", "TIME(3)", true, null, null);
+
+        conn.Close();
     }
 
     [Test]
