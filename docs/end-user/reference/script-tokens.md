@@ -299,6 +299,8 @@ These are two different questions, and confusing them is a real footgun. A moder
 
 Both tokens resolve everywhere template-scoped tokens resolve — script bodies in every slot, and the `Default` / `CheckExpression` / `Expression` / `FilterExpression` / `ShouldApplyExpression` JSON fields — and they are resolved **per target database**, after SchemaSmith connects and detects the version. They are not available in product-level scripts (`Product.json` `BaselineValidationScript` / `VersionStampScript`), which run at server scope before any database is selected.
 
+A product folder's own `ShouldApplyExpression` (the `Before`/`After` entries in `Product.json`'s top-level `ScriptFolders`) is a narrower case: it runs at **product scope**, on the same open server connection but before any database is selected. `{{ServerMajorVersion}}` resolves there — the server connection already exists — but `{{CompatibilityLevel}}` (a property of a database) and `{{SchemaName}}` (a template-iteration concept) do not exist yet at that scope, so they are left unresolved. Referencing either in a product-folder gate reaches the target as literal, unresolved text and fails there, the same way any genuinely unresolvable token does — it does not silently evaluate to a wrong-but-plausible comparison.
+
 > **SQL Server:** `CompatibilityLevel` is a SQL Server concept. On PostgreSQL, MySQL, and MariaDB there is no separate compatibility level, so `{{CompatibilityLevel}}` resolves to the same value as `{{ServerMajorVersion}}` — one portable expression shape works across the per-platform packages, and the syntax-vs-feature distinction above only bites on SQL Server.
 
 ### Example — a version-gated folder
