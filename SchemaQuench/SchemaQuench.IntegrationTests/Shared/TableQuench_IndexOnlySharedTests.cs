@@ -291,6 +291,67 @@ public abstract class TableQuench_IndexOnlySharedTests
     }
 
     [Test]
+    public void IndexOnlyQuench_ShouldRenameIndex_PreservingPrefixLengthAndUniqueness()
+    {
+        // Regression coverage for the below-MySQL-8.0 / below-MariaDB-10.5.2 degrade path
+        // (SchemaSmith_BuildIndexRenameClause rebuilding DROP/ADD from _SchemaSmith_IdxDetectSnap
+        // instead of RENAME INDEX): a prefix-length, unique index must keep its SUB_PART and
+        // uniqueness across a rename, not just its column list. On engines new enough to support
+        // RENAME INDEX this exercises the metadata-only early-return path instead -- still valid
+        // coverage, just not the path this task changed (that's the MariaDB 10.2 floor lane's job).
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"CREATE UNIQUE INDEX `idx_prefix_old` ON `{_testDb}`.`{_testTableName}` (`code`(5))";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $@"
+            INSERT INTO `{MainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
+            VALUES ('TestProduct', '', '{_testDb}', 'INDEX', '{_testTableName}.idx_prefix_old')";
+        command.ExecuteNonQuery();
+
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_prefix_new`"",
+                    ""IndexColumns"": ""`code`(5)"",
+                    ""Unique"": true,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""BTREE""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}'
+              AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_prefix_old'";
+        Assert.That(Convert.ToInt32(command.ExecuteScalar()), Is.EqualTo(0),
+            "Old index name should not exist");
+
+        command.CommandText = $@"
+            SELECT SUB_PART, NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}'
+              AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_prefix_new'
+            ORDER BY SEQ_IN_INDEX";
+        using var reader = command.ExecuteReader();
+        Assert.That(reader.Read(), Is.True, "Renamed index should exist");
+        Assert.Multiple(() =>
+        {
+            Assert.That(Convert.ToInt32(reader["SUB_PART"]), Is.EqualTo(5),
+                "The prefix length must survive the rename -- the degrade path rebuilds the index from catalog metadata.");
+            Assert.That(Convert.ToInt32(reader["NON_UNIQUE"]), Is.EqualTo(0),
+                "Uniqueness must survive the rename.");
+        });
+    }
+
+    [Test]
     public void IndexOnlyQuench_PrefixLengthIndex_IsIdempotent_AcrossRepeatedDeploys()
     {
         // Arrange - a prefix-length index (`code`(5)) already exists exactly as declared, and is

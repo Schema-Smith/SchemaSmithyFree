@@ -22,29 +22,39 @@ BEGIN
   -- (columns in SEQ_IN_INDEX order, prefix lengths, DESC key parts, uniqueness), so it matches the
   -- existing index exactly; only the name changes. (An index rename is detected only when the old
   -- index already matches the desired columns + uniqueness, so this is a true rename.)
+  -- p_DatabaseName is no longer read here: the snapshot below was already scoped to it by the
+  -- caller, so re-scoping here would be redundant. Kept in the signature to avoid touching all
+  -- four call sites for a parameter that costs nothing to leave unused.
+  DECLARE v_NonUnique TINYINT;
+  DECLARE v_NormColumns TEXT;
+  DECLARE v_ErrMsg VARCHAR(255);
+
   IF SchemaSmith_SupportsRenameIndex() = 1 THEN
     RETURN CONCAT('RENAME INDEX `', p_OldIndexName, '` TO `', p_NewIndexName, '`');
   END IF;
 
+  -- The degrade path reads the ONE row the caller already built in _SchemaSmith_IdxDetectSnap
+  -- (SchemaSmith_IndexOnlyQuench.sql / SchemaSmith_MissingIndexesAndConstraintsQuench.sql) rather
+  -- than INFORMATION_SCHEMA.STATISTICS directly -- that snapshot's NormColumns already carries the
+  -- SEQ_IN_INDEX-ordered column list with prefix lengths and DESC key parts, which is exactly the
+  -- clause body an ADD INDEX needs. One row per (TableName, IndexName) by primary key, so this is a
+  -- single reference to the temp table -- no repeat read, no ER_CANT_REOPEN_TABLE (1137) exposure.
+  SELECT snap.NonUnique, snap.NormColumns
+    INTO v_NonUnique, v_NormColumns
+    FROM _SchemaSmith_IdxDetectSnap snap
+   WHERE BINARY snap.TableName = BINARY p_TableName
+     AND BINARY snap.IndexName = BINARY p_OldIndexName;
+
+  -- A missing snapshot row would otherwise concatenate NULL into a malformed ALTER TABLE
+  -- (`ADD INDEX `x` ()` or worse); fail loudly instead of emitting broken DDL.
+  IF v_NormColumns IS NULL THEN
+      SET v_ErrMsg = CONCAT('SchemaSmith_BuildIndexRenameClause: missing detection-snapshot row for ', p_TableName, '.', p_OldIndexName);
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_ErrMsg;
+  END IF;
+
   RETURN CONCAT('DROP INDEX `', p_OldIndexName, '`, ADD ',
-      IF((SELECT MAX(sc.NON_UNIQUE)
-          FROM INFORMATION_SCHEMA.STATISTICS sc
-          WHERE BINARY sc.TABLE_SCHEMA = BINARY p_DatabaseName
-            AND BINARY sc.TABLE_NAME = BINARY p_TableName
-            AND BINARY sc.INDEX_NAME = BINARY p_OldIndexName) = 0, 'UNIQUE ', ''),
-      'INDEX `', p_NewIndexName, '` (',
-      CONVERT((
-          SELECT GROUP_CONCAT(
-                     CONCAT('`', CONVERT(sc.COLUMN_NAME USING utf8mb4), '`',
-                            IF(sc.SUB_PART IS NOT NULL, CONCAT('(', sc.SUB_PART, ')'), ''),
-                            CASE WHEN BINARY sc.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-                     ORDER BY sc.SEQ_IN_INDEX SEPARATOR ',')
-          FROM INFORMATION_SCHEMA.STATISTICS sc
-          WHERE BINARY sc.TABLE_SCHEMA = BINARY p_DatabaseName
-            AND BINARY sc.TABLE_NAME = BINARY p_TableName
-            AND BINARY sc.INDEX_NAME = BINARY p_OldIndexName
-      ) USING utf8mb4),
-      ')');
+      IF(v_NonUnique = 0, 'UNIQUE ', ''),
+      'INDEX `', p_NewIndexName, '` (', v_NormColumns, ')');
 END //
 
 DELIMITER ;
