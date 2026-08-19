@@ -58,12 +58,12 @@ schemaquench --ConfigFile:quench.settings.before.pg12.json --LogPath:"$PWD/logs"
 ```
 # BEFORE -> pg16 (15432): Modern applied, Legacy skipped
 [localhost].[learn]   Skipping folder 'Programmability/Legacy' — ShouldApplyExpression evaluated false
-[localhost].[learn]     Quenched .efore\package\Templates\Main\Programmability/Modern\public.v_reading_summary.sql
+[localhost].[learn]     Quenched ./before/package/Templates/Main/Programmability/Modern/public.v_reading_summary.sql
 [localhost].[learn] Successfully Quenched
 
 # BEFORE -> pg12 (15433): Legacy applied, Modern skipped
 [localhost].[learn]   Skipping folder 'Programmability/Modern' — ShouldApplyExpression evaluated false
-[localhost].[learn]     Quenched .efore\package\Templates\Main\Programmability/Legacy\public.v_reading_summary.sql
+[localhost].[learn]     Quenched ./before/package/Templates/Main/Programmability/Legacy/public.v_reading_summary.sql
 [localhost].[learn] Successfully Quenched
 ```
 
@@ -86,7 +86,7 @@ schemaquench --ConfigFile:quench.settings.after.pg16.json --LogPath:"$PWD/logs"
 ```
 
 ```
-[localhost].[learn]     Quenched .fter\package\Templates\Main\Programmability/Modern\public.v_reading_summary.sql
+[localhost].[learn]     Quenched ./after/package/Templates/Main/Programmability/Modern/public.v_reading_summary.sql
 [localhost].[learn] Successfully Quenched
 ```
 
