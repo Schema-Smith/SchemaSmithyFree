@@ -7,6 +7,7 @@ using System.Linq;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using NUnit.Framework;
+using Schema.Checkpointing;
 using Schema.Domain;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
@@ -1083,6 +1084,97 @@ public class DatabaseQuenchTests
         quench.QuenchDatabaseObjects(mockCmd, scripts, false);
 
         Assert.That(scripts.All(s => s.HasBeenQuenched), Is.True);
+    }
+
+    #endregion
+
+    #region WhatIfLogScripts Tests — overlapping calls must log each script once
+
+    // The engine's two Object-slot WhatIf calls (and the two AfterTablesObject-slot calls) pass
+    // overlapping script lists built from the same underlying scripts, mirroring the real path's
+    // two QuenchDatabaseObjectsWithCheckpoint passes. WhatIfLogScripts must gate on
+    // HasBeenQuenched exactly as the real path's QuenchDatabaseObjectsWithCheckpoint does, so a
+    // script already logged in an earlier call is skipped on the next.
+    [Test]
+    public void WhatIfLogScripts_OverlappingCallsSameScope_RecordsScriptOnlyOnce()
+    {
+        Schema.Utility.LogFactory.Clear();
+        try
+        {
+            Schema.Utility.LogFactory.Register("ProgressLog", Substitute.For<log4net.ILog>());
+            Schema.Utility.LogFactory.Register("ErrorLog", Substitute.For<log4net.ILog>());
+
+            var product = new Product { Name = "P", Platform = Platform.SqlServer };
+            var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+                false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null)
+            {
+                WhatIf = new WhatIfCapture()
+            };
+
+            var overlap = new SqlScript { Name = "vw_Overlap.sql", FilePath = "Scripts/Object/vw_Overlap.sql" };
+            var onlyFirst = new SqlScript { Name = "vw_First.sql", FilePath = "Scripts/Object/vw_First.sql" };
+            var onlySecond = new SqlScript { Name = "vw_Second.sql", FilePath = "Scripts/Object/vw_Second.sql" };
+
+            // Same shape as DatabaseQuench's two Object-slot WhatIf calls: overlapping lists,
+            // same DatabaseScriptSlot, same scope.
+            quench.WhatIfLogScripts([onlyFirst, overlap], DatabaseScriptSlot.Object);
+            quench.WhatIfLogScripts([overlap, onlySecond], DatabaseScriptSlot.Object);
+
+            var snapshot = quench.WhatIf.Snapshot();
+            Assert.Multiple(() =>
+            {
+                Assert.That(snapshot.Count(r => r.Script == overlap.LogPath), Is.EqualTo(1),
+                    "A script present in both overlapping WhatIf calls must be recorded once in the summary");
+                Assert.That(snapshot.Count(r => r.Script == onlyFirst.LogPath), Is.EqualTo(1));
+                Assert.That(snapshot.Count(r => r.Script == onlySecond.LogPath), Is.EqualTo(1));
+                Assert.That(overlap.HasBeenQuenched, Is.True,
+                    "Logged scripts must be flagged, mirroring the real path's HasBeenQuenched gate");
+            });
+        }
+        finally
+        {
+            Schema.Utility.LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void WhatIfLogScripts_OverlappingCallsSameScope_PrintsConsoleLineOnlyOnce()
+    {
+        // Distinct from the summary assertion above: the console output is produced in the same
+        // loop as the WhatIf.Record call, but a fix that only gated the recorded entry (and left
+        // the console foreach unguarded) would still double-print here — that's the specific half
+        // the earlier symptom-level fix missed.
+        Schema.Utility.LogFactory.Clear();
+        try
+        {
+            var progressLog = Substitute.For<log4net.ILog>();
+            var progressLogLines = new List<string>();
+            progressLog.When(l => l.Info(Arg.Any<object>()))
+                .Do(ci => progressLogLines.Add(ci.Arg<object>().ToString()));
+            Schema.Utility.LogFactory.Register("ProgressLog", progressLog);
+            Schema.Utility.LogFactory.Register("ErrorLog", Substitute.For<log4net.ILog>());
+
+            var product = new Product { Name = "P", Platform = Platform.SqlServer };
+            var quench = new DatabaseQuench("srv", product, new Template { Name = "T" }, "db",
+                false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null)
+            {
+                WhatIf = new WhatIfCapture()
+            };
+
+            var overlap = new SqlScript { Name = "vw_Overlap.sql", FilePath = "Scripts/Object/vw_Overlap.sql" };
+
+            // Same slot both times — matches the real Object-slot pair (DatabaseQuench.cs :596/:634).
+            quench.WhatIfLogScripts([overlap], DatabaseScriptSlot.Object);
+            quench.WhatIfLogScripts([overlap], DatabaseScriptSlot.Object);
+
+            var consoleHits = progressLogLines.Count(l => l.Contains(overlap.LogPath));
+            Assert.That(consoleHits, Is.EqualTo(1),
+                "A script present in both overlapping WhatIf calls must be printed to console once");
+        }
+        finally
+        {
+            Schema.Utility.LogFactory.Clear();
+        }
     }
 
     #endregion

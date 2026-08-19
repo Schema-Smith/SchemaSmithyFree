@@ -2297,13 +2297,18 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private static WhatIfDetail WhatIfConsoleDetail =>
         WhatIfConsoleFormatter.ParseDetail(CommandLineParser.ValueOfSwitch("WhatIfDetail", "normal"));
 
-    private void WhatIfLogScripts(List<SqlScript> scripts, DatabaseScriptSlot slot)
+    // Callers pass overlapping lists across the two Object/AfterTablesObject WhatIf calls per
+    // scope (mirroring the real path's two QuenchDatabaseObjectsWithCheckpoint passes), so this
+    // gates on HasBeenQuenched exactly as the real path does — a script already logged here in an
+    // earlier call is skipped, and each script is flagged once it's logged.
+    internal void WhatIfLogScripts(List<SqlScript> scripts, DatabaseScriptSlot slot)
     {
         var entries = new List<WhatIfConsoleEntry>();
-        foreach (var script in scripts)
+        foreach (var script in scripts.Where(s => !s.HasBeenQuenched))
         {
             entries.Add(new WhatIfConsoleEntry("apply", "APPLY", script.LogPath));
             WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
+            script.HasBeenQuenched = true;
         }
         foreach (var line in WhatIfConsoleFormatter.Render(entries, WhatIfConsoleDetail))
             SafeProgressLog(line);

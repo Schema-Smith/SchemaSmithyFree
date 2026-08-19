@@ -2,6 +2,7 @@
 
 using log4net;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json.Linq;
 using NSubstitute;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -11,6 +12,7 @@ using Schema.Utility;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 
 namespace SchemaQuench.IntegrationTests.SqlServer;
@@ -536,6 +538,86 @@ WHERE fs.name = '{tenant}' AND ft.name = 'Orders' AND fk.name = 'FK_Orders_Looku
                     Assert.That(alwaysAfter, Is.EqualTo(alwaysRowsBefore[tenant]),
                         $"Tenant '{tenant}': WhatIf must not execute the [ALWAYS] script.");
                 }
+            }
+            finally
+            {
+                config["WhatIfONLY"] = "false";
+                DropTenantSchemas(DefaultTenants);
+                LogFactory.Clear();
+                FactoryContainer.Unregister<IEnvironment>();
+            }
+        }
+    }
+
+    [Test]
+    public void WhatIf_With_Schema_Template_Reports_One_WouldApply_Entry_Per_Tenant_For_Object_Script()
+    {
+        // Regression coverage for the report's wouldApply[] count on a multi-scope schema-template
+        // WhatIf run — the exact surface the (Scope, Script) assembler dedup and the DatabaseQuench
+        // HasBeenQuenched-gated WhatIfLogScripts were both written to fix (over-count), and the exact
+        // surface a cross-scope HasBeenQuenched leak would silently under-count (SqlScript.Clone()
+        // never copies HasBeenQuenched, and PrepareIterationContent clones fresh SqlScript instances
+        // per schema-template iteration — see DatabaseQuench.cs PrepareIterationContent — so there is
+        // no shared object-reference path between tenants for this to leak across). The engine has no
+        // prior end-to-end test asserting the wouldApply COUNT at all; every other WhatIf test here
+        // only asserts on console log lines. GetTenantLabel.sql (TenantBody/Procedures, QuenchSlot
+        // "Objects") is an Object-slot script, so it is reachable through BOTH ObjectFolders and
+        // AfterTablesObjectFolders (Template.cs AfterTablesObjectFolders deliberately includes the
+        // Objects slot) — the exact overlap that produces a same-scope duplicate raw WhatIfRun that
+        // only the assembler's string-keyed dedup (not DatabaseQuench's object-reference-keyed skip)
+        // can collapse.
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetupSharedMocks();
+            ResetTrackingAndCreateTenantSchemas(DefaultTenants);
+            var config = FactoryContainer.Resolve<IConfigurationRoot>();
+            config["SchemaPackagePath"] = TestHelper.GetTestProductPath("SqlServer", ProductName);
+
+            try
+            {
+                // First quench: real deploy so tenant schemas/tables/procs exist (mirrors the other
+                // WhatIf tests in this fixture — WhatIf's discovery script depends on prior state).
+                RunSchemaQuench();
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+
+                // Second quench: WhatIf mode — the run whose summary we inspect.
+                config["WhatIfONLY"] = "true";
+                RunSchemaQuench();
+
+                _progressLog.DidNotReceive().Error(Arg.Any<string>());
+                _environment.DidNotReceive().Exit(2);
+                _environment.DidNotReceive().Exit(3);
+
+                var jsonPath = Path.Join(ConfigHelper.ResolveLogPath(), "SchemaQuench - Summary.json");
+                Assert.That(File.Exists(jsonPath), Is.True, $"Expected deployment summary JSON at {jsonPath}");
+
+                var json = JObject.Parse(File.ReadAllText(jsonPath));
+                Assert.That(json.SelectToken("run.mode")?.Value<string>(), Is.EqualTo("WhatIf"));
+
+                var wouldApply = (JArray)json.SelectToken("whatIf.wouldApply");
+                Assert.That(wouldApply, Is.Not.Null);
+
+                var tenantLabelEntries = wouldApply
+                    .Where(e => (e["script"]?.Value<string>() ?? "").EndsWith(
+                        $"Procedures{Path.DirectorySeparatorChar}GetTenantLabel.sql"))
+                    .ToList();
+
+                // One entry per tenant scope — not one collapsed entry (cross-scope HasBeenQuenched
+                // suppression) and not more than one per tenant (same-scope duplicate logging).
+                Assert.That(tenantLabelEntries.Count, Is.EqualTo(DefaultTenants.Length),
+                    "wouldApply should report GetTenantLabel.sql exactly once per tenant scope — " +
+                    $"got {tenantLabelEntries.Count} for {DefaultTenants.Length} tenants. Fewer than " +
+                    $"{DefaultTenants.Length} would indicate cross-scope HasBeenQuenched suppression; " +
+                    "more would indicate same-scope duplicate WhatIfLogScripts passes escaping dedup.");
+
+                var expectedScopes = DefaultTenants
+                    .Select(t => $"[{_server}].[{_mainDb}] [Schema: {t}]")
+                    .ToList();
+                var actualScopes = tenantLabelEntries.Select(e => e["scope"]?.Value<string>()).ToList();
+
+                Assert.That(actualScopes, Is.EquivalentTo(expectedScopes),
+                    "each tenant's wouldApply entry must carry that tenant's own [Schema: ...] scope, " +
+                    "proving the entries are genuinely per-scope and not one scope's entry duplicated.");
             }
             finally
             {

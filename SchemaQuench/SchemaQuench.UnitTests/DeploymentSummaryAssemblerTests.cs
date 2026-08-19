@@ -336,6 +336,65 @@ public class DeploymentSummaryAssemblerTests
     }
 
     [Test]
+    public void Assemble_WhatIfMode_DedupesMultiPassEntries_ByScopeAndScript()
+    {
+        // Mirrors the multi-pass object-script producer: one script logged 4 times (SQL Server-style
+        // pass count) across 5 scopes should collapse to exactly one entry per scope, not 5 x 4.
+        var scopes = new[] { "[srv].[dbA]", "[srv].[dbB]", "[srv].[dbC]", "[srv].[dbD]", "[srv].[dbE]" };
+        const string script = "Scripts/Objects/vwSales.sql";
+        const int passes = 4;
+
+        var entries = new List<WhatIfRun>();
+        foreach (var scope in scopes)
+            for (var pass = 0; pass < passes; pass++)
+                entries.Add(new WhatIfRun(WhatIfCategory.Apply, scope, script));
+
+        var summary = AssembleWith(mode: RunMode.WhatIf, whatIfEntries: entries);
+
+        Assert.That(summary.WhatIf.WouldApply.Count, Is.EqualTo(scopes.Length),
+            "one entry per scope, not one per (scope, pass)");
+        Assert.That(summary.WhatIf.WouldApply.Select(e => e.Scope), Is.EqualTo(scopes),
+            "first-occurrence order must survive dedup — no hash-based reordering");
+    }
+
+    [Test]
+    public void Assemble_WhatIfMode_DedupesWouldSkipAndWouldDeliver_SameAsWouldApply()
+    {
+        var entries = new List<WhatIfRun>
+        {
+            new(WhatIfCategory.Skip, "[srv].[dbA]", "Scripts/Templates/002.sql"),
+            new(WhatIfCategory.Skip, "[srv].[dbA]", "Scripts/Templates/002.sql"),
+            new(WhatIfCategory.Deliver, "[srv].[dbA]", "Scripts/Data/003.sql"),
+            new(WhatIfCategory.Deliver, "[srv].[dbA]", "Scripts/Data/003.sql"),
+            new(WhatIfCategory.Deliver, "[srv].[dbA]", "Scripts/Data/003.sql")
+        };
+
+        var summary = AssembleWith(mode: RunMode.WhatIf, whatIfEntries: entries);
+
+        Assert.That(summary.WhatIf.WouldSkip.Count, Is.EqualTo(1));
+        Assert.That(summary.WhatIf.WouldDeliver.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Assemble_WhatIfMode_DistinctScriptsInSameScope_AllKept()
+    {
+        // Dedup keys on (scope, script), not scope alone — two distinct scripts in one scope
+        // are both real entries, even if each is itself repeated across passes.
+        var entries = new List<WhatIfRun>
+        {
+            new(WhatIfCategory.Apply, "[srv].[dbA]", "Scripts/Objects/vwSales.sql"),
+            new(WhatIfCategory.Apply, "[srv].[dbA]", "Scripts/Objects/vwSales.sql"),
+            new(WhatIfCategory.Apply, "[srv].[dbA]", "Scripts/Objects/prcTotals.sql")
+        };
+
+        var summary = AssembleWith(mode: RunMode.WhatIf, whatIfEntries: entries);
+
+        Assert.That(summary.WhatIf.WouldApply.Count, Is.EqualTo(2));
+        Assert.That(summary.WhatIf.WouldApply.Select(e => e.Script),
+            Is.EqualTo(new[] { "Scripts/Objects/vwSales.sql", "Scripts/Objects/prcTotals.sql" }));
+    }
+
+    [Test]
     public void Assemble_NonWhatIfMode_WhatIfIsNull_EvenWhenEntriesNonEmpty()
     {
         var entries = new List<WhatIfRun> { new(WhatIfCategory.Apply, "[srv].[dbA]", "ALTER TABLE ...") };
