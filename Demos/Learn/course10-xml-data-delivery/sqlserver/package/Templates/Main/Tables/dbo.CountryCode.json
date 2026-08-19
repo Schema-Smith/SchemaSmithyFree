@@ -1,0 +1,18 @@
+{
+  "Schema": "dbo",
+  "Name": "CountryCode",
+  "Columns": [
+    { "Name": "Code", "DataType": "CHAR(2)" },
+    { "Name": "Name", "DataType": "NVARCHAR(100)" },
+    { "Name": "Continent", "DataType": "NVARCHAR(50)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "PK_CountryCode", "PrimaryKey": true, "Clustered": true, "IndexColumns": "Code" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/dbo.CountryCode.xml.tabledata",
+    "ContentEncoding": "Xml",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "Code"
+  }
+}

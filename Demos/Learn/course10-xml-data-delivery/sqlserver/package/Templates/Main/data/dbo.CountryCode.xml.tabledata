@@ -1,0 +1,7 @@
+<rows>
+<row><c n="Code">US</c><c n="Name">United States</c><c n="Continent">North America</c></row>
+<row><c n="Code">CA</c><c n="Name">Canada</c><c n="Continent">North America</c></row>
+<row><c n="Code">GB</c><c n="Name">United Kingdom</c><c n="Continent">Europe</c></row>
+<row><c n="Code">DE</c><c n="Name">Germany</c><c n="Continent">Europe</c></row>
+<row><c n="Code">JP</c><c n="Name">Japan</c></row>
+</rows>

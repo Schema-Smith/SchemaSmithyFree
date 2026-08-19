@@ -1,0 +1,7 @@
+[
+{"Code":"US","Name":"United States","Continent":"North America"},
+{"Code":"CA","Name":"Canada","Continent":"North America"},
+{"Code":"GB","Name":"United Kingdom","Continent":"Europe"},
+{"Code":"DE","Name":"Germany","Continent":"Europe"},
+{"Code":"JP","Name":"Japan","Continent":null}
+]

@@ -1,0 +1,18 @@
+{
+  "Schema": "public",
+  "Name": "countrycode",
+  "Columns": [
+    { "Name": "code", "DataType": "CHAR(2)" },
+    { "Name": "name", "DataType": "VARCHAR(100)" },
+    { "Name": "continent", "DataType": "VARCHAR(50)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "pk_countrycode", "PrimaryKey": true, "Unique": true, "IndexColumns": "code" }
+  ],
+  "DataDelivery": {
+    "ContentFile": "data/public.countrycode.xml.tabledata",
+    "ContentEncoding": "Xml",
+    "MergeType": "Insert/Update",
+    "MatchColumns": "code"
+  }
+}

@@ -1,0 +1,9 @@
+# Learner-generated run output. Resolved-SQL artifacts are ignored repo-wide
+# (root .gitignore: "SchemaQuench - *.sql"); logs and checkpoints are per-run and
+# transient (logs carry timestamps; a checkpoint only exists mid-failure), so keep
+# them out of the lab too. Bare names because this lab nests output under both
+# sqlserver/ and postgres/, each with its own package/json-attempt subdirectory.
+logs/
+checkpoints/
+artifacts/
+out/
