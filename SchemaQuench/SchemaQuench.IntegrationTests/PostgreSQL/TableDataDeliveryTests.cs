@@ -330,11 +330,11 @@ public class TableDataDeliveryTests
     [Test]
     public void DataDelivery_PostgreSql_XmlEncoding_MatchesJsonEncodingRowForRow()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"pgxml_{Guid.NewGuid():N}");
+        var tempDir = Path.Join(Path.GetTempPath(), $"pgxml_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
-        File.WriteAllText(Path.Combine(tempDir, "json.tabledata"),
+        File.WriteAllText(Path.Join(tempDir, "json.tabledata"),
             @"[{""code"":""A001"",""name"":""Anvil"",""qty"":7}]");
-        File.WriteAllText(Path.Combine(tempDir, "xml.tabledata"),
+        File.WriteAllText(Path.Join(tempDir, "xml.tabledata"),
             @"<rows><row><c n=""code"">A001</c><c n=""name"">Anvil</c><c n=""qty"">7</c></row></rows>");
 
         var jsonTable = $"_test_pgxml_json_{Guid.NewGuid():N}".Substring(0, 30);
