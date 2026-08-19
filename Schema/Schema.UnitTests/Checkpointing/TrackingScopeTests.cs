@@ -83,4 +83,30 @@ public class TrackingScopeTests
         // (otherwise legacy blank-schema rows would shadow per-tenant lookups).
         Assert.That(legacy.CompositeKey, Is.Not.EqualTo(perTenant.CompositeKey));
     }
+
+    [Test]
+    public void ToString_RendersServerAndDatabase_InBracketedForm()
+    {
+        var scope = new TrackingScope
+        {
+            ProductName = "Demo",
+            TemplateName = "Main",
+            Server = "srv1",
+            DatabaseName = "AppProd"
+        };
+        Assert.That(scope.ToString(), Is.EqualTo("[srv1].[AppProd]"));
+    }
+
+    [Test]
+    public void ToString_DoesNotFallBackToTheTypeName()
+    {
+        var scope = new TrackingScope
+        {
+            ProductName = "Demo",
+            TemplateName = "Main",
+            Server = "srv1",
+            DatabaseName = "AppProd"
+        };
+        Assert.That(scope.ToString(), Does.Not.Contain(nameof(TrackingScope)));
+    }
 }
