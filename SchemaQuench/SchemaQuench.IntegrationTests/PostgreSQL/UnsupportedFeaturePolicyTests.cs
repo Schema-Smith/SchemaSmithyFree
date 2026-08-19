@@ -435,6 +435,96 @@ CREATE TABLE ""{Schema}"".""{tableName}"" (""Id"" INT NOT NULL, ""Code"" INT NUL
         conn.Close();
     }
 
+    // warn (default): a VIRTUAL generated column on a < 18 target is skipped entirely (STORED siblings
+    // are unaffected) and an unsupportedDowngrade manifest row is recorded naming it. Deploy succeeds.
+    [Test]
+    public void VirtualGeneratedColumn_BelowPg18_WarnPolicy_SkipsColumn_AndRecordsDowngrade()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"WarnVirt_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = "SET schemasmith.version_override = '17';";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+[{
+    "Schema": "{{Schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "Qty", "DataType": "INT", "Nullable": false },
+        { "Name": "DoubleQty", "DataType": "INT", "Nullable": true,
+          "Generated": "ALWAYS", "GenerationExpression": "(\"Qty\" * 2)" },
+        { "Name": "TripleQty", "DataType": "INT", "Nullable": true,
+          "Generated": "ALWAYS", "GenerationExpression": "(\"Qty\" * 3)", "Virtual": true }
+    ]
+}]
+""";
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, json, productName: $"UFPV_{uniqueId}"),
+            "a VIRTUAL generated column must degrade (skipped) below PG18, not raise a raw syntax error");
+
+        cmd.CommandText = $@"SELECT is_generated FROM information_schema.columns
+                             WHERE table_schema = '{Schema}' AND table_name = '{tableName}' AND column_name = 'DoubleQty';";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("ALWAYS"),
+            "a STORED generated column on the same table must still be created — the rest of the deploy proceeds");
+
+        cmd.CommandText = $@"SELECT COUNT(*) FROM information_schema.columns
+                             WHERE table_schema = '{Schema}' AND table_name = '{tableName}' AND column_name = 'TripleQty';";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(0), "the VIRTUAL column must not be created");
+
+        cmd.CommandText = $@"SELECT COUNT(*) FROM ""SchemaSmith"".""ChangeAudit""
+                             WHERE ""ActionType"" = 'downgraded'
+                               AND ""ObjectName"" = '{Schema}.{tableName}.TripleQty'
+                               AND ""ObjectType"" = 'VIRTUAL generated column (PG18)';";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1),
+            "a downgrade manifest row must name the column that lost VIRTUAL storage");
+
+        cmd.CommandText = $@"RESET schemasmith.version_override; DROP TABLE ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    // fail (opt-in): a below-18 target declaring a VIRTUAL generated column aborts the quench with a clear
+    // "require PostgreSQL 18" message rather than surfacing PostgreSQL's own generated-column syntax error.
+    [Test]
+    public void VirtualGeneratedColumn_BelowPg18_FailPolicy_AbortsWithRequiresPg18()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"FailVirt_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = "SET schemasmith.version_override = '17'; SET schemasmith.unsupported_policy = 'fail';";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+[{
+    "Schema": "{{Schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "Qty", "DataType": "INT", "Nullable": false },
+        { "Name": "TripleQty", "DataType": "INT", "Nullable": true,
+          "Generated": "ALWAYS", "GenerationExpression": "(\"Qty\" * 3)", "Virtual": true }
+    ]
+}]
+""";
+        var ex = Assert.Catch(() => RunTableQuenchProc(cmd, json, productName: $"UFPV_{uniqueId}"));
+        Assert.That(ex!.Message, Does.Contain("require PostgreSQL 18"),
+            "the fail policy must abort naming the required version, not surface a raw PostgreSQL syntax error");
+
+        cmd.CommandText = $@"RESET schemasmith.version_override; RESET schemasmith.unsupported_policy;
+                             DROP TABLE IF EXISTS ""{Schema}"".""{tableName}"";";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
     private void IndexOnlyQuenchNnd(IDbCommand cmd, string tableName, string indexName, string productName)
     {
         var json = $$"""

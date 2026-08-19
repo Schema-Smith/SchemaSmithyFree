@@ -23,26 +23,55 @@ BEGIN
     CALL "SchemaSmith"."BuildExistingIndexesSnapshot"();
   END IF;
 
+  -- Unsupported-feature policy: VIRTUAL generated columns require PostgreSQL 18. Below it the emit
+  -- below skips the column entirely (STORED remains available and unaffected); 'fail' aborts naming
+  -- the offending column(s), 'warn' (default) records a downgrade manifest row per declared-but-
+  -- unsupported column. Same routing spine as the NULLS NOT DISTINCT / expression-statistics policies.
+  IF "SchemaSmith"."ServerVersionNum"() < 18 THEN
+    IF "SchemaSmith"."UnsupportedFeaturePolicy"() = 'fail'
+       AND EXISTS (SELECT 1
+                     FROM temp_columns tc
+                     WHERE tc."Virtual" AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
+                       AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)) THEN
+      RAISE EXCEPTION 'VIRTUAL generated columns require PostgreSQL 18 (detected major %); column(s): %',
+        "SchemaSmith"."ServerVersionNum"(),
+        (SELECT STRING_AGG(tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name", ', ')
+           FROM temp_columns tc
+           WHERE tc."Virtual" AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
+             AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped));
+    ELSE
+      INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+        SELECT pg_backend_pid(), 'VIRTUAL generated column (PG18)',
+               tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name", 'downgraded'
+          FROM temp_columns tc
+          WHERE tc."Virtual" AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
+            AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped);
+    END IF;
+  END IF;
+
   RAISE NOTICE 'Add New Computed Columns';
   SELECT STRING_AGG('RAISE NOTICE ''  Add new computed columns to ' || tt."Schema" || '.' || tt."Name" || ' (' ||
                     (SELECT STRING_AGG(tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END, ', ')
                      FROM temp_columns tc
                      WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                        AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                       AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)) ||
+                       AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)
+                       AND NOT (tc."Virtual" AND "SchemaSmith"."ServerVersionNum"() < 18)) ||
                     ')'';' || CHR(10) ||
                     'ALTER TABLE "' || tt."Schema" || '"."' || tt."Name" || '" ' ||
                     (SELECT STRING_AGG('ADD COLUMN "' || tc."Name" || '" ' || tc."DataType" || ' GENERATED ' || tc."Generated" || ' AS (' || tc."GenerationExpression" || ') ' || CASE WHEN tc."Virtual" THEN 'VIRTUAL' ELSE 'STORED' END, ', ')
                        FROM temp_columns tc
                        WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                          AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                         AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)) || ';' || CHR(10) ||
+                         AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)
+                         AND NOT (tc."Virtual" AND "SchemaSmith"."ServerVersionNum"() < 18)) || ';' || CHR(10) ||
                     -- Object-change audit (#243 E5): one row per computed column added (folded ALTER above).
                     COALESCE((SELECT STRING_AGG('INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''column'', ''' || tt."Schema" || '.' || tt."Name" || '.' || tc."Name" || ''', ''created'');', CHR(10))
                                 FROM temp_columns tc
                                 WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                                   AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                                  AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)), ''), CHR(10))
+                                  AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)
+                                  AND NOT (tc."Virtual" AND "SchemaSmith"."ServerVersionNum"() < 18)), ''), CHR(10))
     INTO sql_script
     FROM temp_tables tt
     WHERE EXISTS(SELECT * FROM information_schema.tables t WHERE t.table_schema = tt."Schema" AND t.table_name = tt."Name")
@@ -50,7 +79,8 @@ BEGIN
                     FROM temp_columns tc
                     WHERE tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
                       AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-                      AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped));
+                      AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)
+                      AND NOT (tc."Virtual" AND "SchemaSmith"."ServerVersionNum"() < 18));
   CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
   -- #363: WhatIf twin of the embedded computed-column 'created' audit above; same predicate.
@@ -61,7 +91,8 @@ BEGIN
         JOIN temp_columns tc ON tc."TableSchema" = tt."Schema" AND tc."TableName" = tt."Name"
         WHERE EXISTS(SELECT * FROM information_schema.tables t WHERE t.table_schema = tt."Schema" AND t.table_name = tt."Name")
           AND tc."Generated" = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> ''
-          AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped);
+          AND NOT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class rc ON rc.oid = a.attrelid JOIN pg_namespace nn ON nn.oid = rc.relnamespace WHERE nn.nspname = tc."TableSchema" AND rc.relname = tc."TableName" AND a.attname = tc."Name" AND a.attnum > 0 AND NOT a.attisdropped)
+          AND NOT (tc."Virtual" AND "SchemaSmith"."ServerVersionNum"() < 18);
   END IF;
 
   -- Unsupported-feature policy: NULLS NOT DISTINCT requires PostgreSQL 15. Below it the clause is
