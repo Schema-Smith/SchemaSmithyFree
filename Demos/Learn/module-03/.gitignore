@@ -1,0 +1,7 @@
+# Learner-generated run output — transient per-run, keep out of the lab.
+# (Resolved-SQL "SchemaQuench - *.sql" is already ignored repo-wide by the root .gitignore.)
+# Bare names so they match at any depth — this lab nests output under <engine>/solution/.
+logs/
+checkpoints/
+artifacts/
+out/

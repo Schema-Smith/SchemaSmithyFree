@@ -1,0 +1,13 @@
+{
+  "Target": {
+    "Server": "localhost",
+    "Port": "15432",
+    "User": "postgres",
+    "Password": "Learn!Passw0rd",
+    "ConnectionProperties": {}
+  },
+  "WhatIfONLY": true,
+  "SchemaPackagePath": "./after",
+  "KindleTheForge": true,
+  "ArtifactPath": "./artifacts"
+}

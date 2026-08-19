@@ -20,6 +20,7 @@ Each engine folder ships a `baseline/` package (the established fleet state, inc
 | `after/` | The rollout: adds `ShipmentEvent` + `UQ_Customer_Email`, widens `Customer.FullName`, adds `Customer.Region`, drops `IX_Customer_FullName`, re-applies the `vw_ActiveProducts` view. |
 | `quench.settings.baseline.json` | Fleet run against `baseline/`. |
 | `quench.settings.after.json` | Fleet run against `after/` (wires `ArtifactPath`). |
+| `quench.settings.after.whatif.json` | Same fleet run against `after/`, in preview mode — the `after` config plus `"WhatIfONLY": true`. Nothing gets applied. |
 | `drift-tenant-003.sql` | Plants duplicate emails in `fleet_tenant_003` so its `UQ_Customer_Email` can't build. |
 | `reset-tenant-003.sql` | Clears the duplicates so a re-run converges to an all-Success summary. |
 
@@ -34,7 +35,60 @@ schemaquench --ConfigFile:quench.settings.baseline.json
 
 All five tenants deploy cleanly, exit `0`.
 
-## Step 2: Stage the one failure
+## Step 2: Preview the rollout with WhatIf
+
+Before you touch a single tenant, ask SchemaQuench what the rollout would do without doing it. `quench.settings.after.whatif.json` — already shipped in every engine folder — is the same `after/` config with one flag added, `"WhatIfONLY": true`. Run it against the fleet exactly as it stands after Step 1 — clean baseline, no drift staged yet:
+
+```bash
+schemaquench --ConfigFile:quench.settings.after.whatif.json --report:./out/whatif-summary --BottleneckThresholdMs=800
+```
+
+Open `out/whatif-summary.md` first — the human receipt, same `Object Changes` block you'll read for real in Step 5:
+
+```text
+## Object Changes
+- Created: tables=5, columns=5, indexes=5, constraints=5, foreignKeys=0, procedures=0, views=0, functions=0
+- Modified: tables=0, columns=5
+- Dropped: tables=0, indexes=5, constraints=0, foreignKeys=0
+- Ran (object scripts): 0
+```
+
+Now `out/whatif-summary.json` — same section, structured, with the mode that marks it a preview and the itemized actions behind those counts:
+
+```json
+"run": { "mode": "WhatIf", "outcome": "Success", "exitCode": 0 },
+"objectChanges": {
+  "instrumented": true,
+  "created":  { "tables": 5, "columns": 5, "indexes": 5, "constraints": 5, "foreignKeys": 0, "procedures": 0, "views": 0, "functions": 0 },
+  "modified": { "tables": 0, "columns": 5 },
+  "dropped":  { "tables": 0, "indexes": 5, "constraints": 0, "foreignKeys": 0 },
+  "scriptsRan": 0,
+  "details": [
+    { "objectType": "table",      "objectName": "[dbo].[ShipmentEvent]",                    "action": "wouldCreate" },
+    { "objectType": "constraint", "objectName": "[dbo].[ShipmentEvent].[PK_ShipmentEvent]", "action": "wouldCreate" },
+    { "objectType": "index",      "objectName": "[dbo].[Customer].[UQ_Customer_Email]",     "action": "wouldCreate" },
+    { "objectType": "column",     "objectName": "[dbo].[Customer].[Region]",                "action": "wouldCreate" },
+    { "objectType": "column",     "objectName": "[dbo].[Customer].[FullName]",              "action": "wouldModify" },
+    { "objectType": "index",      "objectName": "[dbo].[Customer].IX_Customer_FullName",    "action": "wouldDrop" }
+  ]
+}
+```
+
+Those six rows are one tenant's worth — the list repeats them once per tenant, so each count above is the fleet-wide total across all five.
+
+Now prove it did nothing. Query `fleet_tenant_001` — the first tenant this preview says it would touch — and the after-objects are still absent:
+
+```
+ShipmentEvent exists        0
+Customer.Region exists      0
+IX_Customer_FullName exists 1
+```
+
+No `ShipmentEvent`, no `Region`, and the old index is still standing. `WhatIfONLY` computed the whole fleet's worth of change and struck nothing.
+
+This runs the same way on all four engines — PostgreSQL, MySQL, and MariaDB each ship their own `quench.settings.after.whatif.json`, and the report shape is identical; only the dialect in the object names changes.
+
+## Step 3: Stage the one failure
 
 Plant duplicate emails in a single tenant so the rollout's new unique index fails there — and nowhere else:
 
@@ -44,7 +98,7 @@ cd ..            # back to the lab folder
 cd sqlserver     # back into the engine folder
 ```
 
-## Step 3: Run the rollout and write the report
+## Step 4: Run the rollout and write the report
 
 Deploy `after/` fleet-wide, and pin the report where the sandbox can read it. `--report:` takes a base path with no extension — SchemaSmith writes both `.json` and `.md`. Attach the value with `:` or `=`, never a space: a bare `--report` carries no value, so the report falls back to the default location (the executable's own directory) and `out/` never appears. The lab lowers `BottleneckThresholdMs` far below its 30-second default so a fast five-tenant run still surfaces a long pole:
 
@@ -54,7 +108,7 @@ schemaquench --ConfigFile:quench.settings.after.json --report:./out/deploy-summa
 
 The run finishes with exit code `2` — four tenants converge, `fleet_tenant_003` fails on its duplicate emails. Now open `out/deploy-summary.json` (and its human-readable twin `out/deploy-summary.md`).
 
-## Step 4: Read the receipt
+## Step 5: Read the receipt
 
 Read the report top to bottom — it's built to be read in that order:
 
@@ -64,7 +118,7 @@ Read the report top to bottom — it's built to be read in that order:
 - **`failures[]`** — one entry: the same duplicate-key error, phase trail, and artifact pointer Module 5 chased through `Failures.log`, now as structured data.
 - **`objectChanges`** — the centerpiece. `instrumented: true` means the counts are real. Read them as **fleet-wide totals**: on SQL Server this run reports `created` tables `5` / columns `5` / indexes `4` / constraints `4`, `modified.columns 5`, `dropped.indexes 5`, and `scriptsRan 5`. The two `created` buckets that read `4` instead of `5` (`UQ_Customer_Email`, `PK_ShipmentEvent`) are short by exactly the one tenant that died at the index phase — the counts name the failure before you read a single error. Note `created.views` stays `0` even though the view ran on every tenant: an object script is reported as **`scriptsRan`** / `"action": "ran"`, never "created", because a re-applied script can't be known to have changed anything. `created.columns` and `modified.columns` count different work on different columns — the new `Customer.Region` versus the widened `Customer.FullName` — so a release that adds and reshapes shows both.
 
-## Step 5 (optional): clear the failure and re-read
+## Step 6 (optional): clear the failure and re-read
 
 Reset the one tenant and re-run to watch the summary go all-green:
 
@@ -77,7 +131,7 @@ schemaquench --ConfigFile:quench.settings.after.json --report:./out/deploy-summa
 
 Exit `0`, `outcome: "Success"`, empty `failures[]`, and `objectChanges` now shows only what this second run changed — the structure already converged, so the counts are near-empty except the view, which re-runs every time (`scriptsRan`). That contrast — a busy first run, a quiet idempotent second — is the audit telling the truth about what each run actually did.
 
-## Step 6: Do it on PostgreSQL, MySQL, and MariaDB
+## Step 7: Do it on PostgreSQL, MySQL, and MariaDB
 
 Same steps in `postgres/`, `mysql/`, and `mariadb/`. The report shape is identical; only the dialect in the names and errors changes. Stage the drift with each engine's client:
 

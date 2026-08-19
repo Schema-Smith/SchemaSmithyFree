@@ -53,11 +53,11 @@ engine's `solution/Package/.../Tables/`:
 
 The `solution/` folder ships a `whatif.settings.json` — identical to `deploy.settings.json` but with
 `"WhatIfONLY": true`. It computes the difference and prints the SQL it *would* run, without applying
-anything:
+anything. Add `--report` so the run also writes a structured receipt of the same preview:
 
 ```bash
 cd <engine>/solution
-schemaquench --ConfigFile:whatif.settings.json
+schemaquench --ConfigFile:whatif.settings.json --report:./out/whatif-summary
 ```
 
 Expected (SQL Server shown):
@@ -72,6 +72,46 @@ Expected (SQL Server shown):
 
 PostgreSQL prints `ADD "Price" NUMERIC(10,2)` and `ALTER COLUMN "Name" SET DATA TYPE VARCHAR(200)`;
 MySQL prints `ADD COLUMN \`Price\` DECIMAL(10,2) NULL` and `MODIFY COLUMN \`Name\` VARCHAR(200) NOT NULL`.
+
+### The same preview, as data
+
+The `[WhatIf]` markers above are for a human watching the log scroll by. `--report` writes the identical
+preview as two files a program can read instead. Open `out/whatif-summary.md` first — the human receipt:
+
+```text
+## Object Changes
+- Created: tables=0, columns=1, indexes=0, constraints=0, foreignKeys=0, procedures=0, views=0, functions=0
+- Modified: tables=0, columns=1
+- Dropped: tables=0, indexes=0, constraints=0, foreignKeys=0
+- Ran (object scripts): 0
+```
+
+Now `out/whatif-summary.json` — the machine-readable twin a CI gate reads, with the mode that marks it a
+preview and the two changes itemized:
+
+```json
+"run": { "mode": "WhatIf", "outcome": "Success", "exitCode": 0 },
+"whatIf": { "wouldApply": [], "wouldSkip": [], "wouldDeliver": [] },
+"objectChanges": {
+  "instrumented": true,
+  "created":  { "tables": 0, "columns": 1, "indexes": 0, "constraints": 0, "foreignKeys": 0, "procedures": 0, "views": 0, "functions": 0 },
+  "modified": { "tables": 0, "columns": 1 },
+  "dropped":  { "tables": 0, "indexes": 0, "constraints": 0, "foreignKeys": 0 },
+  "scriptsRan": 0,
+  "details": [
+    { "objectType": "column", "objectName": "[dbo].[Widget].[Name]",  "action": "wouldModify" },
+    { "objectType": "column", "objectName": "[dbo].[Widget].[Price]", "action": "wouldCreate" }
+  ]
+}
+```
+
+Those two `details[]` rows are the exact machine-readable twin of the two `ALTER TABLE` lines above —
+`wouldModify` for the widened `Name`, `wouldCreate` for the new `Price` column. `mode: WhatIf` and the
+empty `whatIf.wouldApply` are the tell that nothing behind these entries was actually applied.
+
+`--report:` takes a base path with no extension — SchemaSmith writes both `.json` and `.md`. This lab's
+`out/` folder is scratch output: remove `solution/out/` once you've looked, or leave it — nothing later
+in this lab reads it back.
 
 ## Step 3: Confirm WhatIf changed nothing
 
