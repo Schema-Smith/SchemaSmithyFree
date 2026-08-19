@@ -1,0 +1,20 @@
+{
+  "Schema": "dbo",
+  "Name": "Gadget",
+  "VariantName": "Legacy",
+  "ShouldApplyExpression": "'{{Edition}}'='Legacy'",
+  "Columns": [
+    {
+      "Name": "Id",
+      "DataType": "INT"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_Gadget",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "Id"
+    }
+  ]
+}

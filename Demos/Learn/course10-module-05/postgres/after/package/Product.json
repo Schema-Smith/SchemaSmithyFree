@@ -1,0 +1,11 @@
+{
+  "Name": "ReadingPlatform",
+  "ValidationScript": "SELECT TRUE",
+  "MinimumVersion": "16",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "PostgreSQL"
+}

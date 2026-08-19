@@ -1,0 +1,42 @@
+{
+  "Schema": "public",
+  "Name": "reading",
+  "Columns": [
+    {
+      "Name": "reading_id",
+      "DataType": "INT"
+    },
+    {
+      "Name": "sensor_id",
+      "DataType": "INT",
+      "Nullable": false,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    },
+    {
+      "Name": "unit",
+      "DataType": "VARCHAR(16)",
+      "Nullable": true,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    },
+    {
+      "Name": "reading_value",
+      "DataType": "NUMERIC(9,2)",
+      "Nullable": true,
+      "Default": "",
+      "CheckExpression": "",
+      "ComputedExpression": ""
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "pk_reading",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "reading_id"
+    }
+  ]
+}

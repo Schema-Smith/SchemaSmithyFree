@@ -1,0 +1,25 @@
+{
+  "Schema": "dbo",
+  "Name": "Gadget",
+  "VariantName": "Modern",
+  "ShouldApplyExpression": "'{{Edition}}'='Modern'",
+  "Columns": [
+    {
+      "Name": "Id",
+      "DataType": "INT"
+    },
+    {
+      "Name": "Label",
+      "DataType": "NVARCHAR(50)",
+      "Nullable": true
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "PK_Gadget",
+      "PrimaryKey": true,
+      "Unique": true,
+      "IndexColumns": "Id"
+    }
+  ]
+}
