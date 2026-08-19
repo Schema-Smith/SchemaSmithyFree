@@ -16,8 +16,17 @@ INSERT @InternalEPNames VALUES (N'ProductName'), (N'PreventDrop')  -- PreventDro
 SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE(REPLACE(REPLACE((
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
-       COALESCE((SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
-                   FROM sys.partitions AS p WITH (NOLOCK) 
+       -- sys.partitions is one row PER PARTITION, and compression can legitimately differ across
+       -- partitions of the same index -- a scalar read here raised Msg 512 on a partitioned table.
+       -- Aggregate instead: a single shared value round-trips as before; non-uniform compression
+       -- emits 'MIXED', a sentinel outside Quench's managed NONE/ROW/PAGE/COLUMNSTORE* set so
+       -- re-deploy leaves an already-mixed table alone rather than flattening it to one value.
+       COALESCE((SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                           WHEN 0 THEN NULL
+                           WHEN 1 THEN MIN(p.data_compression_desc)
+                           ELSE 'MIXED'
+                         END COLLATE DATABASE_DEFAULT
+                   FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
        st.is_tracked_by_cdc AS [EnableCDC],
@@ -82,9 +91,14 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     AND sc.generated_always_type = 0) x
           ORDER BY [Name]
           FOR JSON AUTO) AS [Columns],
-       (SELECT '[' + [Name] + ']' AS [Name], 
-               (SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
-                  FROM sys.partitions AS p WITH (NOLOCK) 
+       (SELECT '[' + [Name] + ']' AS [Name],
+               -- Same per-partition aggregation as the table-level [CompressionType] above.
+               (SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                          WHEN 0 THEN NULL
+                          WHEN 1 THEN MIN(p.data_compression_desc)
+                          ELSE 'MIXED'
+                        END COLLATE DATABASE_DEFAULT
+                  FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
                is_primary_key AS [PrimaryKey], 

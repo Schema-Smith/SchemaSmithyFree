@@ -610,6 +610,72 @@ CREATE TABLE dbo.MyTemporalExtract (
         conn.Close();
     }
 
+    [Test]
+    public void ShouldGenerateCorrectJsonForPartitionedTable()
+    {
+        // Repro for the extraction-abort defect (task C1-0b): sys.partitions is one row PER PARTITION,
+        // so the prior scalar CompressionType subquery raised Msg 512 ("Subquery returned more than
+        // one value") the moment a table had more than one partition -- independent of what compression
+        // was actually set. Four partitions (matching the field repro) with the default uniform NONE
+        // compression must extract cleanly and round-trip a single shared value, not throw.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE PARTITION FUNCTION PF_TestPartitioned (INT) AS RANGE LEFT FOR VALUES (100, 200, 300)
+CREATE PARTITION SCHEME PS_TestPartitioned AS PARTITION PF_TestPartitioned ALL TO ([PRIMARY])
+
+CREATE TABLE dbo.TestPartitioned (
+    Id INT NOT NULL,
+    Val VARCHAR(50) NULL,
+    CONSTRAINT PK_TestPartitioned PRIMARY KEY CLUSTERED (Id) ON PS_TestPartitioned(Id)
+) ON PS_TestPartitioned(Id)
+";
+        cmd.ExecuteNonQuery();
+
+        var result = GenerateTable(cmd, "dbo", "TestPartitioned");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.CompressionType, Is.EqualTo("NONE"), "a partitioned table with uniform per-partition compression must round-trip the shared value, not throw or emit MIXED");
+        Assert.That(result.Indexes, Has.Count.EqualTo(1));
+        Assert.That(((SqlServerIndex)result.Indexes[0]).CompressionType, Is.EqualTo("NONE"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldFlagMixedCompressionAcrossPartitionsRatherThanPickOne()
+    {
+        // Compression can legitimately differ per partition. Extraction must not silently report one
+        // partition's value as if it applied to the whole table/index -- that would mislead a reader of
+        // the extracted JSON into thinking a mixed table is uniformly compressed. 'MIXED' is a sentinel
+        // deliberately outside ModifiedTableQuench.sql's managed NONE/ROW/PAGE/COLUMNSTORE* set, so
+        // re-deploy leaves an already-mixed table alone instead of flattening it to one compression.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE PARTITION FUNCTION PF_TestPartitionedMixed (INT) AS RANGE LEFT FOR VALUES (100, 200, 300)
+CREATE PARTITION SCHEME PS_TestPartitionedMixed AS PARTITION PF_TestPartitionedMixed ALL TO ([PRIMARY])
+
+CREATE TABLE dbo.TestPartitionedMixed (
+    Id INT NOT NULL,
+    Val VARCHAR(50) NULL,
+    CONSTRAINT PK_TestPartitionedMixed PRIMARY KEY CLUSTERED (Id) ON PS_TestPartitionedMixed(Id)
+) ON PS_TestPartitionedMixed(Id)
+
+ALTER TABLE dbo.TestPartitionedMixed REBUILD PARTITION = 2 WITH (DATA_COMPRESSION = PAGE)
+";
+        cmd.ExecuteNonQuery();
+
+        var result = GenerateTable(cmd, "dbo", "TestPartitionedMixed");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.CompressionType, Is.EqualTo("MIXED"));
+        Assert.That(result.Indexes, Has.Count.EqualTo(1));
+        Assert.That(((SqlServerIndex)result.Indexes[0]).CompressionType, Is.EqualTo("MIXED"));
+
+        conn.Close();
+    }
+
     private string GenerateTableJson(IDbCommand cmd, string schema, string table)
     {
         cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableJson @p_Schema = '{schema}', @p_Table = '{table}'";

@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Domain.SqlServer;
 using Schema.Utility;
 
 namespace SchemaTongs.IntegrationTests.SqlServer;
@@ -102,6 +103,43 @@ EXEC sys.sp_addextendedproperty 'MS_Description', 'A rich table', 'SCHEMA', [dbo
 
         // The JSON path carries Extensions; the XML (legacy) path drops it by design. Strip Extensions from
         // both and assert the rest of the model is identical.
+        Assert.That(NormalizeMinusExtensions(xmlModel), Is.EqualTo(NormalizeMinusExtensions(jsonModel)));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableXml_PartitionedTableWithMixedCompression_ExtractsSameModelAs_GenerateTableJson()
+    {
+        // Task C1-0b: sys.partitions is one row PER PARTITION; the prior scalar CompressionType
+        // subquery raised Msg 512 the moment a table had more than one partition. Partition 2 is
+        // rebuilt to PAGE while the rest stay NONE so the two encodings are compared on the highest-
+        // risk case -- non-uniform compression producing the 'MIXED' sentinel -- not just the already-
+        // covered uniform case, since a JSON/XML divergence here is an encoding-dependent bug that
+        // would only surface on a legacy-compat target.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE PARTITION FUNCTION PF_XmlEquivPartitioned (INT) AS RANGE LEFT FOR VALUES (100, 200, 300);
+CREATE PARTITION SCHEME PS_XmlEquivPartitioned AS PARTITION PF_XmlEquivPartitioned ALL TO ([PRIMARY]);
+
+CREATE TABLE dbo.XmlEquivPartitioned (
+    Id INT NOT NULL,
+    Val VARCHAR(50) NULL,
+    CONSTRAINT PK_XmlEquivPartitioned PRIMARY KEY CLUSTERED (Id) ON PS_XmlEquivPartitioned(Id)
+) ON PS_XmlEquivPartitioned(Id);
+
+ALTER TABLE dbo.XmlEquivPartitioned REBUILD PARTITION = 2 WITH (DATA_COMPRESSION = PAGE);
+";
+        cmd.ExecuteNonQuery();
+
+        var jsonModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(GenerateTableJson(cmd, "dbo", "XmlEquivPartitioned"), Platform.SqlServer);
+        var xmlModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(
+            ModelXmlSerializer.FromIngestXml(GenerateTableXml(cmd, "dbo", "XmlEquivPartitioned")), Platform.SqlServer);
+
+        Assert.That(jsonModel.CompressionType, Is.EqualTo("MIXED"), "the JSON proc must flag non-uniform per-partition compression rather than emit one partition's value");
+        Assert.That(xmlModel.CompressionType, Is.EqualTo("MIXED"), "the XML twin must agree with the JSON proc's compression reading");
         Assert.That(NormalizeMinusExtensions(xmlModel), Is.EqualTo(NormalizeMinusExtensions(jsonModel)));
 
         conn.Close();

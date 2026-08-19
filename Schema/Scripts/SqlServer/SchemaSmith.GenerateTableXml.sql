@@ -75,7 +75,14 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 11
 ;WITH XMLNAMESPACES ('http://james.newtonking.com/projects/json' AS json)
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
-       COALESCE((SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
+       -- Mirrors the JSON proc's per-partition aggregation (see GenerateTableJson.sql): sys.partitions
+       -- is one row per partition, and a scalar read raised Msg 512 on a partitioned table. A shared
+       -- value round-trips; non-uniform compression across partitions emits the 'MIXED' sentinel.
+       COALESCE((SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                           WHEN 0 THEN NULL
+                           WHEN 1 THEN MIN(p.data_compression_desc)
+                           ELSE 'MIXED'
+                         END COLLATE DATABASE_DEFAULT
                    FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
@@ -140,7 +147,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FOR XML PATH('Columns'), TYPE),
        (SELECT 'true' AS [@json:Array],
                '[' + [Name] + ']' AS [Name],
-               (SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
+               -- Same per-partition aggregation as the table-level [CompressionType] above.
+               (SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                          WHEN 0 THEN NULL
+                          WHEN 1 THEN MIN(p.data_compression_desc)
+                          ELSE 'MIXED'
+                        END COLLATE DATABASE_DEFAULT
                   FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],

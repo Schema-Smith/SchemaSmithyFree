@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using log4net;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Schema.DataAccess;
@@ -651,6 +652,13 @@ public class SchemaTongs
     }
 
     private readonly ExtractionStats _stats = new();
+
+    // Mirrors ProductQuench.Failed: one or more tables were skipped (per-table catch below) rather
+    // than aborting the run. The package on disk is only the tables that DID extract, so a caller
+    // must not treat a zero exception / exit code as "the package is complete" -- Program.cs maps
+    // this to the same partial-failure exit code SchemaQuench uses.
+    public bool Failed => _stats.TableErrors > 0;
+
     private readonly Dictionary<string, ExtractionFileIndex> _folderIndexes = new();
     private readonly List<string> _pendingSqulerrorCleanup = new();
 
@@ -2796,31 +2804,36 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(tableName.ToLower()) && !_objectsToCast.Contains($"{tableSchema}.{tableName}".ToLower())) continue;
 
                 _progressLog.Info($"  Cast {_ingestEncoding} for {tableSchema}.{tableName}");
-                var json = _ingestEncoding == IngestEncoding.Xml
-                    ? ExtractTableModelXml(commandJson, tableSchema, tableName)
-                    : ExtractTableModelJson(commandJson, tableSchema, tableName);
-                if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
+                // One bad table (e.g. a partitioned table hitting an engine-side extraction defect)
+                // must degrade to a reported skip, not abort every table still queued behind it and
+                // leave a partial package on disk with no record of what's missing (see Failed above).
+                try
                 {
-                    _progressLog.Error($"    No json returned for {tableSchema}.{tableName}");
-                    _stats.TableErrors++;
-                    continue;
-                }
+                    var json = _ingestEncoding == IngestEncoding.Xml
+                        ? ExtractTableModelXml(commandJson, tableSchema, tableName)
+                        : ExtractTableModelJson(commandJson, tableSchema, tableName);
+                    if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
+                    {
+                        _progressLog.Error($"    No json returned for {tableSchema}.{tableName}");
+                        _stats.TableErrors++;
+                        continue;
+                    }
 
-                var resolution = resolver.Resolve(tableSchema, tableName);
-                var filename = resolution.WritePath;
-                MarkPathWritten(tableDir, filename);
-                if (resolution.UngatedEmit)
-                    _progressLog.Warn($"    Extracted {tableSchema}.{tableName} did not match any active variant — writing ungated '{Path.GetFileName(filename)}'; resolve its gating (SS-DUP-001).");
-                _progressLog.Info($"    Casting {filename}");
-                // Use the platform-aware deserializer so the platform subclass
-                // (e.g., SqlServerTable) materializes — otherwise the base Table
-                // type loses platform-only properties like Schema, and non-default-
-                // schema tables get round-tripped as dbo.<name> on the next quench.
-                var tableObj = PlatformDeserializer.DeserializeTable(json, _platform);
+                    var resolution = resolver.Resolve(tableSchema, tableName);
+                    var filename = resolution.WritePath;
+                    MarkPathWritten(tableDir, filename);
+                    if (resolution.UngatedEmit)
+                        _progressLog.Warn($"    Extracted {tableSchema}.{tableName} did not match any active variant — writing ungated '{Path.GetFileName(filename)}'; resolve its gating (SS-DUP-001).");
+                    _progressLog.Info($"    Casting {filename}");
+                    // Use the platform-aware deserializer so the platform subclass
+                    // (e.g., SqlServerTable) materializes — otherwise the base Table
+                    // type loses platform-only properties like Schema, and non-default-
+                    // schema tables get round-tripped as dbo.<name> on the next quench.
+                    var tableObj = PlatformDeserializer.DeserializeTable(json, _platform);
 
-                if (_checkConstraintStyle == CheckConstraintStyle.TableLevel && _platform == Platform.SqlServer && tableObj is SqlServerTable sqlTable)
-                {
-                    commandJson.CommandText = $@"
+                    if (_checkConstraintStyle == CheckConstraintStyle.TableLevel && _platform == Platform.SqlServer && tableObj is SqlServerTable sqlTable)
+                    {
+                        commandJson.CommandText = $@"
 SELECT cc.name AS [Name],
        SchemaSmith.fn_StripParenWrapping(cc.definition) AS [Expression],
        cc.parent_column_id
@@ -2828,27 +2841,43 @@ SELECT cc.name AS [Name],
  WHERE cc.parent_object_id = OBJECT_ID('{EscapeSql(tableSchema)}.{EscapeSql(tableName)}')
  ORDER BY cc.name";
 
-                    var allConstraints = new List<CheckConstraint>();
-                    using (var ccReader = commandJson.ExecuteReader())
-                    {
-                        while (ccReader.Read())
-                            allConstraints.Add(new CheckConstraint { Name = $"{ccReader["Name"]}", Expression = $"{ccReader["Expression"]}" });
+                        var allConstraints = new List<CheckConstraint>();
+                        using (var ccReader = commandJson.ExecuteReader())
+                        {
+                            while (ccReader.Read())
+                                allConstraints.Add(new CheckConstraint { Name = $"{ccReader["Name"]}", Expression = $"{ccReader["Expression"]}" });
+                        }
+                        PromoteCheckConstraintsToTableLevel(sqlTable, allConstraints);
                     }
-                    PromoteCheckConstraintsToTableLevel(sqlTable, allConstraints);
-                }
 
-                var oldTableFile = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableObj.OldName.Trim('"'), ".json"));
-                if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
-                {
-                    var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile, _platform);
-                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                    var oldTableFile = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableObj.OldName.Trim('"'), ".json"));
+                    if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
+                    {
+                        var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile, _platform);
+                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                    }
+                    // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema
+                    // values on the in-memory table object before serialization (design §7.2), and rewrite
+                    // source-schema-qualified refs inside expression-bearing JSON properties (design §7.3).
+                    ScrubSchemaForTemplate(tableObj, filename);
+                    JsonHelper.Write(filename, tableObj);
+                    _stats.Tables++;
                 }
-                // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema
-                // values on the in-memory table object before serialization (design §7.2), and rewrite
-                // source-schema-qualified refs inside expression-bearing JSON properties (design §7.3).
-                ScrubSchemaForTemplate(tableObj, filename);
-                JsonHelper.Write(filename, tableObj);
-                _stats.Tables++;
+                catch (SqlException ex)
+                {
+                    _progressLog.Error($"    ERROR: SQL Server error extracting {tableSchema}.{tableName}: {ex.Message}");
+                    _stats.TableErrors++;
+                }
+                catch (JsonException ex)
+                {
+                    _progressLog.Error($"    ERROR: JSON parsing error for {tableSchema}.{tableName}: {ex.Message}");
+                    _stats.TableErrors++;
+                }
+                catch (IOException ex)
+                {
+                    _progressLog.Error($"    ERROR: File write error for {tableSchema}.{tableName}: {ex.Message}");
+                    _stats.TableErrors++;
+                }
             }
         }
         finally
