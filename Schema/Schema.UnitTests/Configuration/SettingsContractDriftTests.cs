@@ -51,7 +51,7 @@ public class SettingsContractDriftTests
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "SchemaSmith.sln")))
+        while (dir != null && !File.Exists(Path.Join(dir.FullName, "SchemaSmith.sln")))
             dir = dir.Parent;
         return dir?.FullName;
     }
@@ -60,7 +60,7 @@ public class SettingsContractDriftTests
     {
         foreach (var project in ProductProjects)
         {
-            var projectDir = Path.Combine(root, project);
+            var projectDir = Path.Join(root, project);
             if (!Directory.Exists(projectDir)) continue;
 
             foreach (var file in Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories))
@@ -178,7 +178,7 @@ public class SettingsContractDriftTests
 
         foreach (var project in ProductProjects)
         {
-            var projectDir = Path.Combine(root, project);
+            var projectDir = Path.Join(root, project);
             if (!Directory.Exists(projectDir)) continue;
             foreach (var file in Directory.EnumerateFiles(projectDir, "*.cs", SearchOption.AllDirectories))
             {

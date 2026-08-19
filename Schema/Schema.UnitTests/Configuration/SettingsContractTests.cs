@@ -137,7 +137,7 @@ public class SettingsContractTests
                      (SettingsTool.SchemaShears, "SchemaShears/SchemaShears.settings.json")
                  })
         {
-            var path = System.IO.Path.Combine(RepoRoot(), file);
+            var path = System.IO.Path.Join(RepoRoot(), file);
             if (!System.IO.File.Exists(path)) continue;
 
             var config = new ConfigurationBuilder().AddJsonFile(path).Build();
@@ -149,7 +149,7 @@ public class SettingsContractTests
     private static string RepoRoot()
     {
         var dir = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
-        while (dir != null && !System.IO.File.Exists(System.IO.Path.Combine(dir.FullName, "SchemaSmith.sln")))
+        while (dir != null && !System.IO.File.Exists(System.IO.Path.Join(dir.FullName, "SchemaSmith.sln")))
             dir = dir.Parent;
         return dir?.FullName ?? "";
     }

@@ -23,9 +23,9 @@ public class SettingsContractArtifactTests
     private static string ArtifactPath()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "SchemaSmith.sln")))
+        while (dir != null && !File.Exists(Path.Join(dir.FullName, "SchemaSmith.sln")))
             dir = dir.Parent;
-        return dir == null ? null : Path.Combine(dir.FullName, "Schema", "Configuration", "settings-contract.json");
+        return dir == null ? null : Path.Join(dir.FullName, "Schema", "Configuration", "settings-contract.json");
     }
 
     [Test]

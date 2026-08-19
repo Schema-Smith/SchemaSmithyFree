@@ -48,9 +48,9 @@ public class MySqlColumnCheckExpressionAliasTests
         LogFactory.Clear();
     }
 
-    private static string TemplateFile => Path.Combine("C:", "products", "Templates", "Main", "Template.json");
-    private static string TablesPath => Path.Combine("C:", "products", "Templates", "Main", "Tables");
-    private static string TableFile => Path.Combine(TablesPath, "Orders.json");
+    private static string TemplateFile => Path.Join("C:", "products", "Templates", "Main", "Template.json");
+    private static string TablesPath => Path.Join("C:", "products", "Templates", "Main", "Tables");
+    private static string TableFile => Path.Join(TablesPath, "Orders.json");
 
     private Template LoadWith(Platform platform, string tableJson)
     {
@@ -65,7 +65,7 @@ public class MySqlColumnCheckExpressionAliasTests
         {
             Name = "TestProduct",
             Platform = platform,
-            FilePath = Path.Combine("C:", "products", "Product.json")
+            FilePath = Path.Join("C:", "products", "Product.json")
         });
     }
 
