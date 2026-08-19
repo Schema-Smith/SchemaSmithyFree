@@ -1194,6 +1194,63 @@ public class MergeScriptHelperTests
 
     #endregion
 
+    #region B4 — Xml content encoding is a four-engine parity feature, not a SQL-Server-only one
+
+    // The guard that made Xml a SqlServer-only ContentEncoding was removed once B3 gave MySQL/MariaDB a
+    // route (XML->JSON conversion in C#, since both reject dynamic XPath). This test is the parity check:
+    // every platform must accept ContentEncoding: "Xml" without throwing. MariaDb is exercised directly
+    // (not just inferred from MySQL coverage above) because BuildMergeScript takes it as its own enum
+    // member — GetBasePlatform() collapses it to MySQL internally, so the MySQL mock command is reused.
+    [TestCase(Platform.SqlServer)]
+    [TestCase(Platform.PostgreSQL)]
+    [TestCase(Platform.MySQL)]
+    [TestCase(Platform.MariaDb)]
+    public void BuildMergeScript_XmlEncoding_IsSupportedOnEveryEngine(Platform platform)
+    {
+        const string xmlPayload = "<rows><row><c n=\"id\">1</c><c n=\"name\">Anvil</c></row></rows>";
+
+        IDbCommand cmd;
+        string schemaOrDb;
+        string keyColumns;
+
+        switch (platform)
+        {
+            case Platform.SqlServer:
+                cmd = CreateSqlServerXmlMockCommand(
+                    unsupportedComments: null,
+                    insertCols: "        [id],\n        [name]");
+                schemaOrDb = "dbo";
+                keyColumns = "[id]";
+                break;
+            case Platform.PostgreSQL:
+                cmd = CreatePostgreSqlXmlMockCommand(
+                    unsupportedComments: null, identAndSeq: null, updateCols: null,
+                    insertCols: "        \"id\",\n        \"name\"");
+                schemaOrDb = "public";
+                keyColumns = "\"id\"";
+                break;
+            case Platform.MySQL:
+            case Platform.MariaDb:
+                cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+                {
+                    new("id", "int", null, 10L, 0L, null, "int", "", null),
+                    new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+                });
+                schemaOrDb = "testdb";
+                keyColumns = "`id`";
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unhandled platform in parity test.");
+        }
+
+        Assert.DoesNotThrow(() => MergeScriptHelper.BuildMergeScript(
+            platform, cmd, schemaOrDb, "Widget", xmlPayload, keyColumns,
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml"));
+    }
+
+    #endregion
+
     #region Cross-Platform Consistency Tests
 
     [Test]
@@ -1758,6 +1815,70 @@ public class MergeScriptHelperTests
             return idx < sequence.Count ? sequence[idx] : null;
         });
         return cmd;
+    }
+
+    /// <summary>
+    /// SQL Server mock command for the XML row-source path (isXml=true). Unlike CreateSqlServerMockCommand,
+    /// the XML path reads column metadata via GetColumnMetadataSqlServer (ExecuteReader) instead of the
+    /// STRING_AGG-based GetJsonSelectColumnsSqlServer, so it needs its own ExecuteReader stub. ExecuteScalar
+    /// order (mergeUpdate=false, needsIdentity=false, matching every call site here): 1. cliff-check for
+    /// GetUnsupportedColumnComments, 2. GetUnsupportedColumnComments, 3. NeedsIdentityInsertSqlServer,
+    /// 4. cliff-check for GetInsertColumns, 5. GetInsertColumns. ExecuteReader: GetColumnMetadataSqlServer
+    /// (called once, from BuildXmlShredSelectColumnsSqlServer) returns a fixed Id int / Name varchar(100) shape.
+    /// </summary>
+    private static IDbCommand CreateSqlServerXmlMockCommand(string unsupportedComments, string insertCols)
+    {
+        var cmd = Substitute.For<IDbCommand>();
+        var sequence = new List<object>
+        {
+            0,                    // cliff-check for GetUnsupportedColumnComments
+            unsupportedComments,  // GetUnsupportedColumnComments
+            false,                // NeedsIdentityInsertSqlServer
+            0,                    // cliff-check for GetInsertColumns
+            insertCols            // GetInsertColumns
+        };
+
+        var callCount = 0;
+        cmd.ExecuteScalar().Returns(ci =>
+        {
+            var idx = callCount++;
+            return idx < sequence.Count ? sequence[idx] : null;
+        });
+
+        cmd.ExecuteReader().Returns(ci => CreateSqlServerColumnMetadataReader());
+        return cmd;
+    }
+
+    private static IDataReader CreateSqlServerColumnMetadataReader(
+        (string Name, string DataType, string UserType, int? MaxLen, bool IsGeometry, bool IsBinary, bool IsXml)[] columns = null)
+    {
+        columns ??= new (string Name, string DataType, string UserType, int? MaxLen, bool IsGeometry, bool IsBinary, bool IsXml)[]
+        {
+            ("id", "int", "INT", null, false, false, false),
+            ("name", "varchar", "VARCHAR", 100, false, false, false)
+        };
+
+        var reader = Substitute.For<IDataReader>();
+        var idx = -1;
+        reader.Read().Returns(ci => { idx++; return idx < columns.Length; });
+        reader.GetString(0).Returns(ci => columns[idx].Name);
+        reader.GetString(1).Returns(ci => columns[idx].DataType);
+        reader.GetString(2).Returns(ci => columns[idx].UserType);
+        reader.IsDBNull(3).Returns(ci => columns[idx].MaxLen is null);
+        reader.GetValue(3).Returns(ci => (object)columns[idx].MaxLen ?? DBNull.Value);
+        reader.IsDBNull(4).Returns(true);
+        reader.GetValue(4).Returns(DBNull.Value);
+        reader.IsDBNull(5).Returns(true);
+        reader.GetValue(5).Returns(DBNull.Value);
+        reader.IsDBNull(6).Returns(true);
+        reader.GetValue(6).Returns(DBNull.Value);
+        reader.GetString(7).Returns("YES");
+        reader.GetValue(8).Returns(false);
+        reader.GetValue(9).Returns(false);
+        reader.GetValue(10).Returns(ci => columns[idx].IsGeometry);
+        reader.GetValue(11).Returns(ci => columns[idx].IsBinary);
+        reader.GetValue(12).Returns(ci => columns[idx].IsXml);
+        return reader;
     }
 
     /// <summary>

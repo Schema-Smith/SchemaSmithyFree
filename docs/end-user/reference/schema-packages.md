@@ -694,7 +694,7 @@ Tables without a `DataDelivery` block are left alone. Tables that declare one ar
 | Property | Type | Default | Description |
 |---|---|---|---|
 | `ContentFile` | string | | Path to the row data, relative to the template root. Typically produced by DataTongs as a `.tabledata` file (raw JSON array). |
-| `ContentEncoding` | string | `Json` | Encoding of `ContentFile`: `Json` (default) or `Xml`. **SQL Server only.** See [Content encoding](#content-encoding-legacy-sql-server) below. |
+| `ContentEncoding` | string | `Json` | Encoding of `ContentFile`: `Json` (default) or `Xml`. Accepted on every platform. See [Content Encoding](#content-encoding) below. |
 | `MergeType` | string | | One of `Insert`, `Insert/Update`, `Insert/Update/Delete`. See [MergeType](#mergetype) below. |
 | `MatchColumns` | string | | Comma-separated column names that identify a row. Prefix a column with `*` for NULL-safe comparison on nullable keys. Matches the `KeyColumns` concept in DataTongs. |
 | `MergeFilter` | string | `""` | Optional SQL `WHERE` clause (without the `WHERE` keyword). Scopes both the rows considered for matching and, when delete is enabled, the rows eligible for deletion. |
@@ -714,13 +714,17 @@ Tables without a `DataDelivery` block are left alone. Tables that declare one ar
 
 The chosen idiom is platform-specific -- `MERGE` on SQL Server and PostgreSQL, `INSERT ... ON DUPLICATE KEY UPDATE` with a conditional delete step on MySQL -- but the declarative contract is the same on every platform.
 
-### Content encoding (legacy SQL Server)
+### Content Encoding
 
-`ContentEncoding` selects how SchemaQuench shreds the `ContentFile`. **This setting is SQL Server only** -- PostgreSQL and MySQL/MariaDB shred their delivery data at every supported version, so they have no encoding choice to make (declaring `Xml` on those platforms is rejected).
+`ContentEncoding` selects how SchemaQuench shreds the `ContentFile`, and every platform accepts `Xml` -- but the reason to reach for it, and how it's actually applied, differs by engine.
 
-By default (`Json`) delivery shreds the content with `OPENJSON`, which requires **SQL Server compatibility level 130** (SQL Server 2016+). If your target database is left at an older compatibility level (100--120, common where a line-of-business app is certified against an older level), a JSON delivery cannot run there. Set `"ContentEncoding": "Xml"` and SchemaSmith shreds the payload with the XML data-type methods (`.nodes()` / `.value()`) instead -- a path that works at **every** compatibility level -- so the same package's data deploys on a legacy target.
+On **SQL Server**, the default `Json` encoding shreds the content with `OPENJSON`, which requires compatibility level 130 (SQL Server 2016+). If your target database is left at an older compatibility level (100--120, common where a line-of-business app is certified against an older level), a JSON delivery cannot run there. Set `"ContentEncoding": "Xml"` and SchemaSmith shreds the payload with the XML data-type methods (`.nodes()` / `.value()`) instead -- a path that works at every compatibility level -- so the same package's data deploys on a legacy target. Clearing that cliff is the real reason to choose `Xml` on SQL Server.
 
-The two encodings are not interchanged automatically: the payload is your data, in a shape SchemaSmith does not own, so you choose the encoding per delivery and SchemaSmith shreds whichever you declared. A `Json` delivery aimed at a below-130 target follows the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation) -- `warn` (the default) skips just that delivery with a clear message and delivers the rest; `fail` aborts.
+On **PostgreSQL**, `Xml` is shredded natively with `xmltable()` at every supported version -- there's no compatibility cliff to route around there, so it's a stylistic choice rather than a necessity.
+
+On **MySQL and MariaDB**, neither engine can shred XML dynamically (both reject a non-constant XPath outright), so SchemaSmith converts an `Xml`-encoded payload to JSON once, up front, and shreds the result exactly as it would a hand-authored JSON payload. Declaring `Xml` there buys authoring uniformity for a schema package shared across engines -- not a version-reach benefit, since MySQL/MariaDB never had a compatibility-level cliff to begin with.
+
+The two encodings are not interchanged automatically: the payload is your data, in a shape SchemaSmith does not own, so you choose the encoding per delivery and SchemaSmith shreds whichever you declared. A `Json` delivery aimed at a below-130 SQL Server target follows the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation) -- `warn` (the default) skips just that delivery with a clear message and delivers the rest; `fail` aborts.
 
 The XML row shape is a documented, stable contract -- one `<c>` element per column, named by an `n` attribute so any column name (including `[Order Date]`) is carried verbatim:
 
@@ -734,7 +738,7 @@ The XML row shape is a documented, stable contract -- one `<c>` element per colu
 - An **absent `<c>`** is `NULL` (row `B002` above has no `price`).
 - **Binary** columns are base64; **geometry/geography** is WKT with a companion `<c n="Column.STSrid">` carrying the SRID; **dates** are ISO-8601.
 
-You don't have to hand-author this shape: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you. See [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server).
+You don't have to hand-author this shape on SQL Server: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you. That extraction helper is SQL Server only (see [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server)) -- a PostgreSQL, MySQL, or MariaDB package that wants `Xml` encoding hand-authors the `.tabledata` file in the shape above.
 
 ### Multiple Deliveries
 
