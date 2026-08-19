@@ -30,6 +30,8 @@ Tokens that appear in scripts but have no matching definition are left in place 
 
 Tokens are replaced in every place SchemaSmith processes script content -- both in JSON expression fields and in `.sql` files.
 
+> **"Every place" includes `--` comments.** SchemaSmith does a plain text substitution across the whole script; it does not skip comments. A single-line token in a `--` comment is harmless, but a **multi-line** token value -- the pretty-printed JSON of `{{TableSchema}}`, for example -- expands past the end of the first line, and everything after that first line is no longer commented: it becomes live SQL and usually fails to parse. So don't reference a multi-line token inside a `--` line comment unless you mean to run its value. Use a `/* ... */` block comment, or describe the token in words instead of writing it out.
+
 **Product-level JSON properties:**
 
 - `BaselineValidationScript`
