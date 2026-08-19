@@ -328,6 +328,25 @@ END $$;
         }
     }
 
+    /// <summary>
+    /// Assembles the <c>{{SchemaName}}</c> + version-token (<c>{{ServerMajorVersion}}</c>,
+    /// <c>{{CompatibilityLevel}}</c>) vocabulary shared by the gate sites that resolve tokens against a
+    /// live <c>IDbCommand</c> at evaluation time — the folder gate and the data-delivery gate. (Table,
+    /// column, index, and matview/indexed-view gates get the same two version tokens through a different
+    /// mechanism: DatabaseQuench substitutes them directly into the already-serialized table/view JSON
+    /// payload, since those gates are evaluated server-side inside the generated DDL rather than
+    /// client-side against a command.) One assembly point for the command-evaluated sites removes the
+    /// divergence that left the data-delivery gate resolving only <c>{{SchemaName}}</c> (N2).
+    /// </summary>
+    public static List<KeyValuePair<string, string>> AssembleGateTokens(
+        string schemaName, List<KeyValuePair<string, string>> versionTokens)
+    {
+        var tokens = new List<KeyValuePair<string, string>>();
+        if (!string.IsNullOrEmpty(schemaName)) tokens.Add(new("SchemaName", schemaName));
+        if (versionTokens != null) tokens.AddRange(versionTokens);
+        return tokens;
+    }
+
     public static List<string> GetTokensFromString(string script)
     {
         if (string.IsNullOrEmpty(script) || !script.Contains("{{") || !script.Contains("}}")) return [];

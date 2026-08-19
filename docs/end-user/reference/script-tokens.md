@@ -50,7 +50,7 @@ Tokens are replaced in every place SchemaSmith processes script content -- both 
 - `Default` on columns
 - `Expression` on table-level check constraints
 - `FilterExpression` on indexes (where supported)
-- `ShouldApplyExpression` on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, and other supported components
+- `ShouldApplyExpression` on tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, data deliveries, and other supported components
 
 **SQL script files** in every product and template script folder:
 

@@ -41,6 +41,8 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 - **`--Encrypt` / `--NoEncrypt` reached the connection test but not the deploy.** The same split affected the transport-encryption switch introduced in v2.4.0: the server connection test applied it, the per-database deploy connection ignored it. `--NoEncrypt` — the escape hatch for an older or hardened SQL Server whose TLS handshake the modern client library cannot complete — therefore produced a passing connection test followed by a failing deploy, and `--Encrypt` silently did not reach the connection doing the work. Cross-platform (SQL Server `Encrypt`, PostgreSQL `SSL Mode`, MySQL/MariaDB `SslMode`). — #384
 
+- **A `DataDelivery.ShouldApplyExpression` using the `{{ServerMajorVersion}}` / `{{CompatibilityLevel}}` version tokens errored against the server.** Every other gate site — folders, tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views — resolves the version tokens introduced in v2.4.0 before evaluating; a data delivery's gate only ever substituted `{{SchemaName}}`, so `"ShouldApplyExpression": "{{CompatibilityLevel}} >= 130"` reached the server as literal, unresolved text and failed with a SQL parse error instead of evaluating. Both tokens now resolve there too, the same way and from the same assembly point a folder gate already uses, so a delivery can gate on the target version exactly like every other component.
+
 ## [v2.4.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.4.0) — 2026-08-14
 
 ### Added

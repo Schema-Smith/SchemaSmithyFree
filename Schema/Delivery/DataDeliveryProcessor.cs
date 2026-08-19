@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Schema.Domain;
 using Schema.Isolators;
+using Schema.Utility;
 
 namespace Schema.Delivery;
 
@@ -86,6 +88,7 @@ public class DataDeliveryProcessor : IDataDelivery
         // deliver-vs-skip. A gate-eval exception propagates (fail-closed), aborting the run like
         // FolderGate callers — and runs BEFORE the CASCADE check below, so a gate exception aborts
         // the same way it always has.
+        var gateTokenPlatform = PlatformExtensions.ParsePlatform(platform);
         List<(int Index, DataDelivery Delivery)> ResolveApplied(IDeliverableTable table)
         {
             var applied = new List<(int, DataDelivery)>();
@@ -96,7 +99,8 @@ public class DataDeliveryProcessor : IDataDelivery
                 if (string.IsNullOrEmpty(d.MergeType) || d.MergeType.Equals("None", StringComparison.OrdinalIgnoreCase))
                     continue;
                 bool apply;
-                var gateExpression = ResolveGateExpression(d.ShouldApplyExpression, context.SchemaName);
+                var gateExpression = ResolveGateExpression(d.ShouldApplyExpression, context.SchemaName,
+                    context.VersionTokens, gateTokenPlatform);
                 try { apply = GateEvaluator.ShouldApply(context.Command, gateExpression); }
                 catch (Exception e)
                 {
@@ -585,18 +589,21 @@ WHERE tc_p.TABLE_SCHEMA = '{schema.Replace("'", "''")}'
     }
 
     /// <summary>
-    /// Substitutes the <c>{{SchemaName}}</c> token in a delivery's <see cref="DataDelivery.ShouldApplyExpression"/>
-    /// with the iteration's resolved schema name, mirroring <see cref="ResolveMergeFilter"/>. Like
-    /// MergeFilter, the gate expression is verbatim text handed to <see cref="GateEvaluator.ShouldApply"/>,
-    /// which sets it as the command's CommandText and executes it directly — there is no engine-level
-    /// token resolution between here and the database. Regular templates pass an empty
-    /// <paramref name="iterationSchemaName"/> and the expression is returned unchanged.
+    /// Resolves the full gate-token vocabulary — <c>{{SchemaName}}</c> plus the per-target version
+    /// tokens (<c>{{ServerMajorVersion}}</c>, <c>{{CompatibilityLevel}}</c>) — in a delivery's
+    /// <see cref="DataDelivery.ShouldApplyExpression"/> before it reaches <see cref="GateEvaluator.ShouldApply"/>,
+    /// which sets the resolved text as the command's CommandText and executes it directly — there is no
+    /// engine-level token resolution between here and the database. Uses <see cref="TokenHelper.AssembleGateTokens"/>,
+    /// the same assembly <c>DatabaseQuench.ResolveFolderGateExpression</c> uses for folder gates, so this
+    /// site speaks the same gate vocabulary rather than a narrower subset (N2 — this resolver used to
+    /// substitute only <c>{{SchemaName}}</c>, leaving a version-token gate here to error against the server).
     /// </summary>
-    internal static string ResolveGateExpression(string shouldApplyExpression, string iterationSchemaName)
+    internal static string ResolveGateExpression(string shouldApplyExpression, string iterationSchemaName,
+        List<KeyValuePair<string, string>> versionTokens, Platform platform = Platform.SqlServer)
     {
-        if (string.IsNullOrEmpty(shouldApplyExpression) || string.IsNullOrEmpty(iterationSchemaName))
-            return shouldApplyExpression;
-        return shouldApplyExpression.Replace("{{SchemaName}}", iterationSchemaName);
+        if (string.IsNullOrEmpty(shouldApplyExpression)) return shouldApplyExpression;
+        var tokens = TokenHelper.AssembleGateTokens(iterationSchemaName, versionTokens);
+        return tokens.Count == 0 ? shouldApplyExpression : SqlScript.TokenReplace(shouldApplyExpression, tokens, platform);
     }
 
     private static readonly string[] ValidMergeTypes =

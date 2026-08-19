@@ -425,6 +425,105 @@ public class DataDeliveryProcessorTests
             "Regular templates (blank SchemaName) must leave the gate expression's literal token unchanged.");
     }
 
+    // ---------- Gate token vocabulary uniformity (N2) ----------
+
+    [Test]
+    public void ResolveGateExpression_ResolvesVersionTokens_NotJustSchemaName()
+    {
+        var resolved = DataDeliveryProcessor.ResolveGateExpression(
+            "{{CompatibilityLevel}} >= 130 AND '{{SchemaName}}' = 'tenant_acme'",
+            "tenant_acme",
+            new List<KeyValuePair<string, string>> { new("CompatibilityLevel", "150") });
+
+        Assert.That(resolved, Is.EqualTo("150 >= 130 AND 'tenant_acme' = 'tenant_acme'"));
+    }
+
+    [Test]
+    public void DeliverTables_RegularTemplate_VersionTokenGate_ResolvesInsteadOfErroring()
+    {
+        // The bug (N2): the old resolver early-returned unchanged whenever SchemaName was blank —
+        // which is every regular (non-schema) template — so a version-token gate NEVER resolved
+        // outside a schema-template iteration, and {{CompatibilityLevel}} reached the server as
+        // literal text. This is the exact symptom reported: a plain DataDelivery.ShouldApplyExpression
+        // of "{{CompatibilityLevel}} >= 130" on a regular template.
+        string capturedCommandText = null;
+        _mockCommand.ExecuteScalar().Returns(ci =>
+        {
+            capturedCommandText = _mockCommand.CommandText;
+            return 1;
+        });
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery
+                    {
+                        MergeType = "Insert",
+                        ContentFile = "lookups.json",
+                        ShouldApplyExpression = "{{CompatibilityLevel}} >= 130",
+                        VariantName = "modern-only"
+                    }
+                }
+            }
+        };
+        var context = MakeContext(tables); // SchemaName defaults to "" — a regular template
+        context.VersionTokens = new List<KeyValuePair<string, string>> { new("CompatibilityLevel", "150") };
+
+        processor.DeliverTables(context);
+
+        Assert.That(capturedCommandText, Does.Not.Contain("{{CompatibilityLevel}}"),
+            "The version token must be substituted before the gate reaches the server.");
+        Assert.That(capturedCommandText, Does.Contain("150 >= 130"));
+        Assert.That(_executedScripts, Has.Count.EqualTo(1), "Gate evaluated true, so the delivery must apply.");
+    }
+
+    [Test]
+    public void DeliverTables_SchemaTemplate_SchemaNameAndVersionTokensBothResolve()
+    {
+        // Uniformity means every gate resolves every token meaningful at that site — a schema-template
+        // iteration has both {{SchemaName}} and the version tokens available simultaneously.
+        string capturedCommandText = null;
+        _mockCommand.ExecuteScalar().Returns(ci =>
+        {
+            capturedCommandText = _mockCommand.CommandText;
+            return 1;
+        });
+
+        var processor = new DataDeliveryProcessor();
+        var tables = new List<IDeliverableTable>
+        {
+            new TestTable
+            {
+                Name = "Lookups", Schema = "dbo",
+                DataDeliveries = new List<DataDelivery>
+                {
+                    new DataDelivery
+                    {
+                        MergeType = "Insert",
+                        ContentFile = "lookups.json",
+                        ShouldApplyExpression = "{{CompatibilityLevel}} >= 130 AND SCHEMA_NAME() = '{{SchemaName}}'",
+                        VariantName = "tenant-modern-gate"
+                    }
+                }
+            }
+        };
+        var context = MakeContext(tables);
+        context.SchemaName = "tenant_acme";
+        context.VersionTokens = new List<KeyValuePair<string, string>> { new("CompatibilityLevel", "150") };
+
+        processor.DeliverTables(context);
+
+        Assert.That(capturedCommandText, Does.Not.Contain("{{"),
+            "Every token in the expression must resolve — neither token left behind.");
+        Assert.That(capturedCommandText, Does.Contain("150 >= 130"));
+        Assert.That(capturedCommandText, Does.Contain("tenant_acme"));
+    }
+
     [Test]
     public void DeliverTables_GatedDelivery_Applies_LogsVariantNameSuffix()
     {

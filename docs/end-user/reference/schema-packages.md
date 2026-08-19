@@ -404,7 +404,7 @@ Every table definition file declares exactly one table. The shared properties be
 | `DataDelivery` | object | `null` | No | Declarative data delivery configuration for this table. See [DataDelivery](#datadelivery). |
 | `Extensions` | object | `null` | No | Open metadata bag. See [Custom Properties](custom-properties.md). |
 
-The `ShouldApplyExpression` field appears on **tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views**, and several platform-specific components. Wherever it appears, it works the same way: the engine resolves tokens, runs the expression against the target database, and skips the component if the result is falsy.
+The `ShouldApplyExpression` field appears on **tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, data deliveries**, and several platform-specific components. Wherever it appears, it works the same way: the engine resolves tokens, runs the expression against the target database, and skips the component if the result is falsy.
 
 ---
 
@@ -701,7 +701,7 @@ Tables without a `DataDelivery` block are left alone. Tables that declare one ar
 | `MergeDisableTriggers` | bool | `false` | Wrap the merge with platform-appropriate trigger disable/enable. |
 | `MergeDisableRules` | bool | `false` | **PostgreSQL.** Disable rewrite rules on the table during the merge. |
 | `MergeUpdateDescendents` | bool | `false` | **PostgreSQL.** When `true`, the merge targets descendant partitions as well as the specified table. When `false` (the default), the merge uses `ONLY` so descendant tables are left untouched. |
-| `ShouldApplyExpression` | string | `""` | Optional SQL predicate evaluated against the target at deploy time. Blank or absent always applies -- today's unchanged behavior. When `DataDelivery` is an array of two or more deliveries, every entry must set one. See [Multiple Deliveries](#multiple-deliveries) below. |
+| `ShouldApplyExpression` | string | `""` | Optional SQL predicate evaluated against the target at deploy time. Tokens are resolved before evaluation -- including [`{{ServerMajorVersion}}` and `{{CompatibilityLevel}}`](script-tokens.md#servermajorversion-and-compatibilitylevel), the same version tokens a folder or table gate can reference. Blank or absent always applies -- today's unchanged behavior. When `DataDelivery` is an array of two or more deliveries, every entry must set one. See [Multiple Deliveries](#multiple-deliveries) below. |
 | `VariantName` | string | `""` | Optional label naming the intent behind a delivery's `ShouldApplyExpression`. Appears in the deployment log when that delivery is skipped or when its gate errors. Max 128 characters. |
 
 ### MergeType

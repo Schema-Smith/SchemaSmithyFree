@@ -259,9 +259,9 @@ public class DatabaseQuench
     {
         // Version tokens apply to ALL templates (regular + schema) — gating a folder on the target
         // version is the primary use case; {{SchemaName}} only exists on schema-template iterations.
-        var tokens = new List<KeyValuePair<string, string>>();
-        if (!string.IsNullOrEmpty(_schemaName)) tokens.Add(new("SchemaName", _schemaName));
-        if (_versionScriptTokens != null) tokens.AddRange(_versionScriptTokens);
+        // TokenHelper.AssembleGateTokens is the single source of gate vocabulary — DataDeliveryProcessor's
+        // gate resolver builds its token list the same way (N2).
+        var tokens = TokenHelper.AssembleGateTokens(_schemaName, _versionScriptTokens);
         return tokens.Count == 0 ? expression : SqlScript.TokenReplace(expression, tokens, _product.Platform);
     }
 
@@ -710,6 +710,10 @@ public class DatabaseQuench
                                 Platform = _product.Platform.GetBasePlatform().ToString(),
                                 DatabaseName = _databaseName,
                                 SchemaName = _schemaName,
+                                // N2: same vocabulary as the folder gate's ResolveFolderGateExpression, so a
+                                // DataDelivery.ShouldApplyExpression can gate on {{CompatibilityLevel}} /
+                                // {{ServerMajorVersion}} instead of only {{SchemaName}}.
+                                VersionTokens = _versionScriptTokens,
                                 TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
                                 ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),
                                 ReadFileContent = path => ProductFileWrapper.GetFromFactory().ReadAllText(path),
@@ -829,6 +833,7 @@ public class DatabaseQuench
                             Platform = _product.Platform.ToString(),
                             DatabaseName = _databaseName,
                             SchemaName = _schemaName,
+                            VersionTokens = _versionScriptTokens,
                             PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
                             MySqlServerVersionNum = _mySqlServerVersionNum,
                             SqlServerCompatibilityLevel = _sqlServerCompatibilityLevel,
