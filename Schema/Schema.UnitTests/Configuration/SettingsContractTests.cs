@@ -129,17 +129,18 @@ public class SettingsContractTests
     public void EveryKeyInTheShippedSamples_IsRegistered()
     {
         // A typo in a shipped sample is inert and invisible today; this makes it a test failure.
-        foreach (var (tool, file) in new[]
-                 {
-                     (SettingsTool.SchemaQuench, "SchemaQuench/SchemaQuench.settings.json"),
-                     (SettingsTool.SchemaTongs, "SchemaTongs/SchemaTongs.settings.json"),
-                     (SettingsTool.DataTongs, "DataTongs/DataTongs.settings.json"),
-                     (SettingsTool.SchemaShears, "SchemaShears/SchemaShears.settings.json")
-                 })
-        {
-            var path = System.IO.Path.Join(RepoRoot(), file);
-            if (!System.IO.File.Exists(path)) continue;
+        var samples = new[]
+            {
+                (Tool: SettingsTool.SchemaQuench, File: "SchemaQuench/SchemaQuench.settings.json"),
+                (Tool: SettingsTool.SchemaTongs, File: "SchemaTongs/SchemaTongs.settings.json"),
+                (Tool: SettingsTool.DataTongs, File: "DataTongs/DataTongs.settings.json"),
+                (Tool: SettingsTool.SchemaShears, File: "SchemaShears/SchemaShears.settings.json")
+            }
+            .Select(s => (s.Tool, s.File, Path: System.IO.Path.Join(RepoRoot(), s.File)))
+            .Where(s => System.IO.File.Exists(s.Path));
 
+        foreach (var (tool, file, path) in samples)
+        {
             var config = new ConfigurationBuilder().AddJsonFile(path).Build();
             Assert.That(SettingsContract.UnrecognizedKeys(config, tool), Is.Empty,
                 $"{file} contains keys {tool} does not read");

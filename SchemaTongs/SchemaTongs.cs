@@ -2915,11 +2915,9 @@ SELECT cc.name AS [Name],
 
         var tableName = StringHelper.StripIdentifierWrapper(table.Name);
 
-        foreach (var (constraintName, columnName) in singleColumnChecks)
+        foreach (var (constraintName, columnName) in singleColumnChecks
+                     .Where(c => string.Equals(c.Key, $"CK_{tableName}_{c.Value}", StringComparison.OrdinalIgnoreCase)))
         {
-            if (!string.Equals(constraintName, $"CK_{tableName}_{columnName}", StringComparison.OrdinalIgnoreCase))
-                continue;
-
             var constraint = table.CheckConstraints
                 .FirstOrDefault(c => string.Equals(StringHelper.StripIdentifierWrapper(c.Name), constraintName, StringComparison.OrdinalIgnoreCase));
             var column = table.Columns.OfType<PostgreSqlColumn>()

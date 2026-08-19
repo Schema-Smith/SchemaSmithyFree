@@ -174,17 +174,13 @@ public class SettingsContractDriftTests
     private static HashSet<string> ReferencedKeyValues(string root)
     {
         var byName = KeyConstantsByPath();
-        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var reference = new Regex(@"SettingsKeys(?:\.\w+)+", RegexOptions.Compiled);
 
-        var referenced = ScannableProductFiles(root)
+        return ScannableProductFiles(root)
             .SelectMany(file => reference.Matches(StripComments(File.ReadAllText(file))))
-            .Select(m => m.Value);
-
-        foreach (var path in referenced)
-            if (byName.TryGetValue(path, out var value)) used.Add(value);
-
-        return used;
+            .Select(m => byName.TryGetValue(m.Value, out var value) ? value : null)
+            .Where(value => value != null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     // "SettingsKeys.Target.Server" -> "Target:Server", by reflection over the constants themselves.
@@ -194,9 +190,9 @@ public class SettingsContractDriftTests
 
         void Walk(Type type, string prefix)
         {
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Static))
-                if (field.IsLiteral && field.FieldType == typeof(string))
-                    map[$"{prefix}.{field.Name}"] = (string)field.GetRawConstantValue();
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Static)
+                         .Where(f => f.IsLiteral && f.FieldType == typeof(string)))
+                map[$"{prefix}.{field.Name}"] = (string)field.GetRawConstantValue();
             foreach (var nested in type.GetNestedTypes(BindingFlags.Public))
                 Walk(nested, $"{prefix}.{nested.Name}");
         }

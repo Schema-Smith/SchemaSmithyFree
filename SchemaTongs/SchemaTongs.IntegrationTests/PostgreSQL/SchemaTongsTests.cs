@@ -298,7 +298,7 @@ ALTER TABLE ""Test"".""TestTable"" ADD CONSTRAINT ""chk_column2_not_blank"" CHEC
 
                 string tableJson = null;
                 file.When(f => f.WriteAllText(
-                        Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Tables", "Test.TestTable.json"))),
+                        Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Join("Tables", "Test.TestTable.json"))),
                         Arg.Any<string>()))
                     .Do(ci => tableJson = ci.ArgAt<string>(1));
 
