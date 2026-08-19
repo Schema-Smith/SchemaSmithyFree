@@ -9,19 +9,15 @@ using Schema.Utility;
 namespace DataTongs.IntegrationTests.CrossEngine;
 
 /// <summary>
-/// B4b acceptance test: extracts a table with --DeliveryEncoding=Xml on a non-SQL-Server engine, then
-/// deploys the resulting .tabledata file to SQL Server through the same legacy-tier XML shred
-/// GetTableDataXmlSqlServer's own output goes through -- proving cross-engine portability, not just a
-/// same-engine round trip (which proves nothing about the conversion). Needs a live PostgreSQL/MySQL AND
-/// a live SQL Server reachable simultaneously, which no single per-engine CI job provides (each job's
-/// docker-compose starts exactly one engine's container) -- deliberately tagged only "CrossEngine", not
-/// any of the SqlServer/PostgreSQL/MySQL/MariaDb categories CI filters on, so it never turns a
-/// single-engine CI job red. Run it explicitly (e.g. --filter "Category=CrossEngine") against a local
-/// environment where every engine is reachable at once.
-///
-/// MariaDb is not covered by a third test here: DataTongs routes MariaDb through the identical MySQL code
-/// path (Platform.GetBasePlatform() == Platform.MySQL selects GetTableDataJsonMySql regardless of which
-/// of the two engines it actually is), so the MySQL case below already exercises the code MariaDb runs.
+/// Cross-engine XML delivery portability acceptance test. Extracts with --DeliveryEncoding=Xml from
+/// non-SQL-Server engines, then deploys to SQL Server through the same legacy-tier XML shred, proving
+/// portability across engines (not just same-engine round-trips). Requires SQL Server, PostgreSQL, and
+/// MySQL reachable simultaneously — unavailable in per-engine CI jobs. This is a deliberate local-only
+/// convenience check, not a coverage gap: per-engine conversion logic is covered separately by the
+/// `XmlDeliveryExtraction_ConvertsExtractedJsonToTheDeliveryXmlShape` tests in
+/// `Shared/DataTongsExtractionSharedTests.cs` and `PostgreSQL/DataTongsExtractionTests.cs`, which carry
+/// engine categories and run in CI. Run this test locally with `--filter "Category=CrossEngine"` against
+/// an environment with all three engines up.
 /// </summary>
 [Category("CrossEngine")]
 [TestFixture]
