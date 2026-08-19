@@ -118,6 +118,11 @@ The JSON is the frozen contract: camelCase keys, enum values as their names, ind
       { "objectType": "index",     "objectName": "sales.Orders.IX_Region", "action": "dropped" },
       { "objectType": "procedure", "objectName": "Procedures/GetOrders.sql","action": "ran" }
     ]
+  },
+  "unsupportedDowngrade": {         // null unless a feature was degraded for the target version
+    "downgrades": [
+      { "feature": "expression statistics (PG14)", "objectName": "public.metric.ST_metric_expr" }
+    ]
   }
 }
 ```
@@ -136,6 +141,7 @@ The JSON is the frozen contract: camelCase keys, enum values as their names, ind
 | `failures` | One entry per failed scope — the same content as the failure roll-up log. |
 | `whatIf` | The would-apply / would-skip / would-deliver plan; `null` unless the run was `WhatIf` mode. |
 | `objectChanges` | Verified DDL changes and object-script runs — its own section below. |
+| `unsupportedDowngrade` | Features the package declared that the target version couldn't take, emitted in a degraded form and recorded — its own section below. `null` when nothing was degraded. |
 
 ### `run`
 
@@ -242,6 +248,29 @@ These appear as `details[]` rows with their real `objectType` and `action` even 
 | `false` | The engine couldn't read the audit (for example, kindling was suppressed), so every count is `0` and `details[]` is empty. |
 
 > **Note:** `instrumented: false` means *unknown*, not *nothing happened*. A run whose audit couldn't be read reports honestly-empty change data rather than pretending zero changes occurred. Read the progress log for what the run actually did in that case.
+
+## unsupportedDowngrade — features the target couldn't take
+
+When a package declares a feature the detected target version can't support — an expression statistic on PostgreSQL below 14, a `CHECK` constraint on MySQL below 8.0.16, a descending or invisible index on an older MariaDB, a data-masked or temporal column on a pre-2016 SQL Server — the default `Target:UnsupportedFeaturePolicy` (`warn`) emits the object *without* the unsupported aspect and records the fact here. The deploy succeeds; the report is your receipt for exactly what was relaxed. (Set the policy to `fail` and the run aborts instead of degrading — see the [SchemaQuench reference](schemaquench.md).)
+
+These downgrades are recorded **separately** from `objectChanges` — they are not a `details[]` action — because a degraded object is a distinct outcome from a created, modified, or dropped one: the object landed, but not at full fidelity.
+
+```json
+"unsupportedDowngrade": {
+  "downgrades": [
+    { "feature": "expression statistics (PG14)", "objectName": "public.metric.ST_metric_expr" },
+    { "feature": "CHECK constraint (MySQL 8.0.16)", "objectName": "Ledger.CK_Ledger_Amount" }
+  ]
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `downgrades[]` | One entry per object emitted in a degraded form. |
+| `downgrades[].feature` | The feature that was relaxed, tagged with the version it needs — for example `expression statistics (PG14)`, `INDEX (invisible, MySQL 8.0 / MariaDB 10.6)`. |
+| `downgrades[].objectName` | The affected object, `schema.table.item`. |
+
+The whole field is `null` when nothing was degraded. In `Summary.md` the same information renders under an **Unsupported Feature Downgrades** heading, one bullet per feature — the human-readable receipt a reviewer reads after a mixed-version release.
 
 ## Cross-platform
 
