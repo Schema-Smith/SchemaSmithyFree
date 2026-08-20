@@ -77,7 +77,7 @@ namespace Schema.UnitTests.Domain.MySQL
         public void MySqlColumn_PreservesCheckExpression_ThroughDeserializeAndSerializeAll()
         {
             const string json = """
-            {"Name":"T","Schema":"public","Columns":[
+            {"Name":"T","Columns":[
                 {"Name":"Quantity","DataType":"int","CheckExpression":"Quantity > 0"}
             ]}
             """;
