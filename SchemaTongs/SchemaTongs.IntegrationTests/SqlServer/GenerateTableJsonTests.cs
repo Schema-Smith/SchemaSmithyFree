@@ -4,6 +4,7 @@ using System.Data;
 using System;
 using System.Linq;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
 using Schema.Utility;
@@ -567,6 +568,41 @@ EXEC sys.sp_addextendedproperty 'PreventDrop', 'true', 'SCHEMA', [dbo], 'TABLE',
             Assert.That(unprotectedJson, Does.Not.Contain("PreventDrop"), "Extracted JSON for an unprotected table must omit the PreventDrop key.");
             // The internal marker must not leak into the generic ExtendedProperties extraction.
             Assert.That(protectedTable.Extensions?["ExtendedProperties"]?["PreventDrop"], Is.Null, "PreventDrop must stay out of generic Extensions.");
+        });
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldRoundTripAuthoredDataDeliveryAcrossReExtraction()
+    {
+        // DataDelivery is authored config, not catalog metadata -- GenerateTableJson never emits it
+        // (the vestigial table-level ContentFile/MergeType this proc used to emit instead were the
+        // strict-deserialization bug; they are now gone). Re-extraction must still deserialize the raw
+        // proc output cleanly, then let ImportTableHelper carry a previously-authored DataDelivery block
+        // forward onto the freshly-extracted table.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "CREATE TABLE dbo.DeliveryRoundTripTable (Id INT NOT NULL PRIMARY KEY)";
+        cmd.ExecuteNonQuery();
+
+        var extracted = GenerateTable(cmd, "dbo", "DeliveryRoundTripTable");
+        Assert.That(extracted.DataDelivery, Is.Empty, "Raw extraction carries no DataDelivery -- it is authored config, not catalog metadata.");
+
+        var original = new SqlServerTable
+        {
+            Name = "DeliveryRoundTripTable",
+            DataDelivery = [new DataDelivery { ContentFile = "DeliveryRoundTripTable.tabledata", MergeType = "Insert/Update" }]
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(extracted, original, _ => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(extracted.DataDelivery, Has.Count.EqualTo(1));
+            Assert.That(extracted.DataDelivery[0].ContentFile, Is.EqualTo("DeliveryRoundTripTable.tabledata"));
+            Assert.That(extracted.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
         });
 
         conn.Close();

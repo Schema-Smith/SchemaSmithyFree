@@ -95,8 +95,6 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
             THEN 'true' END AS [PreventDrop],
        '' AS [OldName],
-       '' AS [ContentFile],
-       'NONE' AS [MergeType],
        (SELECT 'true' AS [@json:Array],
                        '[' + c.COLUMN_NAME + ']' AS [Name],
                        UPPER(USER_TYPE) + SchemaSmith.fn_ColumnTypeArguments(USER_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION,

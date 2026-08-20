@@ -166,9 +166,6 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                           WHERE idx.indrelid = ('"' || t.table_schema || '"."' || t.table_name || '"')::regclass
                           ORDER BY i.relname) sub) AS "ExcludeConstraints",
                '' AS "ShouldApplyExpression",
-               '' AS "ContentFile",
-               'NONE' AS "MergeType",
-               TRUE AS "MergeUpdateDescendents",
                '' AS "OldName",
                rls.relrowsecurity AS "RowLevelSecurity",
                rls.relforcerowsecurity AS "ForceRowLevelSecurity",

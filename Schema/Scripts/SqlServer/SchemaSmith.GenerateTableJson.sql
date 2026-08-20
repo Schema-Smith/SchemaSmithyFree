@@ -41,9 +41,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
             THEN CAST(1 AS BIT) END AS [PreventDrop],
        '' AS [OldName],
-       '' AS [ContentFile],
-       'NONE' AS [MergeType],
-       (SELECT * 
+       (SELECT *
           FROM (SELECT '[' + c.COLUMN_NAME + ']' AS [Name],
                        UPPER(USER_TYPE) + SchemaSmith.fn_ColumnTypeArguments(USER_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION,
                                                CASE WHEN sc.xml_collection_id <> 0
