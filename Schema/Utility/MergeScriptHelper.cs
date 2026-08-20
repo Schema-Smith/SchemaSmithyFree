@@ -604,17 +604,23 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     /// <param name="updateDescendents">PostgreSQL only: whether to update descendant tables (omits ONLY keyword).</param>
     /// <param name="destSchemaOverride">When non-empty, used in place of <paramref name="schemaOrDb"/> for
     /// destination-side refs in the emitted script body (MERGE INTO / ALTER TABLE / IDENTITY_INSERT / SETVAL)
-    /// AND for the content-file token (which becomes unqualified — just <c>{{tableName.tabledata}}</c>).
-    /// Source-side catalog probes still use <paramref name="schemaOrDb"/>. Exists for DataTongs schema-template
-    /// extraction (design §8) where the caller passes <c>{{SchemaName}}</c> so the engine resolves the destination
-    /// schema at quench time. MySQL ignores the override (no schema-inside-database concept).</param>
+    /// AND for the content-file token (which becomes unqualified — just <c>{{tableName.tabledata}}</c>) when
+    /// <paramref name="contentFileToken"/> is not supplied. Source-side catalog probes still use
+    /// <paramref name="schemaOrDb"/>. Exists for DataTongs schema-template extraction (design §8) where the
+    /// caller passes <c>{{SchemaName}}</c> so the engine resolves the destination schema at quench time.
+    /// MySQL ignores the override (no schema-inside-database concept).</param>
+    /// <param name="contentFileToken">The exact <c>{{key}}</c> the content-file placeholder should embed
+    /// (e.g. <c>Sales.Widget.tabledata</c>). DataTongs computes this once — identical, by construction, to
+    /// the .tabledata filename stem it writes — and passes it here so the token can never drift from the
+    /// filename. When omitted (all callers other than DataTongs, none of which tokenize), the legacy
+    /// per-platform derivation below is used instead.</param>
     public static string BuildMergeScript(Platform platform, IDbCommand cmd,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
         bool disableRules = false, bool updateDescendents = false,
         string destSchemaOverride = null, int pgServerVersionNum = 0, int mySqlServerVersionNum = 0,
-        string contentEncoding = "Json")
+        string contentEncoding = "Json", string contentFileToken = null)
     {
         var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
 
@@ -638,14 +644,41 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
         return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, isXml),
+                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, isXml, contentFileToken),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum, isXml),
+                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum, isXml, contentFileToken),
             Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, mySqlTableData, keyColumns,
-                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, dataKeys, mySqlServerVersionNum),
+                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, dataKeys, mySqlServerVersionNum, contentFileToken),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
         };
     }
+
+    #endregion
+
+    #region Content-file token derivation (#390 — single source for filename stem and token key)
+
+    /// <summary>
+    /// The one derivation of a table's encoded, optionally schema-qualified display name — the
+    /// content-file filename stem, and (suffixed with ".tabledata" via <see cref="BuildContentFileToken"/>)
+    /// the ScriptTokens/content-file token key embedded in a tokenized merge script. Unqualified when
+    /// <paramref name="forceUnqualified"/> is set (DataTongs schema-template mode, or a per-engine
+    /// builder's destSchemaOverride) or <paramref name="schema"/> is empty; otherwise
+    /// "{encoded schema}.{encoded tableName}". DataTongs and every per-engine BuildMergeScript fallback
+    /// call this — do not re-derive either quantity anywhere else.
+    /// </summary>
+    public static string EncodeTableDisplayName(string schema, string tableName, bool forceUnqualified)
+    {
+        return forceUnqualified || string.IsNullOrEmpty(schema)
+            ? FileNameEncoder.Encode(tableName)
+            : $"{FileNameEncoder.Encode(schema)}.{FileNameEncoder.Encode(tableName)}";
+    }
+
+    /// <summary>
+    /// The content-file token key: <see cref="EncodeTableDisplayName"/> suffixed with ".tabledata" —
+    /// the same string DataTongs uses for the .tabledata filename stem, by construction.
+    /// </summary>
+    public static string BuildContentFileToken(string schema, string tableName, bool forceUnqualified)
+        => $"{EncodeTableDisplayName(schema, tableName, forceUnqualified)}.tabledata";
 
     #endregion
 
@@ -707,7 +740,7 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
     private static string BuildMergeScriptSqlServer(IDbCommand cmd, string tableSchema, string tableName,
         string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null, bool isXml = false)
+        string destSchemaOverride = null, bool isXml = false, string contentFileToken = null)
     {
         tableSchema = tableSchema.Trim().Trim('[', ']');
         tableName = tableName.Trim().Trim('[', ']');
@@ -733,12 +766,12 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
                              && IdentityColumnInJsonKeysSqlServer(cmd, tableSchema, tableName, jsonKeys);
         var jsonColumns = isXml ? null : GetJsonColumnDefinitionsSqlServer(cmd, tableSchema, tableName, jsonKeys);
 
-        // Content-file token: when destination is overridden, the .tabledata file is unqualified
-        // (DataTongs writes Customers.tabledata, not tenant_seed.Customers.tabledata in schema-
-        // template mode), so the token must match by name. Otherwise stays schema-qualified.
-        var contentToken = string.IsNullOrEmpty(destSchemaOverride)
-            ? $"{tableSchema}.{tableName}.tabledata"
-            : $"{tableName}.tabledata";
+        // Content-file token: DataTongs passes the exact key it wrote alongside the .tabledata filename
+        // (see MergeScriptHelper.BuildMergeScript's contentFileToken doc). The fallback below — the same
+        // shared derivation DataTongs itself uses — only serves callers that never tokenize (e.g.
+        // DataDeliveryProcessor), kept for backward compatibility.
+        var contentToken = contentFileToken
+            ?? BuildContentFileToken(tableSchema, tableName, !string.IsNullOrEmpty(destSchemaOverride));
         var contentValue = tokenizeScripts
             ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
@@ -1012,7 +1045,7 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
     private static string BuildMergeScriptPostgreSql(IDbCommand cmd, string tableSchema, string tableName,
         bool updateDescendents, string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool disableRules, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null, int pgServerVersionNum = 0, bool isXml = false)
+        string destSchemaOverride = null, int pgServerVersionNum = 0, bool isXml = false, string contentFileToken = null)
     {
         tableSchema = tableSchema.Trim().Trim('"');
         tableName = tableName.Trim().Trim('"');
@@ -1047,11 +1080,10 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
             ? GetRuleDisableEnableStatements(cmd, tableSchema, tableName, updateDescendents, destSchema)
             : ("", "");
 
-        // Content-file token: see SQL Server method — unqualified when destSchemaOverride is set
-        // so the token matches the unqualified filename DataTongs writes in schema-template mode.
-        var contentToken = string.IsNullOrEmpty(destSchemaOverride)
-            ? $"{tableSchema}.{tableName}.tabledata"
-            : $"{tableName}.tabledata";
+        // Content-file token: see SQL Server method — DataTongs passes the exact key it wrote, so
+        // the fallback derivation below (the same shared derivation) only serves non-tokenizing callers.
+        var contentToken = contentFileToken
+            ?? BuildContentFileToken(tableSchema, tableName, !string.IsNullOrEmpty(destSchemaOverride));
         var jsonValue = tokenizeScripts
             ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
@@ -1562,7 +1594,7 @@ SELECT c.column_name, c.udt_name
 
     private static string BuildMergeScriptMySql(IDbCommand cmd, string databaseName, string tableName,
         string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete, bool tokenizeScripts, string mergeFilter,
-        HashSet<string> jsonKeys, int mySqlServerVersionNum = 0)
+        HashSet<string> jsonKeys, int mySqlServerVersionNum = 0, string contentFileToken = null)
     {
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
@@ -1602,8 +1634,8 @@ SELECT c.column_name, c.udt_name
                     mergeUpdate ? updateColumns : null, keyColumns, payloadRows, columns, stringKeys, mergeFilter);
 
             var upsert = mergeUpdate
-                ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts)
-                : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts);
+                ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts, contentFileToken)
+                : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts, contentFileToken);
             var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonSource, keyColumns, mergeFilter, stringKeys);
             return upsert + "\n" + delete;
         }
@@ -1613,12 +1645,12 @@ SELECT c.column_name, c.udt_name
             if (chunked)
                 return BuildChunkedMergeMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource,
                     updateColumns, keyColumns, payloadRows, columns, null, null);
-            return BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts);
+            return BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts, contentFileToken);
         }
         if (chunked)
             return BuildChunkedMergeMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource,
                 null, keyColumns, payloadRows, columns, null, null);
-        return BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts);
+        return BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts, contentFileToken);
     }
 
     private static List<MySqlColumnInfo> GetColumnInfoMySql(IDbCommand cmd, string databaseName, string tableName, bool excludeAutoIncrement, HashSet<string> jsonKeys = null)
@@ -1825,7 +1857,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
 
     private static string BuildUpsertStatementMySql(string databaseName, string tableName,
         string insertColumns, string selectExpressions, string jsonSource, string updateColumns,
-        string tableData, string keyColumns, bool tokenizeScripts)
+        string tableData, string keyColumns, bool tokenizeScripts, string contentFileToken = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"INSERT INTO `{databaseName}`.`{tableName}` ({insertColumns})");
@@ -1835,7 +1867,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
         var keyColNames = ParseKeyColumnsMySql(keyColumns);
         sb.AppendLine(BuildUpsertClauseMySql(databaseName, tableName, insertColumns, updateColumns, keyColNames) + ";");
 
-        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts);
+        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts, contentFileToken);
     }
 
     // The ON DUPLICATE KEY UPDATE clause, shared by the single-statement and chunked paths so the two
@@ -1877,14 +1909,14 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
 
     private static string BuildInsertStatementMySql(string databaseName, string tableName,
         string insertColumns, string selectExpressions, string jsonSource,
-        string tableData, bool tokenizeScripts)
+        string tableData, bool tokenizeScripts, string contentFileToken = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"INSERT IGNORE INTO `{databaseName}`.`{tableName}` ({insertColumns})");
         sb.AppendLine($"SELECT {selectExpressions}");
         sb.AppendLine($"FROM {jsonSource};");
 
-        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts);
+        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts, contentFileToken);
     }
 
     // Emits the MariaDB 10.2-10.5 shred as one SET + statement pair per chunk, so the quadratic
@@ -1953,12 +1985,17 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
         return sb.ToString();
     }
 
-    private static string BuildWithJsonVariableMySql(string tableName, string tableData, string sqlStatement, bool tokenizeScripts)
+    private static string BuildWithJsonVariableMySql(string tableName, string tableData, string sqlStatement,
+        bool tokenizeScripts, string contentFileToken = null)
     {
         var sb = new StringBuilder();
         if (tokenizeScripts)
         {
-            sb.AppendLine($"SET @json_data = '{{{{{tableName}.tabledata}}}}';");
+            // DataTongs passes the exact key it wrote alongside the .tabledata filename; the fallback
+            // below (the same shared derivation, always unqualified — MySQL has no schema concept)
+            // only serves non-DataTongs callers.
+            var tokenKey = contentFileToken ?? BuildContentFileToken(null, tableName, forceUnqualified: true);
+            sb.AppendLine($"SET @json_data = '{{{{{tokenKey}}}}}';");
         }
         else
         {

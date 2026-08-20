@@ -187,6 +187,51 @@ public class MergeScriptHelperTests
 
     #endregion
 
+    #region EncodeTableDisplayName / BuildContentFileToken Tests (#390 — the single shared derivation)
+
+    [Test]
+    public void EncodeTableDisplayName_NonEmptySchema_NotForced_QualifiesWithSchema()
+    {
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("dbo", "Widget", forceUnqualified: false),
+            Is.EqualTo("dbo.Widget"));
+    }
+
+    [Test]
+    public void EncodeTableDisplayName_ForceUnqualified_IgnoresNonEmptySchema()
+    {
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("dbo", "Widget", forceUnqualified: true),
+            Is.EqualTo("Widget"));
+    }
+
+    [Test]
+    public void EncodeTableDisplayName_EmptySchema_UnqualifiesEvenWhenNotForced()
+    {
+        // The bug case: the old per-engine derivation only unqualified when an override was set,
+        // so an empty schema outside schema-template mode produced a leading-dot mismatch
+        // ("." + tableName) against the (correctly unqualified) filename. Empty schema must
+        // unqualify on its own, independent of forceUnqualified.
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("", "Widget", forceUnqualified: false),
+            Is.EqualTo("Widget"));
+    }
+
+    [Test]
+    public void EncodeTableDisplayName_NameNeedingEncoding_EncodesBothSchemaAndTable()
+    {
+        // The other bug case: the old per-engine derivation embedded raw names, disagreeing with
+        // the FileNameEncoder-encoded filename DataTongs writes.
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("Sales:Q1", "Report:Detail", forceUnqualified: false),
+            Is.EqualTo("Sales%3AQ1.Report%3ADetail"));
+    }
+
+    [Test]
+    public void BuildContentFileToken_AppendsTabledataSuffix()
+    {
+        Assert.That(MergeScriptHelper.BuildContentFileToken("dbo", "Widget", forceUnqualified: false),
+            Is.EqualTo("dbo.Widget.tabledata"));
+    }
+
+    #endregion
+
     #region GetKeyColumns Tests
 
     [Test]
@@ -421,6 +466,29 @@ public class MergeScriptHelperTests
             tokenizeScripts: true, mergeFilter: null);
 
         Assert.That(result, Does.Contain("{{dbo.TestTable.tabledata}}"));
+    }
+
+    [Test]
+    public void BuildMergeScript_SqlServer_WithTokenize_ContentFileTokenParameter_IsEmbeddedVerbatim()
+    {
+        // #390 "derive the key once": DataTongs computes the key alongside the .tabledata filename
+        // and passes it here; BuildMergeScript must embed exactly that value, not re-derive it.
+        var cmd = CreateSqlServerMockCommand(
+            jsonSelectCols: "[Id]",
+            needsIdentity: false,
+            jsonColDefs: "           [Id] INT",
+            insertCols: "        [Id]",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "dbo", "TestTable", "[{\"Id\":1}]", "[Id]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            contentFileToken: "Sales%3ATestTable.tabledata");
+
+        Assert.That(result, Does.Contain("{{Sales%3ATestTable.tabledata}}"));
+        Assert.That(result, Does.Not.Contain("{{dbo.TestTable.tabledata}}"),
+            "The passed-in token must win over the platform's own derivation.");
     }
 
     [Test]
@@ -709,6 +777,26 @@ public class MergeScriptHelperTests
     }
 
     [Test]
+    public void BuildMergeScript_PostgreSql_WithTokenize_ContentFileTokenParameter_IsEmbeddedVerbatim()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'id')::int4 AS \"id\"",
+            insertCols: "        \"id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "test_table", "[]", "\"id\"",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            contentFileToken: "Sales%3Atest_table.tabledata");
+
+        Assert.That(result, Does.Contain("{{Sales%3Atest_table.tabledata}}"));
+        Assert.That(result, Does.Not.Contain("{{public.test_table.tabledata}}"),
+            "The passed-in token must win over the platform's own derivation.");
+    }
+
+    [Test]
     public void BuildMergeScript_PostgreSql_XmlEncoding_EmitsXmltableRowSource()
     {
         var cmd = CreatePostgreSqlXmlMockCommand(
@@ -854,6 +942,47 @@ public class MergeScriptHelperTests
         Assert.That(result, Does.Contain("INSERT IGNORE INTO `testdb`.`testtable`"));
         Assert.That(result, Does.Contain("JSON_TABLE("));
         Assert.That(result, Does.Not.Contain("ON DUPLICATE KEY"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_WithTokenize_UsesTokenPlaceholder()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[{\"id\":1}]", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null);
+
+        // MySQL has no schema concept — always unqualified, unlike SQL Server/PostgreSQL's default.
+        Assert.That(result, Does.Contain("{{testtable.tabledata}}"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_WithTokenize_ContentFileTokenParameter_IsEmbeddedVerbatim()
+    {
+        // #390 "derive the key once": DataTongs computes the key alongside the .tabledata filename
+        // (through FileNameEncoder) and passes it here; BuildMergeScript must embed exactly that
+        // value rather than its own always-unqualified, always-unencoded derivation.
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[{\"id\":1}]", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            contentFileToken: "Sales%3AWidget.tabledata");
+
+        Assert.That(result, Does.Contain("{{Sales%3AWidget.tabledata}}"));
+        Assert.That(result, Does.Not.Contain("{{testtable.tabledata}}"),
+            "The passed-in token must win over the platform's own derivation.");
     }
 
     [Test]

@@ -19,16 +19,16 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
     public static IDataDeliveryConfigurator GetFromFactory()
         => FactoryContainer.ResolveOrCreate<IDataDeliveryConfigurator, DataDeliveryConfiguratorImpl>();
 
-    public void Configure(DataDeliveryConfiguratorContext context)
+    public bool Configure(DataDeliveryConfiguratorContext context)
     {
-        if (context == null) return;
+        if (context == null) return false;
 
         var tableJsonFile = FindTableJsonFile(context.TemplateRootPath, context.TableSchema, context.TableName);
         if (tableJsonFile == null)
         {
             var displayName = string.IsNullOrEmpty(context.TableSchema) ? context.TableName : $"{context.TableSchema}.{context.TableName}";
             context.WarningLog?.Invoke($"    Table.json not found for {displayName} in {Path.Combine(context.TemplateRootPath ?? "", "Tables")}. Skipping data delivery configuration.");
-            return;
+            return false;
         }
 
         var json = FileWrapper.GetFromFactory().ReadAllText(tableJsonFile);
@@ -45,7 +45,7 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
             {
                 context.WarningLog?.Invoke($"    DataDelivery for '{displayName}' is an authored array of gated variants and no VariantName was provided for this extraction, so the array was left untouched.");
                 context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (array of gated variants; no target VariantName).");
-                return;
+                return false;
             }
 
             var matches = array.OfType<JObject>()
@@ -56,14 +56,14 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
             {
                 context.WarningLog?.Invoke($"    DataDelivery variant '{context.VariantName}' was not found in the authored array for '{displayName}', so the array was left untouched (extraction never invents an ungated variant).");
                 context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (variant '{context.VariantName}' not found).");
-                return;
+                return false;
             }
 
             if (matches.Count > 1)
             {
                 context.WarningLog?.Invoke($"    DataDelivery variant '{context.VariantName}' matches {matches.Count} entries in the authored array for '{displayName}', so the array was left untouched (ambiguous reconciliation target).");
                 context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} left untouched (variant '{context.VariantName}' ambiguous).");
-                return;
+                return false;
             }
 
             delivery = matches[0];
@@ -119,6 +119,8 @@ public class DataDeliveryConfiguratorImpl : IDataDeliveryConfigurator
         {
             context.ProgressLog?.Invoke($"    Data delivery config for {context.TableName} is already up to date.");
         }
+
+        return true;
     }
 
     internal static string FindTableJsonFile(string templateRootPath, string tableSchema, string tableName)

@@ -99,14 +99,14 @@ The typical placement inside a schema package is `ScriptPath` pointing at `Templ
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `ShouldCast:OutputScripts` | bool | `true` | Generate merge scripts. When `false`, only `.tabledata` files are written. |
+| `ShouldCast:OutputScripts` | bool | `true` | Generate merge scripts. When `false`, only `.tabledata` files are written. Also skipped, per table, when `--ConfigureDataDelivery` actually configured delivery for that table -- see [Delivery takes precedence over merge scripts](#delivery-takes-precedence-over-merge-scripts). |
 | `ShouldCast:OutputContentFiles` | bool | `true` | Write raw data to sibling `.tabledata` content files. Set to `false` to skip writing content files (and, transitively, to skip `ConfigureDataDelivery` since the configurator needs a content file path to record). |
 | `ShouldCast:DisableTriggers` | bool | `false` | Wraps the generated script with platform-appropriate trigger disable/enable. |
 | `ShouldCast:MergeUpdate` | bool | `true` | Includes the update branch (matched rows whose data has changed). |
 | `ShouldCast:MergeDelete` | bool | `true` | Includes the delete branch (target rows missing from the source). On all four platforms: SQL Server / PostgreSQL emit `WHEN NOT MATCHED BY SOURCE THEN DELETE` inside the `MERGE`; MySQL and MariaDB emit an `INSERT ... ON DUPLICATE KEY UPDATE` followed by a separate `DELETE WHERE NOT EXISTS` step (because they have no `MERGE`). |
 | `ShouldCast:MergeType` | string | `Insert/Update` | Default `DataDelivery:MergeType` for tables that don't set it explicitly. Values: `None`, `Insert`, `Insert/Update`, `Insert/Update/Delete`. Used when writing `DataDelivery` blocks via `--ConfigureDataDelivery`. |
 | `ShouldCast:ConfigureDataDelivery` | bool | `false` | After extraction, write a `DataDelivery` block into each matching table's JSON file. See [--ConfigureDataDelivery](#--configuredatadelivery). |
-| `ShouldCast:TokenizeScripts` | bool | `true` | **SQL Server only.** Replaces the source database name with script tokens in the generated merge scripts, matching SchemaTongs' tokenization behavior. Set to `false` to disable tokenization and keep the literal database name in generated scripts. |
+| `ShouldCast:TokenizeScripts` | bool | `true` | **All source engines.** Embeds each table's extracted row data in the merge script as a `{{<table>.tabledata}}` content token instead of inline JSON/XML text, matching SchemaTongs' tokenization behavior. DataTongs wires the matching `ScriptTokens` entry automatically -- see [Content-file tokenization](#tokenizescripts). Set to `false` to inline the literal row data in generated scripts instead. |
 | `ShouldCast:DeliveryEncoding` | string | `Json` | `Xml` extracts each table's content in the XML delivery encoding (so a package can deploy on a legacy-compatibility SQL Server, below the `OPENJSON` cliff), on any source engine, and stamps `"ContentEncoding": "Xml"` on the configured `DataDelivery`. Also settable per run with `--DeliveryEncoding=Xml`. See [Delivery encoding](#delivery-encoding-xml-for-legacy-sql-server). |
 | `ShouldCast:DisableRules` | bool | `false` | **PostgreSQL only.** Wraps the delivery in `ALTER TABLE ... DISABLE RULE` / `ENABLE RULE`. |
 | `ShouldCast:UpdateDescendents` | bool | `true` | **PostgreSQL only.** When `false`, the generated `MERGE` uses `MERGE INTO ... ONLY` so partitioned-table writes do not propagate to descendant tables. |
@@ -455,6 +455,17 @@ When a table's config doesn't set `MergeType` explicitly, the default is derived
 
 A per-table `MergeType` on the `Tables[]` entry always wins over the derived default.
 
+### Delivery takes precedence over merge scripts
+
+`--ConfigureDataDelivery` and `ShouldCast:OutputScripts` both default to producing output, so without this rule a table would get delivered twice -- once through the `DataDelivery` block, once through a generated merge script carrying the same rows. When delivery is actually configured for a table this run, DataTongs does not also emit that table's merge script.
+
+The check is per table, not a global switch: `--ConfigureDataDelivery` can decline for an individual table (its `Tables/<name>.json` isn't found, or its `DataDelivery` is an authored array with no matching `VariantName`), and a table delivery never covered still gets its script normally. A table whose delivery genuinely was configured -- freshly written or already up to date -- is the only one that loses its script.
+
+DataTongs logs this once at startup, not per table (the per-table `Updated data delivery config for <table>` message already covers the detail):
+
+- If `OutputScripts` is left at its default, an informational line notes that scripts will be suppressed where delivery is configured.
+- If `OutputScripts` is set to `true` explicitly alongside `--ConfigureDataDelivery`, that is contradictory configuration -- DataTongs still applies the precedence rule (delivery wins) but logs a warning instead of an info line, since the explicit setting is being overridden.
+
 ## Delivery encoding (XML for legacy SQL Server)
 
 By default DataTongs extracts a table's data as a raw JSON array. On SQL Server, SchemaQuench delivers that with `OPENJSON` -- a path that requires **SQL Server compatibility level 130** (SQL Server 2016+). To produce a package that also deploys on an older SQL Server target (compatibility level 100--120), extract in the XML delivery encoding instead:
@@ -587,7 +598,12 @@ The unqualified filenames match the naming convention for table JSON files in a 
 
 ### TokenizeScripts
 
-`ShouldCast:TokenizeScripts` (SQL Server only) replaces the source database name with a script token in the generated merge scripts, matching SchemaTongs' tokenization behavior. In schema-template mode, both transformations apply in sequence: the database name is replaced with its token, and the source schema name is replaced with `{{SchemaName}}`. The two are orthogonal -- enabling `TokenizeScripts` in schema-template mode produces merge scripts with both a DB token and a `{{SchemaName}}` destination reference.
+`ShouldCast:TokenizeScripts` (default `true`, all four source engines -- `MergeScriptHelper` is the shared cross-platform helper, not a SQL-Server-specific one) controls how a table's extracted row data reaches the generated merge script:
+
+- **Tokenized (default).** The script embeds a `{{<table>.tabledata}}` content-file token instead of the literal row data, matching SchemaTongs' external-file tokenization convention. DataTongs writes the matching `ScriptTokens` entry into `Template.json` automatically, alongside writing the `.tabledata` file -- a `<*File*>`-tagged, template-relative path pointing at the file it just wrote. Re-running extraction is idempotent: an already-correct entry is left untouched, and a key that already exists with a different, non-DataTongs value (a deliberate hand-authored override) is left alone with a warning rather than silently overwritten. This is the key/filename identity DataTongs relies on: the token key is always identical to the `.tabledata` filename stem, by construction, so the two can never drift apart.
+- **Inline (`false`).** The script embeds the literal extracted JSON/XML text directly, with no external token or `ScriptTokens` entry needed.
+
+In schema-template mode, tokenization and the `{{SchemaName}}` destination-schema substitution are orthogonal and both apply: the content token is written unqualified (matching the unqualified `.tabledata` filename schema-template mode produces), and destination refs in the script body use `{{SchemaName}}`.
 
 ### Round-trip
 

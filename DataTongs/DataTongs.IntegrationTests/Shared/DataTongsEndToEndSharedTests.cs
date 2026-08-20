@@ -7,6 +7,7 @@ using System;
 using System.IO;
 using System.Linq;
 
+using System.Collections.Generic;
 using NUnit.Framework;
 using Schema.Utility;
 
@@ -144,6 +145,98 @@ public abstract class DataTongsEndToEndSharedTests
             Assert.That(reader.GetString(0), Is.EqualTo("A001"));
             Assert.That(reader.GetString(1), Is.EqualTo("Item One"));
             Assert.That(reader.GetDecimal(2), Is.EqualTo(100.50m));
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{sourceTable}`";
+            command.ExecuteNonQuery();
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{targetTable}`";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    // #390: the test that would have caught it. An "extraction succeeded" assertion is not enough --
+    // the bug was that the default (tokenized) merge script referenced a {{key}} placeholder with no
+    // resolvable ScriptTokens entry anywhere in the package, so the script itself was never
+    // deployable even though extraction reported success. This proves the token DataTongs embeds
+    // actually resolves, through the real resolver (SqlScript.TokenReplace -- the same method
+    // SqlScript.Load calls after resolving a <*File*> ScriptTokens entry) and actually deploys,
+    // landing the same data the non-tokenized path lands in EndToEnd_ExtractAndReapply_DataMatches.
+    [Test]
+    public void EndToEnd_TokenizedScript_TokenResolvesAndDeploys_MatchingNonTokenizedPath()
+    {
+        if (!TargetHasNativeJsonTable)
+            Assert.Ignore("Data delivery requires native JSON_TABLE (MySQL 8.0 / MariaDB 10.6); the CTE / gated paths are covered by the SchemaQuench delivery tests.");
+        using var command = _connection.CreateCommand();
+        var sourceTable = $"_e2e_tok_source_{Guid.NewGuid():N}".Substring(0, 30);
+        var targetTable = $"_e2e_tok_target_{Guid.NewGuid():N}".Substring(0, 30);
+
+        try
+        {
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{sourceTable}` (
+                    id INT PRIMARY KEY,
+                    code VARCHAR(20) NOT NULL
+                )";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"
+                INSERT INTO `{_testDb}`.`{sourceTable}` (id, code) VALUES
+                (1, 'A001'), (2, 'A002'), (3, 'A003')";
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"
+                CREATE TABLE `{_testDb}`.`{targetTable}` (
+                    id INT PRIMARY KEY,
+                    code VARCHAR(20) NOT NULL
+                )";
+            command.ExecuteNonQuery();
+
+            var selectColumns = _dataTongs.GetSelectColumns(command, _testDb, sourceTable);
+            var keyColumns = MergeScriptHelper.GetKeyColumns(Platform, command, _testDb, sourceTable);
+            var json = _dataTongs.GetTableDataJson(command, selectColumns, _testDb, sourceTable, keyColumns, null);
+
+            // DataTongs writes the content file under this exact name -- MySQL has no schema concept,
+            // so the key is unqualified and unencoded here (no characters FileNameEncoder would touch).
+            var contentFileToken = $"{targetTable}.tabledata";
+            var contentFile = Path.Combine(_testOutputDir, contentFileToken);
+            File.WriteAllText(contentFile, json);
+
+            // Same call DataTongs makes: tokenizeScripts:true, passing the exact key alongside the
+            // .tabledata filename so they can never disagree (#390's fix).
+            var script = MergeScriptHelper.BuildMergeScript(Platform, command, _testDb, targetTable, json, keyColumns,
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: true, mergeFilter: null, contentFileToken: contentFileToken);
+
+            Assert.That(script, Does.Contain($"{{{{{contentFileToken}}}}}"),
+                "The script must embed the same key the content file was written under.");
+
+            // Resolve the token through the real resolver -- the same SqlScript.TokenReplace method
+            // SqlScript.Load calls once TokenHelper.ResolveFileTokens has read the <*File*> path. This
+            // is the substitution a real deploy performs; skipping it (as --Validate does) is exactly
+            // what let #390 ship.
+            var resolvedScript = Schema.Domain.SqlScript.TokenReplace(script,
+                new List<KeyValuePair<string, string>> { new(contentFileToken, File.ReadAllText(contentFile)) },
+                Platform);
+
+            Assert.That(resolvedScript, Does.Not.Contain("{{" + contentFileToken + "}}"),
+                "The token must be fully resolved before execution.");
+
+            foreach (var batch in resolvedScript.Split(new[] { ";\r\n", ";\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                command.CommandText = batch;
+                command.ExecuteNonQuery();
+            }
+
+            command.CommandText = $"SELECT COUNT(*) FROM `{_testDb}`.`{targetTable}`";
+            var targetCount = Convert.ToInt32(command.ExecuteScalar());
+            Assert.That(targetCount, Is.EqualTo(3));
+
+            command.CommandText = $"SELECT code FROM `{_testDb}`.`{targetTable}` WHERE id = 1";
+            using var reader = command.ExecuteReader();
+            Assert.That(reader.Read(), Is.True);
+            Assert.That(reader.GetString(0), Is.EqualTo("A001"));
         }
         finally
         {
