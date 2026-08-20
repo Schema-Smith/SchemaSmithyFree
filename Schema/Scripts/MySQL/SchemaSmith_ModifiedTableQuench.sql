@@ -43,6 +43,58 @@ BEGIN
     -- wide table; raise the session limit so long clause lists aren't silently truncated.
     SET SESSION group_concat_max_len = 1000000;
 
+    -- =========================================================================
+    -- Degrade column DEFAULT expressions below MySQL 8.0.13 for EXISTING columns (new columns are
+    -- gated in MissingTableAndColumnQuench, which runs earlier in the same deploy). MariaDB has
+    -- supported expression defaults since 10.2.1 (MDEV-10134), at/below our 10.2 floor, so this branch
+    -- is MySQL-only. Below the threshold an existing plain-default column cannot legally acquire an
+    -- expression default -- a hard syntax error, not parsed-and-ignored -- so there is no safe partial
+    -- MODIFY: 'fail' aborts naming the column(s); 'warn' (default) skips the column's modification
+    -- entirely -- STEP 3 below excludes it via the identical predicate, leaving its current default in
+    -- place -- and records a 'downgraded' manifest row per column.
+    -- =========================================================================
+    IF SchemaSmith_SupportsDefaultExpression() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE t.NewTable = 0 AND c.NewColumn = 0
+                     AND c.IsAutoIncrement = 0
+                     AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+                     AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%') THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column DEFAULT expression unsupported (requires MySQL 8.0.13): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+            SET @ss_msg = CONCAT('Column DEFAULT expressions require MySQL 8.0.13 (detected ',
+                                 SchemaSmith_ServerVersionNum(), '); see the deploy log for the unsupported column(s).');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping column modification (DEFAULT expression requires MySQL 8.0.13 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (DEFAULT expression, MySQL 8.0.13)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+        END IF;
+    END IF;
+
     -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
     -- =======================
@@ -194,6 +246,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
               -- synonym so a hand-authored type that differs only by spacing/synonym is not a
@@ -243,6 +299,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
@@ -289,6 +349,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
               -- synonym so a hand-authored type that differs only by spacing/synonym is not a
@@ -341,6 +405,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
@@ -383,6 +451,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'

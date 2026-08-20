@@ -217,7 +217,10 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_SupportsFunctionalIndex (functional/expression-index availability predicate, MySQL
         // 8.0.13; MariaDB has no equivalent form — always 0. Gates the EXPRESSION-column read in
         // GenerateTableJson and both _SchemaSmith_IdxDetectSnap builds).
-        Assert.That(mysql.Length, Is.EqualTo(39));
+        // +1 = SchemaSmith_SupportsDefaultExpression (column DEFAULT-expression availability predicate,
+        // MySQL 8.0.13; MariaDB has supported it since 10.2.1 — at/below the floor, always 1. Gates the
+        // column-skip degrade in MissingTableAndColumnQuench / ModifiedTableQuench).
+        Assert.That(mysql.Length, Is.EqualTo(40));
     }
 
     [Test]
