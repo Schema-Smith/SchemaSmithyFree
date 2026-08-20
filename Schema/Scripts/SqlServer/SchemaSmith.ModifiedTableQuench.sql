@@ -297,6 +297,14 @@ BEGIN TRY
               END AS [SpecialColumnScript],
          CAST(CASE WHEN cc.[definition] IS NOT NULL OR RTRIM(ISNULL([ComputedExpression], '')) <> ''
                      OR (ident.column_id IS NULL AND [DataType] LIKE '%IDENTITY%') -- switching to identity... requires drop and recreate column
+                     -- A column set cannot be altered in place (Microsoft docs: "The column set column cannot
+                     -- be changed or renamed" -- ALTER COLUMN does not even accept the COLUMN_SET clause), so
+                     -- toggling a column into/out of being one goes through drop+recreate like the identity
+                     -- switch above. The recreate re-adds it via #Columns.ColumnScript (MissingTableAndColumnQuench),
+                     -- which already emits COLUMN_SET FOR ALL_SPARSE_COLUMNS correctly; if the table still has
+                     -- OTHER standalone sparse columns at that point, SQL Server's own ADD-time rejection fires --
+                     -- the same restriction a same-statement create-time deploy never hits (see the Parse twins).
+                     OR sc.is_column_set <> [IsColumnSet]
                    THEN 1 ELSE 0 END AS BIT) AS MustDropAndRecreate,
          CAST(CASE WHEN (ident.column_id IS NOT NULL AND [DataType] NOT LIKE '%IDENTITY%'
                         AND RTRIM(ISNULL([ComputedExpression], '')) = '') -- identity removal (data-preserving swap)
@@ -334,6 +342,7 @@ BEGIN TRY
         OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
         OR sc.is_sparse <> [Sparse]
+        OR sc.is_column_set <> [IsColumnSet]
         OR ISNULL(cm.ExistingMaskFn, '') COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
         OR ([Collation] <> 'IGNORE' AND ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') <> [Collation])
         OR ISNULL(cm.ExistingEncType, 'NONE') COLLATE DATABASE_DEFAULT <> [EncryptionType]

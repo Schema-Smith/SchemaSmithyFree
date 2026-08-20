@@ -76,7 +76,7 @@
                             ELSE REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP') END,
          [Nullable] = ISNULL(c.[Nullable], 0),
          c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
-         [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
+         [Sparse] = ISNULL(c.[Sparse], 0), [IsColumnSet] = ISNULL(c.[IsColumnSet], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
          [EncryptionType] = ISNULL(c.[EncryptionType], 'NONE'), [EncryptionKey] = RTRIM(ISNULL(c.[EncryptionKey], '')), [EncryptionAlgorithm] = RTRIM(ISNULL(c.[EncryptionAlgorithm], '')),
          [OldName] = SchemaSmith.fn_SafeBracketWrap(c.[OldName]),
          CONVERT(BIT, CASE WHEN (RTRIM(ISNULL([ComputedExpression], '')) <> '' OR NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1))
@@ -87,6 +87,9 @@
          SchemaSmith.fn_SafeBracketWrap(c.[ColumnName]) + ' ' +
          CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' THEN 'AS (' + ComputedExpression + ')' + CASE WHEN ISNULL(c.[Persisted], 0) = 1 THEN ' PERSISTED' ELSE '' END
                                                                                                      + CASE WHEN ISNULL(c.[Persisted], 0) = 1 AND ISNULL(c.[Nullable], 1) = 0 THEN ' NOT NULL' ELSE '' END
+              -- See the JSON twin (ParseTableJsonIntoTempTables.sql) for why a column set gets its own
+              -- branch instead of the COLLATE/SPARSE/MASKED/ENCRYPTED/NULL/DEFAULT chain below.
+              WHEN ISNULL([IsColumnSet], 0) = 1 THEN UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) + ' COLUMN_SET FOR ALL_SPARSE_COLUMNS'
               ELSE UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) +
                    CASE WHEN RTRIM(ISNULL([Collation], '')) NOT IN ('IGNORE', '') THEN ' COLLATE ' + [Collation] ELSE '' END +
                    CASE WHEN ISNULL([Sparse], 0) = 1 THEN ' SPARSE' ELSE '' END +
@@ -114,6 +117,7 @@
       [ComputedExpression] = col.value('(ComputedExpression/text())[1]', 'NVARCHAR(MAX)'),
       [Persisted] = CONVERT(BIT, CASE LOWER(col.value('(Persisted/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
       [Sparse] = CONVERT(BIT, CASE LOWER(col.value('(Sparse/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
+      [IsColumnSet] = CONVERT(BIT, CASE LOWER(col.value('(IsColumnSet/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
       [Collation] = col.value('(Collation/text())[1]', 'NVARCHAR(500)'),
       [DataMaskFunction] = col.value('(DataMaskFunction/text())[1]', 'NVARCHAR(500)'),
       [EncryptionType] = col.value('(EncryptionType/text())[1]', 'NVARCHAR(100)'),

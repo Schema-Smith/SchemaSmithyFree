@@ -68,7 +68,9 @@ CREATE FULLTEXT STOPLIST [SL_Test];";
         // A rich table exercising every array container: identity, computed+persisted, default, NOT NULL/NULL
         // mix, PK clustered, a nonclustered index with a DESC key + INCLUDE + filter, an FK with a referential
         // action, a user statistic, an XML column with primary + secondary XML indexes, a genuine table-level
-        // check (parent_column_id = 0), and a full-text index (the single-object, no-json:Array container).
+        // check (parent_column_id = 0), a full-text index (the single-object, no-json:Array container), and
+        // (backlog E3) a pair of sparse columns plus their COLUMN_SET FOR ALL_SPARSE_COLUMNS aggregator --
+        // the JSON/XML twin pairing the new IsColumnSet property must keep in lockstep.
         cmd.CommandText = @"
 CREATE TABLE dbo.Parent (Id INT NOT NULL PRIMARY KEY, Code VARCHAR(20) NOT NULL);
 CREATE UNIQUE INDEX UX_Parent_Code ON dbo.Parent (Code);
@@ -81,6 +83,8 @@ CREATE TABLE dbo.Rich (
     Computed AS (Amount * 2) PERSISTED,
     Flag BIT NOT NULL,
     Doc XML NULL,
+    SparseProp VARCHAR(20) SPARSE NULL,
+    SpecialCols XML COLUMN_SET FOR ALL_SPARSE_COLUMNS,
     CONSTRAINT PK_Rich PRIMARY KEY CLUSTERED (Id),
     CONSTRAINT CK_Rich_Amount CHECK (Amount >= 0),
     CONSTRAINT CK_Rich_Table CHECK (Amount < 100000 OR Name IS NOT NULL),

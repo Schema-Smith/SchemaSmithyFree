@@ -455,6 +455,46 @@ CREATE TABLE dbo.TestFractionalSecondsPrecision (
     }
 
     [Test]
+    public void ShouldExtractColumnSetAndSparseColumns()
+    {
+        // Backlog E3: COLUMN_SET FOR ALL_SPARSE_COLUMNS aggregates a table's sparse columns into one
+        // updatable XML column. Both halves of the pairing must round-trip: the sparse columns keep
+        // Sparse:true, and the aggregator gets the new IsColumnSet:true (not folded into DataType, so it
+        // extracts as plain "XML" -- see SqlServerColumn.IsColumnSet).
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.TestColumnSet (
+    MyInt INT NOT NULL PRIMARY KEY,
+    SparseA VARCHAR(20) SPARSE NULL,
+    SparseB INT SPARSE NULL,
+    Aggregated XML COLUMN_SET FOR ALL_SPARSE_COLUMNS
+)
+";
+        cmd.ExecuteNonQuery();
+        var result = GenerateTable(cmd, "dbo", "TestColumnSet");
+        Assert.That(result.Columns, Has.Count.EqualTo(4));
+
+        var sparseA = (SqlServerColumn)result.Columns.Single(c => c.Name == "[SparseA]");
+        var sparseB = (SqlServerColumn)result.Columns.Single(c => c.Name == "[SparseB]");
+        var aggregated = (SqlServerColumn)result.Columns.Single(c => c.Name == "[Aggregated]");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sparseA.Sparse, Is.True, "SparseA must extract as Sparse:true");
+            Assert.That(sparseA.IsColumnSet, Is.False, "SparseA is not itself the column set");
+            Assert.That(sparseB.Sparse, Is.True, "SparseB must extract as Sparse:true");
+            Assert.That(sparseB.IsColumnSet, Is.False, "SparseB is not itself the column set");
+            Assert.That(aggregated.IsColumnSet, Is.True, "Aggregated must extract as IsColumnSet:true");
+            Assert.That(aggregated.Sparse, Is.False, "the column set column is not itself sparse");
+            Assert.That(aggregated.DataType, Is.EqualTo("XML"), "the column set is an XML column -- COLUMN_SET FOR ALL_SPARSE_COLUMNS is carried by IsColumnSet, not folded into DataType");
+        });
+
+        conn.Close();
+    }
+
+    [Test]
     public void ShouldFilterInternalExtendedProperties()
     {
         using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);

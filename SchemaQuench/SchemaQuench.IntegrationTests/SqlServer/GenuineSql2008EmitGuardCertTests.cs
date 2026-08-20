@@ -187,5 +187,51 @@ END";
             Assert.That(ex!.Message, Does.Contain("requires SQL Server"),
                 "the fail policy must abort naming the required version on a genuine old target");
         }
+
+        // Backlog E3 (column sets): unlike the four features above, sparse columns / COLUMN_SET FOR
+        // ALL_SPARSE_COLUMNS are 2008-floor -- no degrade should ever fire for them. This is the one proof
+        // point only a genuine pre-2016 binary can give: the XML ingest path (ParseTableXmlIntoTempTables,
+        // the twin most likely to be missed when a JSON-only change is made) must emit the SAME
+        // `COLUMN_SET FOR ALL_SPARSE_COLUMNS` clause as the modern JSON path, with no downgrade recorded.
+        [Test]
+        public void SparseColumnsAndColumnSet_OnGenuine2008_DeployCleanly_NoDegrade()
+        {
+            using var conn = KindleScratch2008("Cert2008ColSet", policy: "warn");
+            using var cmd = conn.CreateCommand();
+
+            var json = """
+[
+  {
+    "Schema": "[dbo]", "Name": "[Cert_ColSet]",
+    "Columns": [
+      {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+      {"Name": "[SparseA]", "DataType": "VARCHAR(20)", "Nullable": true, "Sparse": true},
+      {"Name": "[Aggregated]", "DataType": "XML", "Nullable": true, "IsColumnSet": true}
+    ]
+  }
+]
+""";
+            var xml = ModelXmlSerializer.ToIngestXml(json, "Tables", "Table");
+            cmd.CommandTimeout = 600;
+            cmd.CommandText =
+                "EXEC SchemaSmith.TableQuench @ProductName = 'Cert2008ColSet', @TableDefinitions = @xml, " +
+                "@WhatIf = 0, @DropTablesRemovedFromProduct = 0, @DropUnknownIndexes = 0";
+            var p = cmd.CreateParameter();
+            p.ParameterName = "@xml";
+            p.Value = xml;
+            p.DbType = DbType.String;
+            cmd.Parameters.Add(p);
+
+            Assert.DoesNotThrow(() => cmd.ExecuteNonQuery(),
+                "sparse columns + a column set are 2008-floor and must deploy cleanly via the XML ingest path");
+            cmd.Parameters.Clear();
+
+            Assert.That(Scalar(cmd, "SELECT is_sparse FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Cert_ColSet') AND name = 'SparseA'"),
+                Is.EqualTo(1), "SparseA must be created SPARSE on genuine 2008");
+            Assert.That(Scalar(cmd, "SELECT is_column_set FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Cert_ColSet') AND name = 'Aggregated'"),
+                Is.EqualTo(1), "Aggregated must be created as the column set on genuine 2008");
+            Assert.That(Scalar(cmd, "SELECT COUNT(*) FROM SchemaSmith.ChangeAudit WHERE ActionType = 'downgraded' AND ObjectName LIKE '%Cert_ColSet%'"),
+                Is.EqualTo(0), "sparse/column-set is 2008-floor -- no downgrade should ever be recorded for it");
+        }
     }
 }

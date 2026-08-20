@@ -101,7 +101,7 @@
                             ELSE REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP') END,
          [Nullable] = ISNULL(c.[Nullable], 0),
          c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
-         [Sparse] = ISNULL(c.[Sparse], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')), 
+         [Sparse] = ISNULL(c.[Sparse], 0), [IsColumnSet] = ISNULL(c.[IsColumnSet], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
          [EncryptionType] = ISNULL(c.[EncryptionType], 'NONE'), [EncryptionKey] = RTRIM(ISNULL(c.[EncryptionKey], '')), [EncryptionAlgorithm] = RTRIM(ISNULL(c.[EncryptionAlgorithm], '')),
          [OldName] = SchemaSmith.fn_SafeBracketWrap(c.[OldName]),
          CONVERT(BIT, CASE WHEN (RTRIM(ISNULL([ComputedExpression], '')) <> '' OR NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1))
@@ -115,10 +115,18 @@
          -- For computed columns only the expression is needed
          CASE WHEN RTRIM(ISNULL([ComputedExpression], '')) <> '' THEN 'AS (' + ComputedExpression + ')' + CASE WHEN ISNULL(c.[Persisted], 0) = 1 THEN ' PERSISTED' ELSE '' END
                                                                                                      + CASE WHEN ISNULL(c.[Persisted], 0) = 1 AND ISNULL(c.[Nullable], 1) = 0 THEN ' NOT NULL' ELSE '' END
+              -- A column set is an aggregating XML column: no COLLATE/SPARSE/MASKED/ENCRYPTED/NULL/DEFAULT
+              -- clause is legal on it, and SQL Server only accepts adding one (a) at CREATE TABLE time or
+              -- (b) via ALTER TABLE in the SAME statement as the sparse columns it aggregates -- both of
+              -- which this proc already satisfies by batching a table's new columns into one CREATE/ADD
+              -- (see MissingTableAndColumnQuench.sql). A column set added to a table that already has
+              -- standalone sparse columns from a prior deploy is left to the engine's own (clear) rejection
+              -- rather than pre-validated here.
+              WHEN ISNULL([IsColumnSet], 0) = 1 THEN UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) + ' COLUMN_SET FOR ALL_SPARSE_COLUMNS'
               -- Otherwise build the column definition
-              ELSE UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) + 
-                   CASE WHEN RTRIM(ISNULL([Collation], '')) NOT IN ('IGNORE', '') THEN ' COLLATE ' + [Collation] ELSE '' END +                   
-                   CASE WHEN ISNULL([Sparse], 0) = 1 THEN ' SPARSE' ELSE '' END +                   
+              ELSE UPPER(REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP')) +
+                   CASE WHEN RTRIM(ISNULL([Collation], '')) NOT IN ('IGNORE', '') THEN ' COLLATE ' + [Collation] ELSE '' END +
+                   CASE WHEN ISNULL([Sparse], 0) = 1 THEN ' SPARSE' ELSE '' END +
                    -- MASKED WITH / ENCRYPTED WITH are 2016 (major 13). The column DDL is assembled here at parse
                    -- time, so this is the one place the create-path emit is suppressed below the floor;
                    -- DegradeUnsupportedFeatures reports the downgrade and neutralizes the source columns for the
@@ -142,6 +150,7 @@
       [ComputedExpression] NVARCHAR(MAX) '$.ComputedExpression',
       [Persisted] BIT '$.Persisted',
       [Sparse] BIT '$.Sparse',
+      [IsColumnSet] BIT '$.IsColumnSet',
       [Collation] NVARCHAR(500) '$.Collation',
       [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction',
       [EncryptionType] NVARCHAR(100) '$.EncryptionType',
