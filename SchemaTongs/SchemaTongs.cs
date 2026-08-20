@@ -2642,7 +2642,12 @@ SELECT 'Events' AS Folder,
                COALESCE('\n    ENDS ''' || ENDS || '''', '')
        END ||
        '\n  ON COMPLETION ' || CASE WHEN ON_COMPLETION = 'PRESERVE' THEN 'PRESERVE' ELSE 'NOT PRESERVE' END ||
-       '\n  ' || STATUS ||
+       '\n  ' || CASE STATUS
+           WHEN 'ENABLED' THEN 'ENABLE'
+           WHEN 'DISABLED' THEN 'DISABLE'
+           WHEN 'SLAVESIDE_DISABLED' THEN 'DISABLE ON SLAVE'
+           ELSE 'UNRECOGNIZED_EVENT_STATUS_' || STATUS
+       END ||
        CASE WHEN NULLIF(EVENT_COMMENT, '') IS NOT NULL THEN '\n  COMMENT ''' || REPLACE(EVENT_COMMENT, '''', '''''') || '''' ELSE '' END ||
        '\n  DO ' || EVENT_DEFINITION || ' //\nDELIMITER ;' AS Code
   FROM INFORMATION_SCHEMA.EVENTS
