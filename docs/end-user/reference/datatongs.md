@@ -263,7 +263,7 @@ When auto-detection discovers a nullable column in a unique index, it automatica
 The `Filter` field accepts a SQL `WHERE` clause (without the `WHERE` keyword). It controls two things:
 
 1. **Which rows are extracted** from the source database
-2. **Which target rows are eligible for deletion** when `MergeDelete` is enabled (SQL Server / PostgreSQL)
+2. **Which target rows are eligible for deletion** when `MergeDelete` is enabled (every engine -- see [`MergeDelete`](#mergedelete) for the per-engine form)
 
 ```json
 { "Name": "dbo.FeatureFlags", "KeyColumns": "FlagName", "Filter": "IsActive = 1" }
