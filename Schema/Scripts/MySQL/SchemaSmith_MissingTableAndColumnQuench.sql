@@ -333,7 +333,10 @@ BEGIN
         -- collate / nullability / generated / auto_increment / comment). DEFAULT is intentionally OMITTED:
         -- the subsequent ModifiedTableQuench pass reconciles the column to its desired default in the same
         -- deploy, which sidesteps the cross-engine COLUMN_DEFAULT-quoting divergence (MySQL 5.7 returns
-        -- string defaults unquoted, MariaDB/8.0 quoted) and keeps the rename data-preserving.
+        -- string defaults unquoted, MariaDB/8.0 quoted) and keeps the rename data-preserving. INVISIBLE
+        -- (MySQL 8.0.23 / MariaDB 10.3) is omitted for the same reason and reconciled the same way -- see
+        -- InvisibleColumnGatingTests.RenameOfInvisibleColumnNullableNoDefault_InRenameColumnFallbackBand_VisibilityPredicateAloneRestoresInvisible,
+        -- which isolates that predicate and reddens if it's removed.
         INSERT INTO _SchemaSmith_ColRenameStmts (Stmt)
         SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
                       GROUP_CONCAT(

@@ -419,6 +419,7 @@ The schema model itself parses on every supported version — a version-agnostic
 | **Index rename** (`RENAME INDEX`) | MariaDB 10.5.2 (MySQL 5.7 has it) | drops and recreates the index under the new name from its live definition (same end state) |
 | **CHECK constraints** | MySQL 8.0.16 (MariaDB: at the 10.2 floor) | emits the table *without* the check + records a downgrade (MySQL 5.7 parses-and-ignores CHECK, so it can neither be created nor detected) |
 | **Invisible index** (`INVISIBLE`; MariaDB `IGNORED`) | MySQL 8.0 / MariaDB 10.6 | stores the index *visible* — the visibility clause is suppressed — + records a downgrade. The modified-index compare ignores the visibility difference below the floor, so re-deploys stay idempotent instead of churning the index every run |
+| **Invisible column** (`Column.Invisible`) | MySQL 8.0.23 / MariaDB 10.3 | stores the column *visible* — the `INVISIBLE` clause is suppressed — + records a downgrade. The modified-column compare ignores the visibility difference below the floor, so re-deploys stay idempotent instead of churning the column every run |
 | **Descending index key parts** (`… DESC`) | MySQL 8.0 / MariaDB 10.8 | stores the key part ascending (the engine silently does so anyway) + records a downgrade |
 | **Automatic table-data delivery** | MySQL 8.0 | on MariaDB 10.2 uses a recursive-CTE shred (full support); below the MySQL floor, skips delivery with a clear log — use manual data scripts |
 
@@ -433,6 +434,7 @@ Within that shared family, three DDL surfaces diverge between the two engines:
 | Feature | MySQL | MariaDB |
 |---------|-------|---------|
 | **Invisible indexes** | `INVISIBLE` keyword; visibility read back from `INFORMATION_SCHEMA.STATISTICS.IS_VISIBLE` | No `INVISIBLE` keyword -- an index is hidden with `CREATE INDEX … IGNORED`; visibility read back from the inverted `INFORMATION_SCHEMA.STATISTICS.IGNORED` column (`'YES'` = ignored/invisible) |
+| **Invisible columns -- NOT NULL default requirement** | Permits `col INT NOT NULL INVISIBLE` with no `DEFAULT` | Rejects a `NOT NULL INVISIBLE` column with no `DEFAULT` (engine error 4108, "must have a default value") -- give it a `Default`, or leave it nullable, to deploy the same package on both engines. SchemaSmith does not pre-validate this; the engine's own error passes through unmodified |
 | **Dropping CHECK constraints** | `ALTER TABLE … DROP CHECK name` (MySQL 8.0.16+) | Rejects `DROP CHECK` -- uses the generic `ALTER TABLE … DROP CONSTRAINT name` |
 | **Column-default normalization** | Canonical form -- no normalization needed | `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` reports differently: quotes string literals, emits a literal `NULL` marker for a no-default nullable column, and adds parens to function defaults (`current_timestamp()`); SchemaSmith folds these back to the MySQL canonical form so an unchanged column doesn't phantom-modify on every deploy |
 

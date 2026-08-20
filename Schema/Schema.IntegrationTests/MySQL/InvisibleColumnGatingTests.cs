@@ -101,6 +101,12 @@ public class InvisibleColumnGatingTests
 
     private void DropTestTable() => Exec($"DROP TABLE IF EXISTS `{_testDb}`.`{TableName}`");
 
+    // The secret column carries a DEFAULT so the fixture is portable across both engines: MariaDB
+    // rejects a NOT NULL INVISIBLE column with no DEFAULT (error 4108 -- see
+    // NotNullInvisibleColumnWithoutDefault_IsRejectedByEngine in the MariaDb test file, where that
+    // divergence is pinned deliberately), MySQL does not. The DEFAULT is incidental to what these tests
+    // are actually about (Invisible surviving extraction / visibility drift), so it is fixed at a
+    // constant value here rather than becoming part of what any individual test varies.
     private static string BuildTableJson(bool invisible)
     {
         var table = new MySqlTable
@@ -110,7 +116,7 @@ public class InvisibleColumnGatingTests
             Columns =
             [
                 new MySqlColumn { Name = "`id`", DataType = "INT", Nullable = false, AutoIncrement = true },
-                new MySqlColumn { Name = "`secret`", DataType = "INT", Nullable = false, Invisible = invisible }
+                new MySqlColumn { Name = "`secret`", DataType = "INT", Nullable = false, Invisible = invisible, Default = "0" }
             ],
             Indexes =
             [
