@@ -514,7 +514,9 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 
 ### SQL Server column extras
 
-`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `Collation`, `DataMaskFunction`. Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
+`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`. Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
+
+`IsColumnSet: true` declares `COLUMN_SET FOR ALL_SPARSE_COLUMNS` -- an XML column that aggregates the table's sparse columns. Available at the SQL Server 2008 floor, alongside `Sparse`. Adding a column set and the sparse columns it aggregates together in one deploy always works, whether the table is new or already exists. **Known limitation:** converting an *already-deployed* plain column into a column set in the same deploy that also introduces a brand-new sparse column is not supported -- the new sparse column commits before the conversion runs, and SQL Server refuses a column set on a table that already has a sparse column. The conversion works on its own (no new sparse columns in the same deploy, and none pre-existing on the table); combined with a new sparse column, it fails with SQL Server's own error.
 
 ### PostgreSQL column extras
 

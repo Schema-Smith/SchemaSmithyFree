@@ -300,10 +300,18 @@ BEGIN TRY
                      -- A column set cannot be altered in place (Microsoft docs: "The column set column cannot
                      -- be changed or renamed" -- ALTER COLUMN does not even accept the COLUMN_SET clause), so
                      -- toggling a column into/out of being one goes through drop+recreate like the identity
-                     -- switch above. The recreate re-adds it via #Columns.ColumnScript (MissingTableAndColumnQuench),
-                     -- which already emits COLUMN_SET FOR ALL_SPARSE_COLUMNS correctly; if the table still has
-                     -- OTHER standalone sparse columns at that point, SQL Server's own ADD-time rejection fires --
-                     -- the same restriction a same-statement create-time deploy never hits (see the Parse twins).
+                     -- switch above. The recreate re-adds it via THIS proc's own "Add Missing Physical Columns"
+                     -- step (below), reusing the same #Columns.[ColumnScript] expression the earlier, separate
+                     -- MissingTableAndColumnQuench phase builds new columns from -- but the two phases run as
+                     -- two SEPARATE statements in two SEPARATE proc calls (SchemaSmith.TableQuench.sql:24-25),
+                     -- never batched together. Confirmed (not assumed): a genuinely-new sparse column declared
+                     -- in the SAME quench as a conversion is already physically committed by
+                     -- MissingTableAndColumnQuench.sql's "Add New Physical Columns" step BEFORE this proc even
+                     -- starts, so by the time this drop+recreate's ADD runs, the table already has a sparse
+                     -- column -- SQL Server rejects it ("... because the table already contains one or more
+                     -- sparse columns"), the same restriction a table with sparse columns from a prior deploy
+                     -- hits. This is a real limitation of the two-phase quench design, not pre-validated or
+                     -- special-cased here -- see TableQuench_ColumnSetTests.cs for the covered/uncovered shapes.
                      OR sc.is_column_set <> [IsColumnSet]
                    THEN 1 ELSE 0 END AS BIT) AS MustDropAndRecreate,
          CAST(CASE WHEN (ident.column_id IS NOT NULL AND [DataType] NOT LIKE '%IDENTITY%'
