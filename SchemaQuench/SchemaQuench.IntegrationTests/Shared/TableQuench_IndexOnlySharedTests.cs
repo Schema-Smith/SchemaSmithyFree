@@ -701,6 +701,72 @@ public abstract class TableQuench_IndexOnlySharedTests
     }
 
     [Test]
+    public void IndexOnlyQuench_SpatialIndex_IsIdempotent_AcrossRepeatedDeploys()
+    {
+        // Regression coverage for the hazard specific to SPATIAL indexes: MySQL/MariaDB report a phantom
+        // SUB_PART (always 32, not a declared prefix length) for a spatial key part. If the catalog-snapshot
+        // builds render that phantom value the same way they render a real prefix, the declared (bare
+        // `pt`) and catalog (`pt`(32)) forms never match, and the index is dropped + recreated on every
+        // single deploy -- on all four engines, since SPATIAL is not MySQL-8.0-only like the tests above.
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"ALTER TABLE `{_testDb}`.`{_testTableName}` ADD COLUMN pt POINT NOT NULL";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CREATE SPATIAL INDEX `idx_spatial_stable` ON `{_testDb}`.`{_testTableName}` (`pt`)";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $@"
+            INSERT INTO `{MainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
+            VALUES ('TestProduct', '', '{_testDb}', 'INDEX', '{_testTableName}.idx_spatial_stable')";
+        command.ExecuteNonQuery();
+
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_spatial_stable`"",
+                    ""IndexColumns"": ""`pt`"",
+                    ""Unique"": false,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""SPATIAL""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        // Act - first pass may legitimately do work. The SECOND pass must do nothing at all -- that
+        // convergence is exactly what an unguarded phantom SUB_PART breaks.
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        command.CommandText = "DELETE FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID()";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        // Assert - no rebuild/rename status line on the re-deploy.
+        command.CommandText = $@"
+            SELECT COUNT(*) FROM SchemaSmith_StatusMessages
+            WHERE SessionId = CONNECTION_ID()
+              AND (Message LIKE '%Drop and recreate index%' OR Message LIKE '%Create index%' OR Message LIKE '%Rename index%')";
+        var actionCount = Convert.ToInt32(command.ExecuteScalar());
+        Assert.That(actionCount, Is.EqualTo(0),
+            "A spatial index that already matches the declared definition must be left alone on a re-deploy -- " +
+            "an unguarded phantom SUB_PART in the catalog snapshot would show up here as a spurious rebuild on every pass.");
+
+        command.CommandText = $@"
+            SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_spatial_stable'";
+        var subPart = Convert.ToInt32(command.ExecuteScalar());
+        Assert.That(subPart, Is.EqualTo(32),
+            "The spatial index must survive re-deploy -- SUB_PART stays the engine's own phantom value (32), " +
+            "which SchemaSmith must never treat as a declared prefix to reconcile.");
+    }
+
+    [Test]
     public void IndexOnlyQuench_ShouldModifyIndex_WhenColumnsChange()
     {
         // Arrange - Create an index on just 'code'

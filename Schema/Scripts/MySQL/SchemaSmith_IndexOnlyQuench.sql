@@ -101,7 +101,8 @@ BEGIN
                GROUP_CONCAT(
                    CASE WHEN s.COLUMN_NAME IS NOT NULL THEN
                        CONCAT('`', s.COLUMN_NAME, '`',
-                              IF(s.SUB_PART IS NOT NULL, CONCAT('(', s.SUB_PART, ')'), ''),
+                              -- SPATIAL's SUB_PART is a phantom internal value (always 32), not a declared prefix; exclude it or spatial indexes never converge
+                              IF(s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL', CONCAT('(', s.SUB_PART, ')'), ''),
                               CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
                    ELSE
                        CONCAT('(', REGEXP_REPLACE(
@@ -123,7 +124,7 @@ BEGIN
                CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
                GROUP_CONCAT(
                    CONCAT('`', s.COLUMN_NAME, '`',
-                          IF(s.SUB_PART IS NOT NULL, CONCAT('(', s.SUB_PART, ')'), ''),
+                          IF(s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL', CONCAT('(', s.SUB_PART, ')'), ''),
                           CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
                    ORDER BY s.SEQ_IN_INDEX
                    SEPARATOR ','
