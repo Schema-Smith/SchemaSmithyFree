@@ -581,6 +581,126 @@ public abstract class TableQuench_IndexOnlySharedTests
     }
 
     [Test]
+    public void IndexOnlyQuench_ShouldAddMultiValuedIndex_OverJsonArrayColumn()
+    {
+        // A multi-valued index (MySQL 8.0.17+) is still just a functional key part -- NULL COLUMN_NAME,
+        // populated EXPRESSION -- so it rides the same SchemaSmith_SupportsFunctionalIndex() gate as any
+        // other functional index; there is no dedicated gate to check (see SchemaSmith_SupportsFunctionalIndex.sql).
+        // MariaDB has no equivalent feature at all.
+        if (Platform == Platform.MariaDb)
+            Assert.Ignore("Multi-valued indexes are a MySQL 8.0.17+ feature; MariaDB has no equivalent form.");
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"ALTER TABLE `{_testDb}`.`{_testTableName}` ADD COLUMN attrs JSON";
+        command.ExecuteNonQuery();
+
+        // Arrange - authored with JSON_EXTRACT rather than the col->'$.path' shorthand: MySQL rewrites
+        // -> to json_extract(...) when it stores the key part, so the shorthand never appears in the
+        // catalog and would never converge on a re-deploy. Authoring with the canonical function-call
+        // form (what extraction actually reports) is the form that round-trips.
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_multi_tags`"",
+                    ""IndexColumns"": ""(cast(json_extract(`attrs`,'$.tags') as char(20) array))"",
+                    ""Unique"": false,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""BTREE""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        // Assert - the key part landed as a multi-valued functional one (NULL COLUMN_NAME, populated
+        // EXPRESSION retaining the ARRAY cast).
+        command.CommandText = $@"
+            SELECT COLUMN_NAME, EXPRESSION FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}'
+              AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_multi_tags'";
+        using var reader = command.ExecuteReader();
+        Assert.That(reader.Read(), Is.True, "Multi-valued index should have been created");
+        Assert.Multiple(() =>
+        {
+            Assert.That(reader["COLUMN_NAME"], Is.EqualTo(DBNull.Value), "A multi-valued key part has no column name.");
+            Assert.That(Convert.ToString(reader["EXPRESSION"]), Does.Contain("array").IgnoreCase,
+                "The multi-valued expression key part must be readable back from the catalog, retaining its ARRAY cast.");
+        });
+    }
+
+    [Test]
+    public void IndexOnlyQuench_MultiValuedIndex_IsIdempotent_AcrossRepeatedDeploys()
+    {
+        // Regression coverage for the hazard specific to multi-valued indexes: every multi-valued key
+        // part carries a mandatory JSON-path string literal (CAST(col->'$.path' AS ... ARRAY) has no
+        // form without one), and MySQL prefixes that literal with a charset introducer (_utf8mb4'...')
+        // when it stores EXPRESSION -- the same reformatting already stripped from CHECK_CLAUSE. Left
+        // unstripped on the index side, the declared (introducer-free) and catalog (introducer-bearing)
+        // forms would never match, and the index would be dropped + recreated on every single deploy.
+        if (Platform == Platform.MariaDb)
+            Assert.Ignore("Multi-valued indexes are a MySQL 8.0.17+ feature; MariaDB has no equivalent form.");
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"ALTER TABLE `{_testDb}`.`{_testTableName}` ADD COLUMN attrs JSON";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CREATE INDEX `idx_multi_stable` ON `{_testDb}`.`{_testTableName}` ((cast(json_extract(`attrs`,'$.tags') as char(20) array)))";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $@"
+            INSERT INTO `{MainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
+            VALUES ('TestProduct', '', '{_testDb}', 'INDEX', '{_testTableName}.idx_multi_stable')";
+        command.ExecuteNonQuery();
+
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_multi_stable`"",
+                    ""IndexColumns"": ""(cast(json_extract(`attrs`,'$.tags') as char(20) array))"",
+                    ""Unique"": false,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""BTREE""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        // Act - first pass may legitimately do work. The SECOND pass must do nothing at all.
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        command.CommandText = "DELETE FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID()";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        // Assert - no rebuild/rename status line on the re-deploy.
+        command.CommandText = $@"
+            SELECT COUNT(*) FROM SchemaSmith_StatusMessages
+            WHERE SessionId = CONNECTION_ID()
+              AND (Message LIKE '%Drop and recreate index%' OR Message LIKE '%Create index%' OR Message LIKE '%Rename index%')";
+        var actionCount = Convert.ToInt32(command.ExecuteScalar());
+        Assert.That(actionCount, Is.EqualTo(0),
+            "A multi-valued index that already matches the declared definition must be left alone on a re-deploy -- " +
+            "an unstripped charset-introducer mismatch between the declared text and the catalog snapshot would show up here as a spurious rebuild on every pass.");
+
+        command.CommandText = $@"
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_multi_stable'";
+        var columnName = command.ExecuteScalar();
+        Assert.That(columnName, Is.EqualTo(DBNull.Value), "The multi-valued key part must survive re-deploy.");
+    }
+
+    [Test]
     public void IndexOnlyQuench_ShouldModifyIndex_WhenColumnsChange()
     {
         // Arrange - Create an index on just 'code'

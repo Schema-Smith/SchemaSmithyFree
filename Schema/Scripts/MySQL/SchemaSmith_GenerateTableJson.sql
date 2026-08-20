@@ -112,6 +112,31 @@ BEGIN
     -- shape), so the unreached branch's EXPRESSION reference is never bound on an engine that lacks it.
     -- The expression is wrapped in one extra paren pair, matching what MySQL's own SHOW CREATE TABLE
     -- renders for a functional key part -- the form a user hand-authoring the JSON would recognize.
+    -- EXPRESSION also carries a charset-introducer prefix (e.g. _latin1'...', _utf8mb4'...' -- it
+    -- reflects the connection charset in effect when the index was CREATEd, so it is not a fixed
+    -- value) on any string literal -- the same MySQL re-serialization quirk already stripped from
+    -- CHECK_CLAUSE below, generalized here to any introducer rather than an enumerated list. AND,
+    -- confirmed live (unlike SHOW CREATE TABLE, which does not do this): EXPRESSION additionally
+    -- backslash-escapes that literal's quotes, e.g. _latin1\'$.tags\' -- so a two-pass clean is
+    -- needed: (1) turn every backslash-escaped quote into a plain quote (a targeted `\'`-to-`'`
+    -- substitution via CHAR(92)/CHAR(39), NOT a blanket backslash strip -- a JSON path or literal
+    -- may legitimately contain an unrelated backslash, and destroying it would corrupt the compare
+    -- more subtly than the bug being fixed here), THEN (2) strip the now-plainly-quoted introducer.
+    -- Stripped so a multi-valued key part's mandatory JSON-path literal (CAST(col->'$.path' AS ...
+    -- ARRAY) always carries one) round-trips clean instead of leaving internal charset/escaping
+    -- noise the user never typed, which would otherwise never match the declared side and rebuild
+    -- forever. Applies to any functional index whose expression contains a string literal, not just
+    -- a multi-valued one -- lower(`name`) (C1-1's test case) has none, which is why it never surfaced
+    -- this. Applied identically at both _SchemaSmith_IdxDetectSnap builds so drift comparison converges.
+    -- REGEXP_REPLACE (MySQL 8.0.4+) IS safe here despite the 5.7 floor: this whole branch only
+    -- executes when SchemaSmith_SupportsFunctionalIndex() = 1 (8.0.13+), and MySQL stored-routine
+    -- bodies are not semantically validated at CREATE time -- function-name resolution, like the
+    -- EXPRESSION column reference above, is deferred to the execution of whichever branch actually
+    -- runs, so REGEXP_REPLACE compiles fine into an unreached branch on 5.7/MariaDB. This differs
+    -- from SchemaSmith_StripLeadingSelect.sql and the CHECK_CLAUSE case in ParseTableJson.sql: both
+    -- of those run unconditionally on every target regardless of version, so REGEXP_REPLACE there
+    -- would actually be invoked on 5.7 and fail -- an execution-time constraint, not a compile-time
+    -- one, and not the situation here.
     IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
         SELECT CONCAT('[', IFNULL(GROUP_CONCAT(idx_json SEPARATOR ','), ''), ']') INTO v_indexes
         FROM (
@@ -128,7 +153,9 @@ BEGIN
                             CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
                         )
                     ELSE
-                        CONCAT('(', s.EXPRESSION, ')',
+                        CONCAT('(', REGEXP_REPLACE(
+                            REPLACE(s.EXPRESSION, CONCAT(CHAR(92), CHAR(39)), CHAR(39)),
+                            '_[A-Za-z0-9]+''', ''''), ')',
                             CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
                         )
                     END

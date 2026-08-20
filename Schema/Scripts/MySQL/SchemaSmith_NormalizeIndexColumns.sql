@@ -16,9 +16,13 @@ BEGIN
     -- Normalizes an index column list for comparison. Canonical per-key-part form, comma-separated:
     -- `ColumnName`(SubPart) DESC for a plain column -- backtick-wrapped name, then (n) only when a prefix
     -- length was declared, then DESC only when the target actually stores descending key parts -- or
-    -- (expression) DESC for a functional/expression key part (MySQL 8.0.13+), carrying the parenthesized
-    -- expression verbatim: exactly what INFORMATION_SCHEMA.STATISTICS.EXPRESSION reports, which is also
-    -- what SHOW CREATE TABLE renders. Both the declared side (here) and the catalog-snapshot side
+    -- (expression) DESC for a functional/expression key part (MySQL 8.0.13+, including a multi-valued
+    -- CAST(col->'$.path' AS type ARRAY) index -- MySQL 8.0.17+, same NULL-COLUMN_NAME/EXPRESSION shape,
+    -- no dedicated handling needed), carrying the parenthesized expression verbatim: exactly what
+    -- INFORMATION_SCHEMA.STATISTICS.EXPRESSION reports (with its charset-introducer noise -- e.g.
+    -- _latin1'...' or _utf8mb4'...', varying with the connection charset in effect when the index
+    -- was CREATEd -- already stripped, see GenerateTableJson.sql), which is also what SHOW CREATE
+    -- TABLE renders. Both the declared side (here) and the catalog-snapshot side
     -- (SchemaSmith_IndexOnlyQuench.sql / SchemaSmith_MissingIndexesAndConstraintsQuench.sql
     -- _SchemaSmith_IdxDetectSnap builds) must produce this exact form or the comparison never converges.
     --

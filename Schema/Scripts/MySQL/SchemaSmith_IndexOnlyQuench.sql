@@ -87,7 +87,11 @@ BEGIN
     -- SchemaSmith_IndexIsVisible / SchemaSmith_SnapshotIndexVisibility for the same IS_VISIBLE-below-8.0
     -- shape), so the unreached branch's EXPRESSION reference is never bound on an engine that lacks it.
     -- Must produce the exact same per-key-part form as SchemaSmith_NormalizeIndexColumns and
-    -- GenerateTableJson (one extra paren pair around the expression) or the compare below never converges.
+    -- GenerateTableJson (one extra paren pair around the expression, charset-introducer noise AND
+    -- the backslash-escaped quotes EXPRESSION carries around a literal's quotes both stripped the
+    -- same two-pass way via REGEXP_REPLACE -- safe here despite the 5.7 floor because this branch
+    -- only executes at 8.0.13+ and never on 5.7/MariaDB; see GenerateTableJson.sql for the full
+    -- explanation) or the compare below never converges.
     IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
         INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
         SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
@@ -100,7 +104,9 @@ BEGIN
                               IF(s.SUB_PART IS NOT NULL, CONCAT('(', s.SUB_PART, ')'), ''),
                               CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
                    ELSE
-                       CONCAT('(', s.EXPRESSION, ')',
+                       CONCAT('(', REGEXP_REPLACE(
+                           REPLACE(s.EXPRESSION, CONCAT(CHAR(92), CHAR(39)), CHAR(39)),
+                           '_[A-Za-z0-9]+''', ''''), ')',
                               CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
                    END
                    ORDER BY s.SEQ_IN_INDEX

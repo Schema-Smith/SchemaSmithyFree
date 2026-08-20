@@ -19,6 +19,13 @@ BEGIN
   --     tradeoff SchemaSmith_SupportsCheckConstraints makes for its 8.0.16 intro.
   --   * MariaDB: no equivalent in this form -- a MariaDB "functional index" is a regular index on a
   --     generated/virtual column, which extraction already reports as a plain column. Always 0.
+  --   * Multi-valued indexes (CAST(col->'$.path' AS type ARRAY)) are a functional key part too --
+  --     same NULL COLUMN_NAME / populated EXPRESSION shape -- so they ride this same gate rather than
+  --     needing one of their own. Their true floor is MySQL 8.0.17, one patch band above this gate's
+  --     8.0.13, but ServerVersionNum()'s major*100+minor granularity can't see either patch number, so
+  --     a dedicated gate would just re-derive this exact same value with no added precision. 8.0.13-16
+  --     is an accepted out-of-scope edge for multi-valued indexes specifically, the same tradeoff this
+  --     gate already accepts for 8.0.0-8.0.12 on plain functional indexes.
   RETURN IF(VERSION() LIKE '%MariaDB%', 0, IF(SchemaSmith_ServerVersionNum() >= 800, 1, 0));
 END //
 
