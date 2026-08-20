@@ -238,11 +238,11 @@ Control exactly what gets cast from the database. Each object type can be indivi
 | `Rules` | `true` | Rules attached to tables and views |
 | `MaterializedViews` | `true` | Materialized view definitions as JSON files |
 
-### MySQL only
+### MySQL and MariaDB
 
 | Flag | Default | What It Extracts |
 |---|---|---|
-| `Events` | `true` | MySQL scheduled events |
+| `Events` | `true` | Scheduled events |
 
 ---
 

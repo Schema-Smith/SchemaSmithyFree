@@ -265,6 +265,19 @@ When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills
 | `Table Data/` | TableData | — |
 | `After Scripts/` | After | — |
 
+### MariaDB default folders
+
+| Folder | Quench Slot | Object Type |
+|---|---|---|
+| `Before Scripts/` | Before | — |
+| `Events/` | Objects | Events |
+| `Functions/` | Objects | Functions |
+| `Procedures/` | Objects | Procedures |
+| `Triggers/` | AfterTablesObjects | Triggers |
+| `Views/` | AfterTablesObjects | Views |
+| `Table Data/` | TableData | — |
+| `After Scripts/` | After | — |
+
 Tables are always loaded from `Tables/` regardless of platform. SQL Server adds `Indexed Views/`; PostgreSQL adds `Materialized Views/`. These are not script folders -- they hold structured JSON object definitions, not `.sql` files.
 
 ---
@@ -450,6 +463,20 @@ Each platform's table definition extends the shared properties with engine-speci
 | `Comment` | string | `null` | Table comment. |
 | `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MySQL clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MySQL supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
+
+### MariaDB (`MySqlTable`)
+
+MariaDB tables carry the same property set as MySQL and are deserialized through the same `MySqlTable` wrapper -- there is no separate MariaDB table type.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Engine` | string | `"InnoDB"` | Storage engine. |
+| `RowFormat` | string | `null` | Row format: `"DYNAMIC"`, `"COMPACT"`, `"COMPRESSED"`, or `"REDUNDANT"`. |
+| `CharacterSet` | string | `null` | Default character set for the table. |
+| `Collation` | string | `null` | Default collation for the table. |
+| `Comment` | string | `null` | Table comment. |
+| `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MariaDB clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
+| `FullTextIndexes` | array | `[]` | Full-text index definitions (MariaDB supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
 
 ### Minimal example (PostgreSQL)
 
