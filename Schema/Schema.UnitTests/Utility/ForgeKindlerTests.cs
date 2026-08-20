@@ -220,7 +220,11 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_SupportsDefaultExpression (column DEFAULT-expression availability predicate,
         // MySQL 8.0.13; MariaDB has supported it since 10.2.1 — at/below the floor, always 1. Gates the
         // column-skip degrade in MissingTableAndColumnQuench / ModifiedTableQuench).
-        Assert.That(mysql.Length, Is.EqualTo(40));
+        // +1 = SchemaSmith_SupportsInvisibleColumn (invisible-column availability predicate, MySQL 8.0.23 /
+        // MariaDB 10.3 — the INVISIBLE keyword itself is the same on both engines, only the introduction
+        // version differs. Gates the INVISIBLE clause ParseTableJson bakes into ColumnScript and the
+        // modified-column visibility compare in ModifiedTableQuench).
+        Assert.That(mysql.Length, Is.EqualTo(41));
     }
 
     [Test]

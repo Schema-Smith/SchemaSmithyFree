@@ -95,6 +95,48 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- Degrade invisible columns below MySQL 8.0.23 / MariaDB 10.3 for EXISTING columns (new columns are
+    -- gated in MissingTableAndColumnQuench, which runs earlier in the same deploy). Below the threshold
+    -- the INVISIBLE keyword is a hard syntax error, so ColumnScript never emits it there -- the MODIFY
+    -- COLUMN emitted below (STEP 3) is still syntactically valid, it just leaves the column visible -- and
+    -- STEP 3's predicate ignores the visibility difference so the deploy stays idempotent. This block only
+    -- adds the user-facing report: 'fail' aborts naming the column(s); 'warn' (default) records a
+    -- 'downgraded' manifest row per column.
+    -- =========================================================================
+    IF SchemaSmith_SupportsInvisibleColumn() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE t.NewTable = 0 AND c.NewColumn = 0
+                     AND c.IsInvisible = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsInvisible = 1;
+            SET @ss_msg = 'Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column stored visible (requires MySQL 8.0.23 / MariaDB 10.3 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsInvisible = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (invisible, MySQL 8.0.23 / MariaDB 10.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsInvisible = 1;
+        END IF;
+    END IF;
+
     -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
     -- =======================
@@ -279,6 +321,12 @@ BEGIN
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
           );
 
         -- #363: WhatIf twin of the ELSE-branch 'column'/'modified' audit; same source/predicate, wouldModify.
@@ -321,6 +369,12 @@ BEGIN
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
           );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Modify columns');
@@ -382,6 +436,12 @@ BEGIN
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
           );
 
         -- Object-change audit (#243 E5): one row per column about to be modified. Same join +
@@ -427,6 +487,12 @@ BEGIN
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
           );
 
         -- Materialize: fold each table's column modifications into one multi-clause ALTER, then drain.
@@ -473,6 +539,12 @@ BEGIN
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
           )
         GROUP BY c.TableName;
 

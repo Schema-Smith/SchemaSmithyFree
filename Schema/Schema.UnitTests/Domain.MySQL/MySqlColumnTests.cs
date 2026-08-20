@@ -27,6 +27,7 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(column.CharacterSet, Is.Null);
             Assert.That(column.Collation, Is.Null);
             Assert.That(column.Comment, Is.Null);
+            Assert.That(column.Invisible, Is.False);
         }
 
         [Test]
@@ -44,7 +45,8 @@ namespace Schema.UnitTests.Domain.MySQL
                 Collation = "utf8mb4_unicode_ci",
                 Comment = "Full name computed column",
                 ShouldApplyExpression = "SELECT 1",
-                OldName = "desc"
+                OldName = "desc",
+                Invisible = true
             };
 
             var json = JsonConvert.SerializeObject(column);
@@ -55,6 +57,7 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(deserialized.CharacterSet, Is.EqualTo("utf8mb4"));
             Assert.That(deserialized.Collation, Is.EqualTo("utf8mb4_unicode_ci"));
             Assert.That(deserialized.Comment, Is.EqualTo("Full name computed column"));
+            Assert.That(deserialized.Invisible, Is.True);
         }
 
         [Test]

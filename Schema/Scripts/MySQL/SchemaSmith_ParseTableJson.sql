@@ -160,6 +160,7 @@ BEGIN
         CharacterSet VARCHAR(50) DEFAULT NULL,
         Collation VARCHAR(100) DEFAULT NULL,
         CheckExpression TEXT DEFAULT NULL,
+        IsInvisible TINYINT DEFAULT 0,
         OldName VARCHAR(128) DEFAULT NULL,
         NewColumn TINYINT DEFAULT 0,
         ColumnScript TEXT DEFAULT NULL,
@@ -181,7 +182,7 @@ BEGIN
                 INSERT INTO _SchemaSmith_Columns (
                     TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue,
                     IsAutoIncrement, GeneratedExpression, GeneratedType,
-                    CharacterSet, Collation, CheckExpression, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
+                    CharacterSet, Collation, CheckExpression, IsInvisible, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
                 )
                 SELECT
                     SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Name')))) AS TableName,
@@ -196,6 +197,7 @@ BEGIN
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].CharacterSet'))) AS CharacterSet,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Collation'))) AS Collation,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].CheckExpression'))) AS CheckExpression,
+                    COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Invisible'))), 0) AS IsInvisible,
                     -- #375: blank/whitespace OldName -> NULL (no rename), same as the table-level OldName above.
                     SchemaSmith_SafeBacktickWrap(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].OldName')))), '')) AS OldName,
                     0 AS NewColumn,
@@ -239,6 +241,12 @@ BEGIN
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Build column scripts');
 
     -- Build ColumnScript for each column
+    -- The trailing INVISIBLE clause is appended OUTSIDE the generated/regular CASE so it applies to
+    -- either form uniformly, mirroring how SchemaSmith_IndexInvisibleClause is appended after an
+    -- index's column list rather than folded into it. Gated behind SchemaSmith_SupportsInvisibleColumn():
+    -- below MySQL 8.0.23 / MariaDB 10.3 the keyword is a hard syntax error, so suppressing it here (rather
+    -- than at each of the CREATE TABLE / ADD COLUMN / MODIFY COLUMN emit sites that consume ColumnScript)
+    -- is the single point that keeps a declared invisible column safely degrading to visible everywhere.
     UPDATE _SchemaSmith_Columns
     SET ColumnScript = CONCAT(
         ColumnName, ' ',
@@ -265,7 +273,8 @@ BEGIN
                                    ELSE DefaultValue END)
                          ELSE '' END
                 )
-        END
+        END,
+        CASE WHEN IsInvisible = 1 AND SchemaSmith_SupportsInvisibleColumn() = 1 THEN ' INVISIBLE' ELSE '' END
     );
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Calculate generated column dependencies');

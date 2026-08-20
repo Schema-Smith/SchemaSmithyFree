@@ -81,6 +81,12 @@ BEGIN
                 ELSE CONVERT(CONCAT('''', REPLACE(CONVERT(SchemaSmith_NormalizeColumnDefault(c.COLUMN_DEFAULT) USING utf8mb4), '''', ''''''), '''') USING utf8mb4)
             END,
             'AutoIncrement', CASE WHEN c.EXTRA LIKE '%auto_increment%' THEN TRUE ELSE FALSE END,
+            -- EXTRA is a single column shared by both engines and predates the invisible-column feature,
+            -- so (unlike SchemaSmith_IndexIsVisible's IS_VISIBLE/IGNORED divergence, which required a
+            -- per-engine wrapper to avoid binding a column that doesn't exist below its floor) reading it
+            -- here is safe on every version: below MySQL 8.0.23 / MariaDB 10.3 the INVISIBLE marker simply
+            -- never appears, so the LIKE is always false there -- no version gate needed at extraction time.
+            'Invisible', CASE WHEN c.EXTRA LIKE '%INVISIBLE%' THEN TRUE ELSE FALSE END,
             'Generated', CASE
                 WHEN c.EXTRA LIKE '%VIRTUAL GENERATED%' THEN 'VIRTUAL'
                 WHEN c.EXTRA LIKE '%STORED GENERATED%' THEN 'STORED'

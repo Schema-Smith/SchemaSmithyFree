@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.ComponentModel;
 using Newtonsoft.Json;
 
 namespace Schema.Domain.MySQL
@@ -27,5 +28,12 @@ namespace Schema.Domain.MySQL
 
         [JsonProperty(Order = 106)]
         public string CheckExpression { get; set; }
+
+        // Mirrors MySqlIndex.Visible one level down (index -> column): hides the column from
+        // SELECT * / INSERT-without-column-list. MySQL 8.0.23 / MariaDB 10.3 — see
+        // SchemaSmith_SupportsInvisibleColumn.
+        [JsonProperty(Order = 107)]
+        [DefaultValue(false)]
+        public bool Invisible { get; set; }
     }
 }

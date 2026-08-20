@@ -125,6 +125,48 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- Degrade invisible columns below MySQL 8.0.23 / MariaDB 10.3 (mirrors the invisible-index guard in
+    -- MissingIndexesAndConstraintsQuench, one level down). Below the threshold the INVISIBLE keyword is a
+    -- hard syntax error, so ColumnScript (built in ParseTableJson) never emits it there -- the column is
+    -- created visible instead, which is the safe degrade; the CREATE TABLE and ADD COLUMN emit sites below
+    -- need no exclusion for it. This block only adds the user-facing report: 'fail' aborts naming the
+    -- offending column(s); 'warn' (default) records a 'downgraded' manifest row per column so a
+    -- silently-visible column stays discoverable.
+    -- =========================================================================
+    IF SchemaSmith_SupportsInvisibleColumn() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+                     AND c.IsInvisible = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsInvisible = 1;
+            SET @ss_msg = 'Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column stored visible (requires MySQL 8.0.23 / MariaDB 10.3 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsInvisible = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (invisible, MySQL 8.0.23 / MariaDB 10.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsInvisible = 1;
+        END IF;
+    END IF;
+
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
 
