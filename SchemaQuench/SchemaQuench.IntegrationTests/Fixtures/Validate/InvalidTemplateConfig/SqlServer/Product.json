@@ -1,0 +1,11 @@
+{
+  "Name": "InvalidTemplateConfigProduct",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [
+    "Main",
+    "Secondary"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}

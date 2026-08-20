@@ -1,0 +1,8 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT 1",
+  "ScriptFolders": [],
+  "ScriptTokens": {
+    "TemplateSeed": "<*File*>data/template-seed.sql"
+  }
+}

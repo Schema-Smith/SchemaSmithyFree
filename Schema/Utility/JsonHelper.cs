@@ -69,13 +69,15 @@ public static class JsonHelper
         return WithFileContext(filePath, () => PlatformDeserializer.DeserializeTable(text, platform));
     }
 
-    public static Template TemplateLoad(string filePath, Platform platform)
+    // missingMemberHandling defaults to Error (deploy path, unchanged) — PackageLoader passes
+    // Ignore for --Validate, mirroring ProductLoad's existing leniency parameter above.
+    public static Template TemplateLoad(string filePath, Platform platform, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
     {
         if (!ProductFileWrapper.GetFromFactory().Exists(filePath))
             throw new Exception($"File {filePath} does not exist");
 
         var text = ProductFileWrapper.GetFromFactory().ReadAllText(filePath);
-        return WithFileContext(filePath, () => PlatformDeserializer.DeserializeTemplate(text, platform));
+        return WithFileContext(filePath, () => PlatformDeserializer.DeserializeTemplate(text, platform, missingMemberHandling));
     }
 
     // Every JsonHelper load path funnels through here so a JSON parse/member failure — including

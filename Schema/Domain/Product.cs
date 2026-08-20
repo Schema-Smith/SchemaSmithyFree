@@ -101,6 +101,16 @@ namespace Schema.Domain
         public Dictionary<string, string> NonQueryTokens { get; set; } = [];
 
         /// <summary>
+        /// File-token resolution failures collected instead of thrown when <see cref="Load"/> is
+        /// called with <c>tolerateFileTokenErrors: true</c> (--Validate's lenient load). Empty on
+        /// the deploy path, which never tolerates an unresolvable file token. Mirrors
+        /// <see cref="Template.FileTokenErrors"/> — PackageLoader turns each entry into an
+        /// SS-TOK-004 finding.
+        /// </summary>
+        [JsonIgnore]
+        public List<FileTokenError> FileTokenErrors { get; } = [];
+
+        /// <summary>
         /// Loads a Product from a Product.json file path for display purposes only.
         /// Does NOT resolve tokens or load scripts. Use Load() (config-based) for runtime use.
         /// </summary>
@@ -123,7 +133,13 @@ namespace Schema.Domain
         /// re-validates the raw Product.json against products.*.schema and reports SS-JSON-001 for
         /// the property regardless of which way this loaded.
         /// </param>
-        public static Product Load(MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
+        /// <param name="tolerateFileTokenErrors">
+        /// Deploy path leaves this false: an unresolvable <c>ScriptTokens</c> file reference
+        /// throws immediately and aborts the run, same as always. `--Validate` (PackageLoader)
+        /// passes true so the failure lands in <see cref="FileTokenErrors"/> as a reportable
+        /// finding instead of aborting the whole load.
+        /// </param>
+        public static Product Load(MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error, bool tolerateFileTokenErrors = false)
         {
             var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
             var schemaPackagePath = config[SettingsKeys.SchemaPackagePath] ?? "";
@@ -141,7 +157,9 @@ namespace Schema.Domain
             var product = JsonHelper.ProductLoad(productFilePath, missingMemberHandling);
             product.FilePath = productFilePath;
             OverrideProductScriptTokens(config, product);
-            TokenHelper.ResolveFileTokens(product.ScriptTokens, schemaPackagePath, product.Platform);
+            var tokenErrors = TokenHelper.ResolveFileTokens(product.ScriptTokens, schemaPackagePath, product.Platform, tolerateFileTokenErrors);
+            foreach (var tokenError in tokenErrors)
+                product.FileTokenErrors.Add(new FileTokenError(product.FilePath, tokenError));
             product.ScriptTokens.Add("ProductName", product.Name);
 
             product.InstanceLoad();

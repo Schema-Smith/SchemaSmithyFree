@@ -187,6 +187,16 @@ namespace Schema.Domain
         [JsonIgnore]
         public List<ComponentLoadError> ComponentLoadErrors { get; } = [];
 
+        /// <summary>
+        /// File-token resolution failures collected instead of thrown when <see cref="Load"/> is
+        /// called with <c>tolerateFileTokenErrors: true</c> (--Validate's lenient load). Empty on
+        /// the deploy path, which never tolerates an unresolvable file token. Mirrors
+        /// <see cref="Product.FileTokenErrors"/> — PackageLoader turns each entry into an
+        /// SS-TOK-004 finding.
+        /// </summary>
+        [JsonIgnore]
+        public List<FileTokenError> FileTokenErrors { get; } = [];
+
         [JsonIgnore]
         public string TableSchema { get; set; } = "";
 
@@ -354,6 +364,16 @@ namespace Schema.Domain
             return clone;
         }
 
+        // Single source of truth for the "Templates/<name>/Template.json" on-disk convention —
+        // Load() uses it to locate the file, and PackageLoader uses it independently (via
+        // TryLoadTemplate) to name a template whose Load() call threw before ever returning a
+        // Template instance, so there's no loaded object to read FilePath off of.
+        internal static string GetTemplateFilePath(Product product, string templateName)
+        {
+            var schemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
+            return Path.Combine(schemaPackagePath, "Templates", templateName, "Template.json");
+        }
+
         /// <summary>
         /// Loads a Template and its Tables from disk using platform-aware deserialization.
         /// Resolves file tokens, merges product + template tokens, loads scripts, and applies token replacement.
@@ -368,13 +388,27 @@ namespace Schema.Domain
         /// produce. JsonSchemaCheck re-validates every package file straight off disk regardless
         /// of what loaded here, so the excluded file's precise SS-JSON-001 finding still surfaces.
         /// </param>
-        public static Template Load(string templateName, Product product, bool tolerateComponentLoadErrors = false)
+        /// <param name="tolerateFileTokenErrors">
+        /// Deploy path leaves this false: an unresolvable <c>ScriptTokens</c> file reference
+        /// throws immediately and aborts the template load, same as always. `--Validate`
+        /// (PackageLoader) passes true so the failure lands in <see cref="FileTokenErrors"/> as a
+        /// reportable finding instead of aborting the load.
+        /// </param>
+        /// <param name="missingMemberHandling">
+        /// Deploy path leaves this at the default (Error) so an unrecognised Template.json property
+        /// still stops the run. `--Validate` (PackageLoader) passes Ignore instead — the same
+        /// leniency <see cref="Product.Load"/> already has for Product.json — so a parseable-but-
+        /// wrong Template.json loads fully (full check coverage for that template) instead of
+        /// excluding the whole template over one bad property; JsonSchemaCheck independently
+        /// re-validates the raw file and reports the precise SS-JSON-001 regardless of which way
+        /// this loaded.
+        /// </param>
+        public static Template Load(string templateName, Product product, bool tolerateComponentLoadErrors = false, bool tolerateFileTokenErrors = false, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
         {
-            var schemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
-            var templatePath = Path.Combine(schemaPackagePath, "Templates", templateName);
-            var templateFilePath = Path.Combine(templatePath, "Template.json");
+            var templateFilePath = GetTemplateFilePath(product, templateName);
+            var templatePath = Path.GetDirectoryName(templateFilePath) ?? "";
 
-            var template = JsonHelper.TemplateLoad(templateFilePath, product.Platform);
+            var template = JsonHelper.TemplateLoad(templateFilePath, product.Platform, missingMemberHandling);
             template.FilePath = templateFilePath;
             template.Product = product;
 
@@ -388,7 +422,9 @@ namespace Schema.Domain
             foreach (var token in template.ScriptTokens)
                 template.LoggableTokens.Add(token.Key, token.Value);
 
-            TokenHelper.ResolveFileTokens(template.ScriptTokens, templatePath, product.Platform);
+            var tokenErrors = TokenHelper.ResolveFileTokens(template.ScriptTokens, templatePath, product.Platform, tolerateFileTokenErrors);
+            foreach (var tokenError in tokenErrors)
+                template.FileTokenErrors.Add(new FileTokenError(template.FilePath, tokenError));
 
             // Merge template and product script tokens — template takes precedence
             var scriptTokens = template.ScriptTokens

@@ -30,7 +30,12 @@ public static class TokenHelper
     public const string SpecificMaterializedViewXmlTag = "<*SpecificMaterializedViewXml*>";
     public const string SpecificIndexedViewXmlTag = "<*SpecificIndexedViewXml*>";
 
-    public static void ResolveFileTokens(Dictionary<string, string> tokens, string basePath, Platform platform)
+    // tolerateErrors: deploy path leaves this false — an unresolvable file token throws
+    // immediately, same as always. `--Validate` (PackageLoader) passes true so a missing/unreadable
+    // file is returned in the errors list instead of aborting the load; the token keeps its
+    // original unresolved "<*File*>..." literal, which is harmless on the validate-only path since
+    // nothing downstream executes it.
+    public static List<string> ResolveFileTokens(Dictionary<string, string> tokens, string basePath, Platform platform, bool tolerateErrors = false)
     {
         // PostgreSQL BYTEA needs an E-string-escaped hex literal with an explicit cast; SQL Server VARBINARY and
         // MySQL BLOB both accept 0x<hex> directly. Pattern mirrors GetDropTempTablesScript's platform branching.
@@ -44,7 +49,7 @@ public static class TokenHelper
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, FileTag, "", "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, BinaryFileTag, binaryPrefix, binarySuffix, fileName => BitConverter.ToString(ProductFileWrapper.GetFromFactory().ReadAllBytes(fileName)).Replace("-", ""));
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, QueryFileTag, QueryTag, "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
-        if (tokenErrors.Count == 0) return;
+        if (tokenErrors.Count == 0 || tolerateErrors) return tokenErrors;
         throw new Exception(string.Join("\r\n", tokenErrors));
     }
 

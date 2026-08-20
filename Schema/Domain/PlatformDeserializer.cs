@@ -48,9 +48,14 @@ namespace Schema.Domain
             return Deserialize<CheckConstraint>(json, platform, nameof(CheckConstraint));
         }
 
-        public static Template DeserializeTemplate(string json, Platform platform)
+        // missingMemberHandling defaults to Error (unchanged deploy behavior) — --Validate's
+        // lenient load path (PackageLoader) is the only caller that passes Ignore, mirroring the
+        // same leniency Product.Load already has for Product.json. See Template.Load's own doc
+        // comment for why: a parseable-but-wrong Template.json can now load fully instead of
+        // excluding the whole template over one bad property.
+        public static Template DeserializeTemplate(string json, Platform platform, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
         {
-            return Deserialize<Template>(json, platform, nameof(Template));
+            return Deserialize<Template>(json, platform, nameof(Template), missingMemberHandling);
         }
 
         public static PostgreSqlMaterializedView DeserializeMaterializedView(string json, Platform platform)
@@ -69,19 +74,22 @@ namespace Schema.Domain
                 ?? throw new JsonSerializationException("Failed to deserialize indexed view");
         }
 
-        private static T Deserialize<T>(string json, Platform platform, string typeName) where T : class
+        // missingMemberHandling defaults to Error for every caller except DeserializeTemplate,
+        // which is the only one that ever passes Ignore through (--Validate only). Table/Column/
+        // Index/ForeignKey/CheckConstraint deserialization stays hardcoded strict regardless.
+        private static T Deserialize<T>(string json, Platform platform, string typeName, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error) where T : class
         {
             var type = GetType<T>(typeName, platform);
-            var settings = GetSerializerSettings(platform);
+            var settings = GetSerializerSettings(platform, missingMemberHandling);
             return JsonConvert.DeserializeObject(json, type, settings) as T
                 ?? throw new JsonSerializationException($"Failed to deserialize {typeName} for platform {platform}");
         }
 
-        private static JsonSerializerSettings GetSerializerSettings(Platform platform)
+        private static JsonSerializerSettings GetSerializerSettings(Platform platform, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
         {
             return new JsonSerializerSettings
             {
-                MissingMemberHandling = MissingMemberHandling.Error,
+                MissingMemberHandling = missingMemberHandling,
                 Converters = new List<JsonConverter>
                 {
                     new PlatformItemConverter(typeof(Column), GetColumnType(platform)),

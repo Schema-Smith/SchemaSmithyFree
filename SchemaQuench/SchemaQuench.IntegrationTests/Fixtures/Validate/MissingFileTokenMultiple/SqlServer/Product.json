@@ -1,0 +1,13 @@
+{
+  "Name": "MissingFileTokenMultipleProduct",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "ProductMissingA": "<*File*>data/ProductA.dat",
+    "ProductMissingB": "<*File*>data/ProductB.dat"
+  },
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}
