@@ -284,7 +284,7 @@ namespace Schema.UnitTests.Domain
                 ""FileGroup"": ""PRIMARY"",
                 ""Columns"": []
             }";
-            var filePath = Path.Combine("C:", "tables", "dbo.TestTable.json");
+            var filePath = Path.Join("C:", "tables", "dbo.TestTable.json");
             _mockFile.Exists(filePath).Returns(true);
             _mockFile.ReadAllText(filePath).Returns(tableJson);
 
@@ -305,7 +305,7 @@ namespace Schema.UnitTests.Domain
                     ""Nested"": { ""Deep"": [1, 2, 3] }
                 }
             }";
-            var filePath = Path.Combine("C:", "tables", "dbo.TestTable.json");
+            var filePath = Path.Join("C:", "tables", "dbo.TestTable.json");
             _mockFile.Exists(filePath).Returns(true);
             _mockFile.ReadAllText(filePath).Returns(tableJson);
 
