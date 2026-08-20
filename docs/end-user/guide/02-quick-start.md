@@ -114,7 +114,7 @@ my-northwind/
         dbo.Categories.json
         dbo.Customers.json
         dbo.Orders.json
-        ... (13 tables)
+        ... (14 tables, including recyclebin.Registry)
       Views/
         dbo.Alphabetical list of products.sql
         ...
