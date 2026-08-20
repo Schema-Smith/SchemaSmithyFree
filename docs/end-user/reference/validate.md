@@ -41,7 +41,7 @@ SchemaQuench gives you four read-only gates that run before (or instead of) a re
 
 ## What it checks
 
-`--Validate` loads the package once, then runs every registered check against the loaded model. A load failure short-circuits everything else -- there's no point running structural checks against a package that couldn't be parsed.
+`--Validate` loads the package once, then runs every registered check against the loaded model. A load failure that takes down the whole package (`Product.json` itself is missing/unparseable) short-circuits everything else -- there's no point running structural checks against a package that couldn't be parsed at all. A narrower load failure -- one component file, or one whole template -- excludes just that piece and lets every other check still run against the rest of the package.
 
 ### Package load
 
@@ -49,9 +49,10 @@ A schema package has to load before it can be checked at all -- malformed JSON, 
 
 | Code | Severity | Meaning |
 |------|----------|---------|
-| `SS-LOAD-001` | Error | The package failed to load. The message carries the underlying load error. |
+| `SS-LOAD-001` | Error | Either the whole package failed to load (`Product.json` itself is missing/unparseable, or the configured path doesn't exist -- every other check is skipped when this happens), or one component file (a table/materialized-view/indexed-view JSON) inside an otherwise-loadable template was unparseable and got excluded -- the rest of the package still loads and every other check still runs. |
+| `SS-LOAD-002` | Error | A whole template's own `Template.json` couldn't be loaded (unparseable JSON, or a self-contradictory template configuration such as `CreateSchemaIfMissing` without a `SchemaIdentificationScript`). That template is excluded and every check for it is skipped, but every OTHER template in the package still loads and still gets full check coverage. |
 
-Every other check depends on a successfully loaded package, so a load failure is the only finding you'll see on that run.
+When `SS-LOAD-001` means the whole package failed to load, it's the only finding you'll see on that run. When it (or `SS-LOAD-002`) means one component/template was excluded from an otherwise-loadable package, every other check still runs and you may see it alongside other findings.
 
 ### Duplication
 
@@ -91,8 +92,11 @@ This check is deliberately structural only -- it confirms columns exist, not tha
 | `SS-TOK-001` | Error | A `{{Token}}` reference has no matching definition anywhere in the package. |
 | `SS-TOK-002` | Error | A file contains an unmatched `{{` with no closing `}}`. |
 | `SS-TOK-003` | Warning | A `ScriptTokens` entry is defined but never referenced anywhere in the package. |
+| `SS-TOK-004` | Error | A `<*File*>`/`<*BinaryFile*>`/`<*QueryFile*>` ScriptTokens entry points at a file that doesn't exist (or can't be read). |
 
 Built-in tokens (`ProductName`, `TemplateName`, `SchemaName`, `TableSchema`, `MaterializedViewSchema`, `IndexedViewSchema`, `repo_path`, `BranchName`) always count as defined, along with every `ScriptTokens` entry and every name derived from an `Extensions` block, in every prefixed form (`Table.`, `MaterializedView.`, `IndexedView.`) a token could legitimately take. When it's unclear whether a name is a genuine custom token, `--Validate` always resolves the uncertainty toward "assume defined" -- a linter that flags a token you actually defined is worse than one that occasionally misses a stale one.
+
+`SS-TOK-001`/`002`/`003` scan the package as raw text and only confirm a token's *key* is defined somewhere -- they can't tell whether a `<*File*>` reference actually resolves. `SS-TOK-004` closes that gap: it comes from the loaded package (the same file-token resolution `Template.Load`/`Product.Load` perform at deploy time), so it reports the token key **and** the full resolved path it looked for -- product-level tokens resolve against the package root, template-level tokens against that template's own directory, so the same key can mean two different paths depending on where it's declared.
 
 ### Schema lint & staleness
 
@@ -193,5 +197,5 @@ Pair it with the connection-based gates for a layered pipeline: `--Validate` on 
 - [SchemaQuench -- WhatIf Mode](schemaquench.md#whatif-mode) -- The full dry-run gate, for seeing the actual SQL a deployment would generate
 - [Custom Properties -- JSON Schema Validation](custom-properties.md#json-schema-validation) -- Authoring governance fragments that `SS-JSON-001` enforces
 - [Schema Packages Reference](schema-packages.md#conditional-application) -- `ShouldApplyExpression` and `VariantName`, the mechanism `SS-DUP-001`/`SS-DUP-VAR-002` reason about
-- [Script Tokens Reference](script-tokens.md) -- Token syntax and resolution, the mechanism `SS-TOK-001`/`SS-TOK-002`/`SS-TOK-003` check statically
+- [Script Tokens Reference](script-tokens.md) -- Token syntax and resolution, the mechanism `SS-TOK-001`/`SS-TOK-002`/`SS-TOK-003`/`SS-TOK-004` check
 - [Testing and Validation Guide](../guide/06-testing-and-validation.md) -- Where `--Validate` fits alongside Docker-based testing and WhatIf

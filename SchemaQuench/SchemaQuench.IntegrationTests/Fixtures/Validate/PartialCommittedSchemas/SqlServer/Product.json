@@ -1,0 +1,10 @@
+{
+  "Name": "PartialCommittedSchemasProduct",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {},
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}
