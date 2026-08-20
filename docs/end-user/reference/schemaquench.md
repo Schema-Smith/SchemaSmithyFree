@@ -643,7 +643,7 @@ Set it in `SchemaQuench.settings.json`, or pass `--ForceReKindle` on the command
 
 > **Tip:** Forcing a re-kindle is safe to run concurrently. SchemaSmith serializes the helper re-install per database with a session lock, so parallel deployments don't collide even when every one of them is forcing.
 
-> **Tip:** If you can't change the configuration or CLI invocation but still need a re-kindle, dropping the `SchemaSmith.KindleStamp` marker table (or `SchemaSmith_KindleStamp` on MySQL) has the same effect — the gate sees the missing stamp on the next run and re-installs.
+> **Tip:** If you can't change the configuration or CLI invocation but still need a re-kindle, dropping the `SchemaSmith.KindleStamp` marker table (or `SchemaSmith_KindleStamp` on MySQL and MariaDB) has the same effect — the gate sees the missing stamp on the next run and re-installs.
 
 ---
 
@@ -774,14 +774,18 @@ You can also pass the full schema tokens (`{{TableSchema}}`, `{{IndexedViewSchem
 
 ## Migration Script Tracking
 
-SchemaQuench remembers what it has already run, so you never have to worry about a migration script executing twice. Migration scripts (scripts in the `Before`, `BetweenTablesAndKeys`, `AfterTablesScripts`, and `After` slots) are tracked in the `SchemaSmith.CompletedMigrationScripts` table:
+SchemaQuench remembers what it has already run, so you never have to worry about a migration script executing twice. Migration scripts (scripts in the `Before`, `BetweenTablesAndKeys`, `AfterTablesScripts`, and `After` slots) are tracked in a table SchemaSmith maintains in each target database. On SQL Server and PostgreSQL it is schema-qualified as `SchemaSmith.CompletedMigrationScripts`. MySQL and MariaDB have no schema-inside-database concept, so the same table is named `SchemaSmith_CompletedMigrationScripts` there -- the same flattening `SchemaSmith_KindleStamp` and `SchemaSmith_StatusMessages` use.
 
 | Column | Description |
 |--------|-------------|
 | `ProductName` | The product name from `Product.json`. |
 | `QuenchSlot` | The slot the script belongs to. |
 | `ScriptPath` | The relative path of the script within the template. |
-| `QuenchDate` | Timestamp when the script was executed. |
+| `template_name` | The template the script ran under. |
+| `schema_name` | The per-iteration schema for a schema template. Empty for a regular template, and always empty on MySQL and MariaDB, where schema templates do not apply. |
+| `QuenchDate` | Timestamp when the script was executed. Named `CompletedAt` on MySQL and MariaDB. |
+
+Those five identity columns -- `ProductName`, `QuenchSlot`, `ScriptPath`, `template_name`, and `schema_name` -- are what make a tracking row unique, so the same script is recorded separately per template and per tenant schema. SQL Server and PostgreSQL enforce them as the primary key. MySQL and MariaDB carry an auto-increment `Id` primary key instead and enforce the same five columns as a unique index, with prefix lengths on the three longest.
 
 ### Execution rules
 
@@ -830,7 +834,7 @@ When SchemaQuench processes a slot, it compares the tracking table entries again
 
 ### Forcing re-execution
 
-To force a tracked script to run again, either delete the corresponding row from `SchemaSmith.CompletedMigrationScripts` in the target database, or rename the script file (tracking is by path, so a renamed script is treated as new).
+To force a tracked script to run again, either delete the corresponding row from the migration tracking table in the target database (named per engine as above), or rename the script file (tracking is by path, so a renamed script is treated as new).
 
 ---
 
