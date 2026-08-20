@@ -72,7 +72,7 @@ The solution is organized around the three end-user CLI tools and the shared sch
 - **`SchemaQuench/`** — CLI that deploys a schema package to a target database.
 - **`SchemaTongs/`** — CLI that extracts a live database into a clean, source-controllable schema package.
 - **`DataTongs/`** — CLI that captures and deploys reference data alongside schema.
-- **`Schema/`** — Shared library containing the domain model (`Domain/`, with platform-specific `Domain.SqlServer/`, `Domain.PostgreSQL/`, `Domain.MySQL/` projections), data access (`DataAccess/`), data delivery (`Delivery/`), checkpointing, isolators, embedded SQL scripts (`Scripts/`), and utilities. Published as the `SchemaSmith.Schema` NuGet package for downstream consumers.
+- **`Schema/`** — Shared library containing the domain model (`Domain/`, with platform-specific `Domain.SqlServer/`, `Domain.PostgreSQL/`, `Domain.MySQL/` projections), data access (`DataAccess/`), data delivery (`Delivery/`), checkpointing, isolators, embedded SQL scripts (`Scripts/`), and utilities. Referenced by the four CLI projects in this repository.
 - **`TestProducts/`** — Schema packages used by integration tests as fixtures.
 - **`Demos/`** — Demo schema packages and Docker compose stack for local development.
 - **`packaging/`** — Release packaging assets (install scripts, package templates, etc.).
