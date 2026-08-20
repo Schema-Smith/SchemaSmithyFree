@@ -1621,7 +1621,9 @@ public class SchemaTongsTests
             var jsonReader = Substitute.For<IDataReader>();
             var jsonReadCount = 0;
             jsonReader.Read().Returns(_ => jsonReadCount++ < 1, _ => false);
-            jsonReader[0].Returns("{\"Name\":\"users\",\"Columns\":[{\"Name\":\"id\",\"DataType\":\"INT\",\"IsNullable\":false,\"IsPrimaryKey\":true}]}");
+            // Column has no IsPrimaryKey — a primary key is a Table-level Index (PrimaryKey:true),
+            // not a column flag — and the real property is Nullable, not IsNullable.
+            jsonReader[0].Returns("{\"Name\":\"users\",\"Columns\":[{\"Name\":\"id\",\"DataType\":\"INT\",\"Nullable\":false}]}");
 
             // Second connection for JSON extraction
             var connection2 = Substitute.For<IDbConnection>();

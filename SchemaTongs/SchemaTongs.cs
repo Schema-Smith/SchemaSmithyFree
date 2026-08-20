@@ -18,6 +18,7 @@ using Schema.Delivery;
 using Schema.Domain;
 using Schema.Isolators;
 using MySqlConnector;
+using Npgsql;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Utility;
@@ -2025,8 +2026,11 @@ SELECT s.name AS SchemaName, v.name AS ViewName
         bool IsVariantActive(string expr) =>
             GateEvaluator.ShouldApply(gateCommand, SqlScript.TokenReplace(expr, _packageTokens, _platform));
 
+        // relkind and relispartition let the loop below tell a partitioned parent (relkind = 'p')
+        // and its partitions (relispartition = true) apart from an ordinary table — both need
+        // different handling than a plain table once enumerated (see the skip below).
         command.CommandText = @"
-SELECT t.schemaname, t.tablename
+SELECT t.schemaname, t.tablename, c.relkind, c.relispartition
   FROM pg_tables t
   JOIN pg_class c ON c.relname = t.tablename
                  AND c.relnamespace = (SELECT n.oid FROM pg_namespace n WHERE n.nspname = t.schemaname)
@@ -2036,14 +2040,14 @@ SELECT t.schemaname, t.tablename
 ";
 
         _progressLog.Info("Casting Table Structures");
-        var tables = new List<(string Schema, string Table)>();
+        var tables = new List<(string Schema, string Table, string RelKind, bool IsPartitionChild)>();
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
             {
                 var sch = reader["schemaname"].ToString();
                 if (!ShouldExtractFromSchema(sch)) continue;
-                tables.Add((sch, reader["tablename"].ToString()));
+                tables.Add((sch, reader["tablename"].ToString(), reader["relkind"].ToString(), Convert.ToBoolean(reader["relispartition"])));
             }
         }
 
@@ -2051,32 +2055,50 @@ SELECT t.schemaname, t.tablename
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
         var resolver = new TableFileResolver(castPath, _platform, _isSchemaTemplate, IsVariantActive);
 
-        foreach (var (schema, table) in tables)
+        foreach (var (schema, table, relKind, isPartitionChild) in tables)
         {
             if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{table}".ToLower()) && !_objectsToCast.Contains(table.ToLower())) continue;
 
-            _progressLog.Info($"  Cast Json for {schema}.{table}");
-            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{EscapeSql(schema)}', '{EscapeSql(table)}')";
-            var tableJson = command.ExecuteScalar()?.ToString() ?? "";
-            if (string.IsNullOrWhiteSpace(tableJson) || tableJson.Trim().Equals("{}"))
+            // SchemaSmith does not model PostgreSQL declarative partitioning (see the growth-up spike
+            // findings) and the generator query cannot see a partitioned parent at all (relkind = 'p'
+            // matches neither its relkind = 'r' nor its relam join). Left unhandled, the parent
+            // silently disappears while each partition extracts as an ordinary standalone table --
+            // the package looks complete but no longer means what the database means. Failing both
+            // the parent and its partitions through the same per-table skip used for any other
+            // unextractable table keeps that misrepresentation from reaching disk at all.
+            if (relKind == "p" || isPartitionChild)
             {
-                _progressLog.Error($"    No json returned for {schema}.{table}");
+                _progressLog.Error(relKind == "p"
+                    ? $"    ERROR: {schema}.{table} is a partitioned table — PostgreSQL partitioning is not modeled; skipped rather than emitted as a table with no partitions."
+                    : $"    ERROR: {schema}.{table} is a partition of a partitioned table — PostgreSQL partitioning is not modeled; skipped rather than emitted as an unrelated standalone table.");
                 _stats.TableErrors++;
                 continue;
             }
-            // Deserialize to the typed PostgreSqlTable so the Schema property exists on the in-memory
-            // object — needed both to scrub it in schema-template mode and to omit the default schema
-            // in regular mode. Base Table would drop Schema (and PG-specific column properties),
-            // leaving content that disagrees with a catalog-derived filename (SS-FILE-NAME-003) and,
-            // worse, round-tripping a non-default-schema table as public.<name> on the next deploy.
-            var tableObj = PlatformDeserializer.DeserializeTable(tableJson, _platform);
 
-            if (_checkConstraintStyle == CheckConstraintStyle.ColumnLevel && tableObj is PostgreSqlTable columnLevelTable)
+            _progressLog.Info($"  Cast Json for {schema}.{table}");
+            try
             {
-                // The generator emits every check table-level; conkey is what attributes a
-                // single-column one back to its column. array_length = 1 excludes multi-column
-                // checks, which have no single column to belong to.
-                command.CommandText = $@"
+                command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{EscapeSql(schema)}', '{EscapeSql(table)}')";
+                var tableJson = command.ExecuteScalar()?.ToString() ?? "";
+                if (string.IsNullOrWhiteSpace(tableJson) || tableJson.Trim().Equals("{}"))
+                {
+                    _progressLog.Error($"    No json returned for {schema}.{table}");
+                    _stats.TableErrors++;
+                    continue;
+                }
+                // Deserialize to the typed PostgreSqlTable so the Schema property exists on the in-memory
+                // object — needed both to scrub it in schema-template mode and to omit the default schema
+                // in regular mode. Base Table would drop Schema (and PG-specific column properties),
+                // leaving content that disagrees with a catalog-derived filename (SS-FILE-NAME-003) and,
+                // worse, round-tripping a non-default-schema table as public.<name> on the next deploy.
+                var tableObj = PlatformDeserializer.DeserializeTable(tableJson, _platform);
+
+                if (_checkConstraintStyle == CheckConstraintStyle.ColumnLevel && tableObj is PostgreSqlTable columnLevelTable)
+                {
+                    // The generator emits every check table-level; conkey is what attributes a
+                    // single-column one back to its column. array_length = 1 excludes multi-column
+                    // checks, which have no single column to belong to.
+                    command.CommandText = $@"
 SELECT con.conname AS ""Name"",
        a.attname AS ""ColumnName""
   FROM pg_catalog.pg_constraint con
@@ -2086,46 +2108,62 @@ SELECT con.conname AS ""Name"",
    AND array_length(con.conkey, 1) = 1
  ORDER BY con.conname";
 
-                var singleColumnChecks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                using (var ccReader = command.ExecuteReader())
-                {
-                    while (ccReader.Read())
-                        singleColumnChecks[$"{ccReader["Name"]}"] = $"{ccReader["ColumnName"]}";
+                    var singleColumnChecks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    using (var ccReader = command.ExecuteReader())
+                    {
+                        while (ccReader.Read())
+                            singleColumnChecks[$"{ccReader["Name"]}"] = $"{ccReader["ColumnName"]}";
+                    }
+                    DemoteSingleColumnChecksToColumnLevel(columnLevelTable, singleColumnChecks);
                 }
-                DemoteSingleColumnChecksToColumnLevel(columnLevelTable, singleColumnChecks);
+
+                // Regular mode: omit the PostgreSQL default schema (public) from content so the package
+                // follows the default-schema-omission convention (deploy re-resolves an unset Schema to
+                // public). A named non-default schema is kept. The write target then derives from this
+                // same content Schema — schema-less for public, qualified for a named schema — so the
+                // extraction output passes SS-FILE-NAME-003 by construction. Schema-template mode nulls
+                // Schema in ScrubSchemaForTemplate below, so it is excluded here.
+                if (!_isSchemaTemplate && tableObj is PostgreSqlTable pgTable
+                    && string.Equals(Identifier.Unwrap(pgTable.Schema, _platform),
+                                     _platform.GetDefaultSchema(), _schemaNameComparison))
+                    pgTable.Schema = null;
+
+                var contentSchema = (tableObj as IDeliverableTable)?.Schema ?? "";
+                var resolution = resolver.Resolve(contentSchema, table);
+                var tableFile = resolution.WritePath;
+                MarkPathWritten(castPath, tableFile);
+                if (resolution.UngatedEmit)
+                    _progressLog.Warn($"    Extracted {schema}.{table} did not match any active variant — writing ungated '{Path.GetFileName(tableFile)}'; resolve its gating (SS-DUP-001).");
+                var oldName = tableObj.OldName?.Trim('"') ?? "";
+                var oldTableFile = string.IsNullOrEmpty(oldName)
+                    ? null
+                    : ResolveOutputPath(castPath, TableFileName.Canonical(
+                        contentSchema, oldName, "", _isSchemaTemplate || string.IsNullOrEmpty(contentSchema)));
+                _progressLog.Info($"    Casting {tableFile}");
+                if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
+                {
+                    var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
+                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                }
+                ScrubSchemaForTemplate(tableObj, tableFile);
+                JsonHelper.Write(tableFile, tableObj);
+                _stats.Tables++;
             }
-
-            // Regular mode: omit the PostgreSQL default schema (public) from content so the package
-            // follows the default-schema-omission convention (deploy re-resolves an unset Schema to
-            // public). A named non-default schema is kept. The write target then derives from this
-            // same content Schema — schema-less for public, qualified for a named schema — so the
-            // extraction output passes SS-FILE-NAME-003 by construction. Schema-template mode nulls
-            // Schema in ScrubSchemaForTemplate below, so it is excluded here.
-            if (!_isSchemaTemplate && tableObj is PostgreSqlTable pgTable
-                && string.Equals(Identifier.Unwrap(pgTable.Schema, _platform),
-                                 _platform.GetDefaultSchema(), _schemaNameComparison))
-                pgTable.Schema = null;
-
-            var contentSchema = (tableObj as IDeliverableTable)?.Schema ?? "";
-            var resolution = resolver.Resolve(contentSchema, table);
-            var tableFile = resolution.WritePath;
-            MarkPathWritten(castPath, tableFile);
-            if (resolution.UngatedEmit)
-                _progressLog.Warn($"    Extracted {schema}.{table} did not match any active variant — writing ungated '{Path.GetFileName(tableFile)}'; resolve its gating (SS-DUP-001).");
-            var oldName = tableObj.OldName?.Trim('"') ?? "";
-            var oldTableFile = string.IsNullOrEmpty(oldName)
-                ? null
-                : ResolveOutputPath(castPath, TableFileName.Canonical(
-                    contentSchema, oldName, "", _isSchemaTemplate || string.IsNullOrEmpty(contentSchema)));
-            _progressLog.Info($"    Casting {tableFile}");
-            if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
+            catch (NpgsqlException ex)
             {
-                var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
-                ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                _progressLog.Error($"    ERROR: PostgreSQL error extracting {schema}.{table}: {ex.Message}");
+                _stats.TableErrors++;
             }
-            ScrubSchemaForTemplate(tableObj, tableFile);
-            JsonHelper.Write(tableFile, tableObj);
-            _stats.Tables++;
+            catch (JsonException ex)
+            {
+                _progressLog.Error($"    ERROR: JSON parsing error for {schema}.{table}: {ex.Message}");
+                _stats.TableErrors++;
+            }
+            catch (IOException ex)
+            {
+                _progressLog.Error($"    ERROR: File write error for {schema}.{table}: {ex.Message}");
+                _stats.TableErrors++;
+            }
         }
     }
 
@@ -2715,17 +2753,21 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 }
                 catch (MySqlException ex)
                 {
-                    _progressLog.Error($"    ERROR: MySQL error extracting {table}: {ex.Message}");
+                    // Exception type name included alongside Message: a bare Message on a caught-and-
+                    // continued table skip is otherwise indistinguishable in the log from any other
+                    // MySqlException, which makes a "table silently missing from the package" report
+                    // unnecessarily hard to root-cause after the fact.
+                    _progressLog.Error($"    ERROR: MySQL error extracting {table}: {ex.GetType().Name}: {ex.Message}");
                     _stats.TableErrors++;
                 }
                 catch (JsonException ex)
                 {
-                    _progressLog.Error($"    ERROR: JSON parsing error for {table}: {ex.Message}");
+                    _progressLog.Error($"    ERROR: JSON parsing error for {table}: {ex.GetType().Name}: {ex.Message}");
                     _stats.TableErrors++;
                 }
                 catch (IOException ex)
                 {
-                    _progressLog.Error($"    ERROR: File write error for {table}: {ex.Message}");
+                    _progressLog.Error($"    ERROR: File write error for {table}: {ex.GetType().Name}: {ex.Message}");
                     _stats.TableErrors++;
                 }
             }

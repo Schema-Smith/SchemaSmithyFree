@@ -502,6 +502,8 @@ public class SchemaTemplateExtractionTests
             pgTableListReader.Read().Returns(_ => calls++ < 1, _ => false);
             pgTableListReader["schemaname"].Returns(SourceSchema);
             pgTableListReader["tablename"].Returns("orders");
+            pgTableListReader["relkind"].Returns("r");
+            pgTableListReader["relispartition"].Returns(false);
             _command.ExecuteReader().Returns(pgTableListReader);
             var ordersJson =
                 "{\"Name\":\"orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
@@ -1100,6 +1102,8 @@ public class SchemaTemplateExtractionTests
             pgTableListReader.Read().Returns(_ => calls++ < 1, _ => false);
             pgTableListReader["schemaname"].Returns(SourceSchema);
             pgTableListReader["tablename"].Returns("invoices");
+            pgTableListReader["relkind"].Returns("r");
+            pgTableListReader["relispartition"].Returns(false);
             _command.ExecuteReader().Returns(pgTableListReader);
             // Discriminate by CommandText: the PG kindle-gate pg_class existence check must return
             // 0L (table absent → stamp null → DDL runs via ExecuteNonQuery, which is fine for
@@ -1149,6 +1153,8 @@ public class SchemaTemplateExtractionTests
             pgTableListReader.Read().Returns(_ => calls++ < 1, _ => false);
             pgTableListReader["schemaname"].Returns(SourceSchema);
             pgTableListReader["tablename"].Returns("customers");
+            pgTableListReader["relkind"].Returns("r");
+            pgTableListReader["relispartition"].Returns(false);
             _command.ExecuteReader().Returns(pgTableListReader);
             var customersJson =
                 "{\"Name\":\"customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
@@ -1194,6 +1200,8 @@ public class SchemaTemplateExtractionTests
             pgTableListReader.Read().Returns(_ => calls++ < 1, _ => false);
             pgTableListReader["schemaname"].Returns(SourceSchema);
             pgTableListReader["tablename"].Returns("rooms");
+            pgTableListReader["relkind"].Returns("r");
+            pgTableListReader["relispartition"].Returns(false);
             _command.ExecuteReader().Returns(pgTableListReader);
             var roomsJson =
                 "{\"Name\":\"rooms\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
