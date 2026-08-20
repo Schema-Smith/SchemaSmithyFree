@@ -9,7 +9,7 @@
                   // On MySQL (where schema = database), Source.Schema is accepted as a fallback for
                   // Source.Database, but Source.Database is preferred.
         "Port": "", // Optional for all platforms — overrides default port
-        "Platform": "", // SqlServer, PostgreSQL, or MySQL
+        "Platform": "", // SqlServer, PostgreSQL, MySQL, or MariaDb
         "ConnectionProperties": {
             "TrustServerCertificate": "True" // Trust self-signed certificates (recommended for development)
         }
