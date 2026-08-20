@@ -145,6 +145,42 @@ namespace Schema.UnitTests.Domain
         }
 
         [Test]
+        public void DeserializeTable_UnrecognizedTopLevelProperty_Throws()
+        {
+            var json = @"{ ""Name"": ""Customer"", ""Bogus"": ""x"" }";
+
+            // Assert.Catch (not Assert.Throws) — Newtonsoft may wrap the MissingMemberHandling
+            // failure in an outer JsonSerializationException while adding path context, so the
+            // exact runtime type isn't the point; ex.ToString() walks the full InnerException
+            // chain, so the property name is found regardless of which level it landed on.
+            var ex = Assert.Catch<System.Exception>(() => PlatformDeserializer.DeserializeTable(json, Platform.SqlServer));
+            Assert.That(ex.ToString(), Does.Contain("Bogus"));
+        }
+
+        // PlatformItemConverter hands nested Column/Index/ForeignKey/CheckConstraint elements to a
+        // second, "clean" serializer (built without this converter, to avoid recursing back into
+        // itself) — the property this check guards is that the clean serializer still carries the
+        // unknown-property rejection forward instead of quietly reverting to Newtonsoft's default.
+        [Test]
+        public void DeserializeTable_UnrecognizedNestedColumnProperty_Throws()
+        {
+            var json = @"{ ""Name"": ""Customer"", ""Columns"": [{ ""Name"": ""Email"", ""Bogus"": ""x"" }] }";
+
+            var ex = Assert.Catch<System.Exception>(() => PlatformDeserializer.DeserializeTable(json, Platform.SqlServer));
+            Assert.That(ex.ToString(), Does.Contain("Bogus"));
+        }
+
+        [Test]
+        public void DeserializeTable_ExtensionsContent_RoundTripsUntouched()
+        {
+            var json = @"{ ""Name"": ""Customer"", ""Extensions"": { ""CustomFlag"": true, ""Nested"": { ""Deep"": 1 } } }";
+
+            var result = PlatformDeserializer.DeserializeTable(json, Platform.SqlServer);
+
+            Assert.That(result.GetExtensionProperty("CustomFlag"), Is.EqualTo(true));
+        }
+
+        [Test]
         public void DeserializeTable_BaseProperties_WorkThroughSubclass()
         {
             var json = JsonConvert.SerializeObject(new SqlServerTable

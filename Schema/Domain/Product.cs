@@ -115,7 +115,15 @@ namespace Schema.Domain
         /// Loads a Product from the configured SchemaPackagePath (config or zip).
         /// Unified: no platform validation — accepts all platforms.
         /// </summary>
-        public static Product Load()
+        /// <param name="missingMemberHandling">
+        /// Deploy path leaves this at the default (Error) so an unrecognised property still stops
+        /// the run. `--Validate` (PackageLoader) passes Ignore instead — it needs Product.Platform
+        /// to run its checks at all, and a single misnamed property in Product.json shouldn't take
+        /// down every other finding the run would otherwise report; JsonSchemaCheck independently
+        /// re-validates the raw Product.json against products.*.schema and reports SS-JSON-001 for
+        /// the property regardless of which way this loaded.
+        /// </param>
+        public static Product Load(MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
         {
             var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
             var schemaPackagePath = config[SettingsKeys.SchemaPackagePath] ?? "";
@@ -130,7 +138,7 @@ namespace Schema.Domain
                 throw new Exception($"SchemaPackagePath not found '{schemaPackagePath}'");
 
             var productFilePath = Path.Combine(schemaPackagePath, "Product.json");
-            var product = JsonHelper.ProductLoad(productFilePath);
+            var product = JsonHelper.ProductLoad(productFilePath, missingMemberHandling);
             product.FilePath = productFilePath;
             OverrideProductScriptTokens(config, product);
             TokenHelper.ResolveFileTokens(product.ScriptTokens, schemaPackagePath, product.Platform);

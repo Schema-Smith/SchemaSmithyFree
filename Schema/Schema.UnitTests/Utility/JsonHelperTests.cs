@@ -117,6 +117,21 @@ public class JsonHelperTests
         _mockFile.Received().ReadAllText(@"C:\Product.json");
     }
 
+    [Test]
+    public void ProductLoad_UnrecognizedProperty_ThrowsNamingPropertyAndFile()
+    {
+        // Matches the editor's generated .json-schemas (additionalProperties:false) and
+        // --Validate — deploy used to silently drop an unknown property via Newtonsoft's default
+        // MissingMemberHandling.Ignore; it must now fail loudly, naming both the property and file.
+        _mockFile.Exists(@"C:\Product.json").Returns(true);
+        _mockFile.ReadAllText(@"C:\Product.json").Returns("{\"Name\":\"Test\",\"Platform\":\"MySQL\",\"Bogus\":1}");
+
+        var ex = Assert.Throws<JsonSerializationException>(() => JsonHelper.ProductLoad(@"C:\Product.json"));
+
+        Assert.That(ex.Message, Does.Contain("Bogus"));
+        Assert.That(ex.Message, Does.Contain(@"C:\Product.json"));
+    }
+
     // --- TableLoad ---
 
     [Test]

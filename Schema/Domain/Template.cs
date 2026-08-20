@@ -95,10 +95,10 @@ namespace Schema.Domain
         /// this template and the run continues to subsequent templates.
         /// <para>This property replaces the prior <c>Required</c> field. The rename is a breaking
         /// change in the v2.1 Schema Templates release; user-authored <c>Template.json</c> files
-        /// that still use <c>Required</c> need to be updated. Unknown JSON properties are ignored
-        /// at deserialization, so an unmigrated file silently picks up the default <c>true</c> —
-        /// which surfaces as a clear "no targets discovered" error rather than a silent
-        /// behavior change. See the CHANGELOG for migration guidance.</para>
+        /// that still use <c>Required</c> need to be updated. Deserialization now rejects unknown
+        /// package properties, so an unmigrated file fails to load with an error naming
+        /// <c>Required</c> and the offending file — pointing straight at the rename — rather than
+        /// the old silent default-<c>true</c> fallback. See the CHANGELOG for migration guidance.</para>
         /// </summary>
         [JsonProperty(Order = 9)]
         [DefaultValue(true)]
@@ -176,6 +176,16 @@ namespace Schema.Domain
 
         [JsonIgnore]
         public List<Table> Tables { get; } = [];
+
+        /// <summary>
+        /// Component files (tables / materialized views / indexed views) that
+        /// <see cref="InstanceLoad"/> skipped because they could not be parsed as JSON at all —
+        /// populated only when loading with <c>tolerateComponentLoadErrors: true</c>. PackageLoader
+        /// turns each entry into an SS-LOAD-001 finding so a skip is always reported, never silently
+        /// dropped. Empty on the deploy path, which never tolerates a component load failure.
+        /// </summary>
+        [JsonIgnore]
+        public List<ComponentLoadError> ComponentLoadErrors { get; } = [];
 
         [JsonIgnore]
         public string TableSchema { get; set; } = "";
@@ -348,7 +358,17 @@ namespace Schema.Domain
         /// Loads a Template and its Tables from disk using platform-aware deserialization.
         /// Resolves file tokens, merges product + template tokens, loads scripts, and applies token replacement.
         /// </summary>
-        public static Template Load(string templateName, Product product)
+        /// <param name="tolerateComponentLoadErrors">
+        /// Deploy path leaves this false: a Table/Materialized-View/Indexed-View that fails to
+        /// deserialize (e.g. a misnamed property) throws immediately and aborts the whole load —
+        /// deploying against a package the tool couldn't fully parse is the risk that behavior
+        /// closes. `--Validate` (PackageLoader) passes true: its contract is to report every
+        /// problem it can find in one pass, so a single bad component file is excluded from the
+        /// loaded template instead of taking down every other finding the run would otherwise
+        /// produce. JsonSchemaCheck re-validates every package file straight off disk regardless
+        /// of what loaded here, so the excluded file's precise SS-JSON-001 finding still surfaces.
+        /// </param>
+        public static Template Load(string templateName, Product product, bool tolerateComponentLoadErrors = false)
         {
             var schemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
             var templatePath = Path.Combine(schemaPackagePath, "Templates", templateName);
@@ -376,7 +396,7 @@ namespace Schema.Domain
                     .Where(st => !template.ScriptTokens.ContainsKey(st.Key)))
                 .ToDictionary(k => k.Key, v => v.Value);
 
-            template.InstanceLoad(scriptTokens, product.Platform);
+            template.InstanceLoad(scriptTokens, product.Platform, tolerateComponentLoadErrors);
 
             // Resolve the per-token TokenScope map so the SchemaQuench dispatcher can decide which
             // <*Query*> tokens need re-running per schema iteration vs. once per DB. Idempotent on
@@ -414,12 +434,12 @@ namespace Schema.Domain
             SchemaIdentificationScript = null;
         }
 
-        private void InstanceLoad(Dictionary<string, string> scriptTokens, Platform platform)
+        private void InstanceLoad(Dictionary<string, string> scriptTokens, Platform platform, bool tolerateComponentLoadErrors)
         {
-            LoadTables(platform);
+            LoadTables(platform, tolerateComponentLoadErrors);
             MigrateMySqlColumnCheckExpressionAlias(platform);
-            LoadMaterializedViews(platform);
-            LoadIndexedViews(platform);
+            LoadMaterializedViews(platform, tolerateComponentLoadErrors);
+            LoadIndexedViews(platform, tolerateComponentLoadErrors);
 
             // Run schema-default resolution BEFORE any token serialization touches the in-memory
             // Tables / MaterializedViews / IndexedViews. The resolver fills unset Schema fields
@@ -609,7 +629,7 @@ namespace Schema.Domain
             }
         }
 
-        private void LoadMaterializedViews(Platform platform)
+        private void LoadMaterializedViews(Platform platform, bool tolerateComponentLoadErrors)
         {
             if (platform != Platform.PostgreSQL) return;
             var matViewsPath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Materialized Views");
@@ -617,21 +637,29 @@ namespace Schema.Domain
             var files = ProductDirectoryWrapper.GetFromFactory()
                 .GetFiles(matViewsPath, "*.json", SearchOption.AllDirectories)
                 .OrderBy(x => x);
-            MaterializedViews.AddRange(files.Select(f =>
+            foreach (var f in files)
             {
                 try
                 {
                     var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
-                    return PlatformDeserializer.DeserializeMaterializedView(json, platform);
+                    MaterializedViews.Add(PlatformDeserializer.DeserializeMaterializedView(json, platform));
                 }
-                catch (Exception e)
+                catch (Exception e) when (!tolerateComponentLoadErrors)
                 {
                     throw new Exception($"Error loading materialized view from {f}\r\n{e.Message}", e);
                 }
-            }));
+                catch (Exception e)
+                {
+                    // --Validate: excluded here so the rest of the template still loads. An
+                    // unparseable file gets its own SS-LOAD-001 (see RecordComponentLoadErrorIfUnparseable);
+                    // a parseable-but-wrong one (e.g. a misnamed property) is left for
+                    // JsonSchemaCheck's on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadErrorIfUnparseable(f, e);
+                }
+            }
         }
 
-        private void LoadIndexedViews(Platform platform)
+        private void LoadIndexedViews(Platform platform, bool tolerateComponentLoadErrors)
         {
             if (platform != Platform.SqlServer) return;
             var indexedViewsPath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Indexed Views");
@@ -639,18 +667,26 @@ namespace Schema.Domain
             var files = ProductDirectoryWrapper.GetFromFactory()
                 .GetFiles(indexedViewsPath, "*.json", SearchOption.AllDirectories)
                 .OrderBy(x => x);
-            IndexedViews.AddRange(files.Select(f =>
+            foreach (var f in files)
             {
                 try
                 {
                     var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
-                    return PlatformDeserializer.DeserializeIndexedView(json, platform);
+                    IndexedViews.Add(PlatformDeserializer.DeserializeIndexedView(json, platform));
                 }
-                catch (Exception e)
+                catch (Exception e) when (!tolerateComponentLoadErrors)
                 {
                     throw new Exception($"Error loading indexed view from {f}\r\n{e.Message}", e);
                 }
-            }));
+                catch (Exception e)
+                {
+                    // --Validate: excluded here so the rest of the template still loads. An
+                    // unparseable file gets its own SS-LOAD-001 (see RecordComponentLoadErrorIfUnparseable);
+                    // a parseable-but-wrong one (e.g. a misnamed property) is left for
+                    // JsonSchemaCheck's on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadErrorIfUnparseable(f, e);
+                }
+            }
         }
 
         /// <summary>
@@ -703,14 +739,67 @@ namespace Schema.Domain
             }
         }
 
-        private void LoadTables(Platform platform)
+        private void LoadTables(Platform platform, bool tolerateComponentLoadErrors)
         {
             var tablesPath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Tables");
             if (!ProductDirectoryWrapper.GetFromFactory().Exists(tablesPath)) return;
             var files = ProductDirectoryWrapper.GetFromFactory()
                 .GetFiles(tablesPath, "*.json", SearchOption.AllDirectories)
                 .OrderBy(x => x);
-            Tables.AddRange(files.Select(f => Table.Load(f, platform)));
+            foreach (var f in files)
+            {
+                try
+                {
+                    Tables.Add(Table.Load(f, platform));
+                }
+                catch (Exception e) when (tolerateComponentLoadErrors)
+                {
+                    // --Validate: excluded here so the rest of the template still loads (and
+                    // Duplication/Coherence still run against the tables that DID parse). An
+                    // unparseable file gets its own SS-LOAD-001 (see RecordComponentLoadErrorIfUnparseable);
+                    // a parseable-but-wrong one (e.g. a misnamed property) is left for
+                    // JsonSchemaCheck's on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadErrorIfUnparseable(f, e);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Records <paramref name="filePath"/> in <see cref="ComponentLoadErrors"/> when the file
+        /// itself is not valid JSON — the file isn't parseable at all, so there is no object for
+        /// JsonSchemaCheck to schema-check and nothing else would ever report it. A parseable-but-
+        /// wrong file (an unrecognised/misnamed property rejected by MissingMemberHandling.Error) is
+        /// left unrecorded here on purpose: JsonSchemaCheck re-validates the raw file straight off
+        /// disk regardless of what loaded here, so that case already gets its own precise SS-JSON-001
+        /// — recording it here too would report the same file under two different codes.
+        /// </summary>
+        private void RecordComponentLoadErrorIfUnparseable(string filePath, Exception e)
+        {
+            if (IsParseableJson(filePath)) return;
+            ComponentLoadErrors.Add(new ComponentLoadError(filePath, e.Message));
+        }
+
+        // Deliberately does NOT infer parseability from the CLR exception type that surfaced out of
+        // Table.Load / PlatformDeserializer — that inference is unsound. MissingMemberHandling.Error
+        // (an unrecognised/misnamed property: parseable, wrong shape) and a truncated/malformed
+        // document (not parseable at all) both surface from Newtonsoft as JsonSerializationException
+        // ("Unexpected end when deserializing object..." is a JsonSerializationException, not a
+        // JsonReaderException, despite being a pure syntax failure) — so exception type cannot tell
+        // the two cases apart. Re-parsing the raw text directly answers the actual question ("is this
+        // valid JSON at all?") and stays correct regardless of which exception type Newtonsoft raises
+        // for a given malformation, or whether a future deserialization setting changes that shape.
+        private static bool IsParseableJson(string filePath)
+        {
+            try
+            {
+                var text = ProductFileWrapper.GetFromFactory().ReadAllText(filePath);
+                JToken.Parse(text);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>

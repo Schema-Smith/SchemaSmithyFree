@@ -12,6 +12,17 @@ namespace Schema.Domain
 {
     public static class PlatformDeserializer
     {
+        // Two of three surfaces (generated .json-schemas' additionalProperties:false, --Validate)
+        // already reject an unrecognised package property; Newtonsoft's own default
+        // (MissingMemberHandling.Ignore) was the odd one out, silently discarding a typo'd
+        // property at deploy time. Never trips on Extensions: DynamicBase declares it as a real
+        // property, so Newtonsoft always matches it as a member and parses its content as an
+        // opaque JToken with no member-checking inside.
+        internal static readonly JsonSerializerSettings StrictSettings = new()
+        {
+            MissingMemberHandling = MissingMemberHandling.Error
+        };
+
         public static Table DeserializeTable(string json, Platform platform)
         {
             return Deserialize<Table>(json, platform, nameof(Table));
@@ -46,7 +57,7 @@ namespace Schema.Domain
         {
             if (platform != Platform.PostgreSQL)
                 throw new ArgumentException("Materialized views are only supported on PostgreSQL", nameof(platform));
-            return JsonConvert.DeserializeObject<PostgreSqlMaterializedView>(json)
+            return JsonConvert.DeserializeObject<PostgreSqlMaterializedView>(json, StrictSettings)
                 ?? throw new JsonSerializationException("Failed to deserialize materialized view");
         }
 
@@ -54,7 +65,7 @@ namespace Schema.Domain
         {
             if (platform != Platform.SqlServer)
                 throw new ArgumentException("Indexed views are only supported on SQL Server", nameof(platform));
-            return JsonConvert.DeserializeObject<SqlServerIndexedView>(json)
+            return JsonConvert.DeserializeObject<SqlServerIndexedView>(json, StrictSettings)
                 ?? throw new JsonSerializationException("Failed to deserialize indexed view");
         }
 
@@ -70,6 +81,7 @@ namespace Schema.Domain
         {
             return new JsonSerializerSettings
             {
+                MissingMemberHandling = MissingMemberHandling.Error,
                 Converters = new List<JsonConverter>
                 {
                     new PlatformItemConverter(typeof(Column), GetColumnType(platform)),
@@ -186,9 +198,11 @@ namespace Schema.Domain
         {
             if (reader.TokenType == JsonToken.Null) return null;
             var jObj = JObject.Load(reader);
-            // Use a clean serializer without this converter to avoid infinite recursion,
-            // since the target type is a subclass of the base type we intercept.
-            var cleanSerializer = JsonSerializer.CreateDefault();
+            // Built from StrictSettings alone (no PlatformItemConverter registered) — avoids the
+            // infinite recursion a full settings copy would cause, since the target type is a
+            // subclass of the base type this converter intercepts, while still carrying the
+            // unknown-property check onto the nested Column/Index/ForeignKey/CheckConstraint.
+            var cleanSerializer = JsonSerializer.Create(PlatformDeserializer.StrictSettings);
             return jObj.ToObject(_targetType, cleanSerializer);
         }
 

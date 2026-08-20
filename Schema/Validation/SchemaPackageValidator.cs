@@ -42,6 +42,10 @@ public sealed class SchemaPackageValidator
         var ctx = new ValidationContext(pkg.Product, pkg.Templates, packagePath);
         // No per-check try/catch (YAGNI) — the real checks don't throw; a check exception is a
         // bug in the check and should surface, not be swallowed as a finding.
-        return new ValidationResult(_checks.SelectMany(check => check.Run(ctx)));
+        // pkg.LoadFindings carries SS-LOAD-001s for component files the loader skipped rather than
+        // aborted on (see PackageLoader) — merged in so a skip during loading is reported exactly
+        // like any other finding, instead of vanishing because the load itself didn't throw.
+        var loadFindings = pkg.LoadFindings ?? Array.Empty<Finding>();
+        return new ValidationResult(loadFindings.Concat(_checks.SelectMany(check => check.Run(ctx))));
     }
 }
