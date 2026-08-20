@@ -371,7 +371,7 @@ namespace Schema.Domain
         internal static string GetTemplateFilePath(Product product, string templateName)
         {
             var schemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
-            return Path.Combine(schemaPackagePath, "Templates", templateName, "Template.json");
+            return Path.Join(schemaPackagePath, "Templates", templateName, "Template.json");
         }
 
         /// <summary>

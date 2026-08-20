@@ -24,7 +24,7 @@ public class MergeScriptTokenConfiguratorImpl : IMergeScriptTokenConfigurator
     {
         if (context == null || string.IsNullOrEmpty(context.TokenKey)) return;
 
-        var templateJsonFile = Path.Combine(context.TemplateRootPath ?? "", "Template.json");
+        var templateJsonFile = Path.Join(context.TemplateRootPath ?? "", "Template.json");
         var file = FileWrapper.GetFromFactory();
         if (!file.Exists(templateJsonFile))
         {

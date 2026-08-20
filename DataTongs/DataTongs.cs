@@ -316,7 +316,7 @@ public class DataTongs
 
                     if (outputContents)
                     {
-                        var emptyContentFilePath = Path.Combine(contentsPath, contentFileToken);
+                        var emptyContentFilePath = Path.Join(contentsPath, contentFileToken);
                         _progressLog.Info($"    Writing contents to : {emptyContentFilePath}");
                         FileWrapper.GetFromFactory().WriteAllText(emptyContentFilePath, emptyContent);
                     }
@@ -333,7 +333,7 @@ public class DataTongs
                 string contentFilePath = null;
                 if (outputContents)
                 {
-                    contentFilePath = Path.Combine(contentsPath, contentFileToken);
+                    contentFilePath = Path.Join(contentsPath, contentFileToken);
                     _progressLog.Info($"    Writing contents to : {contentFilePath}");
                     FileWrapper.GetFromFactory().WriteAllText(contentFilePath, tableData);
                 }

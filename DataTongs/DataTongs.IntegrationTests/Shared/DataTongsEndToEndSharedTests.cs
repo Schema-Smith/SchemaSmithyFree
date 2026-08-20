@@ -199,7 +199,7 @@ public abstract class DataTongsEndToEndSharedTests
             // DataTongs writes the content file under this exact name -- MySQL has no schema concept,
             // so the key is unqualified and unencoded here (no characters FileNameEncoder would touch).
             var contentFileToken = $"{targetTable}.tabledata";
-            var contentFile = Path.Combine(_testOutputDir, contentFileToken);
+            var contentFile = Path.Join(_testOutputDir, contentFileToken);
             File.WriteAllText(contentFile, json);
 
             // Same call DataTongs makes: tokenizeScripts:true, passing the exact key alongside the

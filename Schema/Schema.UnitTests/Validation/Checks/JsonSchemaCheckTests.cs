@@ -237,27 +237,46 @@ public class JsonSchemaCheckTests
     // ---- Extra coverage beyond the brief's mandatory list ----
 
     [Test]
-    public void NoJsonSchemasDirectory_NoFindings()
+    public void NoJsonSchemasDirectory_ViolationStillReported()
     {
+        // No .json-schemas directory at all — nothing committed for ANY type. Decorative only:
+        // the SUT no longer queries directory existence directly (it drives entirely off
+        // per-file IFile.Exists), but this keeps the mock state honestly matching the scenario
+        // this test names. The domain model is the authority regardless of what's committed, so
+        // a table file is still validated against a schema generated fresh in memory — this is
+        // the headline case of the "validation must not depend on a committed artifact" decision.
         _mockDirectory.Exists(SchemaDir).Returns(false);
+        var tableFile = TableFilePath();
+        JsonFiles(tableFile);
+        FileContent(tableFile, @"{ ""Name"": ""Customer"", ""Columns"": [ { ""Nam"": ""Id"", ""DataType"": ""int"" } ] }");
 
         var findings = new JsonSchemaCheck().Run(Context()).ToList();
 
-        Assert.That(findings, Is.Empty);
+        Assert.That(findings, Has.Some.Matches<Finding>(f => f.Code == "SS-JSON-001" && f.Message.Contains("Nam") && f.Location == tableFile));
+        Assert.That(findings.Any(f => f.Code is "SS-STALE-001" or "SS-STALE-002"), Is.False,
+            "Nothing was ever committed, so there is nothing to compare for staleness.");
     }
 
     [Test]
-    public void NoCommittedTablesSchema_TableFilesNotValidated()
+    public void NoCommittedTablesSchema_TableFileStillValidatedAgainstGeneratedSchema()
     {
-        // No tables.sqlserver.schema committed at all (e.g. a package that never ran
-        // --WriteSchemasOnly) — nothing to validate against, so no findings for tables either way.
+        // .json-schemas/ exists and carries a current committed schema for another type
+        // (products), but tables.sqlserver.schema specifically was never committed (e.g. a
+        // package that ran --WriteSchemasOnly before a new type existed, or just never had one
+        // added). Distinct from NoJsonSchemasDirectory_ViolationStillReported's missing-
+        // everything case: this is the missing-one-file case. The table file must still be
+        // validated, against a schema generated fresh in memory for the tables type.
+        CommitProductsSchema(FreshProductsSchema());
         var tableFile = TableFilePath();
         JsonFiles(tableFile);
-        FileContent(tableFile, @"{ ""Columns"": [ { ""Nam"": ""Id"" } ] }");
+        FileContent(tableFile, @"{ ""Name"": ""Customer"", ""Columns"": [ { ""Nam"": ""Id"", ""DataType"": ""int"" } ] }");
 
         var findings = new JsonSchemaCheck().Run(Context()).ToList();
 
-        Assert.That(findings, Is.Empty);
+        Assert.That(findings, Has.Some.Matches<Finding>(f => f.Code == "SS-JSON-001" && f.Message.Contains("Nam") && f.Location == tableFile));
+        Assert.That(findings.Any(f => f.Code is "SS-STALE-001" or "SS-STALE-002"), Is.False,
+            "tables.sqlserver.schema was never committed, so there is nothing to compare for staleness — and " +
+            "products.sqlserver.schema, which IS committed, is current and must not report stale either.");
     }
 
     [Test]

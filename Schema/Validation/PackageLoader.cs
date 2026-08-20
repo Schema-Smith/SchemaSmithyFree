@@ -107,12 +107,20 @@ public static class PackageLoader
             return (Template.Load(name, product, tolerateComponentLoadErrors: true, tolerateFileTokenErrors: true,
                 missingMemberHandling: MissingMemberHandling.Ignore), null);
         }
-        catch (Exception e) when (e is JsonException or InvalidOperationException)
+        catch (JsonException e)
         {
-            var templateFilePath = Template.GetTemplateFilePath(product, name);
-            var failure = new Finding(Severity.Error, TemplateLoadFailureCode, "Load", templateFilePath,
-                $"Template '{name}' could not be loaded — every check for this template is skipped: {e.Message}");
-            return (null, failure);
+            return (null, BuildTemplateLoadFailure(name, product, e));
         }
+        catch (InvalidOperationException e)
+        {
+            return (null, BuildTemplateLoadFailure(name, product, e));
+        }
+    }
+
+    private static Finding BuildTemplateLoadFailure(string name, Product product, Exception e)
+    {
+        var templateFilePath = Template.GetTemplateFilePath(product, name);
+        return new Finding(Severity.Error, TemplateLoadFailureCode, "Load", templateFilePath,
+            $"Template '{name}' could not be loaded — every check for this template is skipped: {e.Message}");
     }
 }

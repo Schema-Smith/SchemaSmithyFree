@@ -49,12 +49,12 @@ public class MergeScriptTokenWiringTests
         _directoryWrapper.Exists(Arg.Any<string>()).Returns(true);
         _fileWrapper.Exists(Arg.Any<string>()).Returns(false);
 
-        _templateRoot = Path.Combine(Path.GetTempPath(), "token-wiring-" + Guid.NewGuid().ToString("N"));
+        _templateRoot = Path.Join(Path.GetTempPath(), "token-wiring-" + Guid.NewGuid().ToString("N"));
     }
 
     private void RegisterTemplateJson(string templateRoot, string scriptTokensJson = null)
     {
-        var templateJsonPath = Path.Combine(templateRoot, "Template.json");
+        var templateJsonPath = Path.Join(templateRoot, "Template.json");
         _fileWrapper.Exists(Arg.Is<string>(p => p.Replace('/', Path.DirectorySeparatorChar)
             == templateJsonPath.Replace('/', Path.DirectorySeparatorChar))).Returns(true);
 
@@ -68,7 +68,7 @@ public class MergeScriptTokenWiringTests
 
     private void RegisterTableJsonFound(string templateRoot, string tableFileName)
     {
-        var tableJsonPath = Path.Combine(templateRoot, "Tables", tableFileName);
+        var tableJsonPath = Path.Join(templateRoot, "Tables", tableFileName);
         _fileWrapper.Exists(Arg.Is<string>(p => p.Replace('/', Path.DirectorySeparatorChar)
             == tableJsonPath.Replace('/', Path.DirectorySeparatorChar))).Returns(true);
         _fileWrapper.ReadAllText(Arg.Is<string>(p => p.Replace('/', Path.DirectorySeparatorChar)
@@ -315,7 +315,7 @@ public class MergeScriptTokenWiringTests
             // Table.json is never found for this table -- FindTableJsonFile declines by returning
             // null (Tables dir itself reports missing, short-circuiting before the glob fallback).
             _directoryWrapper.Exists(Arg.Is<string>(p => p.Replace('/', Path.DirectorySeparatorChar)
-                == Path.Combine(_templateRoot, "Tables"))).Returns(false);
+                == Path.Join(_templateRoot, "Tables"))).Returns(false);
             var config = BuildConfig(_templateRoot, "TestTable",
                 new Dictionary<string, string> { ["ShouldCast:ConfigureDataDelivery"] = "true" });
             StubCatalogQueriesForSingleTable();
