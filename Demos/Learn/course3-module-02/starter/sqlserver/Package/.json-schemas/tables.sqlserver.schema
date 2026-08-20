@@ -60,6 +60,9 @@
           "EncryptionAlgorithm": {
             "type": "string"
           },
+          "IsColumnSet": {
+            "type": "boolean"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,

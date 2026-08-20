@@ -54,6 +54,9 @@
           "CheckExpression": {
             "type": "string"
           },
+          "Invisible": {
+            "type": "boolean"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
