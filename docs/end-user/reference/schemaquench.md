@@ -1155,6 +1155,7 @@ The match is trimmed and case-insensitive. The message must be the entire error 
 | SQL Server | `RAISERROR('SCHEMASMITH: SHOULD NOT APPLY', 16, 1)` |
 | PostgreSQL | `RAISE EXCEPTION 'SCHEMASMITH: SHOULD NOT APPLY'` |
 | MySQL | `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SCHEMASMITH: SHOULD NOT APPLY'` |
+| MariaDB | `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SCHEMASMITH: SHOULD NOT APPLY'` |
 
 > **Warning:** SQL Server severity must be ≥ 11. `RAISERROR` at severity ≤ 10 is an informational message -- SchemaQuench does not see it and the script continues executing. Severity 16 is the conventional choice.
 
