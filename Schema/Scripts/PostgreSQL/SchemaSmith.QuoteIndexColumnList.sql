@@ -13,6 +13,7 @@ DECLARE
     token TEXT;
     mods TEXT;
     col TEXT;
+    col_and_opclass TEXT[];
     res_items TEXT[] := ARRAY[]::TEXT[];
 
     -- tokenizer state
@@ -120,8 +121,16 @@ BEGIN
         END LOOP;
 
         IF s NOT LIKE '%(%' THEN
-          -- Clean column identifier: remove surrounding spaces and double quotes, then re-quote
-          col := '"' || TRIM(BOTH ' "' FROM s) || '"';
+          -- A plain column may carry a trailing operator class (CREATE INDEX ... USING gist
+          -- (embedding vector_l2_ops)); split it off before quoting, or it folds into the quoted
+          -- identifier as one bogus two-word name instead of "embedding" vector_l2_ops.
+          col_and_opclass := REGEXP_MATCH(s, '^("(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)\s+([A-Za-z_][A-Za-z0-9_$]*(?:\.[A-Za-z_][A-Za-z0-9_$]*)?)$');
+          IF col_and_opclass IS NOT NULL THEN
+            col := '"' || TRIM(BOTH ' "' FROM col_and_opclass[1]) || '" ' || col_and_opclass[2];
+          ELSE
+            -- Clean column identifier: remove surrounding spaces and double quotes, then re-quote
+            col := '"' || TRIM(BOTH ' "' FROM s) || '"';
+          END IF;
         ELSE
           col := TRIM(s);  -- Preserve complex expressions as-is
         END IF;

@@ -109,7 +109,10 @@ BEGIN
     || CASE WHEN NULLIF(t."IncludeColumns", '') IS NOT NULL THEN ' INCLUDE (' || t."IncludeColumns" || ')' ELSE '' END
     || CASE WHEN t."NullsNotDistinct" THEN ' NULLS NOT DISTINCT' ELSE '' END
     || CASE WHEN NULLIF(t."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || t."FilterExpression" ELSE '' END
-    || CASE WHEN COALESCE(t."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+    -- Positive gate, not a deny-list: an extension AM (e.g. pgvector's hnsw/ivfflat) can't be
+    -- enumerated in advance, so allow-listing the AMs verified to accept fillfactor fails safe
+    -- (no clause) instead of failing loud (PostgreSQL's "unrecognized parameter" error).
+    || CASE WHEN COALESCE(t."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
             THEN ' WITH (fillfactor = ' || t."FillFactor" || ')'
             ELSE '' END
     || ';',
@@ -131,7 +134,8 @@ BEGIN
     INTO sql_script
     FROM temp_mv_indexes t
     WHERE t."Clustered"
-      AND COALESCE(t."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+      -- Positive gate on AMs verified to accept fillfactor (see the create-path comment above).
+      AND COALESCE(t."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
       AND EXISTS (SELECT 1 FROM pg_class c
                    JOIN pg_index idx ON idx.indrelid = c.oid
                    JOIN pg_class i ON i.oid = idx.indexrelid AND i.relname = t."Name"

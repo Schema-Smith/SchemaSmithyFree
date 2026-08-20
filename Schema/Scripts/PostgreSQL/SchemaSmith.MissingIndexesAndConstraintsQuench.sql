@@ -121,7 +121,12 @@ BEGIN
                          THEN 'ALTER TABLE "' || ti."TableSchema" || '"."' || ti."TableName" || '" ADD CONSTRAINT "' || ti."Name" || '" ' ||
                               CASE WHEN ti."PrimaryKey" THEN 'PRIMARY KEY ' ELSE 'UNIQUE ' || CASE WHEN ti."NullsNotDistinct" THEN 'NULLS NOT DISTINCT ' ELSE '' END END ||
                               '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
-                              CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+                              -- Positive gate on the AMs verified to accept fillfactor, not a deny-list of ones
+                              -- that don't: an extension AM (e.g. pgvector's hnsw/ivfflat) can't be enumerated in
+                              -- advance, and a deny-list defaults an unknown AM into the clause, breaking CREATE
+                              -- with PostgreSQL's own "unrecognized parameter" error. An allow-list defaults an
+                              -- unknown AM OUT of the clause instead — no fillfactor tuning, but no hard failure.
+                              CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
                                    ELSE '' END ||
                               CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
@@ -132,7 +137,7 @@ BEGIN
                               CASE WHEN NULLIF(ti."IncludeColumns", '') IS NOT NULL THEN ' INCLUDE (' || "SchemaSmith"."QuoteColumnList"(ti."IncludeColumns") || ')' ELSE '' END ||
                               -- NULLS NOT DISTINCT belongs after INCLUDE and before WITH per the CREATE INDEX grammar.
                               CASE WHEN ti."Unique" AND ti."NullsNotDistinct" THEN ' NULLS NOT DISTINCT' ELSE '' END ||
-                              CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+                              CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ') '
                                    ELSE ' ' END ||
                               CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'

@@ -247,7 +247,9 @@ BEGIN
                      AND i.relname = ti."Name"
       WHERE ti."UpdateFillFactor"
         AND ei."FillFactor" != ti."FillFactor"
-        AND COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist');
+        -- Positive gate on AMs verified to accept fillfactor (see the CREATE-path comment below) —
+        -- an extension AM that rejects the option never reaches an ALTER INDEX SET here either.
+        AND COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash');
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Add Missing Indexes'; -- Includes Primary Keys and Unique Constraints
@@ -259,7 +261,11 @@ BEGIN
                                      ELSE 'UNIQUE ' || CASE WHEN ti."NullsNotDistinct" THEN 'NULLS NOT DISTINCT ' ELSE '' END
                                      END ||
                                 '(' || "SchemaSmith"."QuoteIndexColumnList"(ti."IndexColumns") || ')' ||
-                                CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+                                -- Positive gate, not a deny-list: an extension AM (e.g. pgvector's hnsw/ivfflat)
+                                -- can't be enumerated in advance, so allow-listing the AMs verified to accept
+                                -- fillfactor fails safe (no clause) instead of failing loud (PostgreSQL's own
+                                -- "unrecognized parameter" error) for anything not on the list.
+                                CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                      THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
                                      ELSE '' END ||
                                 CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
@@ -270,7 +276,7 @@ BEGIN
                                 CASE WHEN NULLIF(ti."IncludeColumns", '') IS NOT NULL THEN ' INCLUDE (' || "SchemaSmith"."QuoteColumnList"(ti."IncludeColumns") || ')' ELSE '' END ||
                                 -- CREATE INDEX grammar order: (cols) INCLUDE [NULLS NOT DISTINCT] [WITH] [WHERE].
                                 CASE WHEN ti."Unique" AND ti."NullsNotDistinct" THEN ' NULLS NOT DISTINCT' ELSE '' END ||
-                                CASE WHEN COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist')
+                                CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                      THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
                                      ELSE '' END ||
                                 CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'

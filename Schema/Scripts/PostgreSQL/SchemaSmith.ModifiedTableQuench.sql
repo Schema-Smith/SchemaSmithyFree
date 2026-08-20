@@ -765,7 +765,10 @@ BEGIN
                      AND i.relname = ti."Name"
       WHERE ti."UpdateFillFactor"
         AND ei."FillFactor" != ti."FillFactor"
-        AND COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist');
+        -- Positive gate, not a deny-list: an extension AM (e.g. pgvector's hnsw/ivfflat) can't be
+        -- enumerated in advance, so allow-listing the AMs verified to accept fillfactor fails safe
+        -- (skip the ALTER) instead of failing loud (PostgreSQL's "unrecognized parameter" error).
+        AND COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash');
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Generated Columns Referencing Columns That Are Changing Data Type';

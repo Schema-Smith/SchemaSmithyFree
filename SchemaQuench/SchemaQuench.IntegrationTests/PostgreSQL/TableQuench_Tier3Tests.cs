@@ -89,6 +89,32 @@ public class TableQuench_Tier3Tests : BaseTableQuenchTests
         conn.Close();
     }
 
+    [Test]
+    public void ShouldCreateHashIndexWithFillFactor()
+    {
+        // hash is a non-btree built-in access method (no extension needed) that accepts fillfactor,
+        // exercising the same allow-list gate that excludes gin/brin above without requiring pgvector.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'Tier3Tests' AND tablename = 'HashIndexTable' AND indexname = 'IDX_HashIndex')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True);
+
+        cmd.CommandText = @"SELECT am.amname FROM pg_index idx
+                            JOIN pg_class i ON i.oid = idx.indexrelid
+                            JOIN pg_am am ON am.oid = i.relam
+                            WHERE i.relname = 'IDX_HashIndex'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("hash"));
+
+        cmd.CommandText = @"SELECT SPLIT_PART(opt, '=', 2) FROM pg_class c, UNNEST(c.reloptions) AS opt
+                            WHERE c.relname = 'IDX_HashIndex' AND opt LIKE 'fillfactor=%'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("70"), "hash accepts fillfactor and must not be skipped by the allow-list");
+
+        conn.Close();
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -102,6 +128,8 @@ CREATE SCHEMA ""Tier3Tests"";
 CREATE TABLE ""Tier3Tests"".""GinIndexTable"" (""Tags"" JSONB NOT NULL);
 --ShouldCreateBrinIndex
 CREATE TABLE ""Tier3Tests"".""BrinIndexTable"" (""CreatedAt"" TIMESTAMP NOT NULL);
+--ShouldCreateHashIndexWithFillFactor
+CREATE TABLE ""Tier3Tests"".""HashIndexTable"" (""Code"" TEXT NOT NULL);
 
 -- Index Only
 --ShouldCreateGinIndexIndexOnly
@@ -147,6 +175,25 @@ CREATE TABLE ""Tier3Tests"".""BrinIndexTableIO"" (""CreatedAt"" TIMESTAMP NOT NU
                       "Name": "IDX_BrinIndex",
                       "IndexColumns": "CreatedAt",
                       "AccessMethod": "brin"
+                    }
+                ]
+            },
+            {
+                "Schema": "Tier3Tests",
+                "Name": "HashIndexTable",
+                "Columns": [
+                    {
+                      "Name": "Code",
+                      "DataType": "TEXT",
+                      "Nullable": false
+                    }
+                ],
+                "Indexes": [
+                    {
+                      "Name": "IDX_HashIndex",
+                      "IndexColumns": "Code",
+                      "AccessMethod": "hash",
+                      "FillFactor": 70
                     }
                 ]
             }

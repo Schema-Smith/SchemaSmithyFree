@@ -1018,4 +1018,52 @@ WHERE n.nspname = 'public' AND t.relname = '{tableName}' AND c.conname = '{pkNam
 
         conn.Close();
     }
+
+    [Test]
+    public void ShouldCreateIndexWithOperatorClass()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var tableName = $"opclass_{uniqueId}";
+        var indexName = $"idx_{tableName}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = $@"CREATE TABLE public.{tableName} (name TEXT NOT NULL)";
+        cmd.CommandTimeout = 300;
+        cmd.ExecuteNonQuery();
+
+        // text_pattern_ops is a built-in operator class (no extension required) that reproduces the
+        // reported "column opclass" spec shape (e.g. pgvector's "embedding vector_l2_ops") without
+        // needing pgvector: QuoteIndexColumnList must split the trailing opclass token off before
+        // quoting, or it folds "name text_pattern_ops" into one bogus quoted identifier.
+        var json = $$"""
+        {
+            "Schema": "public",
+            "Name": "{{tableName}}",
+            "Columns": [
+                {"Name": "name", "DataType": "TEXT", "Nullable": false}
+            ],
+            "Indexes": [
+                {"Name": "{{indexName}}", "IndexColumns": "name text_pattern_ops"}
+            ]
+        }
+        """;
+
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, json),
+            "An index column spec with a trailing operator class must not be folded into a single bogus quoted identifier");
+
+        cmd.CommandText = $@"SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = '{tableName}' AND indexname = '{indexName}')";
+        Assert.That(cmd.ExecuteScalar() as bool?, Is.True, "Index with an explicit operator class should be created");
+
+        cmd.CommandText = $@"SELECT opc.opcname FROM pg_index idx
+                            JOIN pg_class i ON i.oid = idx.indexrelid
+                            JOIN pg_opclass opc ON opc.oid = idx.indclass[0]
+                            WHERE i.relname = '{indexName}'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("text_pattern_ops"), "The operator class must be applied to the column, not embedded in a bogus identifier");
+
+        conn.Close();
+    }
 }
