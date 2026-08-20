@@ -80,21 +80,52 @@ BEGIN
         NormColumns TEXT,
         PRIMARY KEY (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
-    SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
-           CONVERT(s.INDEX_NAME USING utf8mb4),
-           MAX(s.NON_UNIQUE),
-           CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
-           GROUP_CONCAT(
-               CONCAT('`', s.COLUMN_NAME, '`',
-                      IF(s.SUB_PART IS NOT NULL, CONCAT('(', s.SUB_PART, ')'), ''),
-                      CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-               ORDER BY s.SEQ_IN_INDEX
-               SEPARATOR ','
-           )
-      FROM INFORMATION_SCHEMA.STATISTICS s
-     WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-     GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+    -- A functional/expression key part (MySQL 8.0.13+) has NULL COLUMN_NAME and reports its text via
+    -- EXPRESSION instead; that column does not exist below the floor or on MariaDB, so the branch that
+    -- reads it is gated behind SchemaSmith_SupportsFunctionalIndex() as two whole statements -- column
+    -- resolution is deferred to the execution of whichever statement actually runs (see
+    -- SchemaSmith_IndexIsVisible / SchemaSmith_SnapshotIndexVisibility for the same IS_VISIBLE-below-8.0
+    -- shape), so the unreached branch's EXPRESSION reference is never bound on an engine that lacks it.
+    -- Must produce the exact same per-key-part form as SchemaSmith_NormalizeIndexColumns and
+    -- GenerateTableJson (one extra paren pair around the expression) or the compare below never converges.
+    IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
+        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
+               CONVERT(s.INDEX_NAME USING utf8mb4),
+               MAX(s.NON_UNIQUE),
+               CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
+               GROUP_CONCAT(
+                   CASE WHEN s.COLUMN_NAME IS NOT NULL THEN
+                       CONCAT('`', s.COLUMN_NAME, '`',
+                              IF(s.SUB_PART IS NOT NULL, CONCAT('(', s.SUB_PART, ')'), ''),
+                              CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+                   ELSE
+                       CONCAT('(', s.EXPRESSION, ')',
+                              CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+                   END
+                   ORDER BY s.SEQ_IN_INDEX
+                   SEPARATOR ','
+               )
+          FROM INFORMATION_SCHEMA.STATISTICS s
+         WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+         GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+    ELSE
+        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
+               CONVERT(s.INDEX_NAME USING utf8mb4),
+               MAX(s.NON_UNIQUE),
+               CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
+               GROUP_CONCAT(
+                   CONCAT('`', s.COLUMN_NAME, '`',
+                          IF(s.SUB_PART IS NOT NULL, CONCAT('(', s.SUB_PART, ')'), ''),
+                          CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+                   ORDER BY s.SEQ_IN_INDEX
+                   SEPARATOR ','
+               )
+          FROM INFORMATION_SCHEMA.STATISTICS s
+         WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+         GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+    END IF;
 
     -- Names-only copy: STEP 1 references the snapshot twice in one statement (main join + the
     -- "new index name doesn't exist" NOT EXISTS), which MySQL/MariaDB forbid for a TEMPORARY table

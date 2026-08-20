@@ -413,6 +413,174 @@ public abstract class TableQuench_IndexOnlySharedTests
     }
 
     [Test]
+    public void IndexOnlyQuench_SupportsFunctionalIndex_GateMatchesPlatform()
+    {
+        // The functional/expression-index gate (MySQL 8.0.13+) has no MariaDB equivalent in this form --
+        // MariaDB expresses a "functional index" as an index on a generated/virtual column, which
+        // extraction already reports as a plain column. Asserting the predicate directly gives MariaDB a
+        // real, non-empty assertion for this feature's absence rather than a suite that simply skips it.
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT SchemaSmith_SupportsFunctionalIndex()";
+        var supports = Convert.ToInt32(command.ExecuteScalar());
+
+        var expected = Platform == Platform.MariaDb ? 0 : 1;
+        Assert.That(supports, Is.EqualTo(expected),
+            $"SchemaSmith_SupportsFunctionalIndex() must be {expected} on {Platform}");
+    }
+
+    [Test]
+    public void IndexOnlyQuench_ShouldAddPurelyFunctionalIndex()
+    {
+        // MariaDB has no equivalent for a functional/expression key part (see the gate test above) and
+        // rejects the ((expr)) CREATE INDEX syntax outright, so the create path is exercised on MySQL only.
+        if (Platform == Platform.MariaDb)
+            Assert.Ignore("Functional/expression indexes are a MySQL 8.0.13+ feature; MariaDB has no equivalent form.");
+
+        // Arrange - a purely functional index: before this task, extraction built IndexColumns from
+        // COLUMN_NAME alone (NULL for a key part like this one), so this shape extracted schema-invalid.
+        using var command = _connection.CreateCommand();
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_func_lower`"",
+                    ""IndexColumns"": ""(lower(`name`))"",
+                    ""Unique"": false,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""BTREE""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        // Assert - the key part landed as a functional one (NULL COLUMN_NAME, populated EXPRESSION).
+        command.CommandText = $@"
+            SELECT COLUMN_NAME, EXPRESSION FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}'
+              AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_func_lower'";
+        using var reader = command.ExecuteReader();
+        Assert.That(reader.Read(), Is.True, "Functional index should have been created");
+        Assert.Multiple(() =>
+        {
+            Assert.That(reader["COLUMN_NAME"], Is.EqualTo(DBNull.Value), "A functional key part has no column name.");
+            Assert.That(Convert.ToString(reader["EXPRESSION"]), Does.Contain("name"),
+                "The expression key part must be readable back from the catalog.");
+        });
+    }
+
+    [Test]
+    public void IndexOnlyQuench_ShouldAddCompositeIndex_MixingPlainColumnAndExpression()
+    {
+        if (Platform == Platform.MariaDb)
+            Assert.Ignore("Functional/expression indexes are a MySQL 8.0.13+ feature; MariaDB has no equivalent form.");
+
+        // Arrange - a composite index mixing a plain column with an expression key part: the case that
+        // regresses first if the declared-side normalizer ever mis-splits the two on their shared comma.
+        using var command = _connection.CreateCommand();
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_mixed`"",
+                    ""IndexColumns"": ""`code`,(lower(`name`))"",
+                    ""Unique"": false,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""BTREE""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        // Assert - both key parts landed, in declared order.
+        command.CommandText = $@"
+            SELECT SEQ_IN_INDEX, COLUMN_NAME, EXPRESSION FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}'
+              AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_mixed'
+            ORDER BY SEQ_IN_INDEX";
+        using var reader = command.ExecuteReader();
+        Assert.That(reader.Read(), Is.True, "First key part should exist");
+        Assert.That(Convert.ToString(reader["COLUMN_NAME"]), Is.EqualTo("code"),
+            "The plain column must stay first, in declared order.");
+        Assert.That(reader.Read(), Is.True, "Second key part should exist");
+        Assert.That(reader["COLUMN_NAME"], Is.EqualTo(DBNull.Value),
+            "The expression key part must follow, with no column name.");
+        Assert.That(Convert.ToString(reader["EXPRESSION"]), Does.Contain("name"));
+    }
+
+    [Test]
+    public void IndexOnlyQuench_FunctionalIndex_IsIdempotent_AcrossRepeatedDeploys()
+    {
+        // Regression coverage for the exact hazard this task closes: if the declared-side normalizer and
+        // the catalog-snapshot builds don't agree byte-for-byte on how a functional key part renders, the
+        // compare never converges and the index is dropped + recreated on every deploy.
+        if (Platform == Platform.MariaDb)
+            Assert.Ignore("Functional/expression indexes are a MySQL 8.0.13+ feature; MariaDB has no equivalent form.");
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"CREATE INDEX `idx_func_stable` ON `{_testDb}`.`{_testTableName}` ((lower(`name`)))";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $@"
+            INSERT INTO `{MainDb}`.SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName)
+            VALUES ('TestProduct', '', '{_testDb}', 'INDEX', '{_testTableName}.idx_func_stable')";
+        command.ExecuteNonQuery();
+
+        var tableJson = $@"[{{
+            ""Name"": ""`{_testTableName}`"",
+            ""Indexes"": [
+                {{
+                    ""Name"": ""`idx_func_stable`"",
+                    ""IndexColumns"": ""(lower(`name`))"",
+                    ""Unique"": false,
+                    ""PrimaryKey"": false,
+                    ""IndexType"": ""BTREE""
+                }}
+            ]
+        }}]";
+        command.CommandText = $"CALL SchemaSmith_ParseTableJson('{_testDb}', '{tableJson.Replace("'", "''")}')";
+        command.ExecuteNonQuery();
+
+        // Act - first pass may legitimately do work. The SECOND pass must do nothing at all -- that
+        // convergence is exactly what a four-site representation mismatch breaks.
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        command.CommandText = "DELETE FROM SchemaSmith_StatusMessages WHERE SessionId = CONNECTION_ID()";
+        command.ExecuteNonQuery();
+
+        command.CommandText = $"CALL SchemaSmith_IndexOnlyQuench('TestProduct', '{_testDb}', 0, 0, 1)";
+        command.ExecuteNonQuery();
+
+        // Assert - no rebuild/rename status line on the re-deploy (same phrases the prefix-length
+        // idempotency test above checks for).
+        command.CommandText = $@"
+            SELECT COUNT(*) FROM SchemaSmith_StatusMessages
+            WHERE SessionId = CONNECTION_ID()
+              AND (Message LIKE '%Drop and recreate index%' OR Message LIKE '%Create index%' OR Message LIKE '%Rename index%')";
+        var actionCount = Convert.ToInt32(command.ExecuteScalar());
+        Assert.That(actionCount, Is.EqualTo(0),
+            "A functional index that already matches the declared definition must be left alone on a re-deploy -- " +
+            "a mismatch between the declared-side normalizer and the catalog snapshot would show up here as a spurious rebuild.");
+
+        command.CommandText = $@"
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{_testTableName}'
+              AND INDEX_NAME = 'idx_func_stable'";
+        var columnName = command.ExecuteScalar();
+        Assert.That(columnName, Is.EqualTo(DBNull.Value), "The functional key part must survive re-deploy.");
+    }
+
+    [Test]
     public void IndexOnlyQuench_ShouldModifyIndex_WhenColumnsChange()
     {
         // Arrange - Create an index on just 'code'

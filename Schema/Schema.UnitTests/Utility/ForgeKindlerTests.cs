@@ -214,7 +214,10 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_SnapshotIndexExistence (engine-agnostic index-existence snapshot procedure; refreshes
         // _SchemaSmith_IdxExist at each IndexOnlyQuench create/ownership point, replacing the per-declared-index
         // live existence reads with a one-scan snapshot).
-        Assert.That(mysql.Length, Is.EqualTo(38));
+        // +1 = SchemaSmith_SupportsFunctionalIndex (functional/expression-index availability predicate, MySQL
+        // 8.0.13; MariaDB has no equivalent form — always 0. Gates the EXPRESSION-column read in
+        // GenerateTableJson and both _SchemaSmith_IdxDetectSnap builds).
+        Assert.That(mysql.Length, Is.EqualTo(39));
     }
 
     [Test]

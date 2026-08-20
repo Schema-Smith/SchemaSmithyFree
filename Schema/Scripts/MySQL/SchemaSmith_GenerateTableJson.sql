@@ -103,32 +103,74 @@ BEGIN
     WHERE c.TABLE_SCHEMA = p_Schema
       AND c.TABLE_NAME = p_Table;
 
-    -- Get indexes (excluding FULLTEXT which are handled separately)
-    SELECT CONCAT('[', IFNULL(GROUP_CONCAT(idx_json SEPARATOR ','), ''), ']') INTO v_indexes
-    FROM (
-        SELECT JSON_OBJECT(
-            'Name', s.INDEX_NAME,
-            'PrimaryKey', CASE WHEN s.INDEX_NAME = 'PRIMARY' THEN TRUE ELSE FALSE END,
-            'Unique', CASE WHEN s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
-            'UniqueConstraint', CASE WHEN s.INDEX_NAME = 'PRIMARY' OR s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
-            'IndexType', s.INDEX_TYPE,
-            'IndexColumns', GROUP_CONCAT(
-                CONCAT('`', s.COLUMN_NAME, '`',
-                    CASE WHEN s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL' THEN CONCAT('(', s.SUB_PART, ')') ELSE '' END,
-                    CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
-                )
-                ORDER BY s.SEQ_IN_INDEX
-                SEPARATOR ','
-            ),
-            'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
-            'Comment', NULLIF(s.INDEX_COMMENT, '')
-        ) AS idx_json
-        FROM INFORMATION_SCHEMA.STATISTICS s
-        WHERE s.TABLE_SCHEMA = p_Schema
-          AND s.TABLE_NAME = p_Table
-          AND s.INDEX_TYPE != 'FULLTEXT'
-        GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
-    ) idx_subquery;
+    -- Get indexes (excluding FULLTEXT which are handled separately). A functional/expression key part
+    -- (MySQL 8.0.13+) has NULL COLUMN_NAME and reports its text via EXPRESSION instead; that column does
+    -- not exist below the floor or on MariaDB, so the branch that reads it is gated behind
+    -- SchemaSmith_SupportsFunctionalIndex() as two whole statements rather than one CASE inside a single
+    -- statement -- column resolution is deferred to the execution of whichever statement actually runs (see
+    -- SchemaSmith_IndexIsVisible / SchemaSmith_SnapshotIndexVisibility for the same IS_VISIBLE-below-8.0
+    -- shape), so the unreached branch's EXPRESSION reference is never bound on an engine that lacks it.
+    -- The expression is wrapped in one extra paren pair, matching what MySQL's own SHOW CREATE TABLE
+    -- renders for a functional key part -- the form a user hand-authoring the JSON would recognize.
+    IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
+        SELECT CONCAT('[', IFNULL(GROUP_CONCAT(idx_json SEPARATOR ','), ''), ']') INTO v_indexes
+        FROM (
+            SELECT JSON_OBJECT(
+                'Name', s.INDEX_NAME,
+                'PrimaryKey', CASE WHEN s.INDEX_NAME = 'PRIMARY' THEN TRUE ELSE FALSE END,
+                'Unique', CASE WHEN s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'UniqueConstraint', CASE WHEN s.INDEX_NAME = 'PRIMARY' OR s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'IndexType', s.INDEX_TYPE,
+                'IndexColumns', GROUP_CONCAT(
+                    CASE WHEN s.COLUMN_NAME IS NOT NULL THEN
+                        CONCAT('`', s.COLUMN_NAME, '`',
+                            CASE WHEN s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL' THEN CONCAT('(', s.SUB_PART, ')') ELSE '' END,
+                            CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
+                        )
+                    ELSE
+                        CONCAT('(', s.EXPRESSION, ')',
+                            CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
+                        )
+                    END
+                    ORDER BY s.SEQ_IN_INDEX
+                    SEPARATOR ','
+                ),
+                'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
+                'Comment', NULLIF(s.INDEX_COMMENT, '')
+            ) AS idx_json
+            FROM INFORMATION_SCHEMA.STATISTICS s
+            WHERE s.TABLE_SCHEMA = p_Schema
+              AND s.TABLE_NAME = p_Table
+              AND s.INDEX_TYPE != 'FULLTEXT'
+            GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
+        ) idx_subquery;
+    ELSE
+        SELECT CONCAT('[', IFNULL(GROUP_CONCAT(idx_json SEPARATOR ','), ''), ']') INTO v_indexes
+        FROM (
+            SELECT JSON_OBJECT(
+                'Name', s.INDEX_NAME,
+                'PrimaryKey', CASE WHEN s.INDEX_NAME = 'PRIMARY' THEN TRUE ELSE FALSE END,
+                'Unique', CASE WHEN s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'UniqueConstraint', CASE WHEN s.INDEX_NAME = 'PRIMARY' OR s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'IndexType', s.INDEX_TYPE,
+                'IndexColumns', GROUP_CONCAT(
+                    CONCAT('`', s.COLUMN_NAME, '`',
+                        CASE WHEN s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL' THEN CONCAT('(', s.SUB_PART, ')') ELSE '' END,
+                        CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
+                    )
+                    ORDER BY s.SEQ_IN_INDEX
+                    SEPARATOR ','
+                ),
+                'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
+                'Comment', NULLIF(s.INDEX_COMMENT, '')
+            ) AS idx_json
+            FROM INFORMATION_SCHEMA.STATISTICS s
+            WHERE s.TABLE_SCHEMA = p_Schema
+              AND s.TABLE_NAME = p_Table
+              AND s.INDEX_TYPE != 'FULLTEXT'
+            GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
+        ) idx_subquery;
+    END IF;
 
     -- Get foreign keys
     SELECT CONCAT('[', IFNULL(GROUP_CONCAT(fk_json SEPARATOR ','), ''), ']') INTO v_foreign_keys
