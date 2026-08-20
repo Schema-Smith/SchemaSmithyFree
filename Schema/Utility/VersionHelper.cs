@@ -19,7 +19,7 @@ namespace Schema.Utility
         // is 100 — see PreFlightVersionGuard.
         private static readonly Dictionary<int, int> SqlServerYearToMajor = new()
         {
-            { 2008, 10 }, { 2012, 11 }, { 2014, 12 }, { 2016, 13 }, { 2017, 14 }, { 2019, 15 }, { 2022, 16 }
+            { 2008, 10 }, { 2012, 11 }, { 2014, 12 }, { 2016, 13 }, { 2017, 14 }, { 2019, 15 }, { 2022, 16 }, { 2025, 17 }
         };
 
         // Intrinsic per-engine hard floor: the lowest version the current script set supports, matching
