@@ -211,6 +211,157 @@ public class CoherenceCheckTests
     }
 
     [Test]
+    public void FkLocalColumnDeclaredBare_ReferencedBacktickWrapped_NoFinding()
+    {
+        // Local column declared bare ("CustomerId"), FK Columns backtick-wrapped
+        // ("`CustomerId`") -- same column, different spelling (MySQL-style quoting on the FK side).
+        var order = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" }, new SqlServerColumn { Name = "CustomerId", DataType = "int" } },
+            ForeignKeys =
+            {
+                new SqlServerForeignKey
+                {
+                    Name = "FK_Order_Customer",
+                    Columns = "`CustomerId`",
+                    RelatedTable = "Customer",
+                    RelatedTableSchema = "dbo",
+                    RelatedColumns = "Id"
+                }
+            }
+        };
+        var ctx = Context(TemplateWithTables("Main", order, Customer()));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void FkLocalColumnDeclaredBracketWrapped_ReferencedBare_NoFinding()
+    {
+        // Reverse direction, non-backtick wrapper: local column declared bracket-wrapped
+        // ("[CustomerId]"), FK Columns bare ("CustomerId").
+        var order = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" }, new SqlServerColumn { Name = "[CustomerId]", DataType = "int" } },
+            ForeignKeys =
+            {
+                new SqlServerForeignKey
+                {
+                    Name = "FK_Order_Customer",
+                    Columns = "CustomerId",
+                    RelatedTable = "Customer",
+                    RelatedTableSchema = "dbo",
+                    RelatedColumns = "Id"
+                }
+            }
+        };
+        var ctx = Context(TemplateWithTables("Main", order, Customer()));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void FkRelatedColumnMismatchedWrapping_NoFinding()
+    {
+        // Related column reference bracket-wrapped ("[Id]") against the target table's bare
+        // declaration (Customer()'s "Id") -- same column across the FK boundary, different spelling.
+        var order = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" }, new SqlServerColumn { Name = "CustomerId", DataType = "int" } },
+            ForeignKeys =
+            {
+                new SqlServerForeignKey
+                {
+                    Name = "FK_Order_Customer",
+                    Columns = "CustomerId",
+                    RelatedTable = "Customer",
+                    RelatedTableSchema = "dbo",
+                    RelatedColumns = "[Id]"
+                }
+            }
+        };
+        var ctx = Context(TemplateWithTables("Main", order, Customer()));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void FkLocalColumnMissingWrapped_StillReportsExactlyOneError()
+    {
+        // Guard against over-correction: a genuinely missing local column, wrapped or not, must
+        // still be flagged exactly once with the correct code.
+        var order = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" } },
+            ForeignKeys =
+            {
+                new SqlServerForeignKey
+                {
+                    Name = "FK_Order_Customer",
+                    Columns = "`NoSuchColumn`",
+                    RelatedTable = "Customer",
+                    RelatedTableSchema = "dbo",
+                    RelatedColumns = "Id"
+                }
+            }
+        };
+        var ctx = Context(TemplateWithTables("Main", order, Customer()));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0].Severity, Is.EqualTo(Severity.Error));
+        Assert.That(findings[0].Code, Is.EqualTo("SS-FK-001"));
+        Assert.That(findings[0].Category, Is.EqualTo("Coherence"));
+    }
+
+    [Test]
+    public void FkRelatedColumnMissingWrapped_StillReportsExactlyOneError()
+    {
+        // Guard against over-correction on the related-column side: a genuinely missing related
+        // column, wrapped or not, must still be flagged exactly once with the correct code.
+        var order = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" }, new SqlServerColumn { Name = "CustomerId", DataType = "int" } },
+            ForeignKeys =
+            {
+                new SqlServerForeignKey
+                {
+                    Name = "FK_Order_Customer",
+                    Columns = "CustomerId",
+                    RelatedTable = "Customer",
+                    RelatedTableSchema = "dbo",
+                    RelatedColumns = "[NoSuchColumn]"
+                }
+            }
+        };
+        var ctx = Context(TemplateWithTables("Main", order, Customer()));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0].Severity, Is.EqualTo(Severity.Error));
+        Assert.That(findings[0].Code, Is.EqualTo("SS-FK-004"));
+        Assert.That(findings[0].Category, Is.EqualTo("Coherence"));
+    }
+
+    [Test]
     public void IndexColumnMissing_IsError()
     {
         var table = new SqlServerTable
@@ -228,6 +379,122 @@ public class CoherenceCheckTests
         Assert.That(findings[0].Severity, Is.EqualTo(Severity.Error));
         Assert.That(findings[0].Code, Is.EqualTo("SS-IDX-001"));
         Assert.That(findings[0].Category, Is.EqualTo("Coherence"));
+    }
+
+    [Test]
+    public void IndexColumnExpressionKeyPart_IsNotFlagged()
+    {
+        // Canonical extracted form for a MySQL functional/expression index — a whole key part
+        // wrapped in one paren pair. Not a column reference; must be skipped, not flagged.
+        var table = new SqlServerTable
+        {
+            Name = "Customer",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" } },
+            Indexes = { new SqlServerIndex { Name = "IX_Customer_Label", IndexColumns = "(lower(`Label`))" } }
+        };
+        var ctx = Context(TemplateWithTables("Main", table));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void IndexColumnPlainColumnPlusExpressionKeyPart_OnlyPlainColumnChecked()
+    {
+        // Mixed key-part list: the plain column must still be checked against the table (and
+        // passes here, since `Id` is present), while the expression key part is skipped.
+        var table = new SqlServerTable
+        {
+            Name = "Customer",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" } },
+            Indexes = { new SqlServerIndex { Name = "IX_Customer_IdLabel", IndexColumns = "`Id`,(lower(`Label`))" } }
+        };
+        var ctx = Context(TemplateWithTables("Main", table));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void IndexColumnExpressionKeyPartContainingComma_IsNotShatteredOrFlagged()
+    {
+        // A naive comma split would shatter this into two fragments and report two spurious
+        // errors — the paren-depth-aware split must keep it as one key part and then skip it.
+        var table = new SqlServerTable
+        {
+            Name = "Customer",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" } },
+            Indexes = { new SqlServerIndex { Name = "IX_Customer_Concat", IndexColumns = "(concat(`Label`,`Label`))" } }
+        };
+        var ctx = Context(TemplateWithTables("Main", table));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void IndexColumnMissingPlainColumn_StillReportsExactlyOneError()
+    {
+        // Guard against over-correction: a genuinely bogus plain-column reference (no parens)
+        // must still be flagged, exactly once.
+        var table = new SqlServerTable
+        {
+            Name = "Customer",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" } },
+            Indexes = { new SqlServerIndex { Name = "IX_Customer_NoSuch", IndexColumns = "`NoSuchColumn`" } }
+        };
+        var ctx = Context(TemplateWithTables("Main", table));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0].Severity, Is.EqualTo(Severity.Error));
+        Assert.That(findings[0].Code, Is.EqualTo("SS-IDX-001"));
+        Assert.That(findings[0].Category, Is.EqualTo("Coherence"));
+    }
+
+    [Test]
+    public void IndexColumnDeclaredBare_ReferencedBracketWrapped_NoFinding()
+    {
+        // Declared bare ("Id"), referenced SQL Server-style bracket-wrapped ("[Id]") — same
+        // column, different spelling. Also proves quoting normalization isn't MySQL-only.
+        var table = new SqlServerTable
+        {
+            Name = "Customer",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Id", DataType = "int" } },
+            Indexes = { new SqlServerIndex { Name = "IX_Customer_Id", IndexColumns = "[Id]" } }
+        };
+        var ctx = Context(TemplateWithTables("Main", table));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
+    }
+
+    [Test]
+    public void IndexColumnDeclaredBracketWrapped_ReferencedBare_NoFinding()
+    {
+        // Reverse direction: declared bracket-wrapped ("[Id]"), referenced bare ("Id").
+        var table = new SqlServerTable
+        {
+            Name = "Customer",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "[Id]", DataType = "int" } },
+            Indexes = { new SqlServerIndex { Name = "IX_Customer_Id", IndexColumns = "Id" } }
+        };
+        var ctx = Context(TemplateWithTables("Main", table));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty);
     }
 
     [Test]
