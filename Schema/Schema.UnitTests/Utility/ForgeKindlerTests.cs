@@ -231,7 +231,12 @@ public class ForgeKindlerTests
         // SRS_ID, the MariaDb override always returns NULL since that column does not exist there at all —
         // isolates the divergence out of GenerateTableJson / ModifiedTableQuench, same shape as
         // SchemaSmith_IndexIsVisible).
-        Assert.That(mysql.Length, Is.EqualTo(43));
+        // +1 = SchemaSmith_ColumnOnUpdateClause (extracts + normalizes a column's `ON UPDATE
+        // CURRENT_TIMESTAMP[(n)]` auto-refresh clause from EXTRA; no MariaDb override needed — it reuses
+        // SchemaSmith_NormalizeColumnDefault for the engine-divergent case/paren folding. Unlike
+        // Invisible/Srid above, the clause predates both engines' floors, so no SchemaSmith_Supports...
+        // gate exists for it).
+        Assert.That(mysql.Length, Is.EqualTo(44));
     }
 
     [Test]

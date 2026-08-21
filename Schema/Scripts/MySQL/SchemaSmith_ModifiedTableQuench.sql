@@ -29,6 +29,7 @@ BEGIN
     -- 3. Column modifications (type, nullable, etc.)
     -- 4. Engine changes
     -- 5. Collation changes
+    -- 5.5. Comment changes (table-level)
     -- 6. Row format changes
     -- 7. Auto-increment seed changes
     -- 8. ProductOwnership updates
@@ -378,6 +379,13 @@ BEGIN
               -- change (NULL on one side) is detected the same as a value change on both sides.
               OR (SchemaSmith_SupportsColumnSrid() = 1
                   AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
 
         -- #363: WhatIf twin of the ELSE-branch 'column'/'modified' audit; same source/predicate, wouldModify.
@@ -433,6 +441,13 @@ BEGIN
               -- change (NULL on one side) is detected the same as a value change on both sides.
               OR (SchemaSmith_SupportsColumnSrid() = 1
                   AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Modify columns');
@@ -507,6 +522,13 @@ BEGIN
               -- change (NULL on one side) is detected the same as a value change on both sides.
               OR (SchemaSmith_SupportsColumnSrid() = 1
                   AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
 
         -- Object-change audit (#243 E5): one row per column about to be modified. Same join +
@@ -565,6 +587,13 @@ BEGIN
               -- change (NULL on one side) is detected the same as a value change on both sides.
               OR (SchemaSmith_SupportsColumnSrid() = 1
                   AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
 
         -- Materialize: fold each table's column modifications into one multi-clause ALTER, then drain.
@@ -624,6 +653,13 @@ BEGIN
               -- change (NULL on one side) is detected the same as a value change on both sides.
               OR (SchemaSmith_SupportsColumnSrid() = 1
                   AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           )
         GROUP BY c.TableName;
 
@@ -1249,6 +1285,62 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
             END LOOP;
 
             CLOSE cur_CollationChanges;
+        END;
+    END IF;
+
+    -- =======================
+    -- STEP 5.5: ALTER TABLE COMMENT
+    -- =======================
+    -- Symmetric compare (unlike Engine/RowFormat above, which only ever apply a declared value and
+    -- never clear one): a declared NULL comment against a live comment counts as a difference the
+    -- same as a value change, so removing a Comment from the JSON clears it in the database too --
+    -- matching the symmetric column-comment predicate in STEP 3 above. Escaping matches the
+    -- established _SchemaSmith_FullTextIndexes.Comment form (double the embedded single quotes).
+    IF p_WhatIf = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Change table comment');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName,
+                      ' COMMENT=''', REPLACE(COALESCE(t.Comment, ''), '''', ''''''), '''')
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        WHERE t.NewTable = 0
+          AND BINARY COALESCE(ist.TABLE_COMMENT, '') != BINARY COALESCE(t.Comment, '');
+    ELSE
+        BEGIN
+            DECLARE v_CommentDone INT DEFAULT FALSE;
+            DECLARE v_CommentSql TEXT;
+            DECLARE cur_CommentChanges CURSOR FOR
+                SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName,
+                              ' COMMENT=''', REPLACE(COALESCE(t.Comment, ''), '''', ''''''), '''') AS AlterCommentStatement
+                FROM _SchemaSmith_Tables t
+                INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                    ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                    AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+                WHERE t.NewTable = 0
+                  AND BINARY COALESCE(ist.TABLE_COMMENT, '') != BINARY COALESCE(t.Comment, '');
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_CommentDone = TRUE;
+
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Change table comment');
+            SET v_CommentDone = FALSE;
+            OPEN cur_CommentChanges;
+
+            comment_changes_loop: LOOP
+                FETCH cur_CommentChanges INTO v_CommentSql;
+                IF v_CommentDone THEN
+                    LEAVE comment_changes_loop;
+                END IF;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Change comment: ', v_CommentSql));
+                SET @exec_sql = v_CommentSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+
+            CLOSE cur_CommentChanges;
         END;
     END IF;
 

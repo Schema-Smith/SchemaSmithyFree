@@ -528,6 +528,8 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 
 `Srid` (int) restricts a spatial column to one spatial reference system -- `"Srid": 4326` deploys as `col POINT SRID 4326`, so the column accepts only geometries in that reference system. MySQL 8.0.3+ only; below that (and on MariaDB, which has no equivalent attribute at any version) the restriction is silently skipped and the column deploys unrestricted, per the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation). Omit `Srid` for an unrestricted spatial column.
 
+`OnUpdateCurrentTimestamp` (string) auto-refreshes a `TIMESTAMP`/`DATETIME` column on every `UPDATE` -- `"OnUpdateCurrentTimestamp": "CURRENT_TIMESTAMP"` deploys as `... ON UPDATE CURRENT_TIMESTAMP`, and an optional fractional-seconds precision round-trips exactly (`"CURRENT_TIMESTAMP(3)"`). Independent of `Default`: a column's `Default` governs its value on `INSERT`, this governs the refresh on `UPDATE` -- declare either, both, or neither. Available on every supported MySQL and MariaDB version, so no version gate applies.
+
 ### User-defined types
 
 When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `DataType` value is the type name. The type must be created in the appropriate types script folder (`DataTypes/` on SQL Server, `Domain Types/`/`Enum Types/`/`Composite Types/` on PostgreSQL) before the table quench runs.

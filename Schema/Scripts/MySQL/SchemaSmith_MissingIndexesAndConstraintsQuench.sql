@@ -179,6 +179,9 @@ BEGIN
         NonUnique TINYINT DEFAULT 0,
         IndexType VARCHAR(32),
         NormColumns TEXT,
+        -- MySQL's index comment ceiling is 1024 characters; MAX() alongside the other per-index
+        -- aggregates below since INDEX_COMMENT is constant across a composite index's key parts.
+        IndexComment VARCHAR(1024),
         PRIMARY KEY (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     -- A functional/expression key part (MySQL 8.0.13+) has NULL COLUMN_NAME and reports its text via
@@ -194,7 +197,7 @@ BEGIN
     -- only executes at 8.0.13+ and never on 5.7/MariaDB; see GenerateTableJson.sql for the full
     -- explanation) or the compare below never converges.
     IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
-        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
+        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns, IndexComment)
         SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
                CONVERT(s.INDEX_NAME USING utf8mb4),
                MAX(s.NON_UNIQUE),
@@ -213,12 +216,13 @@ BEGIN
                    END
                    ORDER BY s.SEQ_IN_INDEX
                    SEPARATOR ','
-               )
+               ),
+               CONVERT(MAX(s.INDEX_COMMENT) USING utf8mb4)
           FROM INFORMATION_SCHEMA.STATISTICS s
          WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
          GROUP BY s.TABLE_NAME, s.INDEX_NAME;
     ELSE
-        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
+        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns, IndexComment)
         SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
                CONVERT(s.INDEX_NAME USING utf8mb4),
                MAX(s.NON_UNIQUE),
@@ -229,7 +233,8 @@ BEGIN
                           CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
                    ORDER BY s.SEQ_IN_INDEX
                    SEPARATOR ','
-               )
+               ),
+               CONVERT(MAX(s.INDEX_COMMENT) USING utf8mb4)
           FROM INFORMATION_SCHEMA.STATISTICS s
          WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
          GROUP BY s.TABLE_NAME, s.INDEX_NAME;
@@ -396,6 +401,10 @@ BEGIN
           OR (BINARY UPPER(snap.IndexType) != BINARY 'FULLTEXT'
               AND SchemaSmith_SupportsInvisibleIndex() = 1
               AND i.IsVisible != viz.IsVisible)
+          -- Or comment differs (symmetric: covers added, changed, and cleared, matching the column
+          -- comment predicate in ModifiedTableQuench). FULLTEXT indexes never reach this file (parsed
+          -- separately into _SchemaSmith_FullTextIndexes), so no FULLTEXT exclusion is needed here.
+          OR (BINARY COALESCE(snap.IndexComment, '') != BINARY COALESCE(i.Comment, ''))
       );
 
     -- Drop modified indexes (they'll be recreated later)
@@ -461,6 +470,9 @@ BEGIN
                       ' (', i.IndexColumns, ')',
                       CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                            WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
+                           ELSE '' END,
+                      CASE WHEN i.Comment IS NOT NULL AND i.Comment != ''
+                           THEN CONCAT(' COMMENT ''', REPLACE(i.Comment, '''', ''''''), '''')
                            ELSE '' END)
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0
@@ -513,6 +525,9 @@ BEGIN
                 ' (', i.IndexColumns, ')',
                 CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                      WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
+                     ELSE '' END,
+                CASE WHEN i.Comment IS NOT NULL AND i.Comment != ''
+                     THEN CONCAT(' COMMENT ''', REPLACE(i.Comment, '''', ''''''), '''')
                      ELSE '' END,
                 CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END
             ),

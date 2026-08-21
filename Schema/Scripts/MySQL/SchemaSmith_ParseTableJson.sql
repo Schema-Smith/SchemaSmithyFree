@@ -67,6 +67,11 @@ BEGIN
         OldName VARCHAR(128) DEFAULT NULL,
         RowFormat VARCHAR(20) DEFAULT NULL,
         AutoIncrementValue BIGINT UNSIGNED DEFAULT NULL,
+        -- MySQL's table comment ceiling is 2048 characters (COLUMN_COMMENT/COLUMN varies -- see the
+        -- Columns/Indexes temp tables below). No pre-validation against that limit: an over-long
+        -- comment is left for the engine's own error at CREATE/ALTER time (matching this codebase's
+        -- existing convention for engine-enforced limits elsewhere).
+        Comment VARCHAR(2048) DEFAULT NULL,
         NewTable TINYINT DEFAULT 0,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
@@ -88,7 +93,7 @@ BEGIN
     SET v_TblIdx = 0;
     WHILE v_TblIdx < v_TblCnt DO
         IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name'))) IS NOT NULL THEN
-            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, PreventDrop)
+            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, PreventDrop)
             SELECT
                 SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name')))) AS TableName,
                 COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Engine')))), ''), 'InnoDB') AS Engine,
@@ -99,6 +104,7 @@ BEGIN
                 SchemaSmith_SafeBacktickWrap(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].OldName')))), '')) AS OldName,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RowFormat')))), '') AS RowFormat,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].AutoIncrementValue'))) AS AutoIncrementValue,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Comment')))), '') AS Comment,
                 0 AS NewTable,
                 1 AS ShouldApply,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
@@ -154,6 +160,10 @@ BEGIN
         DataType VARCHAR(100) NOT NULL,
         IsNullable TINYINT DEFAULT 1,
         DefaultValue TEXT DEFAULT NULL,
+        -- Independent of DefaultValue: DEFAULT governs INSERT-time initialization, this governs
+        -- UPDATE-time refresh. 30 chars comfortably covers 'CURRENT_TIMESTAMP(6)' (the max fractional
+        -- precision) with room to spare.
+        OnUpdateCurrentTimestamp VARCHAR(30) DEFAULT NULL,
         IsAutoIncrement TINYINT DEFAULT 0,
         GeneratedExpression TEXT DEFAULT NULL,
         GeneratedType VARCHAR(10) DEFAULT NULL,
@@ -162,6 +172,9 @@ BEGIN
         CheckExpression TEXT DEFAULT NULL,
         IsInvisible TINYINT DEFAULT 0,
         Srid INT DEFAULT NULL,
+        -- MySQL's column comment ceiling is 1024 characters. No pre-validation -- see the Tables
+        -- temp table Comment column above for the same convention.
+        Comment VARCHAR(1024) DEFAULT NULL,
         OldName VARCHAR(128) DEFAULT NULL,
         NewColumn TINYINT DEFAULT 0,
         ColumnScript TEXT DEFAULT NULL,
@@ -181,9 +194,9 @@ BEGIN
             IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Name'))) IS NOT NULL
                AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Name'))))) THEN
                 INSERT INTO _SchemaSmith_Columns (
-                    TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue,
+                    TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue, OnUpdateCurrentTimestamp,
                     IsAutoIncrement, GeneratedExpression, GeneratedType,
-                    CharacterSet, Collation, CheckExpression, IsInvisible, Srid, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
+                    CharacterSet, Collation, CheckExpression, IsInvisible, Srid, Comment, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
                 )
                 SELECT
                     SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Name')))) AS TableName,
@@ -192,6 +205,9 @@ BEGIN
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].DataType'))) AS DataType,
                     COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Nullable'))), 1) AS IsNullable,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Default'))) AS DefaultValue,
+                    -- UPPER so a hand-authored lower-case 'current_timestamp(3)' compares equal to the
+                    -- canonical form SchemaSmith_ColumnOnUpdateClause extracts from a live target.
+                    UPPER(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].OnUpdateCurrentTimestamp')))), '')) AS OnUpdateCurrentTimestamp,
                     COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].AutoIncrement'))), 0) AS IsAutoIncrement,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].GenerationExpression'))) AS GeneratedExpression,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Generated'))) AS GeneratedType,
@@ -200,6 +216,7 @@ BEGIN
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].CheckExpression'))) AS CheckExpression,
                     COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Invisible'))), 0) AS IsInvisible,
                     SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Srid'))) AS Srid,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Comment')))), '') AS Comment,
                     -- #375: blank/whitespace OldName -> NULL (no rename), same as the table-level OldName above.
                     SchemaSmith_SafeBacktickWrap(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].OldName')))), '')) AS OldName,
                     0 AS NewColumn,
@@ -276,11 +293,23 @@ BEGIN
                               CASE WHEN DefaultValue REGEXP '\\(' AND LEFT(DefaultValue, 1) != '('
                                    THEN CONCAT('(', DefaultValue, ')')
                                    ELSE DefaultValue END)
-                         ELSE '' END
+                         ELSE '' END,
+                    -- ON UPDATE must immediately follow the DEFAULT clause per MySQL/MariaDB's own
+                    -- column_definition grammar (unlike SRID/INVISIBLE/COMMENT below, which are trailing
+                    -- options appended after this whole block) -- placed inside this CONCAT rather than
+                    -- with those. No SchemaSmith_Supports... gate: the clause predates both floors.
+                    CASE WHEN OnUpdateCurrentTimestamp IS NOT NULL AND TRIM(OnUpdateCurrentTimestamp) != ''
+                         THEN CONCAT(' ON UPDATE ', OnUpdateCurrentTimestamp) ELSE '' END
                 )
         END,
         CASE WHEN Srid IS NOT NULL AND SchemaSmith_SupportsColumnSrid() = 1 THEN CONCAT(' SRID ', Srid) ELSE '' END,
-        CASE WHEN IsInvisible = 1 AND SchemaSmith_SupportsInvisibleColumn() = 1 THEN ' INVISIBLE' ELSE '' END
+        CASE WHEN IsInvisible = 1 AND SchemaSmith_SupportsInvisibleColumn() = 1 THEN ' INVISIBLE' ELSE '' END,
+        -- COMMENT is placed last, after SRID/INVISIBLE, matching MySQL's own trailing-option
+        -- placement and the identical pattern already used for FULLTEXT index comments below.
+        -- Escaping (double the embedded single quotes) mirrors that same established form -- see
+        -- _SchemaSmith_FullTextIndexes.Comment's CREATE/ADD FULLTEXT INDEX emit in
+        -- SchemaSmith_IndexOnlyQuench.sql.
+        CASE WHEN Comment IS NOT NULL AND Comment != '' THEN CONCAT(' COMMENT ''', REPLACE(Comment, '''', ''''''), '''') ELSE '' END
     );
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Calculate generated column dependencies');
@@ -400,6 +429,9 @@ BEGIN
         IndexType VARCHAR(20) DEFAULT 'BTREE',
         IndexColumns TEXT NOT NULL,
         IsVisible TINYINT DEFAULT 1,
+        -- MySQL's index comment ceiling is 1024 characters. No pre-validation -- see the Tables
+        -- temp table Comment column above for the same convention.
+        Comment VARCHAR(1024) DEFAULT NULL,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
         VariantName VARCHAR(128) DEFAULT NULL,
@@ -415,7 +447,7 @@ BEGIN
             IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].Name'))) IS NOT NULL
                AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Name'))))) THEN
                 INSERT INTO _SchemaSmith_Indexes (
-                    TableName, IndexName, IsPrimaryKey, IsUnique, IndexType, IndexColumns, IsVisible, ShouldApply, ShouldApplyExpression, VariantName
+                    TableName, IndexName, IsPrimaryKey, IsUnique, IndexType, IndexColumns, IsVisible, Comment, ShouldApply, ShouldApplyExpression, VariantName
                 )
                 SELECT
                     SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Name')))) AS TableName,
@@ -425,6 +457,7 @@ BEGIN
                     COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].IndexType')))), ''), 'BTREE') AS IndexType,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].IndexColumns'))) AS IndexColumns,
                     COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].Visible'))), 1) AS IsVisible,
+                    NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].Comment')))), '') AS Comment,
                     1 AS ShouldApply,
                     NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].ShouldApplyExpression')))), '') AS ShouldApplyExpression,
                     NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_IxOuterIdx, '].Indexes[', v_IxInnerIdx, '].VariantName')))), '') AS VariantName;
@@ -560,7 +593,13 @@ BEGIN
         IndexName VARCHAR(128) NOT NULL,
         Columns TEXT NOT NULL,
         Parser VARCHAR(128) DEFAULT NULL,
-        Comment VARCHAR(255) DEFAULT NULL,
+        -- Was VARCHAR(255) -- narrower than MySQL's actual 1024-char index-comment ceiling (the same
+        -- ceiling used for _SchemaSmith_Indexes.Comment above). Under the default strict SQL mode (the
+        -- default since MySQL 5.7 / MariaDB 10.2, this codebase's own floor), inserting a live
+        -- FULLTEXT index's comment longer than 255 chars into this staging column raised a hard
+        -- 1406 "Data too long" error naming this temp table -- a confusing deploy failure for a
+        -- comment the engine itself accepted and stored.
+        Comment VARCHAR(1024) DEFAULT NULL,
         ShouldApply TINYINT DEFAULT 1,
         ShouldApplyExpression VARCHAR(4000) DEFAULT NULL,
         VariantName VARCHAR(128) DEFAULT NULL,

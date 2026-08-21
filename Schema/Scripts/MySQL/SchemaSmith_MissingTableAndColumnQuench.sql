@@ -51,6 +51,11 @@ BEGIN
                      ELSE '' END,
                 CASE WHEN t.AutoIncrementValue IS NOT NULL
                      THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
+                     ELSE '' END,
+                -- Escaping matches the established _SchemaSmith_FullTextIndexes.Comment form (double
+                -- the embedded single quotes) -- see SchemaSmith_IndexOnlyQuench.sql.
+                CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
+                     THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
                      ELSE '' END
             ) AS CreateTableStatement
         FROM _SchemaSmith_Tables t
@@ -58,7 +63,7 @@ BEGIN
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
 
@@ -262,13 +267,16 @@ BEGIN
                            ELSE '' END,
                       CASE WHEN t.AutoIncrementValue IS NOT NULL
                            THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
+                           ELSE '' END,
+                      CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
+                           THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
                            ELSE '' END)
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
 
         -- Step 2: Show ALTER TABLE ADD COLUMN for new columns on existing tables (set-based;
         -- one row per column, matching the per-column statement the ELSE branch would issue
@@ -380,7 +388,9 @@ BEGIN
         -- string defaults unquoted, MariaDB/8.0 quoted) and keeps the rename data-preserving. INVISIBLE
         -- (MySQL 8.0.23 / MariaDB 10.3) is omitted for the same reason and reconciled the same way -- see
         -- InvisibleColumnGatingTests.RenameOfInvisibleColumnNullableNoDefault_InRenameColumnFallbackBand_VisibilityPredicateAloneRestoresInvisible,
-        -- which isolates that predicate and reddens if it's removed.
+        -- which isolates that predicate and reddens if it's removed. ON UPDATE CURRENT_TIMESTAMP[(n)] is
+        -- omitted here too, for the same reason: it is unconditionally dropped by this CHANGE COLUMN and
+        -- restored by ModifiedTableQuench's ON UPDATE compare against the new column name in the same deploy.
         INSERT INTO _SchemaSmith_ColRenameStmts (Stmt)
         SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
                       GROUP_CONCAT(

@@ -80,6 +80,15 @@ BEGIN
                 -- String literals: normalize (strips MariaDB's outer quotes) then wrap consistently
                 ELSE CONVERT(CONCAT('''', REPLACE(CONVERT(SchemaSmith_NormalizeColumnDefault(c.COLUMN_DEFAULT) USING utf8mb4), '''', ''''''), '''') USING utf8mb4)
             END,
+            -- ON UPDATE CURRENT_TIMESTAMP[(n)] -- deliberately independent of Default above: a column's
+            -- DEFAULT CURRENT_TIMESTAMP governs INSERT-time initialization, this governs UPDATE-time
+            -- refresh, and a column can carry either, both, or neither. Predates both engines' hard
+            -- floors (MySQL 5.6.5; MariaDB inherited it), unlike Invisible/Srid below, so no
+            -- SchemaSmith_Supports... gate is needed here or anywhere else in this feature.
+            -- SchemaSmith_ColumnOnUpdateClause isolates the EXTRA parsing (EXTRA can carry several flags
+            -- at once, e.g. 'DEFAULT_GENERATED on update CURRENT_TIMESTAMP') and preserves a declared
+            -- precision (CURRENT_TIMESTAMP(3)) rather than collapsing it to the bare form.
+            'OnUpdateCurrentTimestamp', SchemaSmith_ColumnOnUpdateClause(c.EXTRA),
             'AutoIncrement', CASE WHEN c.EXTRA LIKE '%auto_increment%' THEN TRUE ELSE FALSE END,
             -- EXTRA is a single column shared by both engines and predates the invisible-column feature,
             -- so (unlike SchemaSmith_IndexIsVisible's IS_VISIBLE/IGNORED divergence, which required a
