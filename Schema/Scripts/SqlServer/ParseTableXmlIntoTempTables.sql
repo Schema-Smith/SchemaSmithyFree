@@ -39,6 +39,11 @@
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          [Schema] = SchemaSmith.fn_SafeBracketWrap(t.value('(Schema/text())[1]', 'NVARCHAR(500)')), [Name] = SchemaSmith.fn_SafeBracketWrap(t.value('(Name/text())[1]', 'NVARCHAR(500)')), [CompressionType] = ISNULL(NULLIF(RTRIM(t.value('(CompressionType/text())[1]', 'NVARCHAR(100)')), ''), 'NONE'),
          [IsTemporal] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(IsTemporal/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [UpdateFillFactor] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(UpdateFillFactor/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0),
+         -- History table identity/retention -- see JSON twin (schema/name left NULL when absent, retention
+         -- normalized to a canonical plural-unit form so it compares like-for-like with the live state).
+         [HistoryTableSchema] = SchemaSmith.fn_SafeBracketWrap(t.value('(HistoryTableSchema/text())[1]', 'NVARCHAR(500)')),
+         [HistoryTableName] = SchemaSmith.fn_SafeBracketWrap(t.value('(HistoryTableName/text())[1]', 'NVARCHAR(500)')),
+         [HistoryRetentionPeriod] = SchemaSmith.fn_NormalizeTemporalRetentionPeriod(t.value('(HistoryRetentionPeriod/text())[1]', 'NVARCHAR(50)')),
          [TableXml] = t.query('.'),
          [ShouldApplyExpression] = t.value('(ShouldApplyExpression/text())[1]', 'NVARCHAR(MAX)'), [VariantName] = t.value('(VariantName/text())[1]', 'NVARCHAR(128)'), [EnableCDC] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(EnableCDC/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [OldName] = SchemaSmith.fn_SafeBracketWrap(t.value('(OldName/text())[1]', 'NVARCHAR(500)')),
          [DropColumnsRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropColumnsRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
@@ -59,7 +64,7 @@
   EXEC(@v_SQL)
 
   IF OBJECT_ID('tempdb..#Tables') IS NOT NULL DROP TABLE #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          ISNULL([PreventDrop], 0) AS [PreventDrop]

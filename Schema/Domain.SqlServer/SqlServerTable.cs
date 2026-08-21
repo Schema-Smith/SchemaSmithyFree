@@ -60,6 +60,25 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 102)]
         public bool IsTemporal { get; set; }
 
+        // Temporal history-table identity + retention (#depth-gap): a history table has a name and a
+        // schema like any other table, so it gets the same two-flat-string shape ForeignKey already uses
+        // for RelatedTableSchema/RelatedTable. Null means "SchemaSmith's own default" -- same schema as
+        // the versioned table, name "<Table>_Hist" -- so existing IsTemporal-only packages deploy exactly
+        // as before. HistoryRetentionPeriod is stored as the raw SQL Server token ("5 YEARS", "INFINITE")
+        // rather than a split number+enum: CompressionType/DeleteAction/UpdateAction already store native
+        // DB tokens as plain strings and let the engine validate them, and the DDL clause it feeds
+        // (HISTORY_RETENTION_PERIOD = <token>) takes that exact shape. Null means unset (SQL Server's own
+        // default, INFINITE unless a database-level default retention is configured) -- preserving
+        // today's silent loss-free behavior for packages that don't set it.
+        [JsonProperty(Order = 108, NullValueHandling = NullValueHandling.Ignore)]
+        public string HistoryTableSchema { get; set; }
+
+        [JsonProperty(Order = 109, NullValueHandling = NullValueHandling.Ignore)]
+        public string HistoryTableName { get; set; }
+
+        [JsonProperty(Order = 110, NullValueHandling = NullValueHandling.Ignore)]
+        public string HistoryRetentionPeriod { get; set; }
+
         [JsonProperty(Order = 103)]
         public List<XmlIndex> XmlIndexes { get; set; } = [];
 

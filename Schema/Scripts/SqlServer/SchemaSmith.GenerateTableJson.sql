@@ -35,6 +35,32 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        -- temporal tables minimal. sys.tables.temporal_type is 2016+ (safe at the current 2017 floor;
        -- gate this + generated_always_type below when the SQL Server floor drops below 2016).
        CASE WHEN st.temporal_type = 2 THEN CAST(1 AS BIT) END AS [IsTemporal],
+       -- History table identity/retention (#depth-gap): emit only when they deviate from SchemaSmith's own
+       -- apply-side default (same schema, "<Table>_Hist", INFINITE retention) so a default-named temporal
+       -- table's JSON stays exactly as minimal as it was before this change. history_table_id /
+       -- history_retention_period(_unit_desc) are 2016+ columns -- safe to reference statically at the
+       -- current 2017 floor, same reasoning as temporal_type above.
+       CASE WHEN st.temporal_type = 2 AND (hs.[name] <> TABLE_SCHEMA OR h.[name] <> TABLE_NAME + '_Hist')
+            THEN '[' + hs.[name] + ']' END AS [HistoryTableSchema],
+       CASE WHEN st.temporal_type = 2 AND (hs.[name] <> TABLE_SCHEMA OR h.[name] <> TABLE_NAME + '_Hist')
+            THEN '[' + h.[name] + ']' END AS [HistoryTableName],
+       -- Reads history_retention_period_unit_desc ('DAY'/'WEEK'/'MONTH'/'YEAR'/'INFINITE') rather than the
+       -- numeric history_retention_period_unit code: the desc needs no separately-maintained code table
+       -- (its 4 finite values pluralize by simple string concatenation), which is exactly what went wrong
+       -- here once already -- the numeric codes actually measured on a live server are 3/4/5/6 for
+       -- DAY/WEEK/MONTH/YEAR, not the 1/2/3/4 a first pass assumed from documentation. An ELSE branch this
+       -- CASE cannot reach today (the 5 values above are exhaustive) still forces a loud runtime error
+       -- rather than a silently-dropped-to-NULL retention if Microsoft ever adds a unit: CONVERT(INT,
+       -- <text>) always fails to convert non-numeric text, so the surrounding CONVERT(NVARCHAR(10), ...)
+       -- keeps this branch's static type consistent with its siblings while still raising Msg 245 with the
+       -- offending unit named in the message text.
+       CASE WHEN st.temporal_type = 2 AND st.history_retention_period_unit_desc <> 'INFINITE'
+            THEN CAST(st.history_retention_period AS NVARCHAR(10)) + ' ' +
+                 CASE st.history_retention_period_unit_desc
+                   WHEN 'DAY' THEN 'DAYS' WHEN 'WEEK' THEN 'WEEKS' WHEN 'MONTH' THEN 'MONTHS' WHEN 'YEAR' THEN 'YEARS'
+                   ELSE CONVERT(NVARCHAR(10), CONVERT(INT, 'Unrecognized SYSTEM_VERSIONING retention unit: ' + ISNULL(st.history_retention_period_unit_desc, CONVERT(NVARCHAR(20), st.history_retention_period_unit))))
+                 END
+            END AS [HistoryRetentionPeriod],
        -- Emit the sticky drop-protection marker first-class (only when set true, so unprotected tables stay minimal).
        -- Read from the PreventDrop extended property (excluded from generic Extensions via @InternalEPNames). #270
        CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
@@ -193,6 +219,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
 	   JSON_QUERY('{"ExtendedProperties": {' + (SELECT STRING_AGG(CAST('"' + [Name] + '": "' + CONVERT(NVARCHAR(MAX), [Value]) + '"' AS NVARCHAR(MAX)), ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, default, default) x WHERE x.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)) + '}}') AS [Extensions]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+  LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
+  LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
   WHERE TABLE_NAME = @p_Table
     AND TABLE_SCHEMA = @p_Schema
   FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER

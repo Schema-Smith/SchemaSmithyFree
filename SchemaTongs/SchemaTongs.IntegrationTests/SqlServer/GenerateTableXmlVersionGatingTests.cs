@@ -44,27 +44,63 @@ public class GenerateTableXmlVersionGatingTests
         // A table carrying a 2016 feature (dynamic data masking) so the version gate has something to drop.
         cmd.CommandText = "CREATE TABLE dbo.Masked (Id INT NOT NULL PRIMARY KEY, Secret VARCHAR(50) MASKED WITH (FUNCTION = 'default()') NULL);";
         cmd.ExecuteNonQuery();
+
+        // A non-default-history-table-name temporal table so the history table identity/retention read
+        // rides the same version guard as temporal_type/masking (#depth-gap).
+        cmd.CommandText = @"
+CREATE TABLE dbo.GatedTemporal (
+    Id INT NOT NULL,
+    Val VARCHAR(50) NOT NULL,
+    ValidFrom DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    ValidTo DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    CONSTRAINT [PK_GatedTemporal] PRIMARY KEY NONCLUSTERED (Id),
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)
+) WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.GatedTemporal_Archive, HISTORY_RETENTION_PERIOD = 3 YEARS));";
+        cmd.ExecuteNonQuery();
         conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableXml_GatesTemporalHistoryReadBelow2016_EmitsAtOrAbove()
+    {
+        // At/above 2016 the version-gated dynamic block runs, so a non-default history table name/schema
+        // and an explicit retention period are read and emitted (#depth-gap).
+        var gatedAt16 = GenerateWithBakedMajor(16, "GatedTemporal");
+        Assert.Multiple(() =>
+        {
+            Assert.That(gatedAt16, Does.Contain("GatedTemporal_Archive"), "at major 13+ the history table name must be emitted");
+            Assert.That(gatedAt16, Does.Contain("3 YEARS"), "at major 13+ the retention period must be emitted");
+        });
+
+        // Below 2016 the guard skips the dynamic read entirely (as it must -- a pre-2016 target cannot be
+        // temporal at all; DegradeUnsupportedFeatures forces IsTemporal off on the apply side), so the
+        // history table name/retention stay unset just like IsTemporal itself.
+        var gatedAt12 = GenerateWithBakedMajor(12, "GatedTemporal");
+        Assert.Multiple(() =>
+        {
+            Assert.That(gatedAt12, Does.Not.Contain("GatedTemporal_Archive"), "below major 13 the history table read is gated out");
+            Assert.That(gatedAt12, Does.Not.Contain("HistoryRetentionPeriod"), "below major 13 no retention period must be emitted");
+        });
     }
 
     [Test]
     public void GenerateTableXml_GatesMaskingReadBelow2016_EmitsAtOrAbove()
     {
         // At/above 2016 (major 13) the version-gated dynamic block runs, so the mask is read and emitted.
-        var maskedAt16 = GenerateWithBakedMajor(16);
+        var maskedAt16 = GenerateWithBakedMajor(16, "Masked");
         Assert.That(maskedAt16, Does.Contain("default()"),
             "at major 13+ the masking read runs, so DataMaskFunction must be emitted");
 
         // Below 2016 the guard skips the dynamic read (as it must — a pre-2016 target cannot mask), so #ColMeta
         // stays empty and the mask is dropped. This is the same gate that lets the proc CREATE on the old binary.
-        var maskedAt12 = GenerateWithBakedMajor(12);
+        var maskedAt12 = GenerateWithBakedMajor(12, "Masked");
         Assert.That(maskedAt12, Does.Not.Contain("default()"),
             "below major 13 the masking read is gated out, so DataMaskFunction must be dropped");
     }
 
     // Re-kindle fn_ServerMajorVersion with the baked major (the JSON kindle installs it on both encodings),
-    // (re)create GenerateTableXml from its resource, and run it against the masked table.
-    private string GenerateWithBakedMajor(int major)
+    // (re)create GenerateTableXml from its resource, and run it against the given table.
+    private string GenerateWithBakedMajor(int major, string table)
     {
         using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
         conn.Open();
@@ -73,7 +109,7 @@ public class GenerateTableXmlVersionGatingTests
         ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: true, IngestEncoding.Json, serverMajorVersion: major);
         ForgeKindler.KindleOneFile(cmd, "SchemaSmith.GenerateTableXml.sql", Platform.SqlServer);
 
-        cmd.CommandText = "EXEC [SchemaSmith].GenerateTableXml @p_Schema = 'dbo', @p_Table = 'Masked'";
+        cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableXml @p_Schema = 'dbo', @p_Table = '{table}'";
         using var reader = cmd.ExecuteReader();
         var xml = new StringBuilder();
         while (reader.Read()) xml.Append(reader.GetValue(0)?.ToString());

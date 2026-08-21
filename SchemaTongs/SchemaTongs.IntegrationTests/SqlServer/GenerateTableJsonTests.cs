@@ -687,6 +687,79 @@ CREATE TABLE dbo.MyTemporalExtract (
     }
 
     [Test]
+    public void ShouldRoundTripNonDefaultHistoryTableNameAndRetentionPeriod()
+    {
+        // #depth-gap: extraction previously emitted only IsTemporal, so a temporal table with a
+        // non-default history table (name/schema) or an explicit retention policy silently lost both on
+        // an extract -> re-deploy round trip -- a retention policy disappearing is compliance-shaped loss.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE SCHEMA history
+CREATE TABLE dbo.MyCustomHistTemporal (
+    Id INT NOT NULL,
+    Somedata VARCHAR(500) NOT NULL,
+    ValidFrom DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    ValidTo DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    CONSTRAINT [PK_MyCustomHistTemporal] PRIMARY KEY NONCLUSTERED (Id),
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)
+) WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = history.MyCustomHistTemporal_Archive, HISTORY_RETENTION_PERIOD = 5 YEARS))
+";
+        cmd.ExecuteNonQuery();
+
+        var result = GenerateTable(cmd, "dbo", "MyCustomHistTemporal");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsTemporal, Is.True);
+            Assert.That(result.HistoryTableSchema, Is.EqualTo("[history]"), "a non-default history schema must round-trip");
+            Assert.That(result.HistoryTableName, Is.EqualTo("[MyCustomHistTemporal_Archive]"), "a non-default history table name must round-trip");
+            Assert.That(result.HistoryRetentionPeriod, Is.EqualTo("5 YEARS"), "an explicit retention period must round-trip");
+        });
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldOmitHistoryTableNameAndRetentionWhenDefault()
+    {
+        // Default-named history table + no explicit retention (SQL Server's own INFINITE default) must
+        // stay minimal, matching how IsTemporal/PreventDrop/etc. only emit when non-default -- otherwise
+        // every existing temporal table's extracted JSON would grow two new properties for nothing.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.MyDefaultHistTemporal (
+    Id INT NOT NULL,
+    Somedata VARCHAR(500) NOT NULL,
+    ValidFrom DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    ValidTo DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    CONSTRAINT [PK_MyDefaultHistTemporal] PRIMARY KEY NONCLUSTERED (Id),
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)
+) WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.MyDefaultHistTemporal_Hist))
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "dbo", "MyDefaultHistTemporal");
+        var result = GenerateTable(cmd, "dbo", "MyDefaultHistTemporal");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsTemporal, Is.True);
+            Assert.That(result.HistoryTableSchema, Is.Null);
+            Assert.That(result.HistoryTableName, Is.Null);
+            Assert.That(result.HistoryRetentionPeriod, Is.Null);
+            Assert.That(json, Does.Not.Contain("HistoryTableSchema"));
+            Assert.That(json, Does.Not.Contain("HistoryTableName"));
+            Assert.That(json, Does.Not.Contain("HistoryRetentionPeriod"));
+        });
+
+        conn.Close();
+    }
+
+    [Test]
     public void ShouldGenerateCorrectJsonForPartitionedTable()
     {
         // Repro for the extraction-abort defect (task C1-0b): sys.partitions is one row PER PARTITION,

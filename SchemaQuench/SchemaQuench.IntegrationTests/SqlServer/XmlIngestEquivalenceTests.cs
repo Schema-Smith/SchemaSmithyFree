@@ -18,7 +18,8 @@ namespace SchemaQuench.IntegrationTests.SqlServer
     {
         // A rich representative model exercising all 8 nested collections the parse shreds.
         private const string RichModelJson = @"[{
-  ""Schema"":""dbo"",""Name"":""XmlEquivTable"",""CompressionType"":""PAGE"",""IsTemporal"":false,""UpdateFillFactor"":false,
+  ""Schema"":""dbo"",""Name"":""XmlEquivTable"",""CompressionType"":""PAGE"",""IsTemporal"":true,
+  ""HistoryTableSchema"":""history"",""HistoryTableName"":""XmlEquivTable_Archive"",""HistoryRetentionPeriod"":""5 YEARS"",""UpdateFillFactor"":false,
   ""OldName"":null,""EnableCDC"":false,""PreventDrop"":false,
   ""DropColumnsRemovedFromProduct"":true,""DropForeignKeysRemovedFromProduct"":false,
   ""DropCheckConstraintsRemovedFromProduct"":false,""DropExcludeConstraintsRemovedFromProduct"":false,

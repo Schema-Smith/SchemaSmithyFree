@@ -37,6 +37,9 @@ SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
 DECLARE @v_ObjectId INT = OBJECT_ID(@p_Schema + '.' + @p_Table)
 DECLARE @v_IsTemporal BIT = 0
+-- History table identity/retention (#depth-gap) -- see JSON twin for the emit-only-when-nonstandard
+-- rationale. Populated by the same version-gated dynamic block as @v_IsTemporal below (0/NULL pre-2016).
+DECLARE @v_HistTableSchema SYSNAME = NULL, @v_HistTableName SYSNAME = NULL, @v_HistRetentionText NVARCHAR(50) = NULL
 
 -- Internal SchemaSmith ownership markers, excluded from the user Extensions/ExtendedProperties (mirrors the
 -- JSON proc). PreventDrop is surfaced as its own top-level property, not a user EP (#270).
@@ -61,8 +64,29 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 13
       FROM sys.columns sc WITH (NOLOCK)
       LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = sc.[object_id] AND mc.column_id = sc.column_id
       WHERE sc.[object_id] = @p_ObjId;
-    SELECT @p_Out = CASE WHEN temporal_type = 2 THEN 1 ELSE 0 END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId;',
-    N'@p_ObjId INT, @p_Out BIT OUTPUT', @p_ObjId = @v_ObjectId, @p_Out = @v_IsTemporal OUTPUT
+    -- History table identity/retention -- see JSON twin (GenerateTableJson.sql) for the emit-only-when-
+    -- nonstandard rationale; @p_Schema/@p_Table compare raw (unwrapped) against sys.schemas/sys.tables
+    -- names, same as the JSON twin''s TABLE_SCHEMA/TABLE_NAME comparison. Reads
+    -- history_retention_period_unit_desc rather than the numeric unit code -- see the JSON twin for why
+    -- (measured live-server codes disagreed with documentation once already). The unreachable ELSE still
+    -- forces a loud Msg 245 rather than a silently-dropped-to-NULL retention if an unrecognized unit ever
+    -- appears; the outer CONVERT(NVARCHAR(10), ...) keeps the branch statically typed like its siblings.
+    SELECT @p_Out = CASE WHEN st.temporal_type = 2 THEN 1 ELSE 0 END,
+           @p_HistSchema = CASE WHEN st.temporal_type = 2 AND (hs.[name] <> @p_Schema OR h.[name] <> @p_Table + ''_Hist'') THEN hs.[name] END,
+           @p_HistName = CASE WHEN st.temporal_type = 2 AND (hs.[name] <> @p_Schema OR h.[name] <> @p_Table + ''_Hist'') THEN h.[name] END,
+           @p_RetentionText = CASE WHEN st.temporal_type = 2 AND st.history_retention_period_unit_desc <> ''INFINITE''
+                                    THEN CAST(st.history_retention_period AS NVARCHAR(10)) + '' '' +
+                                         CASE st.history_retention_period_unit_desc
+                                           WHEN ''DAY'' THEN ''DAYS'' WHEN ''WEEK'' THEN ''WEEKS'' WHEN ''MONTH'' THEN ''MONTHS'' WHEN ''YEAR'' THEN ''YEARS''
+                                           ELSE CONVERT(NVARCHAR(10), CONVERT(INT, ''Unrecognized SYSTEM_VERSIONING retention unit: '' + ISNULL(st.history_retention_period_unit_desc, CONVERT(NVARCHAR(20), st.history_retention_period_unit))))
+                                         END
+                                    END
+      FROM sys.tables st WITH (NOLOCK)
+      LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
+      LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
+      WHERE st.[object_id] = @p_ObjId;',
+    N'@p_ObjId INT, @p_Schema SYSNAME, @p_Table SYSNAME, @p_Out BIT OUTPUT, @p_HistSchema SYSNAME OUTPUT, @p_HistName SYSNAME OUTPUT, @p_RetentionText NVARCHAR(50) OUTPUT',
+    @p_ObjId = @v_ObjectId, @p_Schema = @p_Schema, @p_Table = @p_Table, @p_Out = @v_IsTemporal OUTPUT, @p_HistSchema = @v_HistTableSchema OUTPUT, @p_HistName = @v_HistTableName OUTPUT, @p_RetentionText = @v_HistRetentionText OUTPUT
 
 -- sys.stats.is_temporary is a 2012 column, so a STATIC reference is a CREATE-time "invalid column" error on a
 -- pre-2012 binary. Stage the temporary-stat keys via a fn_ServerMajorVersion()>=11 guarded dynamic INSERT (empty
@@ -90,6 +114,10 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        -- System-versioning round-trip (#369): emit IsTemporal only when true. sys.tables.temporal_type is
        -- 2016+, so it is read into @v_IsTemporal via the version-gated dynamic pre-stage above (0 below 2016).
        CASE WHEN @v_IsTemporal = 1 THEN 'true' END AS [IsTemporal],
+       -- History table identity/retention -- populated by the version-gated dynamic block above (NULL pre-2016).
+       CASE WHEN @v_HistTableSchema IS NOT NULL THEN '[' + @v_HistTableSchema + ']' END AS [HistoryTableSchema],
+       CASE WHEN @v_HistTableName IS NOT NULL THEN '[' + @v_HistTableName + ']' END AS [HistoryTableName],
+       @v_HistRetentionText AS [HistoryRetentionPeriod],
        -- Sticky drop-protection marker (only when set true). Read from the PreventDrop extended property. #270
        CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
                     FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'

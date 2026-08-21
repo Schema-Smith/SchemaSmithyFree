@@ -37,6 +37,12 @@
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          [Schema] = SchemaSmith.fn_SafeBracketWrap([Schema]), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'),
          [IsTemporal] = ISNULL([IsTemporal], 0), [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0),
+         -- History table identity/retention (#depth-gap): schema/name left NULL (not defaulted here) so
+         -- the apply-side quench can tell "unset -> use SchemaSmith's own <Table>_Hist default" apart from
+         -- an explicit value. Retention is normalized here (singular unit -> plural, e.g. "5 YEAR" ->
+         -- "5 YEARS") so a hand-authored singular form compares equal to the canonical plural form the
+         -- live-state read and extraction both produce -- see fn_NormalizeTemporalRetentionPeriod.
+         [HistoryTableSchema] = SchemaSmith.fn_SafeBracketWrap([HistoryTableSchema]), [HistoryTableName] = SchemaSmith.fn_SafeBracketWrap([HistoryTableName]), [HistoryRetentionPeriod] = SchemaSmith.fn_NormalizeTemporalRetentionPeriod([HistoryRetentionPeriod]),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [VariantName], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
@@ -47,6 +53,9 @@
       [Name] NVARCHAR(500) '$.Name',
       [CompressionType] NVARCHAR(100) '$.CompressionType',
       [IsTemporal] BIT '$.IsTemporal',
+      [HistoryTableSchema] NVARCHAR(500) '$.HistoryTableSchema',
+      [HistoryTableName] NVARCHAR(500) '$.HistoryTableName',
+      [HistoryRetentionPeriod] NVARCHAR(50) '$.HistoryRetentionPeriod',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
       [OldName] NVARCHAR(500) '$.OldName',
 	  [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
@@ -77,7 +86,7 @@
   EXEC(@v_SQL)
 
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          ISNULL([PreventDrop], 0) AS [PreventDrop]
