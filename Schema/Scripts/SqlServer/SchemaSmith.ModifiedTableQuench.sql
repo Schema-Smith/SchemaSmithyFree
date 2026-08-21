@@ -526,8 +526,21 @@ BEGIN TRY
          STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                             CASE WHEN fc.type_column_id IS NOT NULL
                                  THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                 ELSE '' END +
+                            -- Full-text LANGUAGE churn: LANGUAGE only when it deviates from the column's own
+                            -- collation-implied default -- stamping every column would churn every existing
+                            -- full-text index once. Must render byte-identical to GenerateTableJson.sql's /
+                            -- GenerateTableXml.sql's extraction and the declared-side parse in
+                            -- ParseTableJsonIntoTempTables.sql / ParseTableXmlIntoTempTables.sql; drift
+                            -- compares these as strings. Mirrors IndexOnlyQuench.sql's live-side build,
+                            -- including the JOIN (not subquery) form -- the two rendering forms must never
+                            -- be allowed to diverge again. NULL collation (non-character column) has no
+                            -- default to compare against, so LANGUAGE is always emitted for it.
+                            CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
+                                 THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                  ELSE '' END
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+            JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
             WHERE fi.[object_id] = fc.[object_id]
             ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
          FullTextCatalog = '[' + (SELECT c.[name] COLLATE DATABASE_DEFAULT FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',

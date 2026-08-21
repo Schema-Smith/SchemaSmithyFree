@@ -60,7 +60,7 @@ BEGIN TRY
          t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
-         i.[FilterExpression], [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
+         i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
          [IndexColumns] = STUFF((SELECT ',' + CASE WHEN RTRIM([value]) LIKE '% DESC'
                                                    THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
                                                    ELSE SchemaSmith.fn_SafeBracketWrap([value])
@@ -88,6 +88,7 @@ BEGIN TRY
       [FilterExpression] = idx.value('(FilterExpression/text())[1]', 'NVARCHAR(MAX)'),
       [IndexColumns] = idx.value('(IndexColumns/text())[1]', 'NVARCHAR(MAX)'),
       [IncludeColumns] = idx.value('(IncludeColumns/text())[1]', 'NVARCHAR(MAX)'),
+      [FileGroup] = idx.value('(FileGroup/text())[1]', 'NVARCHAR(500)'),
       [UpdateFillFactor] = CONVERT(BIT, CASE LOWER(idx.value('(UpdateFillFactor/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
       [ShouldApplyExpression] = idx.value('(ShouldApplyExpression/text())[1]', 'NVARCHAR(MAX)'),
       [VariantName] = idx.value('(VariantName/text())[1]', 'NVARCHAR(128)')
@@ -160,7 +161,15 @@ BEGIN TRY
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
          f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
-         [Columns] = STUFF((SELECT ',' + SchemaSmith.fn_SafeBracketWrap([value]) FROM SchemaSmith.fn_SplitList(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '' ORDER BY [Ordinal] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
+         -- Full-text LANGUAGE churn: same round-trip contract as the JSON twin -- peel off a trailing
+         -- "LANGUAGE nnnn" suffix before bracket-wrapping the column (+ optional TYPE COLUMN) part, then
+         -- reattach it, so this matches the live-side build below byte-for-byte.
+         [Columns] = STUFF((SELECT ',' + CASE WHEN RTRIM([value]) LIKE '% LANGUAGE [0-9]%'
+                                              THEN SchemaSmith.fn_SafeBracketWrap(LEFT(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) - 1)) +
+                                                   ' LANGUAGE ' + SUBSTRING(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) + 10, 4000)
+                                              ELSE SchemaSmith.fn_SafeBracketWrap([value])
+                                              END
+                      FROM SchemaSmith.fn_SplitList(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '' ORDER BY [Ordinal] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
          f.[ShouldApplyExpression], f.[VariantName]
     INTO #FullTextIndexes
     FROM #TableDefinitions t WITH (NOLOCK)
@@ -210,7 +219,12 @@ BEGIN TRY
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS NVARCHAR(500)),
          IsConstraint = CAST(CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
          IsUnique = si.is_unique, IsClustered = CAST(CASE WHEN si.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT), [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
-         IndexScript = 'CREATE ' + 
+         -- Filegroup placement (#filegroups): the index's LIVE filegroup name, for the declared-vs-deployed
+         -- move check below. Deliberately NOT folded into [IndexScript] -- a filegroup difference must
+         -- ERROR, never trigger a silent rebuild via the ordinary "index definition changed" path. Mirrors
+         -- ModifiedTableQuench.sql's #ExistingIndexes build.
+         [xFileGroup] = fg.[name],
+         IndexScript = 'CREATE ' +
                        CASE WHEN si.is_unique = 1 THEN 'UNIQUE ' ELSE '' END + 
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
                        CASE WHEN si.[type] IN (5, 6) THEN 'COLUMNSTORE ' ELSE '' END +
@@ -246,8 +260,38 @@ BEGIN TRY
                                      AND is_disabled = 0
     LEFT JOIN sys.partitions p WITH (NOLOCK)  ON p.[object_id] = si.[object_id]
                                              AND p.index_id = si.index_id
+    LEFT JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
     WHERE t.MissingTable = 0
       AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
+
+  -- Filegroup placement (#filegroups): an EXISTING index (found live, still declared by name) whose declared
+  -- filegroup differs from where it is currently deployed is a MOVE -- SQL Server rebuild territory, so this
+  -- errors naming both rather than silently rebuilding it. Same "error, don't rebuild" contract as
+  -- ModifiedTableQuench.sql's index-level check. Declared NULL means "the database's own default filegroup",
+  -- so an ordinary index with FileGroup unset never trips this against a live index already on the default.
+  RAISERROR('Validate declared index filegroup matches deployed', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #ExistingIndexes ei WITH (NOLOCK)
+               JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                            AND ei.[xTableName] = i.[TableName]
+                                            AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+               WHERE ei.[xFileGroup] IS NOT NULL
+                 AND ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) <> ei.[xFileGroup])
+  BEGIN
+    DECLARE @v_IdxMoveIndex NVARCHAR(1510), @v_IdxMoveDeclared NVARCHAR(500), @v_IdxMoveLive NVARCHAR(500)
+    SELECT TOP 1 @v_IdxMoveIndex = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName],
+                 @v_IdxMoveDeclared = ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)),
+                 @v_IdxMoveLive = ei.[xFileGroup]
+      FROM #ExistingIndexes ei WITH (NOLOCK)
+      JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                   AND ei.[xTableName] = i.[TableName]
+                                   AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+      WHERE ei.[xFileGroup] IS NOT NULL
+        AND ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) <> ei.[xFileGroup]
+    DECLARE @v_IdxMoveMsg NVARCHAR(2000) = 'Index ' + @v_IdxMoveIndex + ' declares filegroup ' + @v_IdxMoveDeclared +
+      ', but is currently deployed on filegroup ' + @v_IdxMoveLive + '. SchemaSmith does not move an existing index to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.';
+    RAISERROR(@v_IdxMoveMsg, 16, 1);
+  END
 
   RAISERROR('Collect Existing XML Index Definitions', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#ExistingXmlIndexes') IS NOT NULL DROP TABLE #ExistingXmlIndexes
@@ -319,8 +363,18 @@ BEGIN TRY
          STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                             CASE WHEN fc.type_column_id IS NOT NULL
                                  THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                 ELSE '' END +
+                            -- Full-text LANGUAGE churn: same emit-only-when-non-default rule and
+                            -- byte-identical contract as the JSON twin (IndexOnlyQuench.sql). Kept as a JOIN
+                            -- (not a subquery) here too even though FOR XML PATH's correlated-subquery form
+                            -- would compile -- the two rendering forms must never be allowed to diverge again.
+                            -- NULL collation (non-character column) has no default to compare against, so
+                            -- LANGUAGE is always emitted for it -- see GenerateTableJson.sql for the rationale.
+                            CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
+                                 THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                  ELSE '' END
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+            JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
             WHERE fi.[object_id] = fc.[object_id]
             ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
          FullTextCatalog = '[' + (SELECT c.[name] COLLATE DATABASE_DEFAULT FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',
@@ -636,6 +690,28 @@ BEGIN TRY
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- Filegroup placement (#filegroups): a NEW index declaring a filegroup name that does not exist on this
+  -- target must fail loudly BEFORE any DDL runs, naming both the index and the filegroup -- same contract as
+  -- MissingIndexesAndConstraintsQuench.sql's check. Only indexes not yet present are checked; an
+  -- already-existing index's declared vs. deployed filegroup is the "move" question, handled above.
+  RAISERROR('Validate declared index filegroups exist', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #Indexes i WITH (NOLOCK)
+               WHERE i.[FileGroup] IS NOT NULL
+                 AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]))
+                 AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])))
+  BEGIN
+    DECLARE @v_IdxFGIndex NVARCHAR(1510), @v_IdxFGName NVARCHAR(500)
+    SELECT TOP 1 @v_IdxFGIndex = i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName], @v_IdxFGName = i.[FileGroup]
+      FROM #Indexes i WITH (NOLOCK)
+      WHERE i.[FileGroup] IS NOT NULL
+        AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]))
+        AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
+    DECLARE @v_IdxFGMsg NVARCHAR(2000) = 'Index ' + @v_IdxFGIndex + ' declares filegroup ' + @v_IdxFGName +
+      ', which does not exist on this database. SchemaSmith does not create filegroups -- create it on the target first, or correct the declared name.';
+    RAISERROR(@v_IdxFGMsg, 16, 1);
+  END
+
   RAISERROR('Add Missing Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + 'RAISERROR(''  Creating ' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + CASE WHEN RTRIM(ISNULL(i.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(i.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1
@@ -648,11 +724,15 @@ BEGIN TRY
                                                       CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN 'DATA_COMPRESSION=' + i.[CompressionType] ELSE '' END +
                                                       CASE WHEN ISNULL(i.[FillFactor], 100) NOT IN (0, 100) 
                                                            THEN CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ', ' ELSE '' END +
-                                                                'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
+                                                                'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20))
                                                            ELSE '' END +
 							                          ')'
-                                                 ELSE '' END
-                                       ELSE 'CREATE ' + 
+                                                 ELSE '' END +
+                                            -- Filegroup placement (#filegroups): ON comes AFTER the WITH
+                                            -- clause for ADD CONSTRAINT, per its own grammar (unlike CREATE
+                                            -- TABLE, where ON precedes WITH). Existence validated above.
+                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
+                                       ELSE 'CREATE ' +
                                             CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
                                             CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
                                             CASE WHEN i.[ColumnStore] = 1 THEN 'COLUMNSTORE ' ELSE '' END +
@@ -673,10 +753,13 @@ BEGIN TRY
                                                            THEN CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
                                                                        OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
                                                                      THEN ', ' ELSE '' END +
-                                                                'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
+                                                                'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20))
                                                            ELSE '' END +
 							                          ')'
-                                                 ELSE '' END
+                                                 ELSE '' END +
+                                            -- Filegroup placement (#filegroups): ON comes AFTER the WITH
+                                            -- clause for CREATE INDEX too. Existence validated above.
+                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
                                        END + ';'
     FROM #Indexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT *

@@ -289,6 +289,135 @@ END";
         conn.Close();
     }
 
+    // --IndexOnly coverage (#filegroups): SchemaSmith.IndexOnlyQuench/IndexOnlyXmlQuench are a separate,
+    // fully duplicated entry point with their own inline parsing and their own copy of the index-creation
+    // DDL -- they carried zero FileGroup handling at all, so a package deployed via --IndexOnly silently
+    // placed every index on the default filegroup. Same contract as the main path above: deploys to a
+    // declared non-default filegroup, errors naming both when it doesn't exist or differs from deployed,
+    // and is a no-op when unset.
+    [Test]
+    public void IndexOnly_IndexOnNonDefaultFileGroup_DeploysThere()
+    {
+        var uid = Guid.NewGuid().ToString("N")[..8];
+        var product = $"FGIdxOnlyProduct_{uid}";
+        var table = $"FGIdxOnlyTable_{uid}";
+
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            cmd.CommandText = $"CREATE TABLE [dbo].[{table}] (Id INT NOT NULL, Somedata VARCHAR(100) NULL);";
+            cmd.ExecuteNonQuery();
+
+            RunTableQuenchProc(cmd, WithIndexOnlyIndexFileGroup(table, FileGroupA), indexOnly: true, productName: product);
+
+            Assert.That(LiveIndexFileGroup(cmd, table, $"IX_{table}_Somedata"), Is.EqualTo(FileGroupA),
+                "an index deployed via --IndexOnly must land on its declared non-default filegroup, matching the main deploy path");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS [dbo].[{table}];";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    [Test]
+    public void IndexOnly_DeclaredIndexFileGroupDoesNotExist_ThrowsNamingIt()
+    {
+        var uid = Guid.NewGuid().ToString("N")[..8];
+        var product = $"FGIdxOnlyMissingProduct_{uid}";
+        var table = $"FGIdxOnlyMissingTable_{uid}";
+        const string missingFileGroup = "FG_SchemaSmithTest_DoesNotExist";
+
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            cmd.CommandText = $"CREATE TABLE [dbo].[{table}] (Id INT NOT NULL, Somedata VARCHAR(100) NULL);";
+            cmd.ExecuteNonQuery();
+
+            var ex = Assert.Throws<SqlException>(() => RunTableQuenchProc(cmd, WithIndexOnlyIndexFileGroup(table, missingFileGroup), indexOnly: true, productName: product));
+            Assert.Multiple(() =>
+            {
+                Assert.That(ex!.Message, Does.Contain($"IX_{table}_Somedata"), "the error must name the offending index");
+                Assert.That(ex.Message, Does.Contain(missingFileGroup), "the error must name the missing filegroup");
+                Assert.That(ex.Message, Does.Contain("does not exist"), "the error must say the filegroup does not exist -- same contract as the main deploy path");
+            });
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS [dbo].[{table}];";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    [Test]
+    public void IndexOnly_NoFileGroupDeclared_IsCompletelyUnaffected()
+    {
+        var uid = Guid.NewGuid().ToString("N")[..8];
+        var product = $"FGIdxOnlyUnaffectedProduct_{uid}";
+        var table = $"FGIdxOnlyUnaffectedTable_{uid}";
+
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            cmd.CommandText = $"CREATE TABLE [dbo].[{table}] (Id INT NOT NULL, Somedata VARCHAR(100) NULL);";
+            cmd.ExecuteNonQuery();
+
+            RunTableQuenchProc(cmd, WithIndexOnlyIndex(table), indexOnly: true, productName: product);
+            Assert.That(LiveIndexFileGroup(cmd, table, $"IX_{table}_Somedata"), Is.Null,
+                "an --IndexOnly index with no declared FileGroup must deploy to the database's default filegroup exactly as before");
+
+            Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, WithIndexOnlyIndex(table), indexOnly: true, productName: product),
+                "a redeploy of the identical package via --IndexOnly must be a true no-op");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS [dbo].[{table}];";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    private static string WithIndexOnlyIndexFileGroup(string table, string indexFileGroup) => $$"""
+[
+  {
+    "Schema": "[dbo]",
+    "Name": "[{{table}}]",
+    "Indexes": [
+      { "Name": "[IX_{{table}}_Somedata]", "IndexColumns": "[Somedata]", "FileGroup": "[{{indexFileGroup}}]" }
+    ]
+  }
+]
+""";
+
+    private static string WithIndexOnlyIndex(string table) => $$"""
+[
+  {
+    "Schema": "[dbo]",
+    "Name": "[{{table}}]",
+    "Indexes": [
+      { "Name": "[IX_{{table}}_Somedata]", "IndexColumns": "[Somedata]" }
+    ]
+  }
+]
+""";
+
     private static string WithTable(string table) => $$"""
 [
   {

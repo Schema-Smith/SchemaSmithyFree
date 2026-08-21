@@ -51,6 +51,198 @@ SELECT c.[name] FROM sys.fulltext_indexes fi WITH (NOLOCK)
         return cmd.ExecuteScalar() as string;
     }
 
+    private static int? DeployedLanguageId(DbCommand cmd, string tableName, string columnName)
+    {
+        cmd.CommandText = $@"
+SELECT fc.language_id FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+  WHERE fc.[object_id] = OBJECT_ID('dbo.{tableName}')
+    AND fc.column_id = COLUMNPROPERTY(OBJECT_ID('dbo.{tableName}'), '{columnName}', 'ColumnId')";
+        var result = cmd.ExecuteScalar();
+        return result == null || result == DBNull.Value ? (int?)null : Convert.ToInt32(result);
+    }
+
+    private static string DeployedTypeColumn(DbCommand cmd, string tableName, string columnName)
+    {
+        cmd.CommandText = $@"
+SELECT COL_NAME(fc.[object_id], fc.type_column_id) FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+  WHERE fc.[object_id] = OBJECT_ID('dbo.{tableName}')
+    AND fc.column_id = COLUMNPROPERTY(OBJECT_ID('dbo.{tableName}'), '{columnName}', 'ColumnId')";
+        return cmd.ExecuteScalar() as string;
+    }
+
+    // Full-text LANGUAGE churn: a declared per-column LANGUAGE previously could never compare equal to
+    // the live index -- neither extraction nor the live-side comparison build rendered
+    // sys.fulltext_index_columns.language_id -- so a package that declared one rebuilt (dropped and
+    // recreated, paying a full repopulation) its full-text index on every single deploy.
+    [Test]
+    public void FullText_ExplicitNonDefaultLanguage_Deploys()
+    {
+        const string tableName = "FtLang_Explicit";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        CreateTestTable(cmd, tableName);
+        RunIndexOnlyQuench(cmd, tableName,
+            """{ "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_FtLang_Explicit]", "Columns": "[Title] LANGUAGE 1041", "ChangeTracking": "OFF" }""");
+
+        Assert.That(DeployedLanguageId(cmd, tableName, "Title"), Is.EqualTo(1041),
+            "a declared per-column LANGUAGE must reach CREATE FULLTEXT INDEX and deploy as declared");
+        conn.Close();
+    }
+
+    [Test]
+    public void FullText_ExplicitLanguage_RequenchPerformsNoFullTextWork()
+    {
+        const string tableName = "FtLang_NoChurn";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        CreateTestTable(cmd, tableName);
+        var json = """{ "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_FtLang_NoChurn]", "Columns": "[Title] LANGUAGE 1041", "ChangeTracking": "OFF" }""";
+        RunIndexOnlyQuench(cmd, tableName, json);
+        Assert.That(DeployedLanguageId(cmd, tableName, "Title"), Is.EqualTo(1041));
+
+        var captured = new StringBuilder();
+        var sqlConn = (SqlConnection)conn;
+        SqlInfoMessageEventHandler handler = (_, e) => captured.Append(e.Message);
+        sqlConn.InfoMessage += handler;
+        try
+        {
+            RunIndexOnlyQuench(cmd, tableName, json, whatIf: true);
+        }
+        finally
+        {
+            sqlConn.InfoMessage -= handler;
+        }
+
+        // The regression this closes: before the fix, neither side ever rendered LANGUAGE, so a
+        // declared value could never compare equal to live and the index dropped/recreated every deploy.
+        Assert.That(captured.ToString(), Does.Not.Contain("FULLTEXT"),
+            "a declared LANGUAGE that already matches the live index must not be seen as drift on the next deploy");
+        conn.Close();
+    }
+
+    [Test]
+    public void FullText_TypeColumnAndLanguage_KeepsBoth()
+    {
+        const string tableName = "FtLang_TypeColumn";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}; " +
+                          $"CREATE TABLE dbo.{tableName} (Id INT NOT NULL, Doc VARBINARY(MAX) NULL, DocType NVARCHAR(4) NULL); " +
+                          $"CREATE UNIQUE INDEX UDX_{tableName} ON dbo.{tableName} (Id);";
+        cmd.ExecuteNonQuery();
+
+        RunIndexOnlyQuench(cmd, tableName,
+            """{ "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_FtLang_TypeColumn]", "Columns": "[Doc] TYPE COLUMN [DocType] LANGUAGE 1041", "ChangeTracking": "OFF" }""");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DeployedTypeColumn(cmd, tableName, "Doc"), Is.EqualTo("DocType"), "TYPE COLUMN must still be honored alongside LANGUAGE");
+            Assert.That(DeployedLanguageId(cmd, tableName, "Doc"), Is.EqualTo(1041), "LANGUAGE must be honored alongside TYPE COLUMN");
+        });
+        conn.Close();
+    }
+
+    [Test]
+    public void FullText_NoExplicitLanguage_IsCompletelyUnaffected()
+    {
+        // Backward-compatibility guard: an ordinary full-text index with no declared LANGUAGE -- the
+        // state every existing package is in -- must not churn on requench.
+        const string tableName = "FtLang_Default";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        CreateTestTable(cmd, tableName);
+        var json = """{ "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_FtLang_Default]", "Columns": "[Title]", "ChangeTracking": "OFF" }""";
+        RunIndexOnlyQuench(cmd, tableName, json);
+
+        var captured = new StringBuilder();
+        var sqlConn = (SqlConnection)conn;
+        SqlInfoMessageEventHandler handler = (_, e) => captured.Append(e.Message);
+        sqlConn.InfoMessage += handler;
+        try
+        {
+            RunIndexOnlyQuench(cmd, tableName, json, whatIf: true);
+        }
+        finally
+        {
+            sqlConn.InfoMessage -= handler;
+        }
+
+        Assert.That(captured.ToString(), Does.Not.Contain("FULLTEXT"),
+            "a full-text index with no declared LANGUAGE must not churn on requench");
+        conn.Close();
+    }
+
+    [Test]
+    public void FullText_ExplicitLanguage_MainPathRequenchPerformsNoFullTextWork()
+    {
+        // Same regression as FullText_ExplicitLanguage_RequenchPerformsNoFullTextWork above, but through
+        // the ordinary deploy path (SchemaSmith.TableQuench / SchemaSmith.ModifiedTableQuench) that almost
+        // every user runs -- ModifiedTableQuench.sql has its own separate copy of the live-side Columns
+        // build, so fixing only IndexOnlyQuench.sql left this path -- the common case -- still churning on
+        // every deploy.
+        const string tableName = "FtLang_MainPathNoChurn";
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = (DbCommand)conn.CreateCommand();
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName};";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+            [{
+                "Schema": "[dbo]",
+                "Name": "[{{tableName}}]",
+                "Columns": [
+                    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+                    { "Name": "[Title]", "DataType": "VARCHAR(200)", "Nullable": true }
+                ],
+                "Indexes": [ { "Name": "[UDX_{{tableName}}]", "IndexColumns": "[Id]", "Unique": true } ],
+                "FullTextIndex": { "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_{{tableName}}]", "Columns": "[Title] LANGUAGE 1041", "ChangeTracking": "OFF" }
+            }]
+            """;
+
+        try
+        {
+            RunTableQuenchProc(cmd, json);
+            Assert.That(DeployedLanguageId(cmd, tableName, "Title"), Is.EqualTo(1041));
+
+            var captured = new StringBuilder();
+            var sqlConn = (SqlConnection)conn;
+            SqlInfoMessageEventHandler handler = (_, e) => captured.Append(e.Message);
+            sqlConn.InfoMessage += handler;
+            try
+            {
+                RunTableQuenchProc(cmd, json, whatIf: true);
+            }
+            finally
+            {
+                sqlConn.InfoMessage -= handler;
+            }
+
+            Assert.That(captured.ToString(), Does.Not.Contain("FULLTEXT"),
+                "a declared LANGUAGE that already matches the live index must not be seen as drift on the ordinary deploy path either");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName};";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
     [Test]
     public void FullText_SingleObjectShape_StillDeploys()
     {

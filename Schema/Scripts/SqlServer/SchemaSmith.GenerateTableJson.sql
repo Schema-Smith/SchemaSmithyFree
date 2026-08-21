@@ -227,8 +227,23 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                                        CASE WHEN fc.type_column_id IS NOT NULL
                                             THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                            ELSE '' END +
+                                       -- Full-text LANGUAGE churn: emit only when it deviates from the column's
+                                       -- own collation-implied default -- stamping every column would churn every
+                                       -- existing full-text index once. Must render byte-identical to the
+                                       -- live-side build in IndexOnlyQuench.sql/ModifiedTableQuench.sql; drift
+                                       -- detection compares these as strings. c.collation_name comes from a JOIN,
+                                       -- not a correlated subquery -- STRING_AGG rejects an aggregate expression
+                                       -- containing a subquery. A NULL collation (a non-character column, e.g. a
+                                       -- VARBINARY document column indexed via TYPE COLUMN) has no collation-implied
+                                       -- default to compare against, so it is always treated as non-default and
+                                       -- LANGUAGE is always emitted for it -- the alternative (never emitting) would
+                                       -- make such a column's language permanently unrepresentable.
+                                       CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
+                                            THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                             ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+                  JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
                   WHERE fi.[object_id] = fc.[object_id]) AS [Columns]
           FROM sys.fulltext_indexes fi WITH (NOLOCK)
           WHERE fi.[object_id] = st.[object_id]

@@ -302,8 +302,19 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                                        CASE WHEN fc.type_column_id IS NOT NULL
                                             THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                            ELSE '' END +
+                                       -- Full-text LANGUAGE churn: same emit-only-when-non-default rule and
+                                       -- byte-identical contract as the JSON twin (GenerateTableJson.sql). Kept
+                                       -- as a JOIN (not a subquery) here too even though FOR XML PATH's
+                                       -- correlated-subquery form would compile -- the two rendering forms must
+                                       -- never be allowed to diverge again. NULL collation (non-character
+                                       -- column) has no default to compare against, so LANGUAGE is always
+                                       -- emitted for it -- see GenerateTableJson.sql for the full rationale.
+                                       CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
+                                            THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                             ELSE '' END
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+                  JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
                   WHERE fi.[object_id] = fc.[object_id]
                   ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns]
           FROM sys.fulltext_indexes fi WITH (NOLOCK)
