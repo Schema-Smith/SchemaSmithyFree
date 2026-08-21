@@ -424,6 +424,10 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FullTextIndex` | object or array | `null` | Full-text index on the table -- a single definition, or an array of conditional variants. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
 | `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. |
 | `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. |
+| `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. `null` means SQL Server's own default filegroup. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
+| `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
+| `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
+| `HistoryRetentionPeriod` | string | `null` | Retention for the temporal history table, as the SQL Server token (e.g. `"5 YEARS"`, `"90 DAYS"`, `"INFINITE"`). `null` leaves retention unmanaged. |
 
 ### PostgreSQL (`PostgreSqlTable`)
 
@@ -623,7 +627,9 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ### SQL Server index extras
 
-`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`.
+`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`, `FileGroup`.
+
+`FileGroup` follows the same name-only, null-means-default contract as the table property above. An index is declared independently of its table's filegroup, which is what lets you keep a large table's data and its indexes on separate storage.
 
 ### PostgreSQL index extras
 
@@ -954,7 +960,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 | `KeyIndex` | string | Name of the unique index used as the full-text key. |
 | `ChangeTracking` | string | `"OFF"`, `"MANUAL"`, or `"AUTO"`. |
 | `StopList` | string | Name of a full-text stop list. |
-| `Columns` | string | Column specification for the full-text index. |
+| `Columns` | string | Comma-separated column specification, e.g. `"[Title],[Body] TYPE COLUMN [BodyType] LANGUAGE 1033"`. Each entry is a bracketed column name, optionally followed by `TYPE COLUMN [col]` (the column holding the document's file extension for a binary column) and `LANGUAGE <lcid>` (the word breaker to tokenize with). |
 | `ShouldApplyExpression` | string | Boolean SQL expression evaluated on the target; the index (or variant) applies only when it is true. |
 | `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
@@ -964,6 +970,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 - **One match per target.** With more than one variant, *every* variant must declare a `ShouldApplyExpression`, and those expressions must be mutually exclusive on any given target. Two variants matching the same target fails the deployment with a clear error.
 - **No match means none.** When no variant matches a target, the table behaves as if no full-text index were declared there -- any existing full-text index is removed.
 - **No-op when unchanged.** When the deployed index already matches the selected variant, re-deployment performs no full-text work: no drop, no repopulation.
+- **`LANGUAGE` extracts only when it differs from the column default.** SchemaTongs omits `LANGUAGE` for a column already indexed in the language its collation implies, so extracted packages stay uncluttered. A column with no collation (a binary document column indexed through `TYPE COLUMN`) always extracts its `LANGUAGE`, because it has no implied default to fall back on.
 
 > **Note:** When no variant matches a target, an existing full-text index on that table is dropped -- the absence of a match is treated as "no full-text index here," not "leave it alone."
 
