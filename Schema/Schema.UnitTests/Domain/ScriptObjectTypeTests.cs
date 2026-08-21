@@ -32,6 +32,7 @@ namespace Schema.UnitTests.Domain
         [TestCase(ScriptObjectType.XMLSchemaCollections, "XMLSchemaCollections")]
         [TestCase(ScriptObjectType.DDLTriggers, "DDLTriggers")]
         [TestCase(ScriptObjectType.IndexedViews, "IndexedViews")]
+        [TestCase(ScriptObjectType.Synonyms, "Synonyms")]
         [TestCase(ScriptObjectType.DomainTypes, "DomainTypes")]
         [TestCase(ScriptObjectType.EnumTypes, "EnumTypes")]
         [TestCase(ScriptObjectType.CompositeTypes, "CompositeTypes")]
@@ -41,6 +42,8 @@ namespace Schema.UnitTests.Domain
         [TestCase(ScriptObjectType.Sequences, "Sequences")]
         [TestCase(ScriptObjectType.Rules, "Rules")]
         [TestCase(ScriptObjectType.MaterializedViews, "MaterializedViews")]
+        [TestCase(ScriptObjectType.Collations, "Collations")]
+        [TestCase(ScriptObjectType.Publications, "Publications")]
         [TestCase(ScriptObjectType.Events, "Events")]
         public void AllValues_RoundTripThroughJsonSerialization(ScriptObjectType value, string expectedString)
         {

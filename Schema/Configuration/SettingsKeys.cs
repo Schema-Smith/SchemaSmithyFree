@@ -80,6 +80,7 @@ public static class SettingsKeys
         public const string Section = "ShouldCast";
         public const string Aggregates = "ShouldCast:Aggregates";
         public const string Catalogs = "ShouldCast:Catalogs";
+        public const string Collations = "ShouldCast:Collations";
         public const string CompositeTypes = "ShouldCast:CompositeTypes";
         public const string ConfigureDataDelivery = "ShouldCast:ConfigureDataDelivery";
         public const string DdlTriggers = "ShouldCast:DDLTriggers";
@@ -98,12 +99,14 @@ public static class SettingsKeys
         public const string OutputContentFiles = "ShouldCast:OutputContentFiles";
         public const string OutputScripts = "ShouldCast:OutputScripts";
         public const string Procedures = "ShouldCast:Procedures";
+        public const string Publications = "ShouldCast:Publications";
         public const string Rules = "ShouldCast:Rules";
         public const string SaveInvalidScripts = "ShouldCast:SaveInvalidScripts";
         public const string Schemas = "ShouldCast:Schemas";
         public const string ScriptDynamicDependencyRemovalForFunctions = "ShouldCast:ScriptDynamicDependencyRemovalForFunctions";
         public const string Sequences = "ShouldCast:Sequences";
         public const string StopLists = "ShouldCast:StopLists";
+        public const string Synonyms = "ShouldCast:Synonyms";
         public const string TableTriggers = "ShouldCast:TableTriggers";
         public const string Tables = "ShouldCast:Tables";
         public const string TokenizeScripts = "ShouldCast:TokenizeScripts";

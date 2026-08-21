@@ -71,6 +71,9 @@ public static class CleanupScriptGenerator
             ScriptObjectType.FullTextCatalogs => "DROP FULLTEXT CATALOG",
             ScriptObjectType.FullTextStopLists => "DROP FULLTEXT STOPLIST",
             ScriptObjectType.XMLSchemaCollections => "DROP XML SCHEMA COLLECTION",
+            ScriptObjectType.Synonyms => "DROP SYNONYM",
+            ScriptObjectType.Collations => "DROP COLLATION",
+            ScriptObjectType.Publications => "DROP PUBLICATION",
             ScriptObjectType.Schemas => null,
             _ => null
         };

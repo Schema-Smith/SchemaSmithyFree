@@ -79,6 +79,7 @@ public class SchemaTongs
     private bool _includeXmlSchemaCollections;
     private bool _scriptDynamicDependencyRemovalForFunctions;
     private bool _includeIndexedViews;
+    private bool _includeSynonyms;
 
     // PostgreSQL specific
     private bool _includeDomainTypes;
@@ -87,10 +88,12 @@ public class SchemaTongs
     private bool _includeFunctions; // PostgreSQL: functions, trigger functions, and window functions
     private bool _includeAggregates;
     private bool _includeProcedures;
-    private bool _includeSequences;
+    private bool _includeSequences; // PostgreSQL always; SQL Server (2012+) and MariaDb-only on MySQL's base platform
     private bool _includeRules;
     private bool _includeTriggers;
     private bool _includeMaterializedViews;
+    private bool _includeCollations;
+    private bool _includePublications;
 
     // MySQL specific
     private bool _includeEvents;
@@ -514,6 +517,8 @@ public class SchemaTongs
                 _includeXmlSchemaCollections = config[SettingsKeys.ShouldCast.XmlSchemaCollections]?.ToLower() != "false";
                 _scriptDynamicDependencyRemovalForFunctions = config[SettingsKeys.ShouldCast.ScriptDynamicDependencyRemovalForFunctions]?.ToLower() == "true";
                 _includeIndexedViews = config[SettingsKeys.ShouldCast.IndexedViews]?.ToLower() != "false";
+                _includeSequences = config[SettingsKeys.ShouldCast.Sequences]?.ToLower() != "false";
+                _includeSynonyms = config[SettingsKeys.ShouldCast.Synonyms]?.ToLower() != "false";
                 break;
 
             case Platform.PostgreSQL:
@@ -528,6 +533,8 @@ public class SchemaTongs
                 _includeRules = config[SettingsKeys.ShouldCast.Rules]?.ToLower() != "false";
                 _includeTriggers = config[SettingsKeys.ShouldCast.TableTriggers]?.ToLower() != "false";
                 _includeMaterializedViews = config[SettingsKeys.ShouldCast.MaterializedViews]?.ToLower() != "false";
+                _includeCollations = config[SettingsKeys.ShouldCast.Collations]?.ToLower() != "false";
+                _includePublications = config[SettingsKeys.ShouldCast.Publications]?.ToLower() != "false";
                 break;
 
             case Platform.MySQL:
@@ -535,6 +542,9 @@ public class SchemaTongs
                 _includeStoredProcedures = config[SettingsKeys.ShouldCast.Procedures]?.ToLower() != "false";
                 _includeTableTriggers = config[SettingsKeys.ShouldCast.TableTriggers]?.ToLower() != "false";
                 _includeEvents = config[SettingsKeys.ShouldCast.Events]?.ToLower() != "false";
+                // MariaDb-only: MySQL has no native SEQUENCE object, so the flag stays false on plain MySQL
+                // regardless of config — there is nothing for ShouldCast:Sequences to mean there.
+                _includeSequences = _platform == Platform.MariaDb && config[SettingsKeys.ShouldCast.Sequences]?.ToLower() != "false";
                 break;
         }
 
@@ -591,6 +601,13 @@ public class SchemaTongs
                                   "(schema objects ARE the iteration unit). Move shared schema scripts " +
                                   "to a regular template earlier in TemplateOrder.");
                 _includeSchemas = false;
+            }
+            if (_includePublications)
+            {
+                _progressLog.Warn("ShouldCast.Publications is ignored in schema-template extraction mode " +
+                                  "(publications are database-scoped — CREATE PUBLICATION has no schema " +
+                                  "qualifier). Move them to a regular template earlier in TemplateOrder.");
+                _includePublications = false;
             }
         }
     }
@@ -906,6 +923,8 @@ public class SchemaTongs
                 if (_includeDDLTriggers) folders.Add(ResolveFolderName("DDLTriggers", ScriptObjectType.DDLTriggers));
                 if (_includeXmlSchemaCollections) folders.Add(ResolveFolderName("XMLSchemaCollections", ScriptObjectType.XMLSchemaCollections));
                 if (_includeIndexedViews) folders.Add("Indexed Views");
+                if (_includeSequences) folders.Add(ResolveFolderName("Sequences", ScriptObjectType.Sequences));
+                if (_includeSynonyms) folders.Add(ResolveFolderName("Synonyms", ScriptObjectType.Synonyms));
                 break;
 
             case Platform.PostgreSQL:
@@ -925,6 +944,8 @@ public class SchemaTongs
                 if (_includeRules) folders.Add(ResolveFolderName("Rules", ScriptObjectType.Rules));
                 if (_includeTriggers) folders.Add(ResolveFolderName("Triggers", ScriptObjectType.Triggers));
                 if (_includeMaterializedViews) folders.Add("Materialized Views");
+                if (_includeCollations) folders.Add(ResolveFolderName("Collations", ScriptObjectType.Collations));
+                if (_includePublications) folders.Add(ResolveFolderName("Publications", ScriptObjectType.Publications));
                 break;
 
             case Platform.MySQL:
@@ -932,6 +953,7 @@ public class SchemaTongs
                 if (_includeStoredProcedures) folders.Add(ResolveFolderName("Procedures", ScriptObjectType.Procedures));
                 if (_includeTableTriggers) folders.Add(ResolveFolderName("Triggers", ScriptObjectType.Triggers));
                 if (_includeEvents) folders.Add(ResolveFolderName("Events", ScriptObjectType.Events));
+                if (_includeSequences) folders.Add(ResolveFolderName("Sequences", ScriptObjectType.Sequences)); // MariaDb-only; _includeSequences is gated in LoadShouldCastSettings
                 break;
         }
 
@@ -1019,6 +1041,8 @@ public class SchemaTongs
             if (_includeDDLTriggers) ScriptSqlServerDDLTriggers(command);
             if (_includeXmlSchemaCollections) ScriptSqlServerXmlSchemaCollections(command);
             if (_includeIndexedViews) CastSqlServerIndexedViews(command);
+            if (_includeSequences) ScriptSqlServerSequences(command);
+            if (_includeSynonyms) ScriptSqlServerSynonyms(command);
         }
         finally
         {
@@ -1328,6 +1352,103 @@ SELECT cc.name, cc.definition
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, script);
             _stats.DataTypes++;
+        }
+    }
+
+    private void ScriptSqlServerSequences(IDbCommand command)
+    {
+        _progressLog.Info("Casting Sequences");
+        var castPath = GetCastPath(ScriptObjectType.Sequences, "Sequences");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name AS SchemaName, sq.name AS SequenceName, TYPE_NAME(sq.system_type_id) AS DataType,
+       sq.start_value, sq.increment, sq.minimum_value, sq.maximum_value, sq.is_cycling
+  FROM sys.sequences sq
+  JOIN sys.schemas s ON sq.schema_id = s.schema_id
+ ORDER BY s.name, sq.name";
+
+        // start_value/increment/minimum_value/maximum_value are sql_variant (a sequence can be any exact
+        // numeric type) — read via ToString() rather than a numeric conversion so a DECIMAL/NUMERIC-typed
+        // sequence's value round-trips as a literal instead of risking overflow or truncation.
+        var sequences = new List<(string Schema, string Name, string DataType, string StartValue, string Increment, string MinValue, string MaxValue, bool IsCycling)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                if (!ShouldExtractFromSchema(schema)) continue;
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+                sequences.Add((schema, name, reader.GetString(2),
+                    reader.GetValue(3).ToString(), reader.GetValue(4).ToString(),
+                    reader.GetValue(5).ToString(), reader.GetValue(6).ToString(),
+                    reader.GetBoolean(7)));
+            }
+        }
+
+        foreach (var (schema, name, dataType, startValue, increment, minValue, maxValue, isCycling) in sequences)
+        {
+            var createScript =
+                $"CREATE SEQUENCE [{Identifier.EscapeDelimited(schema, Platform.SqlServer)}].[{Identifier.EscapeDelimited(name, Platform.SqlServer)}]\r\n" +
+                $"\tAS {dataType}\r\n" +
+                $"\tSTART WITH {startValue}\r\n" +
+                $"\tINCREMENT BY {increment}\r\n" +
+                $"\tMINVALUE {minValue}\r\n" +
+                $"\tMAXVALUE {maxValue}\r\n" +
+                $"\t{(isCycling ? "CYCLE" : "NO CYCLE")}";
+
+            // CREATE SEQUENCE has no IF NOT EXISTS form on SQL Server (unlike PostgreSQL); guard with the
+            // same catalog-existence check the Schemas/DataTypes folders use above.
+            var script = $"IF NOT EXISTS (SELECT * FROM sys.sequences sq JOIN sys.schemas ss ON sq.schema_id = ss.schema_id WHERE sq.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
+                         createScript;
+
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            script = RewriteSqlBodyForSchemaTemplate(script, fileName);
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            _stats.Sequences++;
+        }
+    }
+
+    private void ScriptSqlServerSynonyms(IDbCommand command)
+    {
+        _progressLog.Info("Casting Synonyms");
+        var castPath = GetCastPath(ScriptObjectType.Synonyms, "Synonyms");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        command.CommandText = @"
+SELECT s.name AS SchemaName, sy.name AS SynonymName, sy.base_object_name
+  FROM sys.synonyms sy
+  JOIN sys.schemas s ON sy.schema_id = s.schema_id
+ ORDER BY s.name, sy.name";
+
+        var synonyms = new List<(string Schema, string Name, string BaseObjectName)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var schema = reader.GetString(0);
+                var name = reader.GetString(1);
+                if (!ShouldExtractFromSchema(schema)) continue;
+                if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
+                synonyms.Add((schema, name, reader.GetString(2)));
+            }
+        }
+
+        foreach (var (schema, name, baseObjectName) in synonyms)
+        {
+            // CREATE SYNONYM has no IF NOT EXISTS form and must be the first statement in its batch, so
+            // (like Schemas above) the guarded create goes through EXEC sys.sp_executesql dynamic SQL
+            // rather than a plain IF block.
+            var script = $"IF NOT EXISTS (SELECT * FROM sys.synonyms sy JOIN sys.schemas ss ON sy.schema_id = ss.schema_id WHERE sy.name = N'{EscapeSql(name)}' AND ss.name = N'{EscapeSql(schema)}')\r\n" +
+                         $"EXEC sys.sp_executesql N'CREATE SYNONYM [{EscapeSql(Identifier.EscapeDelimited(schema, Platform.SqlServer))}].[{EscapeSql(Identifier.EscapeDelimited(name, Platform.SqlServer))}] FOR {EscapeSql(baseObjectName)}'\r\n";
+
+            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            script = RewriteSqlBodyForSchemaTemplate(script, fileName);
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            _stats.Synonyms++;
         }
     }
 
@@ -2012,6 +2133,8 @@ SELECT s.name AS SchemaName, v.name AS ViewName
             if (_includeTriggers) CastPostgreSqlTriggers(command);
             if (_includeViews) CastPostgreSqlViews(command);
             if (_includeMaterializedViews) CastPostgreSqlMaterializedViews(command);
+            if (_includeCollations) CastPostgreSqlCollations(command);
+            if (_includePublications) CastPostgreSqlPublications(command);
         }
         finally
         {
@@ -2263,6 +2386,31 @@ $$;' AS Code
         PerformPostgreSqlCasting(command, "Composite Types");
     }
 
+    private void CastPostgreSqlCollations(IDbCommand command)
+    {
+        // QUOTE_IDENT/QUOTE_LITERAL build the Code text rather than hand-doubled quote literals — each
+        // returns its value already correctly escaped, so no nested-quote arithmetic is needed here.
+        // Best-effort: libc-provider collations round-trip via LC_COLLATE/LC_CTYPE. ICU-provider
+        // collations (collprovider = 'i') fall back to collcollate as the LOCALE value, which covers
+        // pg_import_system_collations-derived ICU rows but not every hand-authored ICU nuance.
+        command.CommandText = @"
+SELECT 'Collations' AS Folder,
+       n.nspname || '.' || c.collname AS FullName,
+       'CREATE COLLATION IF NOT EXISTS ' || QUOTE_IDENT(n.nspname) || '.' || QUOTE_IDENT(c.collname) || ' (' ||
+       CASE WHEN c.collprovider = 'i' THEN 'PROVIDER = icu, LOCALE = ' || QUOTE_LITERAL(COALESCE(c.collcollate, c.collname))
+            ELSE 'LC_COLLATE = ' || QUOTE_LITERAL(c.collcollate) || ', LC_CTYPE = ' || QUOTE_LITERAL(c.collctype)
+       END ||
+       CASE WHEN c.collisdeterministic = false THEN ', DETERMINISTIC = false' ELSE '' END ||
+       ');' AS Code
+  FROM pg_collation c
+  JOIN pg_namespace n ON c.collnamespace = n.oid
+                     AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
+                     AND n.nspname NOT LIKE 'pg_temp_%'
+                     AND n.nspname NOT LIKE 'pg_toast_temp_%';
+";
+        PerformPostgreSqlCasting(command, "Collations");
+    }
+
     private void CastPostgreSqlFunctions(IDbCommand command)
     {
         command.CommandText = @"
@@ -2348,6 +2496,37 @@ SELECT 'Sequences' AS Folder,
                       AND d.classid = 'pg_class'::regclass);
 ";
         PerformPostgreSqlCasting(command, "Sequences");
+    }
+
+    private void CastPostgreSqlPublications(IDbCommand command)
+    {
+        // Best-effort: covers publish=insert/update/delete/truncate (all PG10+, below the PG12 floor)
+        // and FOR ALL TABLES / FOR TABLE. PG13's publish_via_partition_root is not emitted — a target
+        // above the floor without partitioned-root publishing loses only that one clause on re-extract.
+        // CREATE PUBLICATION has no IF NOT EXISTS form, so the guarded create goes through a DO $$ ... $$
+        // block (like Composite/Enum Types above). QUOTE_IDENT/QUOTE_LITERAL supply every interpolated
+        // value pre-escaped, and every literal chunk below opens and closes with exactly one quote each —
+        // no hand-doubled nested quoting, unlike the older ""schema""."" pattern elsewhere in this file.
+        command.CommandText = @"
+SELECT 'Publications' AS Folder,
+       p.pubname AS FullName,
+       E'\nDO $$\nBEGIN\n    IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = ' || QUOTE_LITERAL(p.pubname) ||
+       E') THEN\n        CREATE PUBLICATION ' || QUOTE_IDENT(p.pubname) || ' ' ||
+       CASE WHEN p.puballtables THEN 'FOR ALL TABLES '
+            ELSE 'FOR TABLE ' || COALESCE(STRING_AGG(DISTINCT QUOTE_IDENT(pt.schemaname) || '.' || QUOTE_IDENT(pt.tablename), ', '), '') || ' '
+       END ||
+       'WITH (publish = ' || QUOTE_LITERAL(CONCAT_WS(',',
+            CASE WHEN p.pubinsert THEN 'insert' END,
+            CASE WHEN p.pubupdate THEN 'update' END,
+            CASE WHEN p.pubdelete THEN 'delete' END,
+            CASE WHEN p.pubtruncate THEN 'truncate' END)) ||
+       E');\n    END IF;\nEND\n$$;' AS Code
+  FROM pg_publication p
+  LEFT JOIN pg_publication_tables pt ON pt.pubname = p.pubname
+ WHERE p.pubname NOT LIKE 'pg\_%'
+ GROUP BY p.pubname, p.puballtables, p.pubinsert, p.pubupdate, p.pubdelete, p.pubtruncate;
+";
+        PerformPostgreSqlCasting(command, "Publications");
     }
 
     private void CastPostgreSqlRules(IDbCommand command)
@@ -2526,6 +2705,7 @@ SELECT mv.schemaname, mv.matviewname
                 if (_includeStoredProcedures) ScriptMySqlProcedures(command, targetSchema);
                 if (_includeTableTriggers) ScriptMySqlTriggers(command, targetSchema);
                 if (_includeEvents) ScriptMySqlEvents(command, targetSchema);
+                if (_includeSequences) ScriptMariaDbSequences(command, targetSchema);
             }
             finally
             {
@@ -2655,6 +2835,60 @@ SELECT 'Events' AS Folder,
     AND EVENT_NAME NOT LIKE 'SchemaSmith\_%'
 ";
         _stats.Events = PerformMySqlCasting(command, "Events");
+    }
+
+    /// <summary>
+    /// MariaDb-only: MySQL has no SEQUENCE object, so this is reached only when the caller's
+    /// _includeSequences flag is true, which LoadShouldCastSettings gates to Platform.MariaDb.
+    /// Two-step like ExtractMySqlTableDefinitions above (list, then per-item) rather than the
+    /// generic PerformMySqlCasting single-query shape — SHOW CREATE SEQUENCE needs a per-sequence
+    /// round trip, and MariaDB's own DDL-generation is the most reliable source for sequence options
+    /// (increment/min/max/cache/cycle) rather than hand-reconstructing them from INFORMATION_SCHEMA.
+    /// </summary>
+    private void ScriptMariaDbSequences(IDbCommand command, string targetSchema)
+    {
+        _progressLog.Info("Casting Sequence Scripts");
+        command.CommandText = $@"
+SELECT TABLE_NAME
+  FROM INFORMATION_SCHEMA.TABLES
+ WHERE TABLE_SCHEMA = '{EscapeSql(targetSchema)}'
+   AND TABLE_TYPE = 'SEQUENCE'
+ ORDER BY TABLE_NAME";
+
+        var sequenceNames = new List<string>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+                sequenceNames.Add(reader.GetString(0));
+        }
+
+        if (sequenceNames.Count == 0) return; // lazy folder creation, matching PerformMySqlCasting's convention
+
+        var castPath = GetCastPath(ScriptObjectType.Sequences, "Sequences");
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var name in sequenceNames)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            command.CommandText = $"SHOW CREATE SEQUENCE `{targetSchema.Replace("`", "``")}`.`{name.Replace("`", "``")}`";
+            string createStatement;
+            using (var reader = command.ExecuteReader())
+            {
+                reader.Read();
+                createStatement = reader.GetString(1); // "Create Table" column carries the CREATE SEQUENCE DDL
+            }
+
+            // SHOW CREATE SEQUENCE emits a plain CREATE SEQUENCE; rewrap as CREATE OR REPLACE so the
+            // extracted script is idempotent on re-run, matching every other scripted-object folder here.
+            var script = createStatement.Replace("CREATE SEQUENCE", "CREATE OR REPLACE SEQUENCE");
+
+            var fileName = ResolveOutputPath(castPath, EncodeFullName(name, ".sql"));
+            script = RewriteSqlBodyForSchemaTemplate(script, fileName);
+            _progressLog.Info($"  Casting {fileName}");
+            FileWrapper.GetFromFactory().WriteAllText(fileName, script);
+            _stats.Sequences++;
+        }
     }
 
     private void ExtractMySqlTableDefinitions(IDbCommand command, string targetSchema)
@@ -3050,6 +3284,8 @@ SELECT cc.name AS [Name],
             case "Triggers": _stats.Triggers++; break;
             case "Views": _stats.Views++; break;
             case "Materialized Views": _stats.MaterializedViews++; break;
+            case "Collations": _stats.Collations++; break;
+            case "Publications": _stats.Publications++; break;
         }
     }
 
@@ -3073,6 +3309,8 @@ SELECT cc.name AS [Name],
                 LogIfPositive("  FTStopLists:", _stats.FullTextStopLists);
                 LogIfPositive("  XmlSchemas: ", _stats.XmlSchemaCollections);
                 LogIfPositive("  IdxViews:   ", _stats.IndexedViews);
+                LogIfPositive("  Sequences:  ", _stats.Sequences);
+                LogIfPositive("  Synonyms:   ", _stats.Synonyms);
                 break;
 
             case Platform.PostgreSQL:
@@ -3088,6 +3326,8 @@ SELECT cc.name AS [Name],
                 LogIfPositive("  Triggers:   ", _stats.Triggers);
                 LogIfPositive("  Views:      ", _stats.Views);
                 LogIfPositive("  MatViews:   ", _stats.MaterializedViews);
+                LogIfPositive("  Collations: ", _stats.Collations);
+                LogIfPositive("  Publications:", _stats.Publications);
                 break;
 
             case Platform.MySQL:
@@ -3096,6 +3336,7 @@ SELECT cc.name AS [Name],
                 LogIfPositive("  Procedures: ", _stats.Procedures);
                 LogIfPositive("  Triggers:   ", _stats.Triggers);
                 LogIfPositive("  Events:     ", _stats.Events);
+                LogIfPositive("  Sequences:  ", _stats.Sequences);
                 break;
         }
 
@@ -3137,5 +3378,8 @@ SELECT cc.name AS [Name],
         public int FullTextCatalogs { get; set; }
         public int FullTextStopLists { get; set; }
         public int XmlSchemaCollections { get; set; }
+        public int Synonyms { get; set; }
+        public int Collations { get; set; }
+        public int Publications { get; set; }
     }
 }

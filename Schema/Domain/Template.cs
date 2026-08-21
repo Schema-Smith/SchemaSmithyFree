@@ -572,6 +572,9 @@ namespace Schema.Domain
         /// <see cref="ScriptObjectType.FullTextStopLists"/> — database-scoped on SQL Server; fanning out
         /// per tenant would either fail with duplicate-name errors or create N copies that all fire on
         /// every DDL change.</item>
+        /// <item><see cref="ScriptObjectType.Publications"/> — <c>CREATE PUBLICATION</c> has no schema
+        /// qualifier on PostgreSQL, so it is database-scoped for the same reason as the SQL Server trio
+        /// above.</item>
         /// </list>
         /// MySQL has no schema-template path; the parameter is ignored on MySQL.
         /// </summary>
@@ -590,6 +593,12 @@ namespace Schema.Domain
                     new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
                     new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Views },
                     new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
+                    // Sequences (2012) and Synonyms (2005) are SCRIPTED-ONLY like every other folder here —
+                    // no drop-by-absence for scripted types (see DatabaseQuench), so wiring them in is additive.
+                    // Sequences post-dates the 2008 floor; gate a target below 2012 via the folder's own
+                    // ShouldApplyExpression (the existing per-folder gate mechanism) rather than a new check here.
+                    new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences },
+                    new TemplateFolder { FolderPath = "Synonyms", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Synonyms },
                     new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
                     new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers },
                     new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
@@ -602,12 +611,18 @@ namespace Schema.Domain
                     new TemplateFolder { FolderPath = "Domain Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DomainTypes },
                     new TemplateFolder { FolderPath = "Enum Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.EnumTypes },
                     new TemplateFolder { FolderPath = "Composite Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.CompositeTypes },
+                    // Collations are schema-scoped (like Domain/Enum/Composite Types above), so this folder
+                    // fans out per schema in schema-template mode the same as those three — no exclusion needed.
+                    new TemplateFolder { FolderPath = "Collations", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Collations },
                     new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
                     new TemplateFolder { FolderPath = "Trigger Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.TriggerFunctions },
                     new TemplateFolder { FolderPath = "Window Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.WindowFunctions },
                     new TemplateFolder { FolderPath = "Aggregates", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Aggregates },
                     new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
                     new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences },
+                    // Publications are database-scoped (CREATE PUBLICATION has no schema qualifier), so —
+                    // like Schemas above — this folder is excluded from schema-template fan-out below.
+                    new TemplateFolder { FolderPath = "Publications", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Publications },
                     new TemplateFolder { FolderPath = "Rules", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Rules },
                     new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
                     new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views },
@@ -629,6 +644,14 @@ namespace Schema.Domain
                 _ => new List<TemplateFolder>()
             };
 
+            // MariaDb-only: MySQL has no native SEQUENCE object at all (not a version gap — the base MySQL
+            // folder set never carries this type). The switch above is keyed on GetBasePlatform(), which maps
+            // MariaDb and MySQL to the same case, so the one MariaDb-only addition is layered on afterward
+            // against the raw `platform` parameter instead — no other folder-set divergence exists to mirror.
+            if (platform == Platform.MariaDb)
+                folders.Insert(folders.FindIndex(f => f.FolderPath == "Triggers"),
+                    new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
+
             if (!isSchemaTemplate) return folders;
 
             // Database-scoped objects cannot legitimately fan out per schema (design §3.3).
@@ -636,7 +659,8 @@ namespace Schema.Domain
                 f.ObjectType != ScriptObjectType.Schemas &&
                 f.ObjectType != ScriptObjectType.DDLTriggers &&
                 f.ObjectType != ScriptObjectType.FullTextCatalogs &&
-                f.ObjectType != ScriptObjectType.FullTextStopLists).ToList();
+                f.ObjectType != ScriptObjectType.FullTextStopLists &&
+                f.ObjectType != ScriptObjectType.Publications).ToList();
         }
 
         /// <summary>

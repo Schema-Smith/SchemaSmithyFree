@@ -166,7 +166,9 @@ public class SchemaTongsTests
                 ["ShouldCast:Catalogs"] = "false",
                 ["ShouldCast:StopLists"] = "false",
                 ["ShouldCast:DDLTriggers"] = "false",
-                ["ShouldCast:XMLSchemaCollections"] = "false"
+                ["ShouldCast:XMLSchemaCollections"] = "false",
+                ["ShouldCast:Sequences"] = "false",
+                ["ShouldCast:Synonyms"] = "false"
             });
             RegisterConnectionFactory(Platform.SqlServer);
 
@@ -727,6 +729,99 @@ public class SchemaTongsTests
         }
     }
 
+    [Test]
+    public void CastTemplate_SqlServer_SequencesOnly_CastsSequences()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            RegisterConfig(Platform.SqlServer, new Dictionary<string, string>
+            {
+                ["ShouldCast:Tables"] = "false",
+                ["ShouldCast:Schemas"] = "false",
+                ["ShouldCast:UserDefinedTypes"] = "false",
+                ["ShouldCast:Functions"] = "false",
+                ["ShouldCast:Views"] = "false",
+                ["ShouldCast:Procedures"] = "false",
+                ["ShouldCast:TableTriggers"] = "false",
+                ["ShouldCast:Catalogs"] = "false",
+                ["ShouldCast:StopLists"] = "false",
+                ["ShouldCast:DDLTriggers"] = "false",
+                ["ShouldCast:XMLSchemaCollections"] = "false",
+                ["ShouldCast:IndexedViews"] = "false",
+                ["ShouldCast:Sequences"] = "true",
+                ["ShouldCast:Synonyms"] = "false"
+            });
+            RegisterConnectionFactory(Platform.SqlServer);
+
+            var reader = Substitute.For<IDataReader>();
+            var callCount = 0;
+            reader.Read().Returns(_ => callCount++ < 1, _ => false);
+            reader.GetString(0).Returns("dbo");
+            reader.GetString(1).Returns("MySeq");
+            reader.GetString(2).Returns("bigint");
+            reader.GetValue(3).Returns((object)"1");
+            reader.GetValue(4).Returns((object)"1");
+            reader.GetValue(5).Returns((object)"1");
+            reader.GetValue(6).Returns((object)"9223372036854775807");
+            reader.GetBoolean(7).Returns(false);
+            _command.ExecuteReader().Returns(reader);
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Sequences")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("dbo.MySeq.sql")), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void CastTemplate_SqlServer_SynonymsOnly_CastsSynonyms()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            RegisterConfig(Platform.SqlServer, new Dictionary<string, string>
+            {
+                ["ShouldCast:Tables"] = "false",
+                ["ShouldCast:Schemas"] = "false",
+                ["ShouldCast:UserDefinedTypes"] = "false",
+                ["ShouldCast:Functions"] = "false",
+                ["ShouldCast:Views"] = "false",
+                ["ShouldCast:Procedures"] = "false",
+                ["ShouldCast:TableTriggers"] = "false",
+                ["ShouldCast:Catalogs"] = "false",
+                ["ShouldCast:StopLists"] = "false",
+                ["ShouldCast:DDLTriggers"] = "false",
+                ["ShouldCast:XMLSchemaCollections"] = "false",
+                ["ShouldCast:IndexedViews"] = "false",
+                ["ShouldCast:Sequences"] = "false",
+                ["ShouldCast:Synonyms"] = "true"
+            });
+            RegisterConnectionFactory(Platform.SqlServer);
+
+            var reader = Substitute.For<IDataReader>();
+            var callCount = 0;
+            reader.Read().Returns(_ => callCount++ < 1, _ => false);
+            reader.GetString(0).Returns("dbo");
+            reader.GetString(1).Returns("MySynonym");
+            reader.GetString(2).Returns("[OtherDb].[dbo].[OtherTable]");
+            _command.ExecuteReader().Returns(reader);
+
+            var tongs = new SchemaTongs(Platform.SqlServer);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Synonyms")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("dbo.MySynonym.sql")), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
     #endregion
 
     #region PostgreSQL Tests
@@ -751,7 +846,9 @@ public class SchemaTongsTests
                 ["ShouldCast:Rules"] = "false",
                 ["ShouldCast:TableTriggers"] = "false",
                 ["ShouldCast:Views"] = "false",
-                ["ShouldCast:MaterializedViews"] = "false"
+                ["ShouldCast:MaterializedViews"] = "false",
+                ["ShouldCast:Collations"] = "false",
+                ["ShouldCast:Publications"] = "false"
             });
             RegisterConnectionFactory(Platform.PostgreSQL);
 
@@ -1373,6 +1470,96 @@ public class SchemaTongsTests
         }
     }
 
+    [Test]
+    public void CastTemplate_PostgreSQL_CollationsOnly_CastsCollations()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            RegisterConfig(Platform.PostgreSQL, new Dictionary<string, string>
+            {
+                ["ShouldCast:Tables"] = "false",
+                ["ShouldCast:Schemas"] = "false",
+                ["ShouldCast:DomainTypes"] = "false",
+                ["ShouldCast:EnumTypes"] = "false",
+                ["ShouldCast:CompositeTypes"] = "false",
+                ["ShouldCast:Functions"] = "false",
+                ["ShouldCast:Aggregates"] = "false",
+                ["ShouldCast:Procedures"] = "false",
+                ["ShouldCast:Sequences"] = "false",
+                ["ShouldCast:Rules"] = "false",
+                ["ShouldCast:TableTriggers"] = "false",
+                ["ShouldCast:Views"] = "false",
+                ["ShouldCast:MaterializedViews"] = "false",
+                ["ShouldCast:Collations"] = "true",
+                ["ShouldCast:Publications"] = "false"
+            });
+            RegisterConnectionFactory(Platform.PostgreSQL);
+
+            var reader = Substitute.For<IDataReader>();
+            var callCount = 0;
+            reader.Read().Returns(_ => callCount++ < 1, _ => false);
+            reader["Folder"].Returns("Collations");
+            reader["FullName"].Returns("public.my_collation");
+            reader["Code"].Returns("CREATE COLLATION IF NOT EXISTS public.my_collation (LC_COLLATE = 'en_US.utf8', LC_CTYPE = 'en_US.utf8');");
+            _command.ExecuteReader().Returns(reader);
+
+            var tongs = new SchemaTongs(Platform.PostgreSQL);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Collations")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("public.my_collation.sql")), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void CastTemplate_PostgreSQL_PublicationsOnly_CastsPublications()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            RegisterConfig(Platform.PostgreSQL, new Dictionary<string, string>
+            {
+                ["ShouldCast:Tables"] = "false",
+                ["ShouldCast:Schemas"] = "false",
+                ["ShouldCast:DomainTypes"] = "false",
+                ["ShouldCast:EnumTypes"] = "false",
+                ["ShouldCast:CompositeTypes"] = "false",
+                ["ShouldCast:Functions"] = "false",
+                ["ShouldCast:Aggregates"] = "false",
+                ["ShouldCast:Procedures"] = "false",
+                ["ShouldCast:Sequences"] = "false",
+                ["ShouldCast:Rules"] = "false",
+                ["ShouldCast:TableTriggers"] = "false",
+                ["ShouldCast:Views"] = "false",
+                ["ShouldCast:MaterializedViews"] = "false",
+                ["ShouldCast:Collations"] = "false",
+                ["ShouldCast:Publications"] = "true"
+            });
+            RegisterConnectionFactory(Platform.PostgreSQL);
+
+            var reader = Substitute.For<IDataReader>();
+            var callCount = 0;
+            reader.Read().Returns(_ => callCount++ < 1, _ => false);
+            reader["Folder"].Returns("Publications");
+            reader["FullName"].Returns("my_pub");
+            reader["Code"].Returns("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'my_pub') THEN CREATE PUBLICATION my_pub FOR ALL TABLES WITH (publish = 'insert,update,delete,truncate'); END IF; END $$;");
+            _command.ExecuteReader().Returns(reader);
+
+            var tongs = new SchemaTongs(Platform.PostgreSQL);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Publications")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("my_pub.sql")), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
     #endregion
 
     #region MySQL Tests
@@ -1723,6 +1910,88 @@ public class SchemaTongsTests
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    #endregion
+
+    #region MariaDb Tests
+
+    [Test]
+    public void CastTemplate_MariaDb_SequencesOnly_CastsSequences()
+    {
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            StubMySqlKindleGate();
+            RegisterConfig(Platform.MariaDb, new Dictionary<string, string>
+            {
+                ["Source:Database"] = "testdb",
+                ["ShouldCast:Tables"] = "false",
+                ["ShouldCast:Functions"] = "false",
+                ["ShouldCast:Views"] = "false",
+                ["ShouldCast:Procedures"] = "false",
+                ["ShouldCast:TableTriggers"] = "false",
+                ["ShouldCast:Events"] = "false",
+                ["ShouldCast:Sequences"] = "true"
+            });
+            RegisterConnectionFactory(Platform.MariaDb);
+
+            // 1st reader: sequence name list (INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'SEQUENCE')
+            var listReader = Substitute.For<IDataReader>();
+            var listCount = 0;
+            listReader.Read().Returns(_ => listCount++ < 1, _ => false);
+            listReader.GetString(0).Returns("my_seq");
+
+            // 2nd reader: SHOW CREATE SEQUENCE result
+            var showCreateReader = Substitute.For<IDataReader>();
+            var showCreateCount = 0;
+            showCreateReader.Read().Returns(_ => showCreateCount++ < 1, _ => false);
+            showCreateReader.GetString(1).Returns(
+                "CREATE SEQUENCE `testdb`.`my_seq` start with 1 minvalue 1 maxvalue 9223372036854775806 increment by 1 cache 1000 nocycle ENGINE=InnoDB");
+
+            _command.ExecuteReader().Returns(listReader, showCreateReader);
+
+            var tongs = new SchemaTongs(Platform.MariaDb);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Sequence Scripts")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("my_seq.sql")), Arg.Any<string>());
+
+            FactoryContainer.Clear();
+            LogFactory.Clear();
+        }
+    }
+
+    [Test]
+    public void CastTemplate_MariaDb_SequencesFlag_IgnoredOnPlainMySQL()
+    {
+        // Same ShouldCast:Sequences=true config, but Platform.MySQL — the flag must have no effect
+        // there, since MySQL has no native SEQUENCE object at all (not a version gap).
+        lock (FactoryContainer.SharedLockObject)
+        {
+            SetUpMocks();
+            StubMySqlKindleGate();
+            RegisterConfig(Platform.MySQL, new Dictionary<string, string>
+            {
+                ["Source:Database"] = "testdb",
+                ["ShouldCast:Tables"] = "false",
+                ["ShouldCast:Functions"] = "false",
+                ["ShouldCast:Views"] = "false",
+                ["ShouldCast:Procedures"] = "false",
+                ["ShouldCast:TableTriggers"] = "false",
+                ["ShouldCast:Events"] = "false",
+                ["ShouldCast:Sequences"] = "true"
+            });
+            RegisterConnectionFactory(Platform.MySQL);
+
+            var tongs = new SchemaTongs(Platform.MySQL);
+            Assert.DoesNotThrow(() => tongs.CastTemplate());
+
+            _progressLog.DidNotReceive().Info(Arg.Is<string>(s => s.Contains("Casting Sequence Scripts")));
 
             FactoryContainer.Clear();
             LogFactory.Clear();

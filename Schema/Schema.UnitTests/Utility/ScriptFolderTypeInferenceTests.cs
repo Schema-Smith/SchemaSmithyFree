@@ -19,6 +19,7 @@ public class ScriptFolderTypeInferenceTests
     [TestCase("FullTextStopLists", ScriptObjectType.FullTextStopLists)]
     [TestCase("XMLSchemaCollections", ScriptObjectType.XMLSchemaCollections)]
     [TestCase("DDLTriggers", ScriptObjectType.DDLTriggers)]
+    [TestCase("Synonyms", ScriptObjectType.Synonyms)]
     [TestCase("Domain Types", ScriptObjectType.DomainTypes)]
     [TestCase("Enum Types", ScriptObjectType.EnumTypes)]
     [TestCase("Composite Types", ScriptObjectType.CompositeTypes)]
@@ -27,6 +28,8 @@ public class ScriptFolderTypeInferenceTests
     [TestCase("Aggregates", ScriptObjectType.Aggregates)]
     [TestCase("Sequences", ScriptObjectType.Sequences)]
     [TestCase("Rules", ScriptObjectType.Rules)]
+    [TestCase("Collations", ScriptObjectType.Collations)]
+    [TestCase("Publications", ScriptObjectType.Publications)]
     [TestCase("Events", ScriptObjectType.Events)]
     public void InferFromFolderName_KnownScriptFolder_ReturnsExpectedType(string folderName, ScriptObjectType expected)
     {

@@ -331,9 +331,9 @@ public static class RepositoryHelper
     /// <summary>
     /// Adds the platform-appropriate default <see cref="TemplateFolder"/> set. When
     /// <paramref name="isSchemaTemplate"/> is true, omits the database-scoped object types
-    /// (<c>Schemas</c>, <c>DDLTriggers</c>, <c>FullTextCatalogs</c>, <c>FullTextStopLists</c>)
-    /// per design §3.3 / §7.2 — those don't fan out per schema iteration and must live in a
-    /// regular template that runs earlier in <c>TemplateOrder</c>.
+    /// (<c>Schemas</c>, <c>DDLTriggers</c>, <c>FullTextCatalogs</c>, <c>FullTextStopLists</c>,
+    /// <c>Publications</c>) per design §3.3 / §7.2 — those don't fan out per schema iteration and
+    /// must live in a regular template that runs earlier in <c>TemplateOrder</c>.
     /// </summary>
     private static void AddDefaultScriptFolders(Template template, Platform platform, bool isSchemaTemplate)
     {
@@ -354,6 +354,8 @@ public static class RepositoryHelper
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Views });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures });
+                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
+                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Synonyms", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Synonyms });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers });
                 if (!isSchemaTemplate)
                     template.ScriptFolders.Add(new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers });
@@ -366,12 +368,15 @@ public static class RepositoryHelper
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Domain Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DomainTypes });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Enum Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.EnumTypes });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Composite Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.CompositeTypes });
+                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Collations", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Collations });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Trigger Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.TriggerFunctions });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Window Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.WindowFunctions });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Aggregates", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Aggregates });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
+                if (!isSchemaTemplate)
+                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Publications", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Publications });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Rules", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Rules });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views });
@@ -382,6 +387,11 @@ public static class RepositoryHelper
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Events", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Events });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures });
+                // MariaDb-only: MySQL has no native SEQUENCE object at all — see the matching comment
+                // in Template.GetDefaultTemplateFolders, which this method must stay in parity with
+                // (TemplateFolderDefaultTests asserts the two lists match exactly).
+                if (platform == Platform.MariaDb)
+                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views });
                 template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData });

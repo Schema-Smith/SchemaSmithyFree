@@ -239,7 +239,11 @@ public class ForgeKindlerTests
         // SchemaSmith_NormalizeColumnDefault for the engine-divergent case/paren folding. Unlike
         // Invisible/Srid above, the clause predates both engines' floors, so no SchemaSmith_Supports...
         // gate exists for it).
-        Assert.That(mysql.Length, Is.EqualTo(44));
+        // +1 = SchemaSmith_IndexHasFunctionalKeyPart (declared-side detector for a functional/expression
+        // key part in an index's column list; gates the create/modify emit sites in
+        // MissingIndexesAndConstraintsQuench / IndexOnlyQuench below SchemaSmith_SupportsFunctionalIndex()'s
+        // floor, closing the emit-side gap that function's own read-only gating left open).
+        Assert.That(mysql.Length, Is.EqualTo(45));
     }
 
     [Test]
