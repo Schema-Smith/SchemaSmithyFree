@@ -57,6 +57,9 @@
           "Invisible": {
             "type": "boolean"
           },
+          "Srid": {
+            "type": "integer"
+          },
           "Extensions": {
             "type": "object",
             "required": [
