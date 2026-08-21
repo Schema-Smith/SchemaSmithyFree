@@ -760,6 +760,73 @@ CREATE TABLE dbo.MyDefaultHistTemporal (
     }
 
     [Test]
+    public void ShouldRoundTripFileGroupOnTableAndIndex()
+    {
+        // #filegroups: a table can sit on a different filegroup from its own indexes (the normal reason
+        // to use them at all), so this exercises the table-level and both index-level (default vs.
+        // non-default) FileGroup extraction independently. Indexes extract ORDER BY [Name], so
+        // "IX_..." sorts before "PK_..." -- Indexes[0]/[1] below are deterministic, matching this file's
+        // established convention (see ShouldFlagMixedCompressionAcrossPartitionsRatherThanPickOne).
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.MyFileGroupTable (
+    Id INT NOT NULL,
+    Somedata VARCHAR(50) NULL,
+    CONSTRAINT [PK_MyFileGroupTable] PRIMARY KEY NONCLUSTERED (Id) ON [PRIMARY]
+) ON [FG_Test]
+
+CREATE NONCLUSTERED INDEX [IX_MyFileGroupTable_Somedata] ON dbo.MyFileGroupTable (Somedata) ON [FG_Test]
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "dbo", "MyFileGroupTable");
+        var result = GenerateTable(cmd, "dbo", "MyFileGroupTable");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.FileGroup, Is.EqualTo("[FG_Test]"), "the table's own (heap) data lives on the non-default filegroup");
+            Assert.That(result.Indexes, Has.Count.EqualTo(2));
+            Assert.That(((SqlServerIndex)result.Indexes[0]).FileGroup, Is.EqualTo("[FG_Test]"), "IX_MyFileGroupTable_Somedata was explicitly placed on the non-default filegroup");
+            Assert.That(((SqlServerIndex)result.Indexes[1]).FileGroup, Is.Null, "PK_MyFileGroupTable was explicitly placed on PRIMARY (the default) -- must stay minimal, not emit '[PRIMARY]'");
+        });
+        Assert.That(json, Does.Not.Contain("PRIMARY"), "the default-filegroup PK index must not carry a FileGroup value anywhere in the extracted JSON");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldOmitFileGroupWhenDefault()
+    {
+        // Backward-compat guard: an ordinary table/index with no explicit filegroup placement (every
+        // existing package) must extract exactly as before this feature -- no FileGroup key anywhere.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.MyOrdinaryFileGroupTable (
+    Id INT NOT NULL,
+    Somedata VARCHAR(50) NULL,
+    CONSTRAINT [PK_MyOrdinaryFileGroupTable] PRIMARY KEY CLUSTERED (Id)
+)
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "dbo", "MyOrdinaryFileGroupTable");
+        var result = GenerateTable(cmd, "dbo", "MyOrdinaryFileGroupTable");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.FileGroup, Is.Null);
+            Assert.That(((SqlServerIndex)result.Indexes[0]).FileGroup, Is.Null);
+            Assert.That(json, Does.Not.Contain("FileGroup"));
+        });
+
+        conn.Close();
+    }
+
+    [Test]
     public void ShouldGenerateCorrectJsonForPartitionedTable()
     {
         // Repro for the extraction-abort defect (task C1-0b): sys.partitions is one row PER PARTITION,
@@ -857,6 +924,16 @@ ALTER TABLE dbo.TestPartitionedMixed REBUILD PARTITION = 2 WITH (DATA_COMPRESSIO
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @$"
 CREATE DATABASE [{_integrationDb}];
+";
+        cmd.ExecuteNonQuery();
+
+        // A non-default filegroup for the #filegroups extraction round-trip tests below. Reuses the
+        // new database's own data-file directory rather than assuming one, so this works regardless of
+        // where the SQL Server instance's default data path is.
+        cmd.CommandText = @$"
+DECLARE @v_DataPath NVARCHAR(500) = (SELECT LEFT(physical_name, LEN(physical_name) - CHARINDEX('\', REVERSE(physical_name)) + 1) FROM sys.master_files WHERE database_id = DB_ID('{_integrationDb}') AND file_id = 1);
+ALTER DATABASE [{_integrationDb}] ADD FILEGROUP [FG_Test];
+EXEC('ALTER DATABASE [{_integrationDb}] ADD FILE (NAME = ''FG_Test_1'', FILENAME = ''' + @v_DataPath + 'FG_Test_1.ndf'') TO FILEGROUP [FG_Test]');
 ";
         cmd.ExecuteNonQuery();
 

@@ -98,5 +98,14 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 107)]
         public bool EnableCDC { get; set; }
 
+        // Filegroup placement (#filegroups): a NAME only -- never a physical file path, which would make
+        // the package non-portable across environments. Null means "SQL Server's own default filegroup",
+        // preserving today's behavior for every existing package. SchemaSmith does not create filegroups
+        // (it errors loudly if the named one is missing on the target) and does not rebuild a table onto a
+        // newly-declared filegroup (that is a rebuild, deferred to the roadmap's Table Rebuild Triggers
+        // item) -- it errors if the declared name differs from where the table already lives.
+        [JsonProperty(Order = 111, NullValueHandling = NullValueHandling.Ignore)]
+        public string FileGroup { get; set; }
+
     }
 }

@@ -19,7 +19,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
         // A rich representative model exercising all 8 nested collections the parse shreds.
         private const string RichModelJson = @"[{
   ""Schema"":""dbo"",""Name"":""XmlEquivTable"",""CompressionType"":""PAGE"",""IsTemporal"":true,
-  ""HistoryTableSchema"":""history"",""HistoryTableName"":""XmlEquivTable_Archive"",""HistoryRetentionPeriod"":""5 YEARS"",""UpdateFillFactor"":false,
+  ""HistoryTableSchema"":""history"",""HistoryTableName"":""XmlEquivTable_Archive"",""HistoryRetentionPeriod"":""5 YEARS"",""FileGroup"":""FG_Test"",""UpdateFillFactor"":false,
   ""OldName"":null,""EnableCDC"":false,""PreventDrop"":false,
   ""DropColumnsRemovedFromProduct"":true,""DropForeignKeysRemovedFromProduct"":false,
   ""DropCheckConstraintsRemovedFromProduct"":false,""DropExcludeConstraintsRemovedFromProduct"":false,
@@ -32,7 +32,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
   ],
   ""Indexes"":[
     {""Name"":""PK_XmlEquivTable"",""PrimaryKey"":true,""Unique"":true,""Clustered"":true,""IndexColumns"":""Id""},
-    {""Name"":""IX_Amount"",""Unique"":false,""IndexColumns"":""Amount DESC"",""IncludeColumns"":""Note""}
+    {""Name"":""IX_Amount"",""Unique"":false,""IndexColumns"":""Amount DESC"",""IncludeColumns"":""Note"",""FileGroup"":""FG_Test""}
   ],
   ""XmlIndexes"":[
     {""Name"":""XI_Data"",""IsPrimary"":true,""Column"":""DataXml"",""PrimaryIndex"":null,""SecondaryIndexType"":null}

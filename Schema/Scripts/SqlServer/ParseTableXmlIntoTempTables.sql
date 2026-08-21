@@ -44,6 +44,8 @@
          [HistoryTableSchema] = SchemaSmith.fn_SafeBracketWrap(t.value('(HistoryTableSchema/text())[1]', 'NVARCHAR(500)')),
          [HistoryTableName] = SchemaSmith.fn_SafeBracketWrap(t.value('(HistoryTableName/text())[1]', 'NVARCHAR(500)')),
          [HistoryRetentionPeriod] = SchemaSmith.fn_NormalizeTemporalRetentionPeriod(t.value('(HistoryRetentionPeriod/text())[1]', 'NVARCHAR(50)')),
+         -- Filegroup placement (#filegroups) -- see JSON twin for the left-NULL-when-absent rationale.
+         [FileGroup] = SchemaSmith.fn_SafeBracketWrap(t.value('(FileGroup/text())[1]', 'NVARCHAR(500)')),
          [TableXml] = t.query('.'),
          [ShouldApplyExpression] = t.value('(ShouldApplyExpression/text())[1]', 'NVARCHAR(MAX)'), [VariantName] = t.value('(VariantName/text())[1]', 'NVARCHAR(128)'), [EnableCDC] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(EnableCDC/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [OldName] = SchemaSmith.fn_SafeBracketWrap(t.value('(OldName/text())[1]', 'NVARCHAR(500)')),
          [DropColumnsRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropColumnsRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
@@ -64,7 +66,7 @@
   EXEC(@v_SQL)
 
   IF OBJECT_ID('tempdb..#Tables') IS NOT NULL DROP TABLE #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          ISNULL([PreventDrop], 0) AS [PreventDrop]
@@ -152,7 +154,7 @@
          t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
-         i.[FilterExpression], [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
+         i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
          [IndexColumns] = STUFF((SELECT ',' + CASE WHEN RTRIM([value]) LIKE '% DESC'
                                                    THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
                                                    ELSE SchemaSmith.fn_SafeBracketWrap([value])
@@ -180,6 +182,7 @@
       [FilterExpression] = idx.value('(FilterExpression/text())[1]', 'NVARCHAR(MAX)'),
       [IndexColumns] = idx.value('(IndexColumns/text())[1]', 'NVARCHAR(MAX)'),
       [IncludeColumns] = idx.value('(IncludeColumns/text())[1]', 'NVARCHAR(MAX)'),
+      [FileGroup] = idx.value('(FileGroup/text())[1]', 'NVARCHAR(500)'),
       [UpdateFillFactor] = CONVERT(BIT, CASE LOWER(idx.value('(UpdateFillFactor/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
       [ShouldApplyExpression] = idx.value('(ShouldApplyExpression/text())[1]', 'NVARCHAR(MAX)'),
       [VariantName] = idx.value('(VariantName/text())[1]', 'NVARCHAR(128)')

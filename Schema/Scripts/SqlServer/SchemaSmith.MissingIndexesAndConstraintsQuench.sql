@@ -53,6 +53,27 @@ BEGIN TRY
         FROM #Columns c WITH (NOLOCK)
         WHERE c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) <> ''
 
+  -- Filegroup placement (#filegroups): a NEW index/constraint declaring a filegroup name that does not
+  -- exist on this target must fail loudly BEFORE any DDL runs, naming both the index and the filegroup --
+  -- same contract as the table-create check in MissingTableAndColumnQuench.sql. Only indexes not yet
+  -- present are checked; an already-existing index's declared vs. deployed filegroup is the "move"
+  -- question, handled in ModifiedTableQuench.
+  RAISERROR('Validate declared index filegroups exist', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #Indexes i WITH (NOLOCK)
+               WHERE i.[FileGroup] IS NOT NULL
+                 AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]))
+                 AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])))
+  BEGIN
+    DECLARE @v_IdxFGIndex NVARCHAR(1510), @v_IdxFGName NVARCHAR(500)
+    SELECT TOP 1 @v_IdxFGIndex = i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName], @v_IdxFGName = i.[FileGroup]
+      FROM #Indexes i WITH (NOLOCK)
+      WHERE i.[FileGroup] IS NOT NULL
+        AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]))
+        AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
+    RAISERROR('Index %s declares filegroup %s, which does not exist on this database. SchemaSmith does not create filegroups -- create it on the target first, or correct the declared name.', 16, 1, @v_IdxFGIndex, @v_IdxFGName)
+  END
+
   RAISERROR('Add Missing Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + 'RAISERROR(''  Creating ' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + CASE WHEN RTRIM(ISNULL(i.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(i.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1
@@ -68,7 +89,11 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
 							                          ')'
-                                                 ELSE '' END
+                                                 ELSE '' END +
+                                            -- Filegroup placement (#filegroups): ON comes AFTER the WITH
+                                            -- clause for ADD CONSTRAINT, per its own grammar (unlike CREATE
+                                            -- TABLE, where ON precedes WITH). Existence validated above.
+                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
                                        ELSE 'CREATE ' + 
                                             CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
                                             CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
@@ -93,7 +118,10 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
 							                          ')'
-                                                 ELSE '' END
+                                                 ELSE '' END +
+                                            -- Filegroup placement (#filegroups): ON comes AFTER the WITH
+                                            -- clause for CREATE INDEX too. Existence validated above.
+                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
                                        END + ';' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ''', ''' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', ''created'');'
     FROM #Indexes i WITH (NOLOCK)

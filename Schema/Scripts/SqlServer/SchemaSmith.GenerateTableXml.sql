@@ -110,6 +110,15 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
+       -- Filegroup placement (#filegroups) -- see JSON twin (GenerateTableJson.sql) for the
+       -- emit-only-when-non-default rationale. Filegroups predate every supported SQL Server version, so
+       -- (unlike temporal above) this needs no version gate and no staged dynamic-SQL variable.
+       (SELECT '[' + fg.[name] + ']'
+          FROM sys.indexes tfg WITH (NOLOCK)
+          JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = tfg.data_space_id
+         WHERE tfg.[object_id] = st.[object_id]
+           AND tfg.index_id IN (0, 1)
+           AND fg.is_default = 0) AS [FileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
        -- System-versioning round-trip (#369): emit IsTemporal only when true. sys.tables.temporal_type is
        -- 2016+, so it is read into @v_IsTemporal via the version-gated dynamic pre-stage above (0 below 2016).
@@ -183,6 +192,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
+               -- Same emit-only-when-non-default rule as the table-level [FileGroup] above -- see JSON twin.
+               (SELECT '[' + fg.[name] + ']'
+                  FROM sys.filegroups fg WITH (NOLOCK)
+                 WHERE fg.data_space_id = si.data_space_id
+                   AND fg.is_default = 0) AS [FileGroup],
                CASE WHEN is_primary_key = 1 THEN 'true' ELSE 'false' END AS [PrimaryKey],
                CASE WHEN is_unique = 1 THEN 'true' ELSE 'false' END AS [Unique],
                CASE WHEN is_unique_constraint = 1 THEN 'true' ELSE 'false' END AS [UniqueConstraint],

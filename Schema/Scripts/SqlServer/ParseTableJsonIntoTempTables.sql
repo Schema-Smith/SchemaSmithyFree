@@ -43,6 +43,10 @@
          -- "5 YEARS") so a hand-authored singular form compares equal to the canonical plural form the
          -- live-state read and extraction both produce -- see fn_NormalizeTemporalRetentionPeriod.
          [HistoryTableSchema] = SchemaSmith.fn_SafeBracketWrap([HistoryTableSchema]), [HistoryTableName] = SchemaSmith.fn_SafeBracketWrap([HistoryTableName]), [HistoryRetentionPeriod] = SchemaSmith.fn_NormalizeTemporalRetentionPeriod([HistoryRetentionPeriod]),
+         -- Filegroup placement (#filegroups): left NULL (not defaulted) when absent, same as
+         -- HistoryTableSchema/Name above, so the apply side can tell "unset -> SQL Server's own default
+         -- filegroup" apart from an explicit declaration.
+         [FileGroup] = SchemaSmith.fn_SafeBracketWrap([FileGroup]),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [VariantName], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
@@ -56,6 +60,7 @@
       [HistoryTableSchema] NVARCHAR(500) '$.HistoryTableSchema',
       [HistoryTableName] NVARCHAR(500) '$.HistoryTableName',
       [HistoryRetentionPeriod] NVARCHAR(50) '$.HistoryRetentionPeriod',
+      [FileGroup] NVARCHAR(500) '$.FileGroup',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
       [OldName] NVARCHAR(500) '$.OldName',
 	  [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
@@ -86,7 +91,7 @@
   EXEC(@v_SQL)
 
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          ISNULL([PreventDrop], 0) AS [PreventDrop]
@@ -188,7 +193,7 @@
          t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
-         i.[FilterExpression], [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
+         i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
          [IndexColumns] = (SELECT STRING_AGG(CAST(CASE WHEN RTRIM([value]) LIKE '% DESC' 
                                                        THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
                                                        ELSE SchemaSmith.fn_SafeBracketWrap([value])
@@ -213,6 +218,7 @@
       [FilterExpression] NVARCHAR(MAX) '$.FilterExpression',
       [IndexColumns] NVARCHAR(MAX) '$.IndexColumns',
       [IncludeColumns] NVARCHAR(MAX) '$.IncludeColumns',
+      [FileGroup] NVARCHAR(500) '$.FileGroup',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
       [VariantName] NVARCHAR(128) '$.VariantName'

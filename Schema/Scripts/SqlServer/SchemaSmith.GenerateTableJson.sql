@@ -29,6 +29,16 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
+       -- Filegroup placement (#filegroups): emit only when the table's data (heap/clustered index,
+       -- index_id 0/1) lives on a non-default filegroup, so an ordinary table on PRIMARY (or whatever
+       -- the target's default filegroup is) stays exactly as minimal as before this change. Filegroups
+       -- predate every supported SQL Server version -- no version gate needed.
+       (SELECT '[' + fg.[name] + ']'
+          FROM sys.indexes tfg WITH (NOLOCK)
+          JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = tfg.data_space_id
+         WHERE tfg.[object_id] = st.[object_id]
+           AND tfg.index_id IN (0, 1)
+           AND fg.is_default = 0) AS [FileGroup],
        st.is_tracked_by_cdc AS [EnableCDC],
        -- System-versioning round-trip (#369): emit IsTemporal so an extracted temporal table re-deploys
        -- as temporal (previously omitted -> silently lost on round-trip). Only when true, to keep non-
@@ -126,7 +136,14 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
-               is_primary_key AS [PrimaryKey], 
+               -- Same emit-only-when-non-default rule as the table-level [FileGroup] above -- a table and
+               -- its indexes are commonly split across filegroups on purpose, so this reads si's own
+               -- data_space_id independently of the table's.
+               (SELECT '[' + fg.[name] + ']'
+                  FROM sys.filegroups fg WITH (NOLOCK)
+                 WHERE fg.data_space_id = si.data_space_id
+                   AND fg.is_default = 0) AS [FileGroup],
+               is_primary_key AS [PrimaryKey],
                is_unique AS [Unique],
                is_unique_constraint AS [UniqueConstraint], 
                CAST(CASE WHEN [type] IN (1, 5) THEN 1 ELSE 0 END AS BIT) AS [Clustered], 

@@ -27,5 +27,11 @@ namespace Schema.Domain.SqlServer
 
         [JsonProperty(Order = 106)]
         public bool UpdateFillFactor { get; set; }
+
+        // Filegroup placement (#filegroups): same name-only, null-means-default contract as
+        // SqlServerTable.FileGroup -- see that property's comment. A table and its indexes are commonly
+        // split across filegroups on purpose, so this is independent of the table's own FileGroup.
+        [JsonProperty(Order = 107, NullValueHandling = NullValueHandling.Ignore)]
+        public string FileGroup { get; set; }
     }
 }

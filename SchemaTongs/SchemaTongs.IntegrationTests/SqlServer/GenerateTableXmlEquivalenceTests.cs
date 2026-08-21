@@ -42,6 +42,14 @@ public class GenerateTableXmlEquivalenceTests
         cmd.CommandText = $"CREATE DATABASE [{_integrationDb}];";
         cmd.ExecuteNonQuery();
 
+        // A non-default filegroup for the #filegroups JSON/XML equivalence test below -- reuses the new
+        // database's own data-file directory rather than assuming one.
+        cmd.CommandText = $@"
+DECLARE @v_DataPath NVARCHAR(500) = (SELECT LEFT(physical_name, LEN(physical_name) - CHARINDEX('\', REVERSE(physical_name)) + 1) FROM sys.master_files WHERE database_id = DB_ID('{_integrationDb}') AND file_id = 1);
+ALTER DATABASE [{_integrationDb}] ADD FILEGROUP [FG_Test];
+EXEC('ALTER DATABASE [{_integrationDb}] ADD FILE (NAME = ''FG_Test_1'', FILENAME = ''' + @v_DataPath + 'FG_Test_1.ndf'') TO FILEGROUP [FG_Test]');";
+        cmd.ExecuteNonQuery();
+
         conn.ChangeDatabase(_integrationDb);
         ForgeKindler.KindleTheForge(cmd, Platform.SqlServer);
 
@@ -145,6 +153,39 @@ ALTER TABLE dbo.XmlEquivPartitioned REBUILD PARTITION = 2 WITH (DATA_COMPRESSION
         Assert.That(jsonModel.CompressionType, Is.EqualTo("MIXED"), "the JSON proc must flag non-uniform per-partition compression rather than emit one partition's value");
         Assert.That(xmlModel.CompressionType, Is.EqualTo("MIXED"), "the XML twin must agree with the JSON proc's compression reading");
         Assert.That(NormalizeMinusExtensions(xmlModel), Is.EqualTo(NormalizeMinusExtensions(jsonModel)));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableXml_FileGroupPlacement_ExtractsSameModelAs_GenerateTableJson()
+    {
+        // #filegroups: table on a non-default filegroup, one index left on the default (PRIMARY) and one
+        // explicitly placed on the same non-default filegroup -- exercising the emit-only-when-non-default
+        // rule on both sides (table AND index) and both encodings at once.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.XmlEquivFileGroup (
+    Id INT NOT NULL,
+    Somedata VARCHAR(50) NULL,
+    CONSTRAINT PK_XmlEquivFileGroup PRIMARY KEY NONCLUSTERED (Id) ON [PRIMARY]
+) ON [FG_Test];
+CREATE NONCLUSTERED INDEX IX_XmlEquivFileGroup_Somedata ON dbo.XmlEquivFileGroup (Somedata) ON [FG_Test];
+";
+        cmd.ExecuteNonQuery();
+
+        var jsonModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(GenerateTableJson(cmd, "dbo", "XmlEquivFileGroup"), Platform.SqlServer);
+        var xmlModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(
+            ModelXmlSerializer.FromIngestXml(GenerateTableXml(cmd, "dbo", "XmlEquivFileGroup")), Platform.SqlServer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(jsonModel.FileGroup, Is.EqualTo("[FG_Test]"));
+            Assert.That(xmlModel.FileGroup, Is.EqualTo("[FG_Test]"), "the XML twin must agree with the JSON proc's table-level filegroup reading");
+            Assert.That(NormalizeMinusExtensions(xmlModel), Is.EqualTo(NormalizeMinusExtensions(jsonModel)));
+        });
 
         conn.Close();
     }

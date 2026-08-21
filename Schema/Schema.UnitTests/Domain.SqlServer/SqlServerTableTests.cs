@@ -37,6 +37,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(table.HistoryTableSchema, Is.Null);
             Assert.That(table.HistoryTableName, Is.Null);
             Assert.That(table.HistoryRetentionPeriod, Is.Null);
+            Assert.That(table.FileGroup, Is.Null);
             Assert.That(table.XmlIndexes, Is.Not.Null.And.Empty);
             Assert.That(table.Statistics, Is.Not.Null.And.Empty);
             Assert.That(table.FullTextIndex, Is.Not.Null.And.Empty);
@@ -56,6 +57,7 @@ namespace Schema.UnitTests.Domain.SqlServer
                 HistoryTableSchema = "history",
                 HistoryTableName = "Customer_Archive",
                 HistoryRetentionPeriod = "7 YEARS",
+                FileGroup = "[FG_Archive]",
                 UpdateFillFactor = true,
                 EnableCDC = true,
                 FullTextIndex = [new FullTextIndex
@@ -79,6 +81,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(deserialized.HistoryTableSchema, Is.EqualTo("history"));
             Assert.That(deserialized.HistoryTableName, Is.EqualTo("Customer_Archive"));
             Assert.That(deserialized.HistoryRetentionPeriod, Is.EqualTo("7 YEARS"));
+            Assert.That(deserialized.FileGroup, Is.EqualTo("[FG_Archive]"));
             Assert.That(deserialized.EnableCDC, Is.True);
             Assert.That(deserialized.FullTextIndex, Has.Count.EqualTo(1));
             Assert.That(deserialized.FullTextIndex[0].FullTextCatalog, Is.EqualTo("FTC_Customer"));
@@ -98,6 +101,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(json, Does.Not.Contain("HistoryTableSchema"));
             Assert.That(json, Does.Not.Contain("HistoryTableName"));
             Assert.That(json, Does.Not.Contain("HistoryRetentionPeriod"));
+            Assert.That(json, Does.Not.Contain("FileGroup"));
             Assert.That(json, Does.Not.Contain("UpdateFillFactor"));
             Assert.That(json, Does.Not.Contain("EnableCDC"));
             Assert.That(json, Does.Not.Contain("FullTextIndex"));

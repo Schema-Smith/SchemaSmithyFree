@@ -33,6 +33,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(index.IncludeColumns, Is.Null);
             Assert.That(index.FilterExpression, Is.Null);
             Assert.That(index.UpdateFillFactor, Is.False);
+            Assert.That(index.FileGroup, Is.Null);
         }
 
         [Test]
@@ -51,6 +52,7 @@ namespace Schema.UnitTests.Domain.SqlServer
                 IncludeColumns = "Email",
                 FilterExpression = "[IsActive] = 1",
                 UpdateFillFactor = true,
+                FileGroup = "[FG_Indexes]",
                 ShouldApplyExpression = "SELECT 1"
             };
 
@@ -65,6 +67,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(deserialized.IncludeColumns, Is.EqualTo("Email"));
             Assert.That(deserialized.FilterExpression, Is.EqualTo("[IsActive] = 1"));
             Assert.That(deserialized.UpdateFillFactor, Is.True);
+            Assert.That(deserialized.FileGroup, Is.EqualTo("[FG_Indexes]"));
         }
 
         [Test]
@@ -78,6 +81,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(json, Does.Not.Contain("Clustered"));
             Assert.That(json, Does.Not.Contain("ColumnStore"));
             Assert.That(json, Does.Not.Contain("UpdateFillFactor"));
+            Assert.That(json, Does.Not.Contain("FileGroup"));
         }
 
         [Test]
