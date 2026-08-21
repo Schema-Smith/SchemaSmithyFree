@@ -66,6 +66,46 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- STEP 0.6: Degrade functional/expression indexes below MySQL 8.0.13 (MariaDB: always)
+    -- =========================================================================
+    -- Mirrors MissingIndexesAndConstraintsQuench STEP 0.7. Unlike a DESC key part (parsed-and-ignored)
+    -- or INVISIBLE (a suppressible clause), a functional/expression key part is a hard syntax error
+    -- below the floor -- there is no reduced form to fall back to, so the whole index is skipped rather
+    -- than degraded in place. MariaDB has no equivalent in this form at ANY version
+    -- (SchemaSmith_SupportsFunctionalIndex() is unconditionally 0 there), so this block fires on MariaDB
+    -- every time a functional index is declared, not just below some threshold. A multi-valued index
+    -- (CAST(... AS ... ARRAY)) is a functional key part too and rides this same gate; see
+    -- SchemaSmith_SupportsFunctionalIndex for why it needs no gate of its own. 'fail' aborts naming the
+    -- offending index(es); 'warn' (default) records one 'downgraded' manifest row + a run-log line per
+    -- declared functional index -- STEP 2 (modified-detect) and STEP 4 (create) below exclude it via the
+    -- identical predicate, leaving any live index of the same name untouched.
+    -- =========================================================================
+    IF SchemaSmith_SupportsFunctionalIndex() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Indexes i
+                   WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Functional/expression index requires MySQL 8.0.13 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+            FROM _SchemaSmith_Indexes i
+            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
+            SET @ss_msg = 'Functional/expression index requires MySQL 8.0.13; MariaDB unsupported (policy=fail). See the run log.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping index (functional/expression key part requires MySQL 8.0.13, MariaDB unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+            FROM _SchemaSmith_Indexes i
+            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'INDEX (functional/expression, MySQL 8.0.13)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
+            FROM _SchemaSmith_Indexes i
+            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
+        END IF;
+    END IF;
+
+    -- =========================================================================
     -- Detection snapshot: the live index picture read ONCE here so STEP 1 (rename) and STEP 2
     -- (modified) join it instead of re-reading INFORMATION_SCHEMA.STATISTICS per declared index.
     -- INFORMATION_SCHEMA is not a stored table on MySQL/MariaDB, so the original per-row reads cost
@@ -286,6 +326,11 @@ BEGIN
           WHERE BINARY r.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
             AND BINARY r.NewIndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
       )
+      -- A declared functional/expression index this target cannot legally CREATE (below the floor / see
+      -- the STEP 0.6 degrade guard above) is left untouched rather than flagged modified-and-dropped:
+      -- STEP 4 below excludes it from recreation via the identical predicate, so dropping it here would
+      -- lose it for good.
+      AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0)
       -- Check if definition differs (columns, uniqueness, or index type)
       AND (
           -- Columns differ
@@ -730,7 +775,10 @@ BEGIN
               SELECT 1 FROM _SchemaSmith_IdxExist s
               WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
                 AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-          );
+          )
+          -- A declared functional index below the floor (see the STEP 0.6 degrade guard above) is
+          -- never created -- it is a hard syntax error, not a clause that can be suppressed.
+          AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0);
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -747,7 +795,8 @@ BEGIN
               SELECT 1 FROM _SchemaSmith_IdxExist s
               WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
                 AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-          );
+          )
+          AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0);
 
         -- Fold each table's missing-index creates into one multi-clause ALTER, materialize, execute.
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexCreateStmts;
@@ -783,6 +832,7 @@ BEGIN
               WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
                 AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           )
+          AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0)
         GROUP BY i.TableName;
 
         SET @v_indexcreate_id := (SELECT MIN(RowId) FROM _SchemaSmith_IndexCreateStmts);

@@ -26,7 +26,11 @@ public abstract class CapabilityGuardConsistencySharedTests : BaseTableQuenchTes
     {
         ["invisible-index"] = "SchemaSmith_SupportsInvisibleIndex",
         ["descending-index"] = "SchemaSmith_SupportsDescendingIndex",
-        ["check-constraint"] = "SchemaSmith_SupportsCheckConstraints"
+        ["check-constraint"] = "SchemaSmith_SupportsCheckConstraints",
+        ["default-expression"] = "SchemaSmith_SupportsDefaultExpression",
+        ["invisible-column"] = "SchemaSmith_SupportsInvisibleColumn",
+        ["column-srid"] = "SchemaSmith_SupportsColumnSrid",
+        ["functional-index"] = "SchemaSmith_SupportsFunctionalIndex"
     };
 
     [Test]
