@@ -281,7 +281,7 @@ namespace Schema.UnitTests.Domain
         {
             var tableJson = @"{
                 ""Name"": ""[TestTable]"",
-                ""FileGroup"": ""PRIMARY"",
+                ""NotARealTableProperty"": ""x"",
                 ""Columns"": []
             }";
             var filePath = Path.Join("C:", "tables", "dbo.TestTable.json");
@@ -290,7 +290,7 @@ namespace Schema.UnitTests.Domain
 
             var ex = Assert.Throws<Exception>(() => Table.Load(filePath, Platform.SqlServer));
 
-            Assert.That(ex.Message, Does.Contain("FileGroup"));
+            Assert.That(ex.Message, Does.Contain("NotARealTableProperty"));
             Assert.That(ex.Message, Does.Contain(filePath));
         }
 

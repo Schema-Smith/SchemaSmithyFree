@@ -1,4 +1,4 @@
--- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
@@ -79,33 +79,42 @@ BEGIN TRY
   -- table with FileGroup unset -- every existing package -- compares its live default-filegroup placement
   -- against itself and never trips this check.
   RAISERROR('Validate declared table filegroup matches deployed', 10, 100) WITH NOWAIT
-  IF EXISTS (SELECT 1
-               FROM #Tables t WITH (NOLOCK)
-               WHERE t.NewTable = 0
-                 AND ISNULL(SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1))
-                       <> ISNULL((SELECT fg.[name]
-                                    FROM sys.indexes si WITH (NOLOCK)
-                                    JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
-                                   WHERE si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
-                                     AND si.index_id IN (0, 1)), ''))
+  -- A partitioned table's heap/clustered data_space_id names a partition SCHEME, not a filegroup, so it has
+  -- no single filegroup to compare against and ISNULL(...,'') would read as "on no filegroup" and mismatch
+  -- every partitioned table. Resolve the data space once and branch on its type instead.
+  IF OBJECT_ID('tempdb..#DeployedTablePlacement') IS NOT NULL DROP TABLE #DeployedTablePlacement
+  SELECT t.[Schema] + '.' + t.[Name] AS FullName,
+         ISNULL(SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]),
+                (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) AS Declared,
+         t.[FileGroup] AS DeclaredRaw,
+         ds.[name] AS DeployedSpace,
+         ds.[type] AS DeployedSpaceType
+    INTO #DeployedTablePlacement
+    FROM #Tables t WITH (NOLOCK)
+    LEFT JOIN sys.indexes si WITH (NOLOCK)
+      ON si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name]) AND si.index_id IN (0, 1)
+    LEFT JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = si.data_space_id
+   WHERE t.NewTable = 0
+
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement WHERE DeployedSpaceType = 'FG' AND Declared <> DeployedSpace)
   BEGIN
     DECLARE @v_MoveTable NVARCHAR(1010), @v_MoveDeclared NVARCHAR(500), @v_MoveLive NVARCHAR(500)
-    SELECT TOP 1 @v_MoveTable = t.[Schema] + '.' + t.[Name],
-                 @v_MoveDeclared = ISNULL(SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)),
-                 @v_MoveLive = (SELECT fg.[name]
-                                  FROM sys.indexes si WITH (NOLOCK)
-                                  JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
-                                 WHERE si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
-                                   AND si.index_id IN (0, 1))
-      FROM #Tables t WITH (NOLOCK)
-      WHERE t.NewTable = 0
-        AND ISNULL(SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1))
-              <> ISNULL((SELECT fg.[name]
-                           FROM sys.indexes si WITH (NOLOCK)
-                           JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
-                          WHERE si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
-                            AND si.index_id IN (0, 1)), '')
+    SELECT TOP 1 @v_MoveTable = FullName, @v_MoveDeclared = Declared, @v_MoveLive = DeployedSpace
+      FROM #DeployedTablePlacement
+     WHERE DeployedSpaceType = 'FG' AND Declared <> DeployedSpace
     RAISERROR('Table %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing table to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_MoveTable, @v_MoveDeclared, @v_MoveLive)
+  END
+
+  -- An explicit FileGroup on a table living on a partition scheme is a placement we cannot honour, so it is
+  -- refused rather than silently ignored. Leaving FileGroup unset on such a table stays supported untouched.
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement
+              WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'FG')
+  BEGIN
+    DECLARE @v_PsTable NVARCHAR(1010), @v_PsDeclared NVARCHAR(500), @v_PsScheme NVARCHAR(500)
+    SELECT TOP 1 @v_PsTable = FullName, @v_PsDeclared = Declared, @v_PsScheme = DeployedSpace
+      FROM #DeployedTablePlacement
+     WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'FG'
+    RAISERROR('Table %s declares filegroup %s, but is currently deployed on partition scheme %s. SchemaSmith cannot place a partitioned table on a single filegroup -- remove the declared FileGroup, or migrate the table manually.', 16, 1, @v_PsTable, @v_PsDeclared, @v_PsScheme)
   END
 
   -- No-drop protection tier (#270): when protected mode is active the caller forces

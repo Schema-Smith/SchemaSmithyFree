@@ -805,22 +805,22 @@ CREATE NONCLUSTERED INDEX [IX_MyFileGroupTable_Somedata] ON dbo.MyFileGroupTable
         conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-CREATE TABLE dbo.MyOrdinaryFileGroupTable (
+CREATE TABLE dbo.MyOrdinaryPlacementTable (
     Id INT NOT NULL,
     Somedata VARCHAR(50) NULL,
-    CONSTRAINT [PK_MyOrdinaryFileGroupTable] PRIMARY KEY CLUSTERED (Id)
+    CONSTRAINT [PK_MyOrdinaryPlacementTable] PRIMARY KEY CLUSTERED (Id)
 )
 ";
         cmd.ExecuteNonQuery();
 
-        var json = GenerateTableJson(cmd, "dbo", "MyOrdinaryFileGroupTable");
-        var result = GenerateTable(cmd, "dbo", "MyOrdinaryFileGroupTable");
+        var json = GenerateTableJson(cmd, "dbo", "MyOrdinaryPlacementTable");
+        var result = GenerateTable(cmd, "dbo", "MyOrdinaryPlacementTable");
 
         Assert.Multiple(() =>
         {
             Assert.That(result.FileGroup, Is.Null);
             Assert.That(((SqlServerIndex)result.Indexes[0]).FileGroup, Is.Null);
-            Assert.That(json, Does.Not.Contain("FileGroup"));
+            Assert.That(json, Does.Not.Contain("\"FileGroup\""));
         });
 
         conn.Close();

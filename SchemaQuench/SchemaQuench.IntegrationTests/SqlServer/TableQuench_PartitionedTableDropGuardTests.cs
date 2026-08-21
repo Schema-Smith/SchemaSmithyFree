@@ -129,6 +129,47 @@ public class TableQuench_PartitionedTableDropGuardTests : BaseTableQuenchTests
         conn.Close();
     }
 
+
+    // The filegroup move-guard resolves the deployed data space and branches on its type: a partitioned
+    // table sits on a partition SCHEME, so there is no single filegroup to compare against. Leaving
+    // FileGroup unset is supported (covered above); declaring one is a placement SchemaSmith cannot honour,
+    // so it must fail closed with a message that names the scheme rather than reporting a null filegroup.
+    [Test]
+    public void TableQuench_PartitionedTableDeclaringFileGroup_FailsClosed()
+    {
+        var uid = Guid.NewGuid().ToString("N")[..8];
+        var product = $"PartGuardFgProduct_{uid}";
+        var table = $"PartGuardFgTable_{uid}";
+
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            RunTableQuenchProc(cmd, WithTable(table), productName: product);
+            PartitionTable(cmd, table, uid);
+            Assert.That(IsPartitioned(cmd, table), Is.True, "Setup: table should be partitioned.");
+
+            var ex = Assert.Throws<SqlException>(
+                () => RunTableQuenchProc(cmd, WithTableOnFileGroup(table, "[PRIMARY]"), productName: product),
+                "Declaring a filegroup on a partitioned table must fail closed, not be silently ignored.");
+            Assert.Multiple(() =>
+            {
+                Assert.That(ex!.Message, Does.Contain(table), "Failure message must name the offending table.");
+                Assert.That(ex.Message, Does.Contain($"ps_{uid}"), "Failure message must name the partition scheme it is deployed on.");
+                Assert.That(ex.Message, Does.Not.Contain("(null)"), "Failure message must not report a null filegroup.");
+            });
+        }
+        finally
+        {
+            CleanupPartitionedTable(cmd, table, uid);
+        }
+        conn.Close();
+    }
+
     private static void PartitionTable(IDbCommand cmd, string table, string uid)
     {
         cmd.CommandText = $"CREATE PARTITION FUNCTION [pf_{uid}](int) AS RANGE LEFT FOR VALUES (1000000);";
@@ -154,6 +195,18 @@ public class TableQuench_PartitionedTableDropGuardTests : BaseTableQuenchTests
   {
     "Schema": "[dbo]",
     "Name": "[{{table}}]",
+    "Columns": [ { "Name": "[Id]", "DataType": "INT", "Nullable": false } ],
+    "Indexes": [ { "Name": "[PK_{{table}}]", "PrimaryKey": true, "Unique": true, "Clustered": true, "IndexColumns": "[Id]" } ]
+  }
+]
+""";
+
+    private static string WithTableOnFileGroup(string table, string fileGroup) => $$"""
+[
+  {
+    "Schema": "[dbo]",
+    "Name": "[{{table}}]",
+    "FileGroup": "{{fileGroup}}",
     "Columns": [ { "Name": "[Id]", "DataType": "INT", "Nullable": false } ],
     "Indexes": [ { "Name": "[PK_{{table}}]", "PrimaryKey": true, "Unique": true, "Clustered": true, "IndexColumns": "[Id]" } ]
   }
