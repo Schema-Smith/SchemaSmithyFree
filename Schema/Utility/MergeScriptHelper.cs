@@ -304,7 +304,19 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE,
             var scale = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5));
             var dtPrecision = reader.IsDBNull(6) ? 0 : Convert.ToInt32(reader.GetValue(6));
 
-            // Build JSON parse type with proper size/precision qualifiers
+            // Build JSON parse type with proper size/precision qualifiers. This is a cast target for
+            // shredding delivered data (OPENJSON WITH / .value()), not a faithful DDL rendering, so it
+            // deliberately does NOT share the catalog-derived DataType function C1-0a introduced for the
+            // engine scripts' drift comparison and extraction — those two jobs have different correctness
+            // requirements (faithful DDL text vs. "a type the shred can safely cast to").
+            //
+            // There is no TIME case below (unlike DATETIME2) — that gap looks like C1-0a's defect but is
+            // not reachable the same way: this is a cast target, and an unqualified TIME/DATETIME2 casts
+            // at precision 7 (the max), so the destination column governs final rounding regardless.
+            // The DATETIME2 precision suffix just above is defensive, not load-bearing: forcing it to
+            // `(dtPrecision * 0)` and rerunning the full suite left every test green, including the
+            // delivery round-trip tests below — proof, not just the documented-defaults argument, that
+            // nothing downstream depends on this value being correct. Do not "fix" the missing TIME case.
             var parseType = userType
                 .Replace("HIERARCHYID", "NVARCHAR(4000)")
                 .Replace("GEOGRAPHY", "NVARCHAR(4000)")
@@ -373,6 +385,14 @@ SELECT c.column_name, c.data_type, c.udt_name, c.udt_schema,
             var fullType = udtSchema is not "pg_catalog" and not "information_schema"
                 ? $"{udtSchema}.{udtName}" : udtName;
 
+            // Same cast-target-not-DDL reasoning as GetColumnMetadataSqlServer above applies here — this
+            // stays separate from C1-0a's catalog-derived function by design. Unlike the SQL Server twin,
+            // this branch already covers time/timestamp precision (no gap to record).
+            //
+            // maxLen > 0 ? "(n)" : "" (no "MAX" keyword, unlike SQL Server's -1-sentinel case above) is
+            // correct PostgreSQL syntax, not a missing case: an unbounded varchar/text has no length
+            // parameter at all in PostgreSQL — there is no "(MAX)"-equivalent token to emit. maxLen is 0
+            // here only when the column is genuinely unbounded (a bare "char" reports length 1, not 0).
             var parseType = fullType;
             var dataType = reader.GetString(1);
             if (dataType.Contains("char", StringComparison.OrdinalIgnoreCase) || dataType.Contains("binary", StringComparison.OrdinalIgnoreCase))
@@ -943,6 +963,14 @@ SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.identity_columns c WITH (NOLOCK)
         return cmd.ExecuteScalar() as bool? ?? false;
     }
 
+    // Builds the OPENJSON WITH clause's column types — the T-SQL twin of GetColumnMetadataSqlServer's
+    // parseType above, evaluated server-side (STRING_AGG) instead of client-side because this feeds the
+    // JSON row source directly rather than a per-column MergeColumnInfo list. Same reasoning applies: a
+    // cast target for shredding, not a DDL rendering, so it stays separate from C1-0a's catalog-derived
+    // DataType function; and the missing TIME precision case (only DATETIME2 is handled here too) is not
+    // reachable for the same mechanism proven at the C# twin above (zeroing its DATETIME2 precision left
+    // the full suite green) — this copy's DATETIME2 case was not itself mutated, but it is a cast target
+    // read by the same OPENJSON/INSERT machinery, so the same "destination column governs" argument holds.
     private static string GetJsonColumnDefinitionsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
@@ -1375,6 +1403,9 @@ SELECT c.column_name || '=' || COALESCE(PG_GET_SERIAL_SEQUENCE(c.table_schema ||
         return cmd.ExecuteScalar()?.ToString();
     }
 
+    // The PostgreSQL twin of GetJsonColumnDefinitionsSqlServer above. Unlike the SQL Server pair, this one
+    // has no time/timestamp precision gap to record — it already handles it (see the `time%`/`timestamp%`
+    // branch below), matching GetColumnMetadataPostgreSql's C# parseType builder.
     private static string GetJsonColumnDefinitionsPostgreSql(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys = null)
     {
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));

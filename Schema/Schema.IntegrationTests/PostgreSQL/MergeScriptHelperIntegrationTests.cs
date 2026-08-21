@@ -676,4 +676,84 @@ public class MergeScriptHelperIntegrationTests
     }
 
     #endregion
+
+    #region Time/Timestamp Precision Tests (C1-0f — is the C1-0a defect reachable here?)
+
+    // MergeScriptHelper's PostgreSQL parseType builder (GetColumnMetadataPostgreSql) and its embedded-SQL
+    // twin (GetJsonColumnDefinitionsPostgreSql) both already carry an explicit time/timestamp precision
+    // case, unlike the SQL Server pair. These two tests pin that as permanent regression coverage rather
+    // than leaving it unverified.
+
+    [Test]
+    public void BuildMergeScript_TimeColumnWithPrecision_RoundTripsSubSecondPrecision()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_time_{Guid.NewGuid():N}"[..40];
+
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""id"" INT PRIMARY KEY,
+    ""t"" TIME(3) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""id"":1,""t"":""13:45:30.123""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $@"SELECT ""t""::text FROM ""public"".""{tableName}"" WHERE ""id"" = 1";
+            var result = command.ExecuteScalar()?.ToString();
+            Assert.That(result, Is.EqualTo("13:45:30.123"),
+                "A TIME(3) delivery must preserve its declared millisecond precision exactly.");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildMergeScript_TimestamptzColumnWithPrecision_RoundTripsSubSecondPrecision()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_tstz_{Guid.NewGuid():N}"[..40];
+
+        try
+        {
+            command.CommandText = $@"CREATE TABLE ""public"".""{tableName}"" (
+    ""id"" INT PRIMARY KEY,
+    ""t"" TIMESTAMPTZ(3) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""id"":1,""t"":""2024-06-15T10:30:00.123+00:00""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, command,
+                "public", tableName, tableData, @"""id""",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            // Read back at a fixed offset (UTC) so the assertion isn't hostage to the session timezone.
+            command.CommandText = $@"SELECT to_char(""t"" AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.MS') FROM ""public"".""{tableName}"" WHERE ""id"" = 1";
+            var result = command.ExecuteScalar()?.ToString();
+            Assert.That(result, Is.EqualTo("2024-06-15 10:30:00.123"),
+                "A TIMESTAMPTZ(3) delivery must preserve its declared millisecond precision exactly.");
+        }
+        finally
+        {
+            command.CommandText = $@"DROP TABLE IF EXISTS ""public"".""{tableName}""";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
 }
