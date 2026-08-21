@@ -137,6 +137,50 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- Degrade column SRID restriction below MySQL 8.0.3 for EXISTING columns (new columns are gated in
+    -- MissingTableAndColumnQuench, which runs earlier in the same deploy). MariaDB has no equivalent
+    -- attribute at any version, so SchemaSmith_SupportsColumnSrid() is 0 there unconditionally -- this
+    -- block fires for MariaDB the same way it fires for a genuinely old MySQL. Below the threshold the
+    -- SRID keyword is a hard syntax error, so ColumnScript never emits it there -- the MODIFY COLUMN
+    -- emitted below (STEP 3) is still syntactically valid, it just leaves the column unrestricted -- and
+    -- STEP 3's predicate ignores the SRID difference so the deploy stays idempotent. This block only
+    -- adds the user-facing report: 'fail' aborts naming the column(s); 'warn' (default) records a
+    -- 'downgraded' manifest row per column.
+    -- =========================================================================
+    IF SchemaSmith_SupportsColumnSrid() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE t.NewTable = 0 AND c.NewColumn = 0
+                     AND c.Srid IS NOT NULL) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.Srid IS NOT NULL;
+            SET @ss_msg = 'Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID stored unrestricted (requires MySQL 8.0.3, MariaDB unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.Srid IS NOT NULL;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (SRID, MySQL 8.0.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.Srid IS NOT NULL;
+        END IF;
+    END IF;
+
     -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
     -- =======================
@@ -327,6 +371,13 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
           );
 
         -- #363: WhatIf twin of the ELSE-branch 'column'/'modified' audit; same source/predicate, wouldModify.
@@ -375,6 +426,13 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
           );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Modify columns');
@@ -442,6 +500,13 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
           );
 
         -- Object-change audit (#243 E5): one row per column about to be modified. Same join +
@@ -493,6 +558,13 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
           );
 
         -- Materialize: fold each table's column modifications into one multi-clause ALTER, then drain.
@@ -545,6 +617,13 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
           )
         GROUP BY c.TableName;
 

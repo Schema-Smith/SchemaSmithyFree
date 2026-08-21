@@ -526,6 +526,8 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 
 `GenerationExpression`, `CharacterSet`, `Collation`, `Comment`, auto-increment via `DataType` (`INT AUTO_INCREMENT`).
 
+`Srid` (int) restricts a spatial column to one spatial reference system -- `"Srid": 4326` deploys as `col POINT SRID 4326`, so the column accepts only geometries in that reference system. MySQL 8.0.3+ only; below that (and on MariaDB, which has no equivalent attribute at any version) the restriction is silently skipped and the column deploys unrestricted, per the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation). Omit `Srid` for an unrestricted spatial column.
+
 ### User-defined types
 
 When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `DataType` value is the type name. The type must be created in the appropriate types script folder (`DataTypes/` on SQL Server, `Domain Types/`/`Enum Types/`/`Composite Types/` on PostgreSQL) before the table quench runs.
@@ -740,7 +742,7 @@ The XML row shape is a documented, stable contract -- one `<c>` element per colu
 - An **absent `<c>`** is `NULL` (row `B002` above has no `price`).
 - **Binary** columns are base64; **geometry/geography** is WKT with a companion `<c n="Column.STSrid">` carrying the SRID; **dates** are ISO-8601.
 
-You don't have to hand-author this shape: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you, on every source engine (see [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server)) -- SQL Server extracts XML natively, and PostgreSQL/MySQL/MariaDB convert their normal JSON extraction into the identical shape. One caveat: the `.STSrid` SRID element is captured only in SQL Server's extraction; PostgreSQL and MySQL JSON (and therefore their XML derivatives) carry WKT alone for spatial columns, the same as their JSON output.
+You don't have to hand-author this shape: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you, on every source engine (see [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server)) -- SQL Server extracts XML natively, and PostgreSQL/MySQL/MariaDB convert their normal JSON extraction into the identical shape. One caveat: the `.STSrid` SRID element -- a per-row companion carried alongside each extracted value -- is captured only in SQL Server's extraction; PostgreSQL and MySQL JSON (and therefore their XML derivatives) carry WKT alone for spatial columns, the same as their JSON output. On **MySQL**, a [SRID-restricted column](#mysql-column-extras) (`Srid` in the schema package) doesn't need that per-row companion: every row in the column is guaranteed to carry the declared reference system, so a deploy target reconstructs it from the schema instead. An *unrestricted* MySQL spatial column, and every PostgreSQL spatial column, still lose the reference system in data extraction.
 
 ### Multiple Deliveries
 

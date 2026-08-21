@@ -35,5 +35,11 @@ namespace Schema.Domain.MySQL
         [JsonProperty(Order = 107)]
         [DefaultValue(false)]
         public bool Invisible { get; set; }
+
+        // Restricts a spatial column to one spatial reference system (`col POINT SRID 4326`); NULL
+        // means unrestricted. MySQL 8.0.3+ only -- MariaDB has no equivalent attribute at any version.
+        // See SchemaSmith_SupportsColumnSrid.
+        [JsonProperty(Order = 108)]
+        public int? Srid { get; set; }
     }
 }

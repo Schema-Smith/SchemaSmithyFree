@@ -167,6 +167,50 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- Degrade column SRID restriction below MySQL 8.0.3 (mirrors the invisible-column guard directly
+    -- above). MariaDB has no equivalent attribute at any version, so SchemaSmith_SupportsColumnSrid()
+    -- is 0 there unconditionally, not a floor it ever crosses -- this block fires for MariaDB the same
+    -- way it fires for a genuinely old MySQL. Below the threshold the SRID clause is a hard syntax
+    -- error, so ColumnScript (built in ParseTableJson) never emits it there -- the column is created
+    -- unrestricted instead, which is the safe degrade; the CREATE TABLE and ADD COLUMN emit sites below
+    -- need no exclusion for it. This block only adds the user-facing report: 'fail' aborts naming the
+    -- offending column(s); 'warn' (default) records a 'downgraded' manifest row per column so a
+    -- silently-unrestricted spatial column stays discoverable.
+    -- =========================================================================
+    IF SchemaSmith_SupportsColumnSrid() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+                     AND c.Srid IS NOT NULL) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.Srid IS NOT NULL;
+            SET @ss_msg = 'Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID stored unrestricted (requires MySQL 8.0.3, MariaDB unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.Srid IS NOT NULL;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (SRID, MySQL 8.0.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.Srid IS NOT NULL;
+        END IF;
+    END IF;
+
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
 

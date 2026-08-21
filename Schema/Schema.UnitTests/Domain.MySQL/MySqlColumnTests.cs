@@ -28,6 +28,7 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(column.Collation, Is.Null);
             Assert.That(column.Comment, Is.Null);
             Assert.That(column.Invisible, Is.False);
+            Assert.That(column.Srid, Is.Null);
         }
 
         [Test]
@@ -46,7 +47,8 @@ namespace Schema.UnitTests.Domain.MySQL
                 Comment = "Full name computed column",
                 ShouldApplyExpression = "SELECT 1",
                 OldName = "desc",
-                Invisible = true
+                Invisible = true,
+                Srid = 4326
             };
 
             var json = JsonConvert.SerializeObject(column);
@@ -58,6 +60,17 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(deserialized.Collation, Is.EqualTo("utf8mb4_unicode_ci"));
             Assert.That(deserialized.Comment, Is.EqualTo("Full name computed column"));
             Assert.That(deserialized.Invisible, Is.True);
+            Assert.That(deserialized.Srid, Is.EqualTo(4326));
+        }
+
+        [Test]
+        public void MySqlColumn_OmitsNullSrid_FromSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Columns":[{"Name":"Id","DataType":"int"}]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL);
+            Assert.That(JsonHelper.SerializeAll(table), Does.Not.Contain("Srid"));
         }
 
         [Test]

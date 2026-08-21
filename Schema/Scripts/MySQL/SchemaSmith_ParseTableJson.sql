@@ -161,6 +161,7 @@ BEGIN
         Collation VARCHAR(100) DEFAULT NULL,
         CheckExpression TEXT DEFAULT NULL,
         IsInvisible TINYINT DEFAULT 0,
+        Srid INT DEFAULT NULL,
         OldName VARCHAR(128) DEFAULT NULL,
         NewColumn TINYINT DEFAULT 0,
         ColumnScript TEXT DEFAULT NULL,
@@ -182,7 +183,7 @@ BEGIN
                 INSERT INTO _SchemaSmith_Columns (
                     TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue,
                     IsAutoIncrement, GeneratedExpression, GeneratedType,
-                    CharacterSet, Collation, CheckExpression, IsInvisible, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
+                    CharacterSet, Collation, CheckExpression, IsInvisible, Srid, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
                 )
                 SELECT
                     SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Name')))) AS TableName,
@@ -198,6 +199,7 @@ BEGIN
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Collation'))) AS Collation,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].CheckExpression'))) AS CheckExpression,
                     COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Invisible'))), 0) AS IsInvisible,
+                    SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Srid'))) AS Srid,
                     -- #375: blank/whitespace OldName -> NULL (no rename), same as the table-level OldName above.
                     SchemaSmith_SafeBacktickWrap(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].OldName')))), '')) AS OldName,
                     0 AS NewColumn,
@@ -241,12 +243,15 @@ BEGIN
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Build column scripts');
 
     -- Build ColumnScript for each column
-    -- The trailing INVISIBLE clause is appended OUTSIDE the generated/regular CASE so it applies to
-    -- either form uniformly, mirroring how SchemaSmith_IndexInvisibleClause is appended after an
-    -- index's column list rather than folded into it. Gated behind SchemaSmith_SupportsInvisibleColumn():
-    -- below MySQL 8.0.23 / MariaDB 10.3 the keyword is a hard syntax error, so suppressing it here (rather
+    -- The trailing SRID / INVISIBLE clauses are appended OUTSIDE the generated/regular CASE so they apply
+    -- to either form uniformly, mirroring how SchemaSmith_IndexInvisibleClause is appended after an
+    -- index's column list rather than folded into it. SRID is gated behind SchemaSmith_SupportsColumnSrid()
+    -- (MySQL 8.0.3+; MariaDB never), INVISIBLE behind SchemaSmith_SupportsInvisibleColumn() (MySQL 8.0.23 /
+    -- MariaDB 10.3): below its floor each keyword is a hard syntax error, so suppressing it here (rather
     -- than at each of the CREATE TABLE / ADD COLUMN / MODIFY COLUMN emit sites that consume ColumnScript)
-    -- is the single point that keeps a declared invisible column safely degrading to visible everywhere.
+    -- is the single point that keeps a declared SRID / invisible column safely degrading everywhere. SRID
+    -- is placed immediately after the type/nullability/default block, matching MySQL's own reference-manual
+    -- rendering ("g GEOMETRY NOT NULL SRID 4326") -- the form a user hand-authoring the JSON would recognize.
     UPDATE _SchemaSmith_Columns
     SET ColumnScript = CONCAT(
         ColumnName, ' ',
@@ -274,6 +279,7 @@ BEGIN
                          ELSE '' END
                 )
         END,
+        CASE WHEN Srid IS NOT NULL AND SchemaSmith_SupportsColumnSrid() = 1 THEN CONCAT(' SRID ', Srid) ELSE '' END,
         CASE WHEN IsInvisible = 1 AND SchemaSmith_SupportsInvisibleColumn() = 1 THEN ' INVISIBLE' ELSE '' END
     );
 

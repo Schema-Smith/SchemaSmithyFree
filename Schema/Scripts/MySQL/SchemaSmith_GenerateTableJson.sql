@@ -87,6 +87,13 @@ BEGIN
             -- here is safe on every version: below MySQL 8.0.23 / MariaDB 10.3 the INVISIBLE marker simply
             -- never appears, so the LIKE is always false there -- no version gate needed at extraction time.
             'Invisible', CASE WHEN c.EXTRA LIKE '%INVISIBLE%' THEN TRUE ELSE FALSE END,
+            -- SRS_ID does not exist on MariaDB's INFORMATION_SCHEMA.COLUMNS at all (unlike EXTRA above,
+            -- which both engines carry), so it cannot be read as a plain c.SRS_ID here without breaking
+            -- extraction for every table on MariaDB (ER_BAD_FIELD_ERROR). SchemaSmith_ColumnSrid isolates
+            -- the divergence: its MySQL body reads SRS_ID (gated below MySQL 8.0.3), its MariaDb override
+            -- (Scripts/MariaDb/SchemaSmith_ColumnSrid.sql) always returns NULL. See
+            -- SchemaSmith_SupportsColumnSrid for the full per-engine rationale.
+            'Srid', SchemaSmith_ColumnSrid(p_Schema, p_Table, c.COLUMN_NAME),
             'Generated', CASE
                 WHEN c.EXTRA LIKE '%VIRTUAL GENERATED%' THEN 'VIRTUAL'
                 WHEN c.EXTRA LIKE '%STORED GENERATED%' THEN 'STORED'

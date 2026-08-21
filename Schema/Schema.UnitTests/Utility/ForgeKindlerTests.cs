@@ -224,7 +224,14 @@ public class ForgeKindlerTests
         // MariaDB 10.3 — the INVISIBLE keyword itself is the same on both engines, only the introduction
         // version differs. Gates the INVISIBLE clause ParseTableJson bakes into ColumnScript and the
         // modified-column visibility compare in ModifiedTableQuench).
-        Assert.That(mysql.Length, Is.EqualTo(41));
+        // +1 = SchemaSmith_SupportsColumnSrid (column-SRID availability predicate, MySQL 8.0.3 only —
+        // MariaDB has no equivalent attribute at any version, always 0. Gates the SRID clause
+        // ParseTableJson bakes into ColumnScript and the modified-column SRID compare in ModifiedTableQuench).
+        // +1 = SchemaSmith_ColumnSrid (per-column live SRID reader; MySQL reads INFORMATION_SCHEMA.COLUMNS.
+        // SRS_ID, the MariaDb override always returns NULL since that column does not exist there at all —
+        // isolates the divergence out of GenerateTableJson / ModifiedTableQuench, same shape as
+        // SchemaSmith_IndexIsVisible).
+        Assert.That(mysql.Length, Is.EqualTo(43));
     }
 
     [Test]
