@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, dev/v2]
+    branches: [main]
     paths-ignore:
       - 'docs/**'
       - '*.md'
@@ -17,7 +17,7 @@ on:
       - 'Demos/**/*.sh'
       - 'Demos/**/*.sql'
   pull_request:
-    branches: [main, dev/v2]
+    branches: [main]
     paths-ignore:
       - 'docs/**'
       - '*.md'
