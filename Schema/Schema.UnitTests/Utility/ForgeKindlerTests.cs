@@ -187,7 +187,10 @@ public class ForgeKindlerTests
         // + SchemaSmith.fn_ColumnTypeArguments (single source of a column's parenthesized DataType argument,
         //   shared by GenerateTableJson/GenerateTableXml/ModifiedTableQuench — replaces the hand-copied CASE
         //   that dropped TIME(n)/DATETIMEOFFSET(n) precision).
-        Assert.That(sqlServer.Length, Is.EqualTo(28));
+        // + SchemaSmith.fn_NormalizeTemporalRetentionPeriod (canonicalizes a declared HISTORY_RETENTION_PERIOD
+        //   to the plural unit the DDL takes, since the catalog reports it singular -- normalized once at
+        //   parse so extraction and the drift compare cannot disagree).
+        Assert.That(sqlServer.Length, Is.EqualTo(29));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
