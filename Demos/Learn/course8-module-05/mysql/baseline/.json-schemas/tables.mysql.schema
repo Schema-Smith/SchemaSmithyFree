@@ -60,6 +60,9 @@
           "Srid": {
             "type": "integer"
           },
+          "OnUpdateCurrentTimestamp": {
+            "type": "string"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,

@@ -516,6 +516,15 @@
     "EnableCDC": {
       "type": "boolean"
     },
+    "HistoryTableSchema": {
+      "type": "string"
+    },
+    "HistoryTableName": {
+      "type": "string"
+    },
+    "HistoryRetentionPeriod": {
+      "type": "string"
+    },
     "Extensions": {
       "type": "object",
       "required": [
