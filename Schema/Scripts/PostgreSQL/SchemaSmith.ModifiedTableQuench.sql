@@ -18,6 +18,7 @@ AS $$
 DECLARE
   sql_script TEXT = '';
   protect_notice TEXT;
+  partitioned_tables TEXT;
 BEGIN
     -- OldName rename parity: a table renamed via OldName still has its PRE-rename name in
     -- temp_product_ownership (owned on the prior deploy). It is NOT removed from the product — the
@@ -73,6 +74,30 @@ BEGIN
                                 AND mv.matviewname = tp."TableName");
     END IF;
     IF p_DropTablesRemovedFromProduct THEN
+      -- Data-loss guard: a partitioned table spreads data across multiple physical partitions
+      -- that DROP TABLE destroys outright. SchemaSmith has no partitioning support -- partitioning
+      -- only happens by hand, typically once a table has grown -- so an ordinary product-owned
+      -- table can be partitioned after deployment and later look like an ordinary drop-by-absence
+      -- candidate. Fail closed before any DDL below, in both live and WhatIf mode, mirroring the
+      -- version-gated 'fail' branches elsewhere in this proc. relispartition also catches a table
+      -- ATTACHed as a child partition of another parent -- the realistic "converted in place" path,
+      -- since PostgreSQL cannot ALTER an existing plain table into a partitioned parent; relkind =
+      -- 'p' catches the table itself being a partitioned parent.
+      SELECT STRING_AGG(tp."Schema" || '.' || tp."TableName", ', ')
+        INTO partitioned_tables
+        FROM temp_product_ownership tp
+        JOIN pg_class c     ON c.relname = tp."TableName"
+        JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = tp."Schema"
+        WHERE tp."IndexName" IS NULL
+          AND NOT COALESCE(tp."PreventDrop", FALSE)
+          AND NOT EXISTS (SELECT 1 FROM temp_tables t WHERE tp."Schema" = t."Schema" AND tp."TableName" = t."Name")
+          AND NOT EXISTS (SELECT 1 FROM pg_matviews mv WHERE mv.schemaname = tp."Schema" AND mv.matviewname = tp."TableName")
+          AND (c.relkind = 'p' OR c.relispartition);
+      IF partitioned_tables IS NOT NULL THEN
+        RAISE EXCEPTION 'Partitioned table(s) removed from the product but not dropped (data-loss guard): %. SchemaSmith cannot verify that data spread across partitions can be safely destroyed by DROP TABLE. Drop the table manually after confirming the data is no longer needed, or mark it PreventDrop to keep it in the product permanently.',
+          partitioned_tables;
+      END IF;
+
       RAISE NOTICE 'Drop inbound foreign keys referencing tables removed from the product';
       -- Drop any foreign key that REFERENCES a table about to be removed (from any table), so the
       -- table drop below does not fail on a still-present inbound dependency. Same removed-table

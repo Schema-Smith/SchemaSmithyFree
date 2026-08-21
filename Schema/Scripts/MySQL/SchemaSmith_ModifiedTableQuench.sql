@@ -1516,6 +1516,39 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     -- =======================
     -- Drop tables that are owned by this product but no longer in the definition
     IF p_DropTablesRemovedFromProduct = 1 THEN
+        -- Data-loss guard: a partitioned table spreads data across partitions that DROP TABLE
+        -- destroys outright. SchemaSmith has no partitioning support -- partitioning only happens
+        -- by hand, typically once a table has grown -- so an ordinary product-owned table can be
+        -- partitioned after deployment and later look like an ordinary drop-by-absence candidate.
+        -- Fail closed before any DDL below, in both live and WhatIf mode, mirroring the
+        -- UnsupportedFeaturePolicy=fail SIGNAL pattern used elsewhere in this proc. Table names are
+        -- logged individually first (the SIGNAL MESSAGE_TEXT below stays well under MySQL's 128-char
+        -- limit -- see STEP 4's comment on that limit).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT DISTINCT CONNECTION_ID(), CONCAT('  Partitioned table removed from product, not dropped (data-loss guard): ', po.ObjectName)
+        FROM SchemaSmith_ProductOwnership po
+        INNER JOIN INFORMATION_SCHEMA.PARTITIONS ip
+            ON CONVERT(ip.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+           AND CONVERT(ip.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+           AND ip.PARTITION_NAME IS NOT NULL
+        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+          AND po.ObjectType = 'TABLE'
+          AND COALESCE(po.PreventDrop, 0) = 0
+          AND EXISTS (
+              SELECT 1 FROM _SchemaSmith_ExistingTables ist
+              WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_Tables t
+              WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          );
+
+        IF ROW_COUNT() > 0 THEN
+            SET @ss_msg = 'Partitioned table(s) skipped by drop-by-absence guard; drop manually or mark PreventDrop.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        END IF;
+
         -- #289: drop any foreign key that REFERENCES a table about to be removed BEFORE the table
         -- drop below, otherwise the DROP TABLE fails on a still-present inbound dependency.
         IF p_WhatIf = 1 THEN

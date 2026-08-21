@@ -122,6 +122,30 @@ BEGIN TRY
 
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
     BEGIN
+      -- Data-loss guard: a partitioned table spreads data across partitions/filegroups that
+      -- DROP TABLE destroys outright. SchemaSmith has no partitioning support -- partitioning
+      -- only happens by hand, typically once a table has grown -- so an ordinary product-owned
+      -- table can be partitioned after deployment and later look like an ordinary
+      -- drop-by-absence candidate. Fail closed before any DDL below, in both live and WhatIf
+      -- mode, mirroring the Always Encrypted swap guard further down this proc. index_id < 2
+      -- (heap/clustered) + COUNT(*) > 1, not a bare scalar subquery: sys.partitions has one row
+      -- per index per partition, and a naive scalar subquery here is exactly what produced
+      -- Msg 512 "Subquery returned more than 1 value" during development.
+      IF EXISTS (SELECT 1
+                   FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                   WHERE (SELECT COUNT(*) FROM sys.partitions p WITH (NOLOCK)
+                            WHERE p.[object_id] = OBJECT_ID(t.[Schema] + '.[' + t.TableName + ']')
+                              AND p.index_id < 2) > 1)
+      BEGIN
+        SELECT @v_SQL = STUFF((SELECT ', ' + t.[Schema] + '.[' + t.TableName + ']'
+                                 FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                                 WHERE (SELECT COUNT(*) FROM sys.partitions p WITH (NOLOCK)
+                                          WHERE p.[object_id] = OBJECT_ID(t.[Schema] + '.[' + t.TableName + ']')
+                                            AND p.index_id < 2) > 1
+                                 FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+        RAISERROR('Partitioned table(s) removed from the product but NOT dropped: %s. SchemaSmith cannot verify that data spread across partitions can be safely destroyed by DROP TABLE. Drop the table manually after confirming the data is no longer needed, or mark it PreventDrop to keep it in the product permanently.', 16, 1, @v_SQL)
+      END
+
       -- A system-versioned temporal table can't be dropped while versioning is on (error 13552).
       -- Capture each removed temporal table's history table BEFORE turning versioning off
       -- (history_table_id is only valid while versioning is on), then turn versioning off so the
