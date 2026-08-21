@@ -180,7 +180,7 @@ EXEC sys.sp_addextendedproperty @name=N'IdxNote', @value=N'hot', @level0type=N'S
             + "\"Indexes\": [{\"Name\": \"[PK_XmlColRenameTest]\", \"PrimaryKey\": true, \"Unique\": true, \"Clustered\": true, \"IndexColumns\": \"[Id]\"}]"
             + "}";
         var xml = ModelXmlSerializer.ToIngestXmlObject(json, "Table");
-        cmd.CommandText = $"EXEC SchemaSmith.BootstrapTableQuench @TableDefinitions = CAST(N'{xml.Replace("'", "''")}' AS XML)";
+        cmd.CommandText = $"DECLARE @x XML = N'{xml.Replace("'", "''")}'; EXEC SchemaSmith.BootstrapTableQuench @TableDefinitions = @x;";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.XmlColRenameTest') AND name = 'Value'";
@@ -217,7 +217,7 @@ EXEC sys.sp_addextendedproperty @name=N'IdxNote', @value=N'hot', @level0type=N'S
             + "\"Indexes\": [{\"Name\": \"[PK_XmlTblRenameTest]\", \"PrimaryKey\": true, \"Unique\": true, \"Clustered\": true, \"IndexColumns\": \"[Id]\"}]"
             + "}";
         var xml = ModelXmlSerializer.ToIngestXmlObject(json, "Table");
-        cmd.CommandText = $"EXEC SchemaSmith.BootstrapTableQuench @TableDefinitions = CAST(N'{xml.Replace("'", "''")}' AS XML)";
+        cmd.CommandText = $"DECLARE @x XML = N'{xml.Replace("'", "''")}'; EXEC SchemaSmith.BootstrapTableQuench @TableDefinitions = @x;";
         cmd.ExecuteNonQuery();
 
         Assert.That(ObjectExists(cmd, "dbo.XmlTblRenameTest", "U"), Is.True, "Renamed table must exist under the new name.");
