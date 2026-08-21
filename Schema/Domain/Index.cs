@@ -19,7 +19,12 @@ namespace Schema.Domain
         [JsonProperty(Order = 4)]
         public bool UniqueConstraint { get; set; }
 
-        [SchemaProperty(Required = true)]
+        // A columnstore index has no key columns: SQL Server reports every one of its columns as
+        // included, so extraction emits them in IncludeColumns and leaves this empty, and the deploy
+        // path only renders it `WHEN ColumnStore = 0`. Requiring it unconditionally made --Validate
+        // reject packages SchemaTongs had just produced. Engines without a columnstore concept have no
+        // ColumnStore property, so there it stays plainly required.
+        [SchemaProperty(Required = true, RequiredUnless = "ColumnStore")]
         [JsonProperty(Order = 10)]
         public string IndexColumns { get; set; } = "";
 

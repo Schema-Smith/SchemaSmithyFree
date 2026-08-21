@@ -120,22 +120,31 @@ public sealed class CoherenceCheck : ISchemaCheck
         var dotIndex = rawRelatedTable.IndexOf('.');
         var hasDotPrefix = dotIndex > 0;
         var prefixSchema = hasDotPrefix ? rawRelatedTable[..dotIndex] : null;
-        var name = (hasDotPrefix ? rawRelatedTable[(dotIndex + 1)..] : rawRelatedTable).Trim().ToLowerInvariant();
+        var name = IdentityKey(hasDotPrefix ? rawRelatedTable[(dotIndex + 1)..] : rawRelatedTable);
 
         var schema = hasExplicitSchemaProperty ? relatedTableSchema
             : prefixSchema ?? NormalizedSchema(owningTable);
 
-        return (schema.Trim().ToLowerInvariant(), name);
+        return (IdentityKey(schema), name);
     }
 
     // IDeliverableTable.Schema is resolved uniformly across platforms (SchemaDefaultResolver
     // fills "dbo"/"public"/the "{{SchemaName}}" token; MySqlTable's explicit interface
     // implementation always returns null) — matches the identity accessor DuplicationCheck uses.
+    // Both sides of the identity comparison must strip identifier wrapping. SchemaDefaultResolver
+    // preserves a declared Schema verbatim -- "[dbo]" stays bracketed -- but an FK that OMITS
+    // RelatedTableSchema has it filled with the platform default, "dbo", unbracketed. Comparing the raw
+    // strings therefore made every such FK unresolvable, which is the ordinary hand-authored shape: two
+    // shipped demos reported SS-FK-002 against a table sitting in the same template. Packages that spell
+    // RelatedTableSchema out explicitly matched by luck, because then both sides carry the brackets.
+    private static string IdentityKey(string identifier) =>
+        NormalizeIdentifier(identifier).ToLowerInvariant();
+
     private static (string Schema, string Name) TableKey(Table table) =>
-        (NormalizedSchema(table), table.Name?.Trim().ToLowerInvariant() ?? "");
+        (NormalizedSchema(table), IdentityKey(table.Name));
 
     private static string NormalizedSchema(Table table) =>
-        ((table as IDeliverableTable)?.Schema ?? "").Trim().ToLowerInvariant();
+        IdentityKey((table as IDeliverableTable)?.Schema ?? "");
 
     private static HashSet<string> ColumnNames(Table table) =>
         new(table.Columns.Select(c => NormalizeIdentifier(c.Name ?? "")), StringComparer.OrdinalIgnoreCase);

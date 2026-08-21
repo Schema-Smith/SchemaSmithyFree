@@ -20,7 +20,10 @@ namespace Schema.Domain
         [JsonProperty(Order = 1)]
         public string Name { get; set; } = "";
 
-        [SchemaProperty(Required = true)]
+        // Recommended, not required: SchemaQuench runs it only when it is set
+        // (ProductQuench: `if (!string.IsNullOrWhiteSpace(...))`), so marking it Required made
+        // --Validate reject packages that deploy perfectly well.
+        [SchemaProperty(Description = "Recommended. SQL run after deployment to validate the product; skipped when unset.")]
         [JsonProperty(Order = 2)]
         public string ValidationScript { get; set; }
 

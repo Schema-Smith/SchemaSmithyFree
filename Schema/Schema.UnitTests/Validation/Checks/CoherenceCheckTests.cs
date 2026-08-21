@@ -76,6 +76,46 @@ public class CoherenceCheckTests
         Assert.That(findings[0].Location, Is.EqualTo("Template 'Main' / Table 'Order' / FK 'FK_Order_Customer'"));
     }
 
+    // Two shipped demos (course4-recipe-10, TenantCRM) reported SS-FK-002 against a table sitting in the
+    // same template. SchemaDefaultResolver keeps a declared Schema verbatim -- "[dbo]" stays bracketed --
+    // but FILLS an omitted RelatedTableSchema with the bare platform default, "dbo". Comparing the raw
+    // strings then never matched. Every pre-existing test here wrote identifiers unbracketed on both
+    // sides, which is exactly why none of them caught it.
+    [Test]
+    public void FkResolves_WhenSchemaIsBracketWrappedAndRelatedTableSchemaWasDefaulted()
+    {
+        var order = new SqlServerTable
+        {
+            Name = "[Order]",
+            Schema = "[dbo]",
+            Columns = { new SqlServerColumn { Name = "[CustomerId]", DataType = "int" } },
+            ForeignKeys =
+            {
+                new SqlServerForeignKey
+                {
+                    Name = "[FK_Order_Customer]",
+                    Columns = "[CustomerId]",
+                    RelatedTable = "[Customer]",
+                    RelatedTableSchema = "dbo", // what SchemaDefaultResolver fills in when the JSON omits it
+                    RelatedColumns = "[Id]"
+                }
+            }
+        };
+        var customer = new SqlServerTable
+        {
+            Name = "[Customer]",
+            Schema = "[dbo]",
+            Columns = { new SqlServerColumn { Name = "[Id]", DataType = "int" } }
+        };
+        var ctx = Context(TemplateWithTables("Main", order, customer));
+
+        var findings = new CoherenceCheck().Run(ctx).ToList();
+
+        Assert.That(findings, Is.Empty,
+            "a bracket-wrapped schema must resolve against a defaulted RelatedTableSchema: "
+            + string.Join("; ", findings.Select(f => f.Code + " " + f.Message)));
+    }
+
     [Test]
     public void FkRelatedTableMissing_IsError()
     {

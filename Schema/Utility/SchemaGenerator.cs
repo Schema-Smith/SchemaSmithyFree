@@ -74,6 +74,7 @@ public static class SchemaGenerator
         var schema = new JObject { ["type"] = "object" };
         var properties = new JObject();
         var required = new JArray();
+        var conditionalRequired = new List<(string Property, string Unless)>();
 
         foreach (var prop in GetSortedProperties(type))
         {
@@ -87,13 +88,41 @@ public static class SchemaGenerator
             properties[GetPropertyName(prop)] = propSchema;
 
             if (schemaAttr is { Required: true })
-                required.Add(GetPropertyName(prop));
+            {
+                // A property may be required only when a sibling flag is off -- IndexColumns is
+                // required unless the index is a columnstore, which has no key columns at all.
+                var unless = string.IsNullOrEmpty(schemaAttr.RequiredUnless)
+                    ? null
+                    : type.GetProperty(schemaAttr.RequiredUnless);
+                if (unless != null)
+                    conditionalRequired.Add((GetPropertyName(prop), GetPropertyName(unless)));
+                else
+                    required.Add(GetPropertyName(prop));
+            }
         }
 
         schema["properties"] = properties;
         schema["additionalProperties"] = false;
         if (required.Count > 0)
             schema["required"] = required;
+
+        if (conditionalRequired.Count > 0)
+        {
+            // `if` must also require the flag: without that, a document omitting it satisfies the
+            // `properties` clause vacuously and would skip the requirement entirely.
+            var allOf = new JArray();
+            foreach (var (property, unless) in conditionalRequired)
+                allOf.Add(new JObject
+                {
+                    ["if"] = new JObject
+                    {
+                        ["properties"] = new JObject { [unless] = new JObject { ["const"] = true } },
+                        ["required"] = new JArray(unless)
+                    },
+                    ["else"] = new JObject { ["required"] = new JArray(property) }
+                });
+            schema["allOf"] = allOf;
+        }
 
         return schema;
     }
