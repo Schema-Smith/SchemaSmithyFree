@@ -140,6 +140,9 @@
           "UpdateFillFactor": {
             "type": "boolean"
           },
+          "FileGroup": {
+            "type": "string"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -523,6 +526,9 @@
       "type": "string"
     },
     "HistoryRetentionPeriod": {
+      "type": "string"
+    },
+    "FileGroup": {
       "type": "string"
     },
     "Extensions": {
