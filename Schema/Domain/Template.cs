@@ -680,10 +680,12 @@ namespace Schema.Domain
                     var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
                     MaterializedViews.Add(PlatformDeserializer.DeserializeMaterializedView(json, platform));
                 }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it; narrowing would let one escape unlabelled
                 catch (Exception e) when (!tolerateComponentLoadErrors)
                 {
                     throw new Exception($"Error loading materialized view from {f}\r\n{e.Message}", e);
                 }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure, and DeserializeMaterializedView rewraps into plain Exception
                 catch (Exception e)
                 {
                     // --Validate: excluded here so the rest of the template still loads. An
@@ -710,10 +712,12 @@ namespace Schema.Domain
                     var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
                     IndexedViews.Add(PlatformDeserializer.DeserializeIndexedView(json, platform));
                 }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it; narrowing would let one escape unlabelled
                 catch (Exception e) when (!tolerateComponentLoadErrors)
                 {
                     throw new Exception($"Error loading indexed view from {f}\r\n{e.Message}", e);
                 }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure, and DeserializeIndexedView rewraps into plain Exception
                 catch (Exception e)
                 {
                     // --Validate: excluded here so the rest of the template still loads. An
@@ -788,6 +792,7 @@ namespace Schema.Domain
                 {
                     Tables.Add(Table.Load(f, platform));
                 }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure, and Table.Load rewraps its own into plain Exception (Table.cs:99)
                 catch (Exception e) when (tolerateComponentLoadErrors)
                 {
                     // --Validate: excluded here so the rest of the template still loads (and
