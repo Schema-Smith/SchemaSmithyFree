@@ -102,7 +102,7 @@ SELECT s.name AS SchemaName, t.name AS TableName
  ORDER BY t.name;
 
 -- Migration tracking per tenant
-SELECT template_name, schema_name, ScriptPath, CompletedAt
+SELECT template_name, schema_name, ScriptPath, QuenchDate
   FROM SchemaSmith.CompletedMigrationScripts
  WHERE ProductName = 'TenantCRM'
  ORDER BY template_name, schema_name, ScriptPath;
