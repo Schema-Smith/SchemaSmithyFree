@@ -329,78 +329,13 @@ public static class RepositoryHelper
         => AddDefaultScriptFolders(template, platform, isSchemaTemplate: false);
 
     /// <summary>
-    /// Adds the platform-appropriate default <see cref="TemplateFolder"/> set. When
-    /// <paramref name="isSchemaTemplate"/> is true, omits the database-scoped object types
-    /// (<c>Schemas</c>, <c>DDLTriggers</c>, <c>FullTextCatalogs</c>, <c>FullTextStopLists</c>,
-    /// <c>Publications</c>) per design §3.3 / §7.2 — those don't fan out per schema iteration and
-    /// must live in a regular template that runs earlier in <c>TemplateOrder</c>.
+    /// Adds the platform-appropriate default <see cref="TemplateFolder"/> set — delegates to
+    /// <see cref="Template.GetDefaultTemplateFolders(Platform, bool)"/>, the deploy path's own
+    /// source of truth for this set, so the scaffolder can never drift from what Template.Load
+    /// falls back to. That method already handles the <paramref name="isSchemaTemplate"/>
+    /// database-scoped-object exclusion (design §3.3 / §7.2), so there's nothing left to do here
+    /// beyond appending the result.
     /// </summary>
     private static void AddDefaultScriptFolders(Template template, Platform platform, bool isSchemaTemplate)
-    {
-        template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Before Scripts", QuenchSlot = TemplateQuenchSlot.Before });
-
-        switch (platform.GetBasePlatform())
-        {
-            case Platform.SqlServer:
-                if (!isSchemaTemplate)
-                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "DataTypes", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DataTypes });
-                if (!isSchemaTemplate)
-                {
-                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "FullTextCatalogs", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextCatalogs });
-                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "FullTextStopLists", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.FullTextStopLists });
-                }
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "XMLSchemaCollections", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.XMLSchemaCollections });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Views });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Synonyms", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Synonyms });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers });
-                if (!isSchemaTemplate)
-                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData });
-                break;
-
-            case Platform.PostgreSQL:
-                if (!isSchemaTemplate)
-                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Schemas", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Schemas });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Domain Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DomainTypes });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Enum Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.EnumTypes });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Composite Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.CompositeTypes });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Collations", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Collations });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Trigger Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.TriggerFunctions });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Window Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.WindowFunctions });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Aggregates", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Aggregates });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
-                if (!isSchemaTemplate)
-                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Publications", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Publications });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Rules", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Rules });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData });
-                break;
-
-            case Platform.MySQL:
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Events", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Events });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures });
-                // MariaDb-only: MySQL has no native SEQUENCE object at all — see the matching comment
-                // in Template.GetDefaultTemplateFolders, which this method must stay in parity with
-                // (TemplateFolderDefaultTests asserts the two lists match exactly).
-                if (platform == Platform.MariaDb)
-                    template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views });
-                template.ScriptFolders.Add(new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData });
-                break;
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}");
-        }
-
-        template.ScriptFolders.Add(new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After });
-    }
+        => template.ScriptFolders.AddRange(Template.GetDefaultTemplateFolders(platform, isSchemaTemplate));
 }
