@@ -224,14 +224,19 @@ public class JsonSchemaCheckTests
         CommitProductsSchema(FreshProductsSchema());
         var productFile = Path.Join(PackagePath, "Product.json");
         JsonFiles(productFile);
-        FileContent(productFile, @"{ ""Name"": ""Acme"" }"); // missing required ValidationScript
+        // TemplateOrder is a Product-only array. Validated against the products schema this is a TYPE
+        // error; misclassified as a table it would instead be an unknown-property error, so the
+        // expected-Array wording is what proves the classification. (This used to lean on
+        // ValidationScript being required, which it no longer is.)
+        FileContent(productFile, @"{ ""Name"": ""Acme"", ""TemplateOrder"": ""not-an-array"" }");
 
         var findings = new JsonSchemaCheck().Run(Context()).ToList();
 
         Assert.That(findings, Has.Exactly(1).Items);
         Assert.That(findings[0].Code, Is.EqualTo("SS-JSON-001"));
         Assert.That(findings[0].Location, Is.EqualTo(productFile));
-        Assert.That(findings[0].Message, Does.Contain("ValidationScript"));
+        Assert.That(findings[0].Message, Does.Contain("TemplateOrder"));
+        Assert.That(findings[0].Message, Does.Contain("Array"));
     }
 
     // ---- Extra coverage beyond the brief's mandatory list ----
