@@ -227,8 +227,8 @@ BEGIN
                 CROSS JOIN LATERAL UNNEST(con.confkey) WITH ORDINALITY AS u(element, idx)
                 WHERE a.attrelid = frel.oid
                   AND a.attnum = element) AS "RelatedColumns",
-             CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "DeleteAction",
-             CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "UpdateAction"
+             CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "DeleteAction",
+             CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "UpdateAction"
         FROM temp_tables t
         JOIN pg_catalog.pg_constraint con ON con.conrelid = to_regclass('"' || t."Schema" || '"' ||  '.' || '"' ||  t."Name" || '"')
         JOIN pg_catalog.pg_class frel ON frel.oid = con.confrelid

@@ -104,8 +104,8 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                                   WHERE a.attrelid = frel.oid
                                     AND a.attnum = element) AS "RelatedColumns",
                                '' AS "ShouldApplyExpression",
-                               CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "DeleteAction",
-                               CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "UpdateAction",
+                               CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "DeleteAction",
+                               CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "UpdateAction",
                                COALESCE(con.condeferrable, FALSE) AS "Deferrable",
                                COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred",
                                CASE con.confmatchtype

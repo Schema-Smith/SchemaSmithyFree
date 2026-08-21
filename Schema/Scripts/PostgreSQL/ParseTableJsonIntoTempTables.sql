@@ -165,8 +165,12 @@
            celem ->> 'RelatedColumns' AS "RelatedColumns",
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
            COALESCE(celem ->> 'VariantName', '') AS "VariantName",
-           COALESCE(celem ->> 'DeleteAction', '') AS "DeleteAction",
-           COALESCE(celem ->> 'UpdateAction', '') AS "UpdateAction",
+           -- 'NO ACTION' is a legal literal per the domain pattern, but extraction (confdeltype/confupdtype
+           -- code 'a') always renders the default action as '' -- normalize the alias here, on the declared
+           -- side only, so a package can spell it either way without churning against every '' package already
+           -- on disk.
+           COALESCE(NULLIF(celem ->> 'DeleteAction', 'NO ACTION'), '') AS "DeleteAction",
+           COALESCE(NULLIF(celem ->> 'UpdateAction', 'NO ACTION'), '') AS "UpdateAction",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
            celem ->> 'MatchType' AS "MatchType"
