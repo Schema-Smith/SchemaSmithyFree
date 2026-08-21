@@ -234,6 +234,75 @@ public abstract class ForgeKindlerSharedTests
     }
 
     [Test]
+    public void KindleTheForge_LegacyCompletedAtColumn_BootstrapRenamesToQuenchDateAndDataSurvives()
+    {
+        // The MySQL/MariaDb tracking table shipped with a diverging column name (CompletedAt) where
+        // SQL Server / PostgreSQL have always used QuenchDate -- shipped behaviour confirmed at v2.4.0,
+        // fixed by teaching Bootstrap to honour a declarative OldName rather than a one-off migration
+        // script. This is the real production consumer: Kindling_CompletedMigrationScripts.json now
+        // carries OldName: "CompletedAt" on the QuenchDate column.
+        using var freshConnection = DbConnectionFactory.ForPlatform(Platform)
+            .GetDbConnection(MainConnectionString);
+        freshConnection.Open();
+        using var command = freshConnection.CreateCommand();
+
+        try
+        {
+            command.CommandText = "DROP TABLE IF EXISTS `SchemaSmith_CompletedMigrationScripts`";
+            command.ExecuteNonQuery();
+            command.CommandText = @"
+                CREATE TABLE `SchemaSmith_CompletedMigrationScripts` (
+                    `Id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `ProductName` VARCHAR(100) NOT NULL,
+                    `QuenchSlot` VARCHAR(50) NOT NULL,
+                    `ScriptPath` VARCHAR(500) NOT NULL,
+                    `CompletedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY `uk_script` (`ProductName`, `QuenchSlot`, `ScriptPath`(255))
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+            command.ExecuteNonQuery();
+            command.CommandText = @"
+                INSERT INTO `SchemaSmith_CompletedMigrationScripts` (`ProductName`, `QuenchSlot`, `ScriptPath`, `CompletedAt`)
+                VALUES ('Demo', 'Before', 'Before Scripts/Migration_001.sql', '2020-01-02 03:04:05')";
+            command.ExecuteNonQuery();
+
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform, forceReKindle: true);
+
+            command.CommandText = $@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = '{MainDb}'
+                  AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
+                  AND COLUMN_NAME = 'CompletedAt'";
+            Assert.That(System.Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(0),
+                "The legacy CompletedAt column must be gone after the rename.");
+
+            command.CommandText = $@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = '{MainDb}'
+                  AND TABLE_NAME = 'SchemaSmith_CompletedMigrationScripts'
+                  AND COLUMN_NAME = 'QuenchDate'";
+            Assert.That(System.Convert.ToInt64(command.ExecuteScalar()), Is.EqualTo(1),
+                "QuenchDate must exist after the rename, matching SQL Server / PostgreSQL.");
+
+            // The decisive assertion: a rename that dropped-and-re-added CompletedAt would pass the two
+            // checks above while destroying the row's timestamp.
+            command.CommandText = @"
+                SELECT `QuenchDate` FROM `SchemaSmith_CompletedMigrationScripts`
+                WHERE `ScriptPath` = 'Before Scripts/Migration_001.sql'";
+            var quenchDate = command.ExecuteScalar();
+            Assert.That(System.Convert.ToDateTime(quenchDate), Is.EqualTo(new System.DateTime(2020, 1, 2, 3, 4, 5)),
+                "The pre-existing row's timestamp must survive the rename, not read back as the column's DEFAULT (now()).");
+        }
+        finally
+        {
+            command.CommandText = "DROP TABLE IF EXISTS `SchemaSmith_CompletedMigrationScripts`";
+            command.ExecuteNonQuery();
+            // force: version-gated kindle would otherwise skip after the fixture's initial kindle
+            ForgeKindler.KindleTheForge(command, Platform, forceReKindle: true);
+        }
+    }
+
+    [Test]
     public void KindleTheForge_FreshInstall_ProductOwnershipAndStatusMessagesExist()
     {
         // BootstrapTableQuench creates all three MySQL kindling tables on a fresh install.

@@ -36,10 +36,11 @@
       "Default": "''''"
     },
     {
-      "Name": "CompletedAt",
+      "Name": "QuenchDate",
       "DataType": "DATETIME",
       "Nullable": false,
-      "Default": "CURRENT_TIMESTAMP"
+      "Default": "CURRENT_TIMESTAMP",
+      "OldName": "CompletedAt"
     }
   ],
   "Indexes": [
