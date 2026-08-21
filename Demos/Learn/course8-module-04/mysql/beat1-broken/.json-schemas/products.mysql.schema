@@ -5,7 +5,8 @@
       "type": "string"
     },
     "ValidationScript": {
-      "type": "string"
+      "type": "string",
+      "description": "Recommended. SQL run after deployment to validate the product; skipped when unset."
     },
     "TemplateOrder": {
       "type": "array",
@@ -99,7 +100,6 @@
   },
   "additionalProperties": false,
   "required": [
-    "Name",
-    "ValidationScript"
+    "Name"
   ]
 }

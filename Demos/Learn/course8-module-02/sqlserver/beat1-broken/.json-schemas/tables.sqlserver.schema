@@ -130,8 +130,26 @@
         },
         "additionalProperties": false,
         "required": [
-          "Name",
-          "IndexColumns"
+          "Name"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "ColumnStore": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ColumnStore"
+              ]
+            },
+            "else": {
+              "required": [
+                "IndexColumns"
+              ]
+            }
+          }
         ]
       }
     },
