@@ -45,12 +45,12 @@ namespace Schema.UnitTests.Domain
         public void Load_Tolerant_RecordsAComponentThatIsValidJsonButFailsToLoad()
         {
             var templateJson = @"{ ""Name"": ""Main"", ""DatabaseIdentificationScript"": ""SELECT 1"" }";
-            var templatePath = Path.Combine("C:", "products", "Templates", "Main", "Template.json");
+            var templatePath = Path.Join("C:", "products", "Templates", "Main", "Template.json");
             _mockFile.Exists(templatePath).Returns(true);
             _mockFile.ReadAllText(templatePath).Returns(templateJson);
 
-            var tablesPath = Path.Combine("C:", "products", "Templates", "Main", "Tables");
-            var typoFile = Path.Combine(tablesPath, "dbo.TypoProperty.json");
+            var tablesPath = Path.Join("C:", "products", "Templates", "Main", "Tables");
+            var typoFile = Path.Join(tablesPath, "dbo.TypoProperty.json");
             _mockDirectory.Exists(tablesPath).Returns(true);
             _mockDirectory.GetFiles(tablesPath, "*.json", SearchOption.AllDirectories).Returns(new[] { typoFile });
             _mockFile.Exists(typoFile).Returns(true);
@@ -62,7 +62,7 @@ namespace Schema.UnitTests.Domain
             {
                 Name = "TestProduct",
                 Platform = Platform.SqlServer,
-                FilePath = Path.Combine("C:", "products", "Product.json")
+                FilePath = Path.Join("C:", "products", "Product.json")
             };
 
             var template = Template.Load("Main", product, tolerateComponentLoadErrors: true);
