@@ -116,6 +116,22 @@ namespace Schema.UnitTests.Domain
             Assert.That(folder.ObjectType, Is.EqualTo(ScriptObjectType.DDLTriggers));
         }
 
+        [Test]
+        public void SqlServer_GetDefaultTemplateFolders_Sequences_HasObjectTypeSequences()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.SqlServer);
+            var folder = folders.Single(f => f.FolderPath == "Sequences");
+            Assert.That(folder.ObjectType, Is.EqualTo(ScriptObjectType.Sequences));
+        }
+
+        [Test]
+        public void SqlServer_GetDefaultTemplateFolders_Synonyms_HasObjectTypeSynonyms()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.SqlServer);
+            var folder = folders.Single(f => f.FolderPath == "Synonyms");
+            Assert.That(folder.ObjectType, Is.EqualTo(ScriptObjectType.Synonyms));
+        }
+
         // ── PostgreSQL ────────────────────────────────────────────────────────────
 
         [Test]
@@ -246,6 +262,38 @@ namespace Schema.UnitTests.Domain
             Assert.That(folder.ObjectType, Is.EqualTo(ScriptObjectType.Rules));
         }
 
+        [Test]
+        public void PostgreSQL_GetDefaultTemplateFolders_Collations_HasObjectTypeCollations()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.PostgreSQL);
+            var folder = folders.Single(f => f.FolderPath == "Collations");
+            Assert.That(folder.ObjectType, Is.EqualTo(ScriptObjectType.Collations));
+        }
+
+        [Test]
+        public void PostgreSQL_GetDefaultTemplateFolders_Publications_HasObjectTypePublications()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.PostgreSQL);
+            var folder = folders.Single(f => f.FolderPath == "Publications");
+            Assert.That(folder.ObjectType, Is.EqualTo(ScriptObjectType.Publications));
+        }
+
+        [Test]
+        public void PostgreSQL_SchemaTemplate_ExcludesPublications_DatabaseScoped()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.PostgreSQL, isSchemaTemplate: true);
+            Assert.That(folders.Any(f => f.ObjectType == ScriptObjectType.Publications), Is.False,
+                "Publications are database-scoped (no schema qualifier on CREATE PUBLICATION) and must not fan out per schema.");
+        }
+
+        [Test]
+        public void PostgreSQL_SchemaTemplate_IncludesCollations_SchemaScoped()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.PostgreSQL, isSchemaTemplate: true);
+            Assert.That(folders.Any(f => f.ObjectType == ScriptObjectType.Collations), Is.True,
+                "Collations are schema-scoped and should fan out per schema like Domain/Enum/Composite Types.");
+        }
+
         // ── MySQL ─────────────────────────────────────────────────────────────────
 
         [Test]
@@ -320,6 +368,31 @@ namespace Schema.UnitTests.Domain
             Assert.That(folder.QuenchSlot, Is.EqualTo(TemplateQuenchSlot.Objects));
         }
 
+        [Test]
+        public void MySQL_GetDefaultTemplateFolders_HasNoSequencesFolder()
+        {
+            // MySQL has no native SEQUENCE object at all — unlike every other cell in this document,
+            // this isn't a version gap, so the folder must be absent rather than merely unwired.
+            var folders = Template.GetDefaultTemplateFolders(Platform.MySQL);
+            Assert.That(folders.Any(f => f.FolderPath == "Sequences"), Is.False);
+        }
+
+        [Test]
+        public void MariaDb_GetDefaultTemplateFolders_Sequences_HasObjectTypeSequences()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.MariaDb);
+            var folder = folders.Single(f => f.FolderPath == "Sequences");
+            Assert.That(folder.ObjectType, Is.EqualTo(ScriptObjectType.Sequences));
+        }
+
+        [Test]
+        public void MariaDb_GetDefaultTemplateFolders_Sequences_HasQuenchSlotObjects()
+        {
+            var folders = Template.GetDefaultTemplateFolders(Platform.MariaDb);
+            var folder = folders.Single(f => f.FolderPath == "Sequences");
+            Assert.That(folder.QuenchSlot, Is.EqualTo(TemplateQuenchSlot.Objects));
+        }
+
         // ── Parity: GetDefaultTemplateFolders vs AddDefaultScriptFolders ──────────
 
         [Test]
@@ -345,6 +418,15 @@ namespace Schema.UnitTests.Domain
         {
             var template = RepositoryHelper.CreateDefaultTemplate("Test", Platform.MySQL);
             var expected = Template.GetDefaultTemplateFolders(Platform.MySQL);
+
+            AssertFolderListsMatch(expected, template.ScriptFolders);
+        }
+
+        [Test]
+        public void MariaDb_AddDefaultScriptFolders_MatchesGetDefaultTemplateFolders()
+        {
+            var template = RepositoryHelper.CreateDefaultTemplate("Test", Platform.MariaDb);
+            var expected = Template.GetDefaultTemplateFolders(Platform.MariaDb);
 
             AssertFolderListsMatch(expected, template.ScriptFolders);
         }

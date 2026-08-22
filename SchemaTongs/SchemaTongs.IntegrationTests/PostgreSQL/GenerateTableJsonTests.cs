@@ -2,7 +2,9 @@
 
 using System.Data;
 using System;
+using System.Linq;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.Domain.PostgreSQL;
 using Schema.Utility;
@@ -294,6 +296,33 @@ CREATE TABLE public.""TestColumns"" (
     }
 
     [Test]
+    public void ShouldPreserveFractionalSecondsPrecisionOnExtraction()
+    {
+        // timestamptz(3)/time(3) precision-loss regression: the extraction CASE special-cased only
+        // 'timestamp' among PostgreSQL's fractional-seconds-precision types, so timestamptz(3) and
+        // time(3) both fell through to no argument at all — the declared precision was silently
+        // dropped. Bare time (default precision 6) is covered by ShouldGenerateCorrectJsonForColumns;
+        // this locks in the explicit-precision case for both siblings.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE public.""TestFractionalSecondsPrecision"" (
+    ""MyInt"" INT NOT NULL PRIMARY KEY,
+    ""MyTimestampTzPrecise"" TIMESTAMPTZ(3) NULL,
+    ""MyTimePrecise"" TIME(3) NULL
+);
+";
+        cmd.ExecuteNonQuery();
+        var result = GenerateTable(cmd, "public", "TestFractionalSecondsPrecision");
+        Assert.That(result.Columns, Has.Count.EqualTo(3));
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "MyTimestampTzPrecise"), "MyTimestampTzPrecise", "timestamptz(3)", true, null);
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "MyTimePrecise"), "MyTimePrecise", "time(3)", true, null);
+
+        conn.Close();
+    }
+
+    [Test]
     public void ShouldEmitPreventDropOnlyForProtectedTables()
     {
         // #270 round-trip: a table protected in the source DB (sticky PreventDrop marker set) must extract with
@@ -322,6 +351,42 @@ VALUES ('public', 'ProtectedExtractTable', NULL, 'TestProduct', '', TRUE);
             Assert.That(protectedJson, Does.Contain("PreventDrop"), "Extracted JSON for a protected table must carry the PreventDrop marker.");
             Assert.That(unprotectedTable.PreventDrop, Is.False, "Unprotected table must deserialize to PreventDrop:false.");
             Assert.That(unprotectedJson, Does.Not.Contain("PreventDrop"), "Extracted JSON for an unprotected table must omit the PreventDrop key.");
+        });
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldRoundTripAuthoredDataDeliveryAcrossReExtraction()
+    {
+        // DataDelivery is authored config, not catalog metadata -- GenerateTableJSON never emits it
+        // (the vestigial table-level ContentFile/MergeType/MergeUpdateDescendents this proc used to emit
+        // instead were the strict-deserialization bug; they are now gone). Re-extraction must still
+        // deserialize the raw proc output cleanly, then let ImportTableHelper carry a previously-authored
+        // DataDelivery block forward onto the freshly-extracted table.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"CREATE TABLE public.""DeliveryRoundTripTable"" (""Id"" INT NOT NULL PRIMARY KEY);";
+        cmd.ExecuteNonQuery();
+
+        var extracted = GenerateTable(cmd, "public", "DeliveryRoundTripTable");
+        Assert.That(extracted.DataDelivery, Is.Empty, "Raw extraction carries no DataDelivery -- it is authored config, not catalog metadata.");
+
+        var original = new PostgreSqlTable
+        {
+            Name = "DeliveryRoundTripTable",
+            DataDelivery = [new DataDelivery { ContentFile = "DeliveryRoundTripTable.tabledata", MergeType = "Insert/Update", MergeUpdateDescendents = true }]
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(extracted, original, _ => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(extracted.DataDelivery, Has.Count.EqualTo(1));
+            Assert.That(extracted.DataDelivery[0].ContentFile, Is.EqualTo("DeliveryRoundTripTable.tabledata"));
+            Assert.That(extracted.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+            Assert.That(extracted.DataDelivery[0].MergeUpdateDescendents, Is.True);
         });
 
         conn.Close();

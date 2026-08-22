@@ -2054,6 +2054,77 @@ public class ProductQuenchTests
         });
     }
 
+    // ---- Product-scope gate token resolution (B6b: the third gate site, aligned with N2) ----
+
+    [Test]
+    public void GateProductFolders_NoGatedFolders_NeverQueriesTheServer()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            var plain = new ProductFolder { FolderPath = "plain" };
+            var command = Substitute.For<IDbCommand>();
+
+            var survivors = quench.GateProductFolders(command, new[] { plain });
+
+            Assert.That(survivors.Select(f => f.FolderPath), Is.EqualTo(new[] { "plain" }));
+            command.DidNotReceive().ExecuteScalar();
+        });
+    }
+
+    [Test]
+    public void GateProductFolders_ResolvesServerMajorVersionToken_BeforeEvaluating()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // Product-folder gates run at product scope — before any database is selected — but the
+            // server connection is already open, so {{ServerMajorVersion}} must resolve there (B6b).
+            var versioned = new ProductFolder { FolderPath = "versioned", ShouldApplyExpression = "{{ServerMajorVersion}} >= 15" };
+            var command = Substitute.For<IDbCommand>();
+            string gateCommandText = null;
+            command.ExecuteScalar().Returns(_ =>
+            {
+                if (command.CommandText.Contains("ProductVersion", StringComparison.OrdinalIgnoreCase))
+                    return "15.0.2000.5";
+                gateCommandText = command.CommandText;
+                return 1;
+            });
+
+            var survivors = quench.GateProductFolders(command, new[] { versioned });
+
+            Assert.That(survivors.Select(f => f.FolderPath), Is.EqualTo(new[] { "versioned" }),
+                "The gate must evaluate the resolved comparison, not reach the server as literal token text.");
+            Assert.That(gateCommandText, Does.Contain("15 >= 15"));
+            Assert.That(gateCommandText, Does.Not.Contain("{{ServerMajorVersion}}"));
+        });
+    }
+
+    [Test]
+    public void GateProductFolders_LeavesUnresolvableCompatibilityLevelTokenLiteral_SoTheServerErrorsLoudly()
+    {
+        WithMinimalSqlServerProductQuench(quench =>
+        {
+            // {{CompatibilityLevel}} is a database property; no database is selected at product scope,
+            // so it must NOT be silently rewritten into a wrong-but-plausible comparison (e.g. "0 >= 130")
+            // — that would skip the folder without telling anyone. It stays literal and reaches the
+            // server as-is, which is today's loud-failure behaviour (decision recorded in the B6b report).
+            var folder = new ProductFolder { FolderPath = "compat-gated", ShouldApplyExpression = "{{CompatibilityLevel}} >= 130" };
+            var command = Substitute.For<IDbCommand>();
+            string gateCommandText = null;
+            command.ExecuteScalar().Returns(_ =>
+            {
+                gateCommandText = command.CommandText;
+                throw new Exception("Incorrect syntax near '{'.");
+            });
+
+            Assert.Throws<Exception>(() => quench.GateProductFolders(command, new[] { folder }));
+
+            Assert.That(gateCommandText, Does.Contain("{{CompatibilityLevel}}"),
+                "An unresolvable token must reach the server as literal text, not be replaced with a wrong value.");
+            Assert.That(quench.ProgressLogLines, Has.Some.Contains("compat-gated"));
+            Assert.That(quench.ProgressLogLines, Has.Some.Contains("ShouldApplyExpression failed"));
+        });
+    }
+
     #endregion
 
     #region Log Hygiene — token scrubbing (#244)

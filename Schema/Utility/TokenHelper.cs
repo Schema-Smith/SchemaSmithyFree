@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -29,7 +30,12 @@ public static class TokenHelper
     public const string SpecificMaterializedViewXmlTag = "<*SpecificMaterializedViewXml*>";
     public const string SpecificIndexedViewXmlTag = "<*SpecificIndexedViewXml*>";
 
-    public static void ResolveFileTokens(Dictionary<string, string> tokens, string basePath, Platform platform)
+    // tolerateErrors: deploy path leaves this false — an unresolvable file token throws
+    // immediately, same as always. `--Validate` (PackageLoader) passes true so a missing/unreadable
+    // file is returned in the errors list instead of aborting the load; the token keeps its
+    // original unresolved "<*File*>..." literal, which is harmless on the validate-only path since
+    // nothing downstream executes it.
+    public static List<string> ResolveFileTokens(Dictionary<string, string> tokens, string basePath, Platform platform, bool tolerateErrors = false)
     {
         // PostgreSQL BYTEA needs an E-string-escaped hex literal with an explicit cast; SQL Server VARBINARY and
         // MySQL BLOB both accept 0x<hex> directly. Pattern mirrors GetDropTempTablesScript's platform branching.
@@ -43,7 +49,7 @@ public static class TokenHelper
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, FileTag, "", "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, BinaryFileTag, binaryPrefix, binarySuffix, fileName => BitConverter.ToString(ProductFileWrapper.GetFromFactory().ReadAllBytes(fileName)).Replace("-", ""));
         ResolveFileTokensByTag(tokens, basePath, tokenErrors, QueryFileTag, QueryTag, "", fileName => ProductFileWrapper.GetFromFactory().ReadAllText(fileName));
-        if (tokenErrors.Count == 0) return;
+        if (tokenErrors.Count == 0 || tolerateErrors) return tokenErrors;
         throw new Exception(string.Join("\r\n", tokenErrors));
     }
 
@@ -327,6 +333,40 @@ END $$;
             }
         }
     }
+
+    /// <summary>
+    /// Assembles the <c>{{SchemaName}}</c> + version-token (<c>{{ServerMajorVersion}}</c>,
+    /// <c>{{CompatibilityLevel}}</c>) vocabulary shared by the gate sites that resolve tokens against a
+    /// live <c>IDbCommand</c> at evaluation time — the folder gate and the data-delivery gate. (Table,
+    /// column, index, and matview/indexed-view gates get the same two version tokens through a different
+    /// mechanism: DatabaseQuench substitutes them directly into the already-serialized table/view JSON
+    /// payload, since those gates are evaluated server-side inside the generated DDL rather than
+    /// client-side against a command.) One assembly point for the command-evaluated sites removes the
+    /// divergence that left the data-delivery gate resolving only <c>{{SchemaName}}</c> (N2).
+    /// </summary>
+    public static List<KeyValuePair<string, string>> AssembleGateTokens(
+        string schemaName, List<KeyValuePair<string, string>> versionTokens)
+    {
+        var tokens = new List<KeyValuePair<string, string>>();
+        if (!string.IsNullOrEmpty(schemaName)) tokens.Add(new("SchemaName", schemaName));
+        if (versionTokens != null) tokens.AddRange(versionTokens);
+        return tokens;
+    }
+
+    /// <summary>
+    /// Gate vocabulary for product-folder gates (<c>ProductQuench.GateProductFolders</c>), which run at
+    /// product scope, before any database is selected. Only <c>{{ServerMajorVersion}}</c> is meaningful
+    /// there — the server connection is already open — unlike the folder/delivery gates above,
+    /// <c>{{CompatibilityLevel}}</c> is a property of a database (none is selected yet) and
+    /// <c>{{SchemaName}}</c> is a template-iteration concept that doesn't exist at product scope. Both
+    /// stay unresolved on purpose: an expression that references them reaches the target as literal text
+    /// and fails loudly, rather than being silently rewritten into a wrong-but-plausible comparison.
+    /// Delegates to <see cref="AssembleGateTokens"/> (schemaName omitted) so product-scope gates still
+    /// speak through the one shared assembly point instead of a separate vocabulary (N2/B6b).
+    /// </summary>
+    public static List<KeyValuePair<string, string>> AssembleProductScopeGateTokens(int serverMajorVersion) =>
+        AssembleGateTokens(null,
+            [new KeyValuePair<string, string>("ServerMajorVersion", serverMajorVersion.ToString(CultureInfo.InvariantCulture))]);
 
     public static List<string> GetTokensFromString(string script)
     {

@@ -259,9 +259,9 @@ public class DatabaseQuench
     {
         // Version tokens apply to ALL templates (regular + schema) — gating a folder on the target
         // version is the primary use case; {{SchemaName}} only exists on schema-template iterations.
-        var tokens = new List<KeyValuePair<string, string>>();
-        if (!string.IsNullOrEmpty(_schemaName)) tokens.Add(new("SchemaName", _schemaName));
-        if (_versionScriptTokens != null) tokens.AddRange(_versionScriptTokens);
+        // TokenHelper.AssembleGateTokens is the single source of gate vocabulary — DataDeliveryProcessor's
+        // gate resolver builds its token list the same way (N2).
+        var tokens = TokenHelper.AssembleGateTokens(_schemaName, _versionScriptTokens);
         return tokens.Count == 0 ? expression : SqlScript.TokenReplace(expression, tokens, _product.Platform);
     }
 
@@ -710,6 +710,10 @@ public class DatabaseQuench
                                 Platform = _product.Platform.GetBasePlatform().ToString(),
                                 DatabaseName = _databaseName,
                                 SchemaName = _schemaName,
+                                // N2: same vocabulary as the folder gate's ResolveFolderGateExpression, so a
+                                // DataDelivery.ShouldApplyExpression can gate on {{CompatibilityLevel}} /
+                                // {{ServerMajorVersion}} instead of only {{SchemaName}}.
+                                VersionTokens = _versionScriptTokens,
                                 TemplateRootPath = Path.GetDirectoryName(_template.FilePath) ?? "",
                                 ScriptHelper = FactoryContainer.Resolve<IMergeScriptHelper>(),
                                 ReadFileContent = path => ProductFileWrapper.GetFromFactory().ReadAllText(path),
@@ -829,6 +833,7 @@ public class DatabaseQuench
                             Platform = _product.Platform.ToString(),
                             DatabaseName = _databaseName,
                             SchemaName = _schemaName,
+                            VersionTokens = _versionScriptTokens,
                             PostgreSqlServerVersionNum = _postgreSqlServerVersionNum,
                             MySqlServerVersionNum = _mySqlServerVersionNum,
                             SqlServerCompatibilityLevel = _sqlServerCompatibilityLevel,
@@ -2297,13 +2302,18 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private static WhatIfDetail WhatIfConsoleDetail =>
         WhatIfConsoleFormatter.ParseDetail(CommandLineParser.ValueOfSwitch("WhatIfDetail", "normal"));
 
-    private void WhatIfLogScripts(List<SqlScript> scripts, DatabaseScriptSlot slot)
+    // Callers pass overlapping lists across the two Object/AfterTablesObject WhatIf calls per
+    // scope (mirroring the real path's two QuenchDatabaseObjectsWithCheckpoint passes), so this
+    // gates on HasBeenQuenched exactly as the real path does — a script already logged here in an
+    // earlier call is skipped, and each script is flagged once it's logged.
+    internal void WhatIfLogScripts(List<SqlScript> scripts, DatabaseScriptSlot slot)
     {
         var entries = new List<WhatIfConsoleEntry>();
-        foreach (var script in scripts)
+        foreach (var script in scripts.Where(s => !s.HasBeenQuenched))
         {
             entries.Add(new WhatIfConsoleEntry("apply", "APPLY", script.LogPath));
             WhatIf?.Record(WhatIfCategory.Apply, LogPrefix, script.LogPath);
+            script.HasBeenQuenched = true;
         }
         foreach (var line in WhatIfConsoleFormatter.Render(entries, WhatIfConsoleDetail))
             SafeProgressLog(line);

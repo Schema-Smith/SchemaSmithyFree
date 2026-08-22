@@ -52,18 +52,15 @@ public class BaseTableQuenchTests
 
     protected static string GetColumnDataType(IDbCommand cmd, string tableName, string columnName)
     {
+        // Calls the same SchemaSmith.fn_ColumnTypeArguments the product extraction/drift-comparison
+        // procs use, rather than re-implementing the type-argument CASE a third time here — a fourth
+        // hand-maintained copy is exactly the pattern that let TIME(3)/DATETIMEOFFSET(3) go unnoticed.
         cmd.CommandText = @$"
-SELECT UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
-                               THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
-                               WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
-                               THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
-                               WHEN USER_TYPE = 'DATETIME2'
-                               THEN  '(' + CONVERT(NVARCHAR(20), DATETIME_PRECISION) + ')'
-                               WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
-                               THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
-                               WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
-                               THEN  ' ROWGUIDCOL'
-                               ELSE '' END +
+SELECT UPPER(USER_TYPE) + SchemaSmith.fn_ColumnTypeArguments(USER_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION,
+                               CASE WHEN sc.xml_collection_id <> 0
+                                    THEN (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id)
+                                    END,
+                               sc.is_rowguidcol) +
                           CASE WHEN ident.column_id IS NOT NULL
                                THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ident.seed_value) + ', ' + CONVERT(NVARCHAR(20), ident.increment_value) + ')' +
                                     CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END

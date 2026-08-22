@@ -142,6 +142,41 @@ public class CleanupScriptGeneratorTests
     }
 
     [Test]
+    public void GenerateDropStatement_SqlServer_Sequences_ReturnsCorrectDrop()
+    {
+        var result = CleanupScriptGenerator.GenerateDropStatement("dbo.my_seq.sql", ScriptObjectType.Sequences, Platform.SqlServer);
+        Assert.That(result, Is.EqualTo("DROP SEQUENCE IF EXISTS [dbo].[my_seq];"));
+    }
+
+    [Test]
+    public void GenerateDropStatement_SqlServer_Synonyms_ReturnsCorrectDrop()
+    {
+        var result = CleanupScriptGenerator.GenerateDropStatement("dbo.my_synonym.sql", ScriptObjectType.Synonyms, Platform.SqlServer);
+        Assert.That(result, Is.EqualTo("DROP SYNONYM IF EXISTS [dbo].[my_synonym];"));
+    }
+
+    [Test]
+    public void GenerateDropStatement_MariaDb_Sequences_ReturnsCorrectDrop()
+    {
+        var result = CleanupScriptGenerator.GenerateDropStatement("my_seq.sql", ScriptObjectType.Sequences, Platform.MariaDb);
+        Assert.That(result, Is.EqualTo("DROP SEQUENCE IF EXISTS `my_seq`;"));
+    }
+
+    [Test]
+    public void GenerateDropStatement_PostgreSQL_Collations_ReturnsCorrectDrop()
+    {
+        var result = CleanupScriptGenerator.GenerateDropStatement("public.my_collation.sql", ScriptObjectType.Collations, Platform.PostgreSQL);
+        Assert.That(result, Is.EqualTo("DROP COLLATION IF EXISTS \"public\".\"my_collation\";"));
+    }
+
+    [Test]
+    public void GenerateDropStatement_PostgreSQL_Publications_ReturnsCorrectDrop()
+    {
+        var result = CleanupScriptGenerator.GenerateDropStatement("my_pub.sql", ScriptObjectType.Publications, Platform.PostgreSQL);
+        Assert.That(result, Is.EqualTo("DROP PUBLICATION IF EXISTS \"my_pub\";"));
+    }
+
+    [Test]
     public void GenerateDropStatement_SqlServer_FullTextCatalogs_ReturnsCorrectDrop()
     {
         var result = CleanupScriptGenerator.GenerateDropStatement("SearchCatalog.sql", ScriptObjectType.FullTextCatalogs, Platform.SqlServer);

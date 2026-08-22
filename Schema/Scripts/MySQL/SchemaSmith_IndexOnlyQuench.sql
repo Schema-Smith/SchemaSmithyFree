@@ -39,7 +39,9 @@ BEGIN
         IndexName VARCHAR(128) NOT NULL,
         Columns TEXT NOT NULL,
         Parser VARCHAR(128) DEFAULT NULL,
-        Comment VARCHAR(255) DEFAULT NULL,
+        -- Widened from VARCHAR(255) to match MySQL's actual 1024-char index-comment ceiling and stay
+        -- in lockstep with ParseTableJson's primary definition -- see the rationale there.
+        Comment VARCHAR(1024) DEFAULT NULL,
         VariantName VARCHAR(128) DEFAULT NULL,
         KEY ix_ft_table_name (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -64,6 +66,46 @@ BEGIN
     END IF;
 
     -- =========================================================================
+    -- STEP 0.6: Degrade functional/expression indexes below MySQL 8.0.13 (MariaDB: always)
+    -- =========================================================================
+    -- Mirrors MissingIndexesAndConstraintsQuench STEP 0.7. Unlike a DESC key part (parsed-and-ignored)
+    -- or INVISIBLE (a suppressible clause), a functional/expression key part is a hard syntax error
+    -- below the floor -- there is no reduced form to fall back to, so the whole index is skipped rather
+    -- than degraded in place. MariaDB has no equivalent in this form at ANY version
+    -- (SchemaSmith_SupportsFunctionalIndex() is unconditionally 0 there), so this block fires on MariaDB
+    -- every time a functional index is declared, not just below some threshold. A multi-valued index
+    -- (CAST(... AS ... ARRAY)) is a functional key part too and rides this same gate; see
+    -- SchemaSmith_SupportsFunctionalIndex for why it needs no gate of its own. 'fail' aborts naming the
+    -- offending index(es); 'warn' (default) records one 'downgraded' manifest row + a run-log line per
+    -- declared functional index -- STEP 2 (modified-detect) and STEP 4 (create) below exclude it via the
+    -- identical predicate, leaving any live index of the same name untouched.
+    -- =========================================================================
+    IF SchemaSmith_SupportsFunctionalIndex() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Indexes i
+                   WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Functional/expression index requires MySQL 8.0.13 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+            FROM _SchemaSmith_Indexes i
+            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
+            SET @ss_msg = 'Functional/expression index requires MySQL 8.0.13; MariaDB unsupported (policy=fail). See the run log.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping index (functional/expression key part requires MySQL 8.0.13, MariaDB unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
+            FROM _SchemaSmith_Indexes i
+            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'INDEX (functional/expression, MySQL 8.0.13)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
+            FROM _SchemaSmith_Indexes i
+            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
+        END IF;
+    END IF;
+
+    -- =========================================================================
     -- Detection snapshot: the live index picture read ONCE here so STEP 1 (rename) and STEP 2
     -- (modified) join it instead of re-reading INFORMATION_SCHEMA.STATISTICS per declared index.
     -- INFORMATION_SCHEMA is not a stored table on MySQL/MariaDB, so the original per-row reads cost
@@ -78,22 +120,66 @@ BEGIN
         NonUnique TINYINT DEFAULT 0,
         IndexType VARCHAR(32),
         NormColumns TEXT,
+        -- MySQL's index comment ceiling is 1024 characters; MAX() alongside the other per-index
+        -- aggregates below since INDEX_COMMENT is constant across a composite index's key parts.
+        IndexComment VARCHAR(1024),
         PRIMARY KEY (TableName, IndexName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns)
-    SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
-           CONVERT(s.INDEX_NAME USING utf8mb4),
-           MAX(s.NON_UNIQUE),
-           CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
-           GROUP_CONCAT(
-               CONCAT('`', s.COLUMN_NAME, '`',
-                      CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-               ORDER BY s.SEQ_IN_INDEX
-               SEPARATOR ','
-           )
-      FROM INFORMATION_SCHEMA.STATISTICS s
-     WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-     GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+    -- A functional/expression key part (MySQL 8.0.13+) has NULL COLUMN_NAME and reports its text via
+    -- EXPRESSION instead; that column does not exist below the floor or on MariaDB, so the branch that
+    -- reads it is gated behind SchemaSmith_SupportsFunctionalIndex() as two whole statements -- column
+    -- resolution is deferred to the execution of whichever statement actually runs (see
+    -- SchemaSmith_IndexIsVisible / SchemaSmith_SnapshotIndexVisibility for the same IS_VISIBLE-below-8.0
+    -- shape), so the unreached branch's EXPRESSION reference is never bound on an engine that lacks it.
+    -- Must produce the exact same per-key-part form as SchemaSmith_NormalizeIndexColumns and
+    -- GenerateTableJson (one extra paren pair around the expression, charset-introducer noise AND
+    -- the backslash-escaped quotes EXPRESSION carries around a literal's quotes both stripped the
+    -- same two-pass way via REGEXP_REPLACE -- safe here despite the 5.7 floor because this branch
+    -- only executes at 8.0.13+ and never on 5.7/MariaDB; see GenerateTableJson.sql for the full
+    -- explanation) or the compare below never converges.
+    IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
+        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns, IndexComment)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
+               CONVERT(s.INDEX_NAME USING utf8mb4),
+               MAX(s.NON_UNIQUE),
+               CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
+               GROUP_CONCAT(
+                   CASE WHEN s.COLUMN_NAME IS NOT NULL THEN
+                       CONCAT('`', s.COLUMN_NAME, '`',
+                              -- SPATIAL's SUB_PART is a phantom internal value (always 32), not a declared prefix; exclude it or spatial indexes never converge
+                              IF(s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL', CONCAT('(', s.SUB_PART, ')'), ''),
+                              CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+                   ELSE
+                       CONCAT('(', REGEXP_REPLACE(
+                           REPLACE(s.EXPRESSION, CONCAT(CHAR(92), CHAR(39)), CHAR(39)),
+                           '_[A-Za-z0-9]+''', ''''), ')',
+                              CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+                   END
+                   ORDER BY s.SEQ_IN_INDEX
+                   SEPARATOR ','
+               ),
+               CONVERT(MAX(s.INDEX_COMMENT) USING utf8mb4)
+          FROM INFORMATION_SCHEMA.STATISTICS s
+         WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+         GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+    ELSE
+        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns, IndexComment)
+        SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
+               CONVERT(s.INDEX_NAME USING utf8mb4),
+               MAX(s.NON_UNIQUE),
+               CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
+               GROUP_CONCAT(
+                   CONCAT('`', s.COLUMN_NAME, '`',
+                          IF(s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL', CONCAT('(', s.SUB_PART, ')'), ''),
+                          CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
+                   ORDER BY s.SEQ_IN_INDEX
+                   SEPARATOR ','
+               ),
+               CONVERT(MAX(s.INDEX_COMMENT) USING utf8mb4)
+          FROM INFORMATION_SCHEMA.STATISTICS s
+         WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
+         GROUP BY s.TABLE_NAME, s.INDEX_NAME;
+    END IF;
 
     -- Names-only copy: STEP 1 references the snapshot twice in one statement (main join + the
     -- "new index name doesn't exist" NOT EXISTS), which MySQL/MariaDB forbid for a TEMPORARY table
@@ -240,6 +326,11 @@ BEGIN
           WHERE BINARY r.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
             AND BINARY r.NewIndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
       )
+      -- A declared functional/expression index this target cannot legally CREATE (below the floor / see
+      -- the STEP 0.6 degrade guard above) is left untouched rather than flagged modified-and-dropped:
+      -- STEP 4 below excludes it from recreation via the identical predicate, so dropping it here would
+      -- lose it for good.
+      AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0)
       -- Check if definition differs (columns, uniqueness, or index type)
       AND (
           -- Columns differ
@@ -256,6 +347,12 @@ BEGIN
           OR (BINARY UPPER(snap.IndexType) != BINARY 'FULLTEXT'
               AND SchemaSmith_SupportsInvisibleIndex() = 1
               AND i.IsVisible != viz.IsVisible)
+          -- Or comment differs (symmetric: covers added, changed, and cleared, matching the column
+          -- comment predicate in ModifiedTableQuench). FULLTEXT indexes never reach this comparison
+          -- (they are parsed separately into _SchemaSmith_FullTextIndexes and have no modified-index
+          -- detection pass at all -- see this file's Comment column note), so no FULLTEXT exclusion
+          -- is needed here.
+          OR (BINARY COALESCE(snap.IndexComment, '') != BINARY COALESCE(i.Comment, ''))
       );
 
     -- Drop modified indexes (they'll be recreated later)
@@ -663,6 +760,9 @@ BEGIN
                       CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                            WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                            ELSE '' END,
+                      CASE WHEN i.Comment IS NOT NULL AND i.Comment != ''
+                           THEN CONCAT(' COMMENT ''', REPLACE(i.Comment, '''', ''''''), '''')
+                           ELSE '' END,
                       CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
         FROM _SchemaSmith_Indexes i
         WHERE i.IsPrimaryKey = 0
@@ -675,7 +775,10 @@ BEGIN
               SELECT 1 FROM _SchemaSmith_IdxExist s
               WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
                 AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-          );
+          )
+          -- A declared functional index below the floor (see the STEP 0.6 degrade guard above) is
+          -- never created -- it is a hard syntax error, not a clause that can be suppressed.
+          AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0);
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Create missing indexes');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
@@ -692,7 +795,8 @@ BEGIN
               SELECT 1 FROM _SchemaSmith_IdxExist s
               WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
                 AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-          );
+          )
+          AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0);
 
         -- Fold each table's missing-index creates into one multi-clause ALTER, materialize, execute.
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexCreateStmts;
@@ -711,6 +815,9 @@ BEGIN
                               CASE WHEN UPPER(i.IndexType) = 'HASH' THEN ' USING HASH'
                                    WHEN UPPER(i.IndexType) = 'BTREE' THEN ' USING BTREE'
                                    ELSE '' END,
+                              CASE WHEN i.Comment IS NOT NULL AND i.Comment != ''
+                                   THEN CONCAT(' COMMENT ''', REPLACE(i.Comment, '''', ''''''), '''')
+                                   ELSE '' END,
                               CASE WHEN i.IsVisible = 0 AND SchemaSmith_SupportsInvisibleIndex() = 1 THEN SchemaSmith_IndexInvisibleClause() ELSE '' END)
                           ORDER BY i.IndexName SEPARATOR ', '))
         FROM _SchemaSmith_Indexes i
@@ -725,6 +832,7 @@ BEGIN
               WHERE BINARY s.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
                 AND BINARY s.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
           )
+          AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0)
         GROUP BY i.TableName;
 
         SET @v_indexcreate_id := (SELECT MIN(RowId) FROM _SchemaSmith_IndexCreateStmts);

@@ -29,7 +29,11 @@ namespace Schema.UnitTests.Capabilities
             "table access method (PG15)",
             "INDEX (invisible, MySQL 8.0 / MariaDB 10.6)",
             "INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)",
-            "CHECK constraint (MySQL 8.0.16)"
+            "CHECK constraint (MySQL 8.0.16)",
+            "column (DEFAULT expression, MySQL 8.0.13)",
+            "column (invisible, MySQL 8.0.23 / MariaDB 10.3)",
+            "column (SRID, MySQL 8.0.3)",
+            "INDEX (functional/expression, MySQL 8.0.13)"
         };
 
         [Test]
@@ -98,6 +102,43 @@ namespace Schema.UnitTests.Capabilities
         {
             // CHECK is supported at the MariaDb 10.2 floor, so it never degrades — no MariaDb row.
             Assert.That(CapabilityRegistry.For(Platform.MariaDb).Any(c => c.Key == "check-constraint"), Is.False);
+        }
+
+        [Test]
+        public void MariaDb_HasNoDefaultExpressionRow()
+        {
+            // MDEV-10134 landed in MariaDB 10.2.1, at/below our 10.2 floor — always supported, no row.
+            Assert.That(CapabilityRegistry.For(Platform.MariaDb).Any(c => c.Key == "default-expression"), Is.False);
+        }
+
+        [Test]
+        public void MariaDb_HasNoColumnSridRow()
+        {
+            // MariaDB has no SRID attribute at any version — SchemaSmith_SupportsColumnSrid() is
+            // unconditionally 0 there, so there is no version boundary for a row to encode.
+            Assert.That(CapabilityRegistry.For(Platform.MariaDb).Any(c => c.Key == "column-srid"), Is.False);
+        }
+
+        [Test]
+        public void MariaDb_HasNoFunctionalIndexRow()
+        {
+            // MariaDB has no equivalent to a functional/expression index in this form at any version —
+            // SchemaSmith_SupportsFunctionalIndex() is unconditionally 0 there, so there is no version
+            // boundary for a row to encode (same "no row" shape as column-srid above).
+            Assert.That(CapabilityRegistry.For(Platform.MariaDb).Any(c => c.Key == "functional-index"), Is.False);
+        }
+
+        [Test]
+        public void InvisibleColumn_HasBothPlatformRows_WithDistinctIntroVersions()
+        {
+            // Unlike column-srid, invisible column IS a real threshold on both engines (unlike invisible
+            // INDEX, the column keyword is identical on both — only the intro version differs).
+            var mysql = CapabilityRegistry.For(Platform.MySQL).Single(c => c.Key == "invisible-column");
+            var maria = CapabilityRegistry.For(Platform.MariaDb).Single(c => c.Key == "invisible-column");
+            Assert.That(mysql.IntroducedInComparable, Is.EqualTo(800));
+            Assert.That(maria.IntroducedInComparable, Is.EqualTo(1003));
+            Assert.That(mysql.ManifestObjectType, Is.EqualTo(maria.ManifestObjectType),
+                "shared manifest literal — mirrors invisible-index");
         }
 
         [Test]

@@ -32,4 +32,10 @@ public class TrackingScope
     /// </summary>
     public string CompositeKey =>
         $"{ProductName}|{TemplateName}|{Server}|{DatabaseName}|{SchemaName}";
+
+    /// <summary>
+    /// Server/database identity for progress and error logs. Distinct from CompositeKey, which is a
+    /// storage key and must stay stable; this is the human-facing rendering the log interpolations want.
+    /// </summary>
+    public override string ToString() => $"[{Server}].[{DatabaseName}]";
 }

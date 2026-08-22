@@ -21,5 +21,10 @@ public class ValidateMisnamedPropertyTests : ValidateFixtureTestBase
 
         Assert.That(result.HasErrors, Is.True);
         Assert.That(result.Findings.Select(f => f.Code), Contains.Item("SS-JSON-001"));
+        // PackageLoader loads leniently for --Validate specifically so this reports the precise
+        // SS-JSON-001 finding instead of aborting the whole run on the generic "couldn't load"
+        // SS-LOAD-001 — asserting its absence pins that regression down, not just SS-JSON-001's
+        // presence (a validator that reported BOTH would still pass a Contains-only check).
+        Assert.That(result.Findings.Select(f => f.Code), Has.None.EqualTo("SS-LOAD-001"));
     }
 }

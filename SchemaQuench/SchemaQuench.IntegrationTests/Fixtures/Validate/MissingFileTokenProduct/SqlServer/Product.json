@@ -1,0 +1,12 @@
+{
+  "Name": "MissingFileTokenProductProduct",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "GlobalSeed": "<*File*>seed/MISSING.seed"
+  },
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}

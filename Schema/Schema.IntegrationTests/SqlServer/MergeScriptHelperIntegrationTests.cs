@@ -416,4 +416,123 @@ CREATE TABLE [dbo].[{tableName}] (
     }
 
     #endregion
+
+    #region TIME / DATETIME2 Precision Tests (C1-0f — is the C1-0a defect reachable here?)
+
+    // MergeScriptHelper's JSON/XML parse-type builders omit a precision qualifier for TIME (they only
+    // add one for DATETIME2) — the same shape as the drift-comparison defect C1-0a fixed. These three
+    // tests are the empirical answer to "is it reachable here too": a TIME(3)/DATETIME2(3) delivery must
+    // round-trip its sub-second value exactly through both the JSON (OPENJSON) and XML (.value()) shred
+    // paths. All three pass because SQL Server treats an unqualified TIME/DATETIME2 as precision 7 — the
+    // shred widens rather than narrows, and the real destination column governs the final rounding.
+
+    [Test]
+    public void BuildMergeScript_TimeColumnWithPrecision_JsonEncoding_RoundTripsSubSecondPrecision()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_time_json_{Guid.NewGuid():N}"[..40];
+
+        try
+        {
+            command.CommandText = $@"
+CREATE TABLE [dbo].[{tableName}] (
+    [Id] INT PRIMARY KEY,
+    [T] TIME(3) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""Id"":1,""T"":""13:45:30.123""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, command,
+                "dbo", tableName, tableData, "[Id]",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $"SELECT CAST([T] AS VARCHAR(20)) FROM [dbo].[{tableName}] WHERE [Id] = 1";
+            var result = command.ExecuteScalar()?.ToString();
+            Assert.That(result, Is.EqualTo("13:45:30.123"),
+                "A TIME(3) delivery must preserve its declared millisecond precision exactly.");
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS [dbo].[{tableName}]";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildMergeScript_TimeColumnWithPrecision_XmlEncoding_RoundTripsSubSecondPrecision()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_time_xml_{Guid.NewGuid():N}"[..40];
+
+        try
+        {
+            command.CommandText = $@"
+CREATE TABLE [dbo].[{tableName}] (
+    [Id] INT PRIMARY KEY,
+    [T] TIME(3) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = "<rows><row><c n=\"Id\">1</c><c n=\"T\">13:45:30.123</c></row></rows>";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, command,
+                "dbo", tableName, tableData, "[Id]",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $"SELECT CAST([T] AS VARCHAR(20)) FROM [dbo].[{tableName}] WHERE [Id] = 1";
+            var result = command.ExecuteScalar()?.ToString();
+            Assert.That(result, Is.EqualTo("13:45:30.123"),
+                "The XML (.value()) shred path must preserve TIME(3) precision exactly, same as the JSON path.");
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS [dbo].[{tableName}]";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    [Test]
+    public void BuildMergeScript_DateTime2ColumnWithPrecision_RoundTripsSubSecondPrecision()
+    {
+        using var command = _connection.CreateCommand();
+        var tableName = $"_test_dt2_{Guid.NewGuid():N}"[..40];
+
+        try
+        {
+            command.CommandText = $@"
+CREATE TABLE [dbo].[{tableName}] (
+    [Id] INT PRIMARY KEY,
+    [T] DATETIME2(3) NOT NULL
+)";
+            command.ExecuteNonQuery();
+
+            var tableData = @"[{""Id"":1,""T"":""2024-06-15T10:30:00.123""}]";
+            var script = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, command,
+                "dbo", tableName, tableData, "[Id]",
+                mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+                tokenizeScripts: false, mergeFilter: null);
+
+            command.CommandText = script;
+            command.ExecuteNonQuery();
+
+            command.CommandText = $"SELECT CONVERT(VARCHAR(30), [T], 121) FROM [dbo].[{tableName}] WHERE [Id] = 1";
+            var result = command.ExecuteScalar()?.ToString();
+            Assert.That(result, Is.EqualTo("2024-06-15 10:30:00.123"),
+                "DATETIME2(3) already carries an explicit precision case — this pins that it stays correct.");
+        }
+        finally
+        {
+            command.CommandText = $"DROP TABLE IF EXISTS [dbo].[{tableName}]";
+            command.ExecuteNonQuery();
+        }
+    }
+
+    #endregion
 }

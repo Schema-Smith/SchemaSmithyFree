@@ -37,6 +37,30 @@ public class SchemaPackageValidatorTests
         check.Received(1).Run(Arg.Any<ValidationContext>());
     }
 
+    // A Product.json with no Platform used to reach JsonSchemaCheck, which asks GetBasePlatform which
+    // engine to use and gets an ArgumentException. Checks deliberately have no per-check try/catch, so that
+    // surfaced to the operator as a raw stack trace rather than a finding -- on a directory that simply
+    // was not a package.
+    [Test]
+    public void Validate_ProductWithoutPlatform_ReportsAFindingInsteadOfThrowing()
+    {
+        var pkg = ValidationTestPackages.Minimal(Platform.SqlServer);
+        pkg.Product.Platform = Platform.Unknown;
+        var check = Substitute.For<ISchemaCheck>();
+
+        var result = new SchemaPackageValidator(() => pkg, new[] { check }).Validate("pkg");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.HasErrors, Is.True);
+            Assert.That(result.Findings, Has.Exactly(1).Items);
+            Assert.That(result.Findings[0].Code, Is.EqualTo("SS-LOAD-003"));
+            Assert.That(result.Findings[0].Message, Does.Contain("Platform"));
+            // No check may run: each one would be asking the same unanswerable question.
+            check.DidNotReceive().Run(Arg.Any<ValidationContext>());
+        });
+    }
+
     [Test]
     public void ValidationContext_AllTables_FlattensTemplates()
     {

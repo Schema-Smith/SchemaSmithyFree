@@ -72,11 +72,53 @@ namespace Schema.Capabilities
             rows.Add(new("data-delivery", "Automatic data delivery (JSON_TABLE row source)", Platform.MySQL,
                 800, "MySQL 8.0", null, DegradeKind.Skip, null));
 
+            // Column DEFAULT expression: below the floor the whole column is skipped (not just the clause —
+            // see MissingTableAndColumnQuench/ModifiedTableQuench). MariaDB is absent on purpose: MDEV-10134
+            // landed in 10.2.1, at/below our 10.2 floor, so SchemaSmith_SupportsDefaultExpression() is
+            // unconditionally 1 on MariaDB — same "no row, no version boundary to cross" shape as the
+            // MySQL-only check-constraint row above.
+            rows.Add(new("default-expression", "Column DEFAULT expression", Platform.MySQL,
+                800, "MySQL 8.0.13", null, DegradeKind.Skip, "column (DEFAULT expression, MySQL 8.0.13)"));
+
+            // Invisible column: unlike invisible-index (INVISIBLE vs. IGNORED keyword differs by engine), the
+            // INVISIBLE keyword itself is identical on both engines — only the introduction version differs,
+            // so both platforms get a row with a shared ManifestObjectType literal (mirrors invisible-index).
+            // MySQL row here; the MariaDb row lives in the MariaDb section below, alongside its siblings.
+            rows.Add(new("invisible-column", "Invisible column", Platform.MySQL,
+                800, "MySQL 8.0.23", null, DegradeKind.Reduced, "column (invisible, MySQL 8.0.23 / MariaDB 10.3)"));
+
+            // Column SRID restriction: MariaDB has NO equivalent at any version (verified live on 11.4 — the
+            // syntax is a hard parse error and INFORMATION_SCHEMA.COLUMNS carries no SRS_ID at all), so
+            // SchemaSmith_SupportsColumnSrid() returns 0 unconditionally on MariaDB — there is no version
+            // boundary for a MariaDB row to encode (IntroducedInComparable documents "the literal the .sql
+            // guard compares against"; MariaDB's guard compares against nothing, it just always returns 0).
+            // Same "no row" treatment as the MySQL-only rows above, just unconditionally-0 instead of
+            // unconditionally-1 — the registry has no way to say "never" other than omission, so MariaDB gets
+            // no row for this key, same as it gets no row for check-constraint (there, unconditionally 1).
+            rows.Add(new("column-srid", "Column SRID restriction", Platform.MySQL,
+                800, "MySQL 8.0.3", null, DegradeKind.Reduced, "column (SRID, MySQL 8.0.3)"));
+
+            // Functional/expression index (including a multi-valued index, CAST(... AS ... ARRAY) —
+            // MySQL 8.0.17+, same NULL-COLUMN_NAME/EXPRESSION shape as a plain functional key part, so it
+            // rides this same row rather than needing one of its own): below the floor the whole index is
+            // skipped, same "no reduced form" shape as default-expression above (a functional key part is
+            // a hard syntax error, not a clause that can be dropped and still leave a valid index). MariaDB
+            // is absent on purpose: it has no equivalent in this form at ANY version, so
+            // SchemaSmith_SupportsFunctionalIndex() is unconditionally 0 there — same "no row, no version
+            // boundary to cross" shape as column-srid above, just unconditionally-0 instead of
+            // unconditionally-1 (default-expression's MariaDB shape).
+            rows.Add(new("functional-index", "Functional/expression index", Platform.MySQL,
+                800, "MySQL 8.0.13", null, DegradeKind.Skip, "INDEX (functional/expression, MySQL 8.0.13)"));
+
             // ---- MariaDb (distinct rows — different intro versions; NO CHECK row: supported at the 10.2 floor)
             rows.Add(new("invisible-index", "Invisible index (IGNORED)", Platform.MariaDb,
                 1006, "MariaDB 10.6", null, DegradeKind.Skip, "INDEX (invisible, MySQL 8.0 / MariaDB 10.6)"));
             rows.Add(new("descending-index", "Descending index key part", Platform.MariaDb,
                 1008, "MariaDB 10.8", null, DegradeKind.Reduced, "INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)"));
+            // Real threshold on this engine too (unlike column-srid/default-expression, which are never/always
+            // supported on MariaDb) — see the MySQL row above for the shared-literal rationale.
+            rows.Add(new("invisible-column", "Invisible column", Platform.MariaDb,
+                1003, "MariaDB 10.3", null, DegradeKind.Reduced, "column (invisible, MySQL 8.0.23 / MariaDB 10.3)"));
 
             return rows;
         }

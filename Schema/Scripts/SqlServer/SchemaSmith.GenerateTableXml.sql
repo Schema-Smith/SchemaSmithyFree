@@ -37,6 +37,9 @@ SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
 DECLARE @v_ObjectId INT = OBJECT_ID(@p_Schema + '.' + @p_Table)
 DECLARE @v_IsTemporal BIT = 0
+-- History table identity/retention (#depth-gap) -- see JSON twin for the emit-only-when-nonstandard
+-- rationale. Populated by the same version-gated dynamic block as @v_IsTemporal below (0/NULL pre-2016).
+DECLARE @v_HistTableSchema SYSNAME = NULL, @v_HistTableName SYSNAME = NULL, @v_HistRetentionText NVARCHAR(50) = NULL
 
 -- Internal SchemaSmith ownership markers, excluded from the user Extensions/ExtendedProperties (mirrors the
 -- JSON proc). PreventDrop is surfaced as its own top-level property, not a user EP (#270).
@@ -61,8 +64,29 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 13
       FROM sys.columns sc WITH (NOLOCK)
       LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = sc.[object_id] AND mc.column_id = sc.column_id
       WHERE sc.[object_id] = @p_ObjId;
-    SELECT @p_Out = CASE WHEN temporal_type = 2 THEN 1 ELSE 0 END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId;',
-    N'@p_ObjId INT, @p_Out BIT OUTPUT', @p_ObjId = @v_ObjectId, @p_Out = @v_IsTemporal OUTPUT
+    -- History table identity/retention -- see JSON twin (GenerateTableJson.sql) for the emit-only-when-
+    -- nonstandard rationale; @p_Schema/@p_Table compare raw (unwrapped) against sys.schemas/sys.tables
+    -- names, same as the JSON twin''s TABLE_SCHEMA/TABLE_NAME comparison. Reads
+    -- history_retention_period_unit_desc rather than the numeric unit code -- see the JSON twin for why
+    -- (measured live-server codes disagreed with documentation once already). The unreachable ELSE still
+    -- forces a loud Msg 245 rather than a silently-dropped-to-NULL retention if an unrecognized unit ever
+    -- appears; the outer CONVERT(NVARCHAR(10), ...) keeps the branch statically typed like its siblings.
+    SELECT @p_Out = CASE WHEN st.temporal_type = 2 THEN 1 ELSE 0 END,
+           @p_HistSchema = CASE WHEN st.temporal_type = 2 AND (hs.[name] <> @p_Schema OR h.[name] <> @p_Table + ''_Hist'') THEN hs.[name] END,
+           @p_HistName = CASE WHEN st.temporal_type = 2 AND (hs.[name] <> @p_Schema OR h.[name] <> @p_Table + ''_Hist'') THEN h.[name] END,
+           @p_RetentionText = CASE WHEN st.temporal_type = 2 AND st.history_retention_period_unit_desc <> ''INFINITE''
+                                    THEN CAST(st.history_retention_period AS NVARCHAR(10)) + '' '' +
+                                         CASE st.history_retention_period_unit_desc
+                                           WHEN ''DAY'' THEN ''DAYS'' WHEN ''WEEK'' THEN ''WEEKS'' WHEN ''MONTH'' THEN ''MONTHS'' WHEN ''YEAR'' THEN ''YEARS''
+                                           ELSE CONVERT(NVARCHAR(10), CONVERT(INT, ''Unrecognized SYSTEM_VERSIONING retention unit: '' + ISNULL(st.history_retention_period_unit_desc, CONVERT(NVARCHAR(20), st.history_retention_period_unit))))
+                                         END
+                                    END
+      FROM sys.tables st WITH (NOLOCK)
+      LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
+      LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
+      WHERE st.[object_id] = @p_ObjId;',
+    N'@p_ObjId INT, @p_Schema SYSNAME, @p_Table SYSNAME, @p_Out BIT OUTPUT, @p_HistSchema SYSNAME OUTPUT, @p_HistName SYSNAME OUTPUT, @p_RetentionText NVARCHAR(50) OUTPUT',
+    @p_ObjId = @v_ObjectId, @p_Schema = @p_Schema, @p_Table = @p_Table, @p_Out = @v_IsTemporal OUTPUT, @p_HistSchema = @v_HistTableSchema OUTPUT, @p_HistName = @v_HistTableName OUTPUT, @p_RetentionText = @v_HistRetentionText OUTPUT
 
 -- sys.stats.is_temporary is a 2012 column, so a STATIC reference is a CREATE-time "invalid column" error on a
 -- pre-2012 binary. Stage the temporary-stat keys via a fn_ServerMajorVersion()>=11 guarded dynamic INSERT (empty
@@ -75,34 +99,46 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 11
 ;WITH XMLNAMESPACES ('http://james.newtonking.com/projects/json' AS json)
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
-       COALESCE((SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
+       -- Mirrors the JSON proc's per-partition aggregation (see GenerateTableJson.sql): sys.partitions
+       -- is one row per partition, and a scalar read raised Msg 512 on a partitioned table. A shared
+       -- value round-trips; non-uniform compression across partitions emits the 'MIXED' sentinel.
+       COALESCE((SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                           WHEN 0 THEN NULL
+                           WHEN 1 THEN MIN(p.data_compression_desc)
+                           ELSE 'MIXED'
+                         END COLLATE DATABASE_DEFAULT
                    FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
+       -- Filegroup placement (#filegroups) -- see JSON twin (GenerateTableJson.sql) for the
+       -- emit-only-when-non-default rationale. Filegroups predate every supported SQL Server version, so
+       -- (unlike temporal above) this needs no version gate and no staged dynamic-SQL variable.
+       (SELECT '[' + fg.[name] + ']'
+          FROM sys.indexes tfg WITH (NOLOCK)
+          JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = tfg.data_space_id
+         WHERE tfg.[object_id] = st.[object_id]
+           AND tfg.index_id IN (0, 1)
+           AND fg.is_default = 0) AS [FileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
        -- System-versioning round-trip (#369): emit IsTemporal only when true. sys.tables.temporal_type is
        -- 2016+, so it is read into @v_IsTemporal via the version-gated dynamic pre-stage above (0 below 2016).
        CASE WHEN @v_IsTemporal = 1 THEN 'true' END AS [IsTemporal],
+       -- History table identity/retention -- populated by the version-gated dynamic block above (NULL pre-2016).
+       CASE WHEN @v_HistTableSchema IS NOT NULL THEN '[' + @v_HistTableSchema + ']' END AS [HistoryTableSchema],
+       CASE WHEN @v_HistTableName IS NOT NULL THEN '[' + @v_HistTableName + ']' END AS [HistoryTableName],
+       @v_HistRetentionText AS [HistoryRetentionPeriod],
        -- Sticky drop-protection marker (only when set true). Read from the PreventDrop extended property. #270
        CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
                     FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
             THEN 'true' END AS [PreventDrop],
        '' AS [OldName],
-       '' AS [ContentFile],
-       'NONE' AS [MergeType],
        (SELECT 'true' AS [@json:Array],
                        '[' + c.COLUMN_NAME + ']' AS [Name],
-                       UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
-                                               THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
-                                               WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
-                                               THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
-                                               WHEN USER_TYPE = 'DATETIME2'
-                                               THEN  '(' + CONVERT(NVARCHAR(20), DATETIME_PRECISION) + ')'
-                                               WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
-                                               THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
-                                               WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
-                                               THEN  ' ROWGUIDCOL'
-                                               ELSE '' END +
+                       UPPER(USER_TYPE) + SchemaSmith.fn_ColumnTypeArguments(USER_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION,
+                                               CASE WHEN sc.xml_collection_id <> 0
+                                                    THEN (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id)
+                                                    END,
+                                               sc.is_rowguidcol) +
                                           CASE WHEN ic.column_id IS NOT NULL
                                                THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ic.seed_value) + ', ' + CONVERT(NVARCHAR(20), ic.increment_value) + ')' +
                                                     CASE WHEN ic.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
@@ -116,6 +152,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        CASE WHEN ISNULL(cc.is_persisted, 0) = 1 THEN 'true' ELSE 'false' END AS [Persisted],
                        CASE WHEN sc.is_sparse = 1 THEN 'true' ELSE 'false' END AS [Sparse],
+                       CASE WHEN sc.is_column_set = 1 THEN 'true' ELSE 'false' END AS [IsColumnSet],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(cm.MaskingFunction, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
                        ISNULL(cm.EncryptionType, 'NONE') COLLATE DATABASE_DEFAULT AS EncryptionType,
@@ -146,10 +183,20 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FOR XML PATH('Columns'), TYPE),
        (SELECT 'true' AS [@json:Array],
                '[' + [Name] + ']' AS [Name],
-               (SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
+               -- Same per-partition aggregation as the table-level [CompressionType] above.
+               (SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                          WHEN 0 THEN NULL
+                          WHEN 1 THEN MIN(p.data_compression_desc)
+                          ELSE 'MIXED'
+                        END COLLATE DATABASE_DEFAULT
                   FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
+               -- Same emit-only-when-non-default rule as the table-level [FileGroup] above -- see JSON twin.
+               (SELECT '[' + fg.[name] + ']'
+                  FROM sys.filegroups fg WITH (NOLOCK)
+                 WHERE fg.data_space_id = si.data_space_id
+                   AND fg.is_default = 0) AS [FileGroup],
                CASE WHEN is_primary_key = 1 THEN 'true' ELSE 'false' END AS [PrimaryKey],
                CASE WHEN is_unique = 1 THEN 'true' ELSE 'false' END AS [Unique],
                CASE WHEN is_unique_constraint = 1 THEN 'true' ELSE 'false' END AS [UniqueConstraint],
@@ -255,8 +302,19 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                                        CASE WHEN fc.type_column_id IS NOT NULL
                                             THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                            ELSE '' END +
+                                       -- Full-text LANGUAGE churn: same emit-only-when-non-default rule and
+                                       -- byte-identical contract as the JSON twin (GenerateTableJson.sql). Kept
+                                       -- as a JOIN (not a subquery) here too even though FOR XML PATH's
+                                       -- correlated-subquery form would compile -- the two rendering forms must
+                                       -- never be allowed to diverge again. NULL collation (non-character
+                                       -- column) has no default to compare against, so LANGUAGE is always
+                                       -- emitted for it -- see GenerateTableJson.sql for the full rationale.
+                                       CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
+                                            THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                             ELSE '' END
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+                  JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
                   WHERE fi.[object_id] = fc.[object_id]
                   ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns]
           FROM sys.fulltext_indexes fi WITH (NOLOCK)

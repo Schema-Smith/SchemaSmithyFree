@@ -17,25 +17,33 @@ using Schema.Utility;
 namespace Schema.Validation.Checks;
 
 /// <summary>
-/// The final `--Validate` check: two passes over the committed <c>.json-schemas/{type}.{platform}.
-/// schema</c> files.
+/// The final `--Validate` check: structural + custom-property governance over every package JSON
+/// file, plus staleness detection for whichever <c>.json-schemas/{type}.{platform}.schema</c>
+/// files happen to be committed. The domain model is the authority, not the committed artifact —
+/// the committed files are a convenience for editor tooling and are optional here.
 /// <para>
-/// Pass 1 (staleness, runs first): regenerates each committed schema in memory via
-/// <see cref="SchemaGenerator.GenerateSchema(Type, Func{Type, Type})"/>, re-merges the committed
-/// file's hand-authored <c>Extensions</c> fragments back in via
-/// <see cref="SchemaGenerator.MergeExtensionsDefinition"/>, and compares the result to the
-/// committed file with <see cref="JToken.DeepEquals(JToken, JToken)"/>. A mismatch means the
-/// domain model moved on since <c>--WriteSchemasOnly</c> was last run — <c>SS-STALE-001</c> — and
-/// Pass 2 is skipped for that type: structural results against a schema that no longer matches
-/// the model would be misleading.
+/// For each type, a fresh schema is regenerated in memory via
+/// <see cref="SchemaGenerator.GenerateSchema(Type, Func{Type, Type})"/>. When a committed schema
+/// exists and parses, it is compared against the fresh one (after re-merging the committed file's
+/// hand-authored <c>Extensions</c> fragments back in via
+/// <see cref="SchemaGenerator.MergeExtensionsDefinition"/>) with
+/// <see cref="JToken.DeepEquals(JToken, JToken)"/>. A mismatch means the domain model moved on
+/// since <c>--WriteSchemasOnly</c> was last run — <c>SS-STALE-001</c> — and structural validation
+/// is skipped for that type: results against a schema that no longer matches the model would be
+/// misleading. A committed schema that fails to parse is reported as <c>SS-STALE-002</c> and
+/// treated the same as absent. When no committed schema is present (missing directory, missing
+/// file, or unparseable file), there is nothing to compare — no staleness finding — and structural
+/// validation runs directly against the freshly generated schema instead.
 /// </para>
 /// <para>
-/// Pass 2 (structural + custom-property governance, non-stale types only): every package JSON
-/// file is validated against its committed schema via NJsonSchema. The generator's
+/// Structural validation: every package JSON file is validated against its resolved schema (the
+/// committed one when present and current, the freshly generated one otherwise) via NJsonSchema.
 /// <c>additionalProperties: false</c> catches misnamed/misplaced properties, <c>required</c>
 /// catches missing ones, and any hand-authored governance on custom <c>Extensions</c> properties
-/// (an authored <c>enum</c>/<c>required</c> fragment) is enforced automatically because Pass 2
-/// validates against the COMMITTED file, not a freshly generated one.
+/// (an authored <c>enum</c>/<c>required</c> fragment) is enforced automatically whenever the
+/// committed file is what's used — a freshly generated schema has no such fragment, so it leaves
+/// <c>Extensions</c> unconstrained (<see cref="Schema.Domain.DynamicBase.Extensions"/> maps to an
+/// empty/permissive schema), never rejecting legitimate custom content.
 /// </para>
 /// The file/type/platform mapping uses the public
 /// <see cref="Schema.Utility.RepositoryHelper.GetSchemaFileNames(Platform)"/> directly. The
@@ -46,6 +54,7 @@ namespace Schema.Validation.Checks;
 public sealed class JsonSchemaCheck : ISchemaCheck
 {
     private const string StaleCode = "SS-STALE-001";
+    private const string MalformedCommittedCode = "SS-STALE-002";
     private const string StaleCategory = "Staleness";
     private const string JsonCode = "SS-JSON-001";
     private const string JsonCategory = "JsonSchema";
@@ -57,36 +66,34 @@ public sealed class JsonSchemaCheck : ISchemaCheck
         var schemaDir = Path.Combine(ctx.PackagePath, ".json-schemas");
 
         var findings = new List<Finding>();
-        if (!dir.Exists(schemaDir)) return findings;
-
         var staleTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var schemaByType = new Dictionary<string, JsonSchema>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var fileName in RepositoryHelper.GetSchemaFileNames(ctx.Platform))
         {
-            var schemaPath = Path.Combine(schemaDir, fileName);
-            if (!file.Exists(schemaPath)) continue; // nothing committed for this type — nothing to check
-
-            JObject committed;
-            try
-            {
-                committed = JObject.Parse(file.ReadAllText(schemaPath));
-            }
-            catch
-            {
-                continue; // malformed committed schema file isn't this check's concern
-            }
-
             var typeName = fileName.Split('.')[0];
             var domainType = GetTypeForSchemaFile(fileName, ctx.Platform);
             var freshGenerated = SchemaGenerator.GenerateSchema(domainType, PlatformElementResolver(ctx.Platform));
+
+            var schemaPath = Path.Combine(schemaDir, fileName);
+            var committed = ReadCommittedSchema(file, schemaPath, findings);
+
+            if (committed == null)
+            {
+                // Nothing usable is committed for this type — the domain model IS the authority,
+                // so validate directly against the freshly generated schema. Nothing to compare,
+                // so no staleness finding either.
+                schemaByType[typeName] = LoadNJsonSchema(freshGenerated);
+                continue;
+            }
+
             var merged = SchemaGenerator.MergeExtensionsDefinition(freshGenerated, committed);
 
             if (!JToken.DeepEquals(merged, committed))
             {
                 findings.Add(new Finding(Severity.Error, StaleCode, StaleCategory, schemaPath,
                     $"{schemaPath}: committed .json-schemas are stale — regenerate via --WriteSchemasOnly."));
-                staleTypes.Add(typeName); // short-circuit: Pass 2 skips this type entirely
+                staleTypes.Add(typeName); // short-circuit: structural validation skips this type entirely
                 continue;
             }
 
@@ -114,6 +121,25 @@ public sealed class JsonSchemaCheck : ISchemaCheck
         }
 
         return findings;
+    }
+
+    // Returns null (nothing usable committed) for both a missing file and a file that fails to
+    // parse — the malformed case additionally records a finding, since an unparseable committed
+    // schema is a broken artifact worth surfacing, not a silent skip.
+    private static JObject ReadCommittedSchema(IFile file, string schemaPath, List<Finding> findings)
+    {
+        if (!file.Exists(schemaPath)) return null;
+
+        try
+        {
+            return JObject.Parse(file.ReadAllText(schemaPath));
+        }
+        catch
+        {
+            findings.Add(new Finding(Severity.Error, MalformedCommittedCode, StaleCategory, schemaPath,
+                $"{schemaPath}: committed .json-schemas file is malformed — validated against a freshly generated schema instead. Regenerate via --WriteSchemasOnly."));
+            return null;
+        }
     }
 
     private static JsonSchema LoadNJsonSchema(JObject committed) =>

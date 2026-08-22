@@ -142,7 +142,9 @@ public class SchemaGeneratorTests
 
         var required = schema["required"]?.ToObject<List<string>>();
         Assert.That(required, Contains.Item("Name"));
-        Assert.That(required, Contains.Item("ValidationScript"));
+        // ValidationScript is recommended, not required (Paul, 2026-08-21): the deploy path skips it
+        // when unset, so requiring it rejected packages that deploy perfectly well.
+        Assert.That(required, Does.Not.Contain("ValidationScript"));
     }
 
     [Test]
@@ -762,6 +764,62 @@ public class SchemaGeneratorTests
             Assert.That(ColumnItemProps(withResolver)?["CheckExpression"], Is.Null);
             Assert.That(ColumnItemProps(noResolver)?["CheckExpression"], Is.Null);
             Assert.That(ColumnItemProps(noResolver)?["Name"], Is.Not.Null);
+        });
+    }
+
+    // A columnstore index has no key columns, so SchemaTongs extracts one with IndexColumns empty and
+    // --Validate used to reject the package it had just produced. IndexColumns stays required for every
+    // ordinary index -- the editor squiggle is the point -- so the exception is expressed as if/else
+    // rather than by dropping the requirement.
+    [Test]
+    public void IndexColumns_IsRequiredOnlyWhenTheIndexIsNotColumnStore()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(SqlServerIndex));
+
+        var required = schema["required"]?.ToObject<List<string>>() ?? new List<string>();
+        var conditional = schema["allOf"] as JArray;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(required, Does.Not.Contain("IndexColumns"),
+                "an unconditional requirement is what rejected extracted columnstore indexes");
+            Assert.That(conditional, Is.Not.Null.And.Count.EqualTo(1));
+            var rule = conditional![0];
+            Assert.That(rule["if"]!["properties"]!["ColumnStore"]!["const"]!.Value<bool>(), Is.True);
+            // Without this the flag's ABSENCE satisfies `properties` vacuously and the rule never fires.
+            Assert.That(rule["if"]!["required"]!.ToObject<List<string>>(), Contains.Item("ColumnStore"));
+            Assert.That(rule["else"]!["required"]!.ToObject<List<string>>(), Contains.Item("IndexColumns"));
+        });
+    }
+
+    // RequiredUnless names a sibling that only some engines declare. MySQL has no columnstore concept and
+    // therefore no exception to make, so the requirement must stay plain there rather than vanish.
+    [Test]
+    public void IndexColumns_StaysPlainlyRequired_OnAnEngineWithoutColumnStore()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Schema.Domain.MySQL.MySqlIndex));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(schema["required"]?.ToObject<List<string>>() ?? new List<string>(),
+                Contains.Item("IndexColumns"));
+            Assert.That(schema["allOf"], Is.Null);
+        });
+    }
+
+    // Recommended, not required: SchemaQuench skips it when unset, so requiring it made --Validate reject
+    // packages that deploy perfectly well (5 shipped demo packages omit it).
+    [Test]
+    public void ValidationScript_IsNotRequiredOnProduct()
+    {
+        var schema = SchemaGenerator.GenerateSchema(typeof(Product));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(schema["required"]?.ToObject<List<string>>() ?? new List<string>(),
+                Does.Not.Contain("ValidationScript"));
+            Assert.That(schema["properties"]!["ValidationScript"]!["description"]!.Value<string>(),
+                Does.Contain("Recommended"));
         });
     }
 }

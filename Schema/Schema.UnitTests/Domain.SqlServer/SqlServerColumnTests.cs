@@ -35,6 +35,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(column.ComputedExpression, Is.Null);
             Assert.That(column.Persisted, Is.False);
             Assert.That(column.Sparse, Is.False);
+            Assert.That(column.IsColumnSet, Is.False);
             Assert.That(column.Collation, Is.Null);
             Assert.That(column.DataMaskFunction, Is.Null);
             Assert.That(column.EncryptionType, Is.EqualTo("NONE"));
@@ -57,6 +58,7 @@ namespace Schema.UnitTests.Domain.SqlServer
                 ComputedExpression = null,
                 Persisted = false,
                 Sparse = true,
+                IsColumnSet = false,
                 Collation = "Latin1_General_CI_AS",
                 DataMaskFunction = "partial(0,\"XXX-XX-\",4)",
                 EncryptionType = "DETERMINISTIC",
@@ -75,6 +77,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(deserialized.Default, Is.EqualTo("'000-00-0000'"));
             Assert.That(deserialized.CheckExpression, Is.EqualTo("LEN([SSN]) = 11"));
             Assert.That(deserialized.Sparse, Is.True);
+            Assert.That(deserialized.IsColumnSet, Is.False);
             Assert.That(deserialized.Collation, Is.EqualTo("Latin1_General_CI_AS"));
             Assert.That(deserialized.DataMaskFunction, Is.EqualTo("partial(0,\"XXX-XX-\",4)"));
             Assert.That(deserialized.EncryptionType, Is.EqualTo("DETERMINISTIC"));
@@ -95,6 +98,7 @@ namespace Schema.UnitTests.Domain.SqlServer
             Assert.That(json, Does.Not.Contain("ComputedExpression"));
             Assert.That(json, Does.Not.Contain("Persisted"));
             Assert.That(json, Does.Not.Contain("Sparse"));
+            Assert.That(json, Does.Not.Contain("IsColumnSet"));
             Assert.That(json, Does.Not.Contain("Collation"));
             Assert.That(json, Does.Not.Contain("DataMaskFunction"));
             Assert.That(json, Does.Not.Contain("EncryptionKey"));

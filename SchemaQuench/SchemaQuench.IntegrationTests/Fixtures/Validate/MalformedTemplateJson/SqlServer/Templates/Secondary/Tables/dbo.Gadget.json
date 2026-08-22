@@ -1,0 +1,11 @@
+{
+  "Name": "[Gadget]",
+  "Columns": [
+    { "Name": "[Id]", "DataType": "INT" },
+    { "Name": "[Id]", "DataType": "INT" }
+  ],
+  "Indexes": [],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Schema": "[dbo]"
+}

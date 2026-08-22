@@ -178,19 +178,30 @@ public class ForgeKindlerTests
         var postgres = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
         var mysql = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
 
-        // SqlServer: 27 = 22 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
+        // SqlServer: 28 = 27 prior + Kindling_ChangeAudit_Table (object-change audit, #243 E5)
         // + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive codegen policy helper, SS-2008 floor spine)
         // + SchemaSmith.fn_SplitList (all-versions STRING_SPLIT replacement for the compat-100 XML path)
         // + SchemaSmith.DegradeUnsupportedColumnStore + SchemaSmith.DegradeUnsupportedFeatures (the emit-guard
         //   degrade spine: the former drops below-2012/2014 columnstore from #Indexes, the latter is the single
-        //   choke point that neutralizes below-2016 temporal/masking/Always-Encrypted in the working set).
-        Assert.That(sqlServer.Length, Is.EqualTo(27));
-        // PostgreSQL: 34 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
+        //   choke point that neutralizes below-2016 temporal/masking/Always-Encrypted in the working set)
+        // + SchemaSmith.fn_ColumnTypeArguments (single source of a column's parenthesized DataType argument,
+        //   shared by GenerateTableJson/GenerateTableXml/ModifiedTableQuench — replaces the hand-copied CASE
+        //   that dropped TIME(n)/DATETIMEOFFSET(n) precision).
+        // + SchemaSmith.fn_NormalizeTemporalRetentionPeriod (canonicalizes a declared HISTORY_RETENTION_PERIOD
+        //   to the plural unit the DDL takes, since the catalog reports it singular -- normalized once at
+        //   parse so extraction and the drift compare cannot disagree).
+        // + SchemaSmith.fn_NormalizeCheckExpression (folds a check expression to the form SQL Server itself
+        //   stores -- spaces around operators removed, parens around a bare literal -- so a constraint
+        //   written in its natural form stops comparing unequal to the engine's rendering of itself).
+        Assert.That(sqlServer.Length, Is.EqualTo(30));
+        // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
         // + SchemaSmith.ColumnCompression (PG14-adaptive attcompression read) + SchemaSmith.StatisticsExpressionColumns
-        // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade.
-        Assert.That(postgres.Length, Is.EqualTo(34));
+        // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade
+        // + SchemaSmith.ColumnTypeArguments (the PostgreSQL twin of the SQL Server helper above — replaces the
+        //   hand-copied CASE that dropped timestamptz(n)/time(n)/timetz(n) precision).
+        Assert.That(postgres.Length, Is.EqualTo(35));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor
@@ -209,7 +220,36 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_SnapshotIndexExistence (engine-agnostic index-existence snapshot procedure; refreshes
         // _SchemaSmith_IdxExist at each IndexOnlyQuench create/ownership point, replacing the per-declared-index
         // live existence reads with a one-scan snapshot).
-        Assert.That(mysql.Length, Is.EqualTo(38));
+        // +1 = SchemaSmith_SupportsFunctionalIndex (functional/expression-index availability predicate, MySQL
+        // 8.0.13; MariaDB has no equivalent form — always 0. Gates the EXPRESSION-column read in
+        // GenerateTableJson and both _SchemaSmith_IdxDetectSnap builds).
+        // +1 = SchemaSmith_SupportsDefaultExpression (column DEFAULT-expression availability predicate,
+        // MySQL 8.0.13; MariaDB has supported it since 10.2.1 — at/below the floor, always 1. Gates the
+        // column-skip degrade in MissingTableAndColumnQuench / ModifiedTableQuench).
+        // +1 = SchemaSmith_SupportsInvisibleColumn (invisible-column availability predicate, MySQL 8.0.23 /
+        // MariaDB 10.3 — the INVISIBLE keyword itself is the same on both engines, only the introduction
+        // version differs. Gates the INVISIBLE clause ParseTableJson bakes into ColumnScript and the
+        // modified-column visibility compare in ModifiedTableQuench).
+        // +1 = SchemaSmith_SupportsColumnSrid (column-SRID availability predicate, MySQL 8.0.3 only —
+        // MariaDB has no equivalent attribute at any version, always 0. Gates the SRID clause
+        // ParseTableJson bakes into ColumnScript and the modified-column SRID compare in ModifiedTableQuench).
+        // +1 = SchemaSmith_ColumnSrid (per-column live SRID reader; MySQL reads INFORMATION_SCHEMA.COLUMNS.
+        // SRS_ID, the MariaDb override always returns NULL since that column does not exist there at all —
+        // isolates the divergence out of GenerateTableJson / ModifiedTableQuench, same shape as
+        // SchemaSmith_IndexIsVisible).
+        // +1 = SchemaSmith_ColumnOnUpdateClause (extracts + normalizes a column's `ON UPDATE
+        // CURRENT_TIMESTAMP[(n)]` auto-refresh clause from EXTRA; no MariaDb override needed — it reuses
+        // SchemaSmith_NormalizeColumnDefault for the engine-divergent case/paren folding. Unlike
+        // Invisible/Srid above, the clause predates both engines' floors, so no SchemaSmith_Supports...
+        // gate exists for it).
+        // +1 = SchemaSmith_IndexHasFunctionalKeyPart (declared-side detector for a functional/expression
+        // key part in an index's column list; gates the create/modify emit sites in
+        // MissingIndexesAndConstraintsQuench / IndexOnlyQuench below SchemaSmith_SupportsFunctionalIndex()'s
+        // floor, closing the emit-side gap that function's own read-only gating left open).
+        // +1 = SchemaSmith_NumericDefaultsEqual (compares a decimal column's default BY VALUE: the engine
+        // stores it at the column's scale, so a declared 0 comes back 0.00 and re-ALTERed the column on
+        // every deploy; scoped to decimal/numeric so string defaults keep comparing as text).
+        Assert.That(mysql.Length, Is.EqualTo(46));
     }
 
     [Test]

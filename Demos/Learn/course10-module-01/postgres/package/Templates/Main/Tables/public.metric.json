@@ -11,8 +11,7 @@
       "DataType": "NUMERIC(12,2)",
       "Nullable": true,
       "Default": "",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     }
   ],
   "Indexes": [

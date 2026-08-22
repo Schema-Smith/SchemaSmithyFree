@@ -18,6 +18,7 @@ AS $$
 DECLARE
   sql_script TEXT = '';
   protect_notice TEXT;
+  partitioned_tables TEXT;
 BEGIN
     -- OldName rename parity: a table renamed via OldName still has its PRE-rename name in
     -- temp_product_ownership (owned on the prior deploy). It is NOT removed from the product — the
@@ -73,6 +74,30 @@ BEGIN
                                 AND mv.matviewname = tp."TableName");
     END IF;
     IF p_DropTablesRemovedFromProduct THEN
+      -- Data-loss guard: a partitioned table spreads data across multiple physical partitions
+      -- that DROP TABLE destroys outright. SchemaSmith has no partitioning support -- partitioning
+      -- only happens by hand, typically once a table has grown -- so an ordinary product-owned
+      -- table can be partitioned after deployment and later look like an ordinary drop-by-absence
+      -- candidate. Fail closed before any DDL below, in both live and WhatIf mode, mirroring the
+      -- version-gated 'fail' branches elsewhere in this proc. relispartition also catches a table
+      -- ATTACHed as a child partition of another parent -- the realistic "converted in place" path,
+      -- since PostgreSQL cannot ALTER an existing plain table into a partitioned parent; relkind =
+      -- 'p' catches the table itself being a partitioned parent.
+      SELECT STRING_AGG(tp."Schema" || '.' || tp."TableName", ', ')
+        INTO partitioned_tables
+        FROM temp_product_ownership tp
+        JOIN pg_class c     ON c.relname = tp."TableName"
+        JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = tp."Schema"
+        WHERE tp."IndexName" IS NULL
+          AND NOT COALESCE(tp."PreventDrop", FALSE)
+          AND NOT EXISTS (SELECT 1 FROM temp_tables t WHERE tp."Schema" = t."Schema" AND tp."TableName" = t."Name")
+          AND NOT EXISTS (SELECT 1 FROM pg_matviews mv WHERE mv.schemaname = tp."Schema" AND mv.matviewname = tp."TableName")
+          AND (c.relkind = 'p' OR c.relispartition);
+      IF partitioned_tables IS NOT NULL THEN
+        RAISE EXCEPTION 'Partitioned table(s) removed from the product but not dropped (data-loss guard): %. SchemaSmith cannot verify that data spread across partitions can be safely destroyed by DROP TABLE. Drop the table manually after confirming the data is no longer needed, or mark it PreventDrop to keep it in the product permanently.',
+          partitioned_tables;
+      END IF;
+
       RAISE NOTICE 'Drop inbound foreign keys referencing tables removed from the product';
       -- Drop any foreign key that REFERENCES a table about to be removed (from any table), so the
       -- table drop below does not fail on a still-present inbound dependency. Same removed-table
@@ -169,17 +194,18 @@ BEGIN
       SELECT t."Schema" AS "TableSchema",
              t."Name" AS "TableName",
              c.column_name AS "ColumnName",
+             -- An array column reports udt_name '_text' while the package declares 'text[]', so the composed
+             -- form was never equal to the declared one and the column was re-modified on every deploy --
+             -- for ANY PostgreSQL array column, not one type. format_type renders the canonical declared
+             -- element spelling this codebase uses everywhere else (udt_name), with the element typmod taken from
+             -- format_type, which is the only place it survives: information_schema reports NULL length for
+             -- an array column, which is why the composed form had no (20) to begin with.
+             CASE WHEN c.data_type = 'ARRAY' THEN REGEXP_REPLACE(c.udt_name, '^_', '') || COALESCE(SUBSTRING(format_type(a.atttypid, a.atttypmod) FROM '\(.*\)'), '') || '[]' ELSE
              CASE WHEN c.domain_name IS NOT NULL
                   THEN CASE WHEN c.domain_schema != 'pg_catalog' THEN '"' || c.domain_schema || '".' ELSE '' END || '"' || c.domain_name || '"'
                   ELSE CASE WHEN c.udt_schema != 'pg_catalog' THEN c.udt_schema || '.' ELSE '' END || REGEXP_REPLACE(c.udt_name, 'bpchar', 'CHAR', 'i')
                   END ||
-             CASE WHEN c.domain_name IS NULL AND UPPER(c.udt_name) LIKE '%CHAR'
-                  THEN CASE WHEN COALESCE(c.character_maximum_length, -1) = -1 THEN '' ELSE '(' || c.character_maximum_length || ')' END
-                  WHEN c.domain_name IS NULL AND UPPER(c.udt_name) IN ('NUMERIC', 'DECIMAL') AND c.numeric_precision IS NOT NULL
-                  THEN '(' || c.numeric_precision || CASE WHEN COALESCE(c.numeric_scale, 0) != 0 THEN ', ' || c.numeric_scale ELSE '' END || ')'
-                  WHEN c.domain_name IS NULL AND UPPER(c.udt_name) = 'TIMESTAMP' AND COALESCE(c.datetime_precision, 6) != 6
-                  THEN '(' || c.datetime_precision || ')'
-                  ELSE '' END AS "DataType",
+             "SchemaSmith"."ColumnTypeArguments"(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision) END AS "DataType",
              CAST(CASE WHEN c.is_nullable = 'YES' THEN TRUE ELSE FALSE END AS BOOLEAN) AS "Nullable",
              c.column_default AS "Default",
              c.collation_name AS "Collation",
@@ -233,8 +259,8 @@ BEGIN
                 CROSS JOIN LATERAL UNNEST(con.confkey) WITH ORDINALITY AS u(element, idx)
                 WHERE a.attrelid = frel.oid
                   AND a.attnum = element) AS "RelatedColumns",
-             CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "DeleteAction",
-             CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "UpdateAction"
+             CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "DeleteAction",
+             CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "UpdateAction"
         FROM temp_tables t
         JOIN pg_catalog.pg_constraint con ON con.conrelid = to_regclass('"' || t."Schema" || '"' ||  '.' || '"' ||  t."Name" || '"')
         JOIN pg_catalog.pg_class frel ON frel.oid = con.confrelid
@@ -771,7 +797,10 @@ BEGIN
                      AND i.relname = ti."Name"
       WHERE ti."UpdateFillFactor"
         AND ei."FillFactor" != ti."FillFactor"
-        AND COALESCE(ti."AccessMethod", 'btree') NOT IN ('gin', 'brin', 'spgist');
+        -- Positive gate, not a deny-list: an extension AM (e.g. pgvector's hnsw/ivfflat) can't be
+        -- enumerated in advance, so allow-listing the AMs verified to accept fillfactor fails safe
+        -- (skip the ALTER) instead of failing loud (PostgreSQL's "unrecognized parameter" error).
+        AND COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash');
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
 
     RAISE NOTICE 'Drop Generated Columns Referencing Columns That Are Changing Data Type';
@@ -986,7 +1015,7 @@ BEGIN
                   OR ic."Nullable" != iec."Nullable"
                   OR COALESCE("SchemaSmith"."StripTypeCast"(ic."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(iec."Default"), '')
                   OR COALESCE(ic."Collation", '') != COALESCE(iec."Collation", '')
-                  OR COALESCE(ic."Generated", 'NEVER') != COALESCE(iec."Generated", 'NEVER')
+                  OR COALESCE(REGEXP_REPLACE(ic."Generated", '\s*\(.*$', ''), 'NEVER') != COALESCE(REGEXP_REPLACE(iec."Generated", '\s*\(.*$', ''), 'NEVER')
                   OR COALESCE(ic."GenerationExpression", '') != COALESCE(iec."GenerationExpression", '')
                   OR (COALESCE(ic."Storage", '') != '' AND COALESCE(ic."Storage", '') != COALESCE(iec."Storage", ''))
                   OR (COALESCE(ic."Compression", '') != '' AND COALESCE(ic."Compression", '') != COALESCE(iec."Compression", '')))) || ')'';' || CHR(10) ||
@@ -1038,7 +1067,13 @@ BEGIN
           OR c."Nullable" != ec."Nullable"
           OR COALESCE("SchemaSmith"."StripTypeCast"(c."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(ec."Default"), '')
           OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
-          OR COALESCE(c."Generated", 'NEVER') != COALESCE(ec."Generated", 'NEVER')
+          -- Identity KIND only, both sides. The catalog records the kind and nothing else (see the live
+          -- rendering above), while a package may legitimately declare
+          -- GENERATED ALWAYS AS IDENTITY(START WITH 1 INCREMENT BY 1) -- and the create path still emits
+          -- those options. Comparing the declared string verbatim re-modified every identity column on
+          -- every deploy. SchemaSmith does not manage the sequence options declaratively, so they must not
+          -- take part in the comparison either.
+          OR COALESCE(REGEXP_REPLACE(c."Generated", '\s*\(.*$', ''), 'NEVER') != COALESCE(REGEXP_REPLACE(ec."Generated", '\s*\(.*$', ''), 'NEVER')
           OR COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
           OR (COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != COALESCE(ec."Storage", ''))
           OR (COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != COALESCE(ec."Compression", '')))
@@ -1081,7 +1116,7 @@ BEGIN
               OR c."Nullable" != ec."Nullable"
               OR COALESCE("SchemaSmith"."StripTypeCast"(c."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(ec."Default"), '')
               OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
-              OR COALESCE(c."Generated", 'NEVER') != COALESCE(ec."Generated", 'NEVER')
+              OR COALESCE(REGEXP_REPLACE(c."Generated", '\s*\(.*$', ''), 'NEVER') != COALESCE(REGEXP_REPLACE(ec."Generated", '\s*\(.*$', ''), 'NEVER')
               OR COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
               OR (COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != COALESCE(ec."Storage", ''))
               OR (COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != COALESCE(ec."Compression", '')))

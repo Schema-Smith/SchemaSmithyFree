@@ -417,7 +417,7 @@ Every table definition file declares exactly one table. The shared properties be
 | `DataDelivery` | object | `null` | No | Declarative data delivery configuration for this table. See [DataDelivery](#datadelivery). |
 | `Extensions` | object | `null` | No | Open metadata bag. See [Custom Properties](custom-properties.md). |
 
-The `ShouldApplyExpression` field appears on **tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views**, and several platform-specific components. Wherever it appears, it works the same way: the engine resolves tokens, runs the expression against the target database, and skips the component if the result is falsy.
+The `ShouldApplyExpression` field appears on **tables, columns, indexes, foreign keys, check constraints, indexed views, materialized views, data deliveries**, and several platform-specific components. Wherever it appears, it works the same way: the engine resolves tokens, runs the expression against the target database, and skips the component if the result is falsy.
 
 ---
 
@@ -437,6 +437,10 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FullTextIndex` | object or array | `null` | Full-text index on the table -- a single definition, or an array of conditional variants. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
 | `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. |
 | `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. |
+| `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
+| `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
+| `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
+| `HistoryRetentionPeriod` | string | `null` | Retention for the temporal history table, as the SQL Server token (e.g. `"5 YEARS"`, `"90 DAYS"`, `"INFINITE"`). `null` leaves retention unmanaged. |
 
 ### PostgreSQL (`PostgreSqlTable`)
 
@@ -541,7 +545,9 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 
 ### SQL Server column extras
 
-`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `Collation`, `DataMaskFunction`. Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
+`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`. Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
+
+`IsColumnSet: true` declares `COLUMN_SET FOR ALL_SPARSE_COLUMNS` -- an XML column that aggregates the table's sparse columns. Available at the SQL Server 2008 floor, alongside `Sparse`. Adding a column set and the sparse columns it aggregates together in one deploy always works, whether the table is new or already exists. **Known limitation:** converting an *already-deployed* plain column into a column set in the same deploy that also introduces a brand-new sparse column is not supported -- the new sparse column commits before the conversion runs, and SQL Server refuses a column set on a table that already has a sparse column. The conversion works on its own (no new sparse columns in the same deploy, and none pre-existing on the table); combined with a new sparse column, it fails with SQL Server's own error.
 
 ### PostgreSQL column extras
 
@@ -550,6 +556,10 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 ### MySQL column extras
 
 `GenerationExpression`, `CharacterSet`, `Collation`, `Comment`, auto-increment via `DataType` (`INT AUTO_INCREMENT`).
+
+`Srid` (int) restricts a spatial column to one spatial reference system -- `"Srid": 4326` deploys as `col POINT SRID 4326`, so the column accepts only geometries in that reference system. MySQL 8.0.3+ only; below that (and on MariaDB, which has no equivalent attribute at any version) the restriction is silently skipped and the column deploys unrestricted, per the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation). Omit `Srid` for an unrestricted spatial column.
+
+`OnUpdateCurrentTimestamp` (string) auto-refreshes a `TIMESTAMP`/`DATETIME` column on every `UPDATE` -- `"OnUpdateCurrentTimestamp": "CURRENT_TIMESTAMP"` deploys as `... ON UPDATE CURRENT_TIMESTAMP`, and an optional fractional-seconds precision round-trips exactly (`"CURRENT_TIMESTAMP(3)"`). Independent of `Default`: a column's `Default` governs its value on `INSERT`, this governs the refresh on `UPDATE` -- declare either, both, or neither. Available on every supported MySQL and MariaDB version, so no version gate applies.
 
 ### User-defined types
 
@@ -644,7 +654,9 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ### SQL Server index extras
 
-`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`.
+`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`, `FileGroup`.
+
+`FileGroup` follows the same name-only, unset-means-unmanaged contract as the table property above. Worth knowing when declaring one on a table but not its indexes: an index created with no filegroup of its own follows **its table**, not the database default. An index is declared independently of its table's filegroup, which is what lets you keep a large table's data and its indexes on separate storage.
 
 ### PostgreSQL index extras
 
@@ -721,14 +733,14 @@ Tables without a `DataDelivery` block are left alone. Tables that declare one ar
 | Property | Type | Default | Description |
 |---|---|---|---|
 | `ContentFile` | string | | Path to the row data, relative to the template root. Typically produced by DataTongs as a `.tabledata` file (raw JSON array). |
-| `ContentEncoding` | string | `Json` | Encoding of `ContentFile`: `Json` (default) or `Xml`. **SQL Server only.** See [Content encoding](#content-encoding-legacy-sql-server) below. |
+| `ContentEncoding` | string | `Json` | Encoding of `ContentFile`: `Json` (default) or `Xml`. Accepted on every platform. See [Content Encoding](#content-encoding) below. |
 | `MergeType` | string | | One of `Insert`, `Insert/Update`, `Insert/Update/Delete`. See [MergeType](#mergetype) below. |
 | `MatchColumns` | string | | Comma-separated column names that identify a row. Prefix a column with `*` for NULL-safe comparison on nullable keys. Matches the `KeyColumns` concept in DataTongs. |
 | `MergeFilter` | string | `""` | Optional SQL `WHERE` clause (without the `WHERE` keyword). Scopes both the rows considered for matching and, when delete is enabled, the rows eligible for deletion. |
 | `MergeDisableTriggers` | bool | `false` | Wrap the merge with platform-appropriate trigger disable/enable. |
 | `MergeDisableRules` | bool | `false` | **PostgreSQL.** Disable rewrite rules on the table during the merge. |
 | `MergeUpdateDescendents` | bool | `false` | **PostgreSQL.** When `true`, the merge targets descendant partitions as well as the specified table. When `false` (the default), the merge uses `ONLY` so descendant tables are left untouched. |
-| `ShouldApplyExpression` | string | `""` | Optional SQL predicate evaluated against the target at deploy time. Blank or absent always applies -- today's unchanged behavior. When `DataDelivery` is an array of two or more deliveries, every entry must set one. See [Multiple Deliveries](#multiple-deliveries) below. |
+| `ShouldApplyExpression` | string | `""` | Optional SQL predicate evaluated against the target at deploy time. Tokens are resolved before evaluation -- including [`{{ServerMajorVersion}}` and `{{CompatibilityLevel}}`](script-tokens.md#servermajorversion-and-compatibilitylevel), the same version tokens a folder or table gate can reference. Blank or absent always applies -- today's unchanged behavior. When `DataDelivery` is an array of two or more deliveries, every entry must set one. See [Multiple Deliveries](#multiple-deliveries) below. |
 | `VariantName` | string | `""` | Optional label naming the intent behind a delivery's `ShouldApplyExpression`. Appears in the deployment log when that delivery is skipped or when its gate errors. Max 128 characters. |
 
 ### MergeType
@@ -741,13 +753,17 @@ Tables without a `DataDelivery` block are left alone. Tables that declare one ar
 
 The chosen idiom is platform-specific -- `MERGE` on SQL Server and PostgreSQL, `INSERT ... ON DUPLICATE KEY UPDATE` with a conditional delete step on MySQL -- but the declarative contract is the same on every platform.
 
-### Content encoding (legacy SQL Server)
+### Content Encoding
 
-`ContentEncoding` selects how SchemaQuench shreds the `ContentFile`. **This setting is SQL Server only** -- PostgreSQL and MySQL/MariaDB shred their delivery data at every supported version, so they have no encoding choice to make (declaring `Xml` on those platforms is rejected).
+`ContentEncoding` selects how SchemaQuench shreds the `ContentFile`, and every platform accepts `Xml` -- but the reason to reach for it, and how it's actually applied, differs by engine.
 
-By default (`Json`) delivery shreds the content with `OPENJSON`, which requires **SQL Server compatibility level 130** (SQL Server 2016+). If your target database is left at an older compatibility level (100--120, common where a line-of-business app is certified against an older level), a JSON delivery cannot run there. Set `"ContentEncoding": "Xml"` and SchemaSmith shreds the payload with the XML data-type methods (`.nodes()` / `.value()`) instead -- a path that works at **every** compatibility level -- so the same package's data deploys on a legacy target.
+On **SQL Server**, the default `Json` encoding shreds the content with `OPENJSON`, which requires compatibility level 130 (SQL Server 2016+). If your target database is left at an older compatibility level (100--120, common where a line-of-business app is certified against an older level), a JSON delivery cannot run there. Set `"ContentEncoding": "Xml"` and SchemaSmith shreds the payload with the XML data-type methods (`.nodes()` / `.value()`) instead -- a path that works at every compatibility level -- so the same package's data deploys on a legacy target. Clearing that cliff is the real reason to choose `Xml` on SQL Server.
 
-The two encodings are not interchanged automatically: the payload is your data, in a shape SchemaSmith does not own, so you choose the encoding per delivery and SchemaSmith shreds whichever you declared. A `Json` delivery aimed at a below-130 target follows the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation) -- `warn` (the default) skips just that delivery with a clear message and delivers the rest; `fail` aborts.
+On **PostgreSQL**, `Xml` is shredded natively with `xmltable()` at every supported version -- there's no compatibility cliff to route around there, so it's a stylistic choice rather than a necessity.
+
+On **MySQL and MariaDB**, neither engine can shred XML dynamically (both reject a non-constant XPath outright), so SchemaSmith converts an `Xml`-encoded payload to JSON once, up front, and shreds the result exactly as it would a hand-authored JSON payload. Declaring `Xml` there buys authoring uniformity for a schema package shared across engines -- not a version-reach benefit, since MySQL/MariaDB never had a compatibility-level cliff to begin with.
+
+The two encodings are not interchanged automatically: the payload is your data, in a shape SchemaSmith does not own, so you choose the encoding per delivery and SchemaSmith shreds whichever you declared. A `Json` delivery aimed at a below-130 SQL Server target follows the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation) -- `warn` (the default) skips just that delivery with a clear message and delivers the rest; `fail` aborts.
 
 The XML row shape is a documented, stable contract -- one `<c>` element per column, named by an `n` attribute so any column name (including `[Order Date]`) is carried verbatim:
 
@@ -761,7 +777,7 @@ The XML row shape is a documented, stable contract -- one `<c>` element per colu
 - An **absent `<c>`** is `NULL` (row `B002` above has no `price`).
 - **Binary** columns are base64; **geometry/geography** is WKT with a companion `<c n="Column.STSrid">` carrying the SRID; **dates** are ISO-8601.
 
-You don't have to hand-author this shape: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you. See [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server).
+You don't have to hand-author this shape: `DataTongs --DeliveryEncoding=Xml` extracts a table's data directly in it and stamps `"ContentEncoding": "Xml"` on the delivery for you, on every source engine (see [DataTongs](datatongs.md#delivery-encoding-xml-for-legacy-sql-server)) -- SQL Server extracts XML natively, and PostgreSQL/MySQL/MariaDB convert their normal JSON extraction into the identical shape. One caveat: the `.STSrid` SRID element -- a per-row companion carried alongside each extracted value -- is captured only in SQL Server's extraction; PostgreSQL and MySQL JSON (and therefore their XML derivatives) carry WKT alone for spatial columns, the same as their JSON output. On **MySQL**, a [SRID-restricted column](#mysql-column-extras) (`Srid` in the schema package) doesn't need that per-row companion: every row in the column is guaranteed to carry the declared reference system, so a deploy target reconstructs it from the schema instead. An *unrestricted* MySQL spatial column, and every PostgreSQL spatial column, still lose the reference system in data extraction.
 
 ### Multiple Deliveries
 
@@ -971,7 +987,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 | `KeyIndex` | string | Name of the unique index used as the full-text key. |
 | `ChangeTracking` | string | `"OFF"`, `"MANUAL"`, or `"AUTO"`. |
 | `StopList` | string | Name of a full-text stop list. |
-| `Columns` | string | Column specification for the full-text index. |
+| `Columns` | string | Comma-separated column specification, e.g. `"[Title],[Body] TYPE COLUMN [BodyType] LANGUAGE 1033"`. Each entry is a bracketed column name, optionally followed by `TYPE COLUMN [col]` (the column holding the document's file extension for a binary column) and `LANGUAGE <lcid>` (the word breaker to tokenize with). |
 | `ShouldApplyExpression` | string | Boolean SQL expression evaluated on the target; the index (or variant) applies only when it is true. |
 | `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
@@ -981,6 +997,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 - **One match per target.** With more than one variant, *every* variant must declare a `ShouldApplyExpression`, and those expressions must be mutually exclusive on any given target. Two variants matching the same target fails the deployment with a clear error.
 - **No match means none.** When no variant matches a target, the table behaves as if no full-text index were declared there -- any existing full-text index is removed.
 - **No-op when unchanged.** When the deployed index already matches the selected variant, re-deployment performs no full-text work: no drop, no repopulation.
+- **`LANGUAGE` extracts only when it differs from the column default.** SchemaTongs omits `LANGUAGE` for a column already indexed in the language its collation implies, so extracted packages stay uncluttered. A column with no collation (a binary document column indexed through `TYPE COLUMN`) always extracts its `LANGUAGE`, because it has no implied default to fall back on.
 
 > **Note:** When no variant matches a target, an existing full-text index on that table is dropped -- the absence of a match is treated as "no full-text index here," not "leave it alone."
 

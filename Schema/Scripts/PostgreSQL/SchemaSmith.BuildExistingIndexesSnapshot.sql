@@ -26,7 +26,11 @@ BEGIN
     SELECT t."Schema" AS "TableSchema",
            t."Name" AS "TableName",
            i.relname AS "IndexName",
-           (SELECT STRING_AGG(a.attname || CASE WHEN (idx.indoption[idx] & 1) = 1 THEN ' DESC' ELSE '' END, ',' ORDER BY idx)
+           -- indoption is a 0-based int2vector while WITH ORDINALITY counts from 1, so this must be
+           -- indoption[idx-1]. Read 1-based it returned the NEXT key's flags (and nothing for the last),
+           -- so a DESC key never reported DESC here and the index was re-created on every deploy. Every
+           -- other site in this codebase already uses the 0-based form -- this was the only one that did not.
+           (SELECT STRING_AGG(a.attname || CASE WHEN (idx.indoption[idx-1] & 1) = 1 THEN ' DESC' ELSE '' END, ',' ORDER BY idx)
               FROM pg_attribute a
               CROSS JOIN LATERAL UNNEST(idx.indkey) WITH ORDINALITY AS u(element, idx)
               WHERE a.attrelid = idx.indrelid

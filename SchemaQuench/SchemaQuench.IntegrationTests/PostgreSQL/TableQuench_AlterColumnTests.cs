@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 ﻿using System.Data;
+using System;
 using Schema.DataAccess;
 using Schema.Domain;
 
@@ -753,4 +754,130 @@ CREATE TABLE ""AlterColumnTests"".""ModifyColumnCollation"" (""Column1"" VARCHAR
 
         conn.Close();
     }
+    // An array column reports data_type=ARRAY / udt_name=_text in the catalog while the package declares
+    // text[]. The two were never reconciled, so the column compared unequal to itself and was re-modified on
+    // EVERY deploy -- for any PostgreSQL array column, not one type. An idempotency break like this exits 0
+    // and logs "Successfully Quenched", so nothing surfaces it; the only signal is the same object changing
+    // again on a re-run, which is what this asserts.
+    [Test]
+    public void AlterColumn_ArrayColumns_AreIdempotentAcrossRepeatedDeploys()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var table = "arr_idempotent_" + Guid.NewGuid().ToString("N")[..8];
+        var json = $@"[
+            {{
+                ""Schema"": ""public"",
+                ""Name"": ""{table}"",
+                ""Columns"": [
+                    {{ ""Name"": ""Id"", ""DataType"": ""integer"", ""Nullable"": false }},
+                    {{ ""Name"": ""Counts"", ""DataType"": ""int4[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Tags"", ""DataType"": ""text[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Legacy"", ""DataType"": ""_text"", ""Nullable"": true }},
+                    {{ ""Name"": ""Sizes"", ""DataType"": ""integer[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Codes"", ""DataType"": ""varchar(20)[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Amounts"", ""DataType"": ""numeric(10,2)[]"", ""Nullable"": true }}
+                ]
+            }}
+        ]";
+
+        try
+        {
+            RunTableQuenchProc(cmd, json);   // creates
+
+            // Two further isolated passes: the catalog now matches the declaration exactly, so neither may
+            // touch the columns again.
+            for (var pass = 2; pass <= 3; pass++)
+            {
+                cmd.CommandText = "DELETE FROM \"SchemaSmith\".\"ChangeAudit\" WHERE \"SessionId\" = pg_backend_pid()";
+                cmd.ExecuteNonQuery();
+
+                RunTableQuenchProc(cmd, json);
+
+                cmd.CommandText = $@"SELECT COUNT(*) FROM ""SchemaSmith"".""ChangeAudit""
+                                      WHERE ""SessionId"" = pg_backend_pid()
+                                        AND ""ObjectName"" LIKE '%{table}%'";
+                var changes = Convert.ToInt32(cmd.ExecuteScalar());
+                if (changes != 0)
+                {
+                    cmd.CommandText = $@"SELECT string_agg(""ObjectType"" || '/' || ""ActionType"" || ' ' || ""ObjectName"", '; ')
+                                          FROM ""SchemaSmith"".""ChangeAudit"" WHERE ""SessionId"" = pg_backend_pid()";
+                    Assert.Fail($"pass {pass}: expected no changes, got {changes}: {cmd.ExecuteScalar()}");
+                }
+            }
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS public.\"{table}\"";
+            cmd.ExecuteNonQuery();
+        }
+    }
+    // The catalog records an identity column's KIND and nothing else, but a package may legitimately declare
+    // the sequence options too -- GENERATED ALWAYS AS IDENTITY(START WITH 1 INCREMENT BY 1). Comparing the
+    // declared string verbatim re-modified every identity column on every deploy (10 of them in one shipped
+    // demo). The create path still emits the options; they just take no part in the comparison, because
+    // SchemaSmith does not manage them declaratively.
+    [Test]
+    public void AlterColumn_IdentityWithSequenceOptions_IsIdempotentAcrossRepeatedDeploys()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var table = "ident_idem_" + Guid.NewGuid().ToString("N")[..8];
+        var json = $@"[
+            {{
+                ""Schema"": ""public"",
+                ""Name"": ""{table}"",
+                ""Columns"": [
+                    {{ ""Name"": ""Id"", ""DataType"": ""integer"", ""Nullable"": false,
+                       ""Generated"": ""GENERATED ALWAYS AS IDENTITY(START WITH 1 INCREMENT BY 1)"" }},
+                    {{ ""Name"": ""ByDefault"", ""DataType"": ""integer"", ""Nullable"": false,
+                       ""Generated"": ""GENERATED BY DEFAULT AS IDENTITY(START WITH 5 INCREMENT BY 2)"" }},
+                    {{ ""Name"": ""Plain"", ""DataType"": ""integer"", ""Nullable"": true }}
+                ]
+            }}
+        ]";
+
+        try
+        {
+            RunTableQuenchProc(cmd, json);
+
+            for (var pass = 2; pass <= 3; pass++)
+            {
+                cmd.CommandText = "DELETE FROM \"SchemaSmith\".\"ChangeAudit\" WHERE \"SessionId\" = pg_backend_pid()";
+                cmd.ExecuteNonQuery();
+
+                RunTableQuenchProc(cmd, json);
+
+                cmd.CommandText = $@"SELECT COALESCE(STRING_AGG(""ObjectType"" || '/' || ""ActionType"" || ' ' || ""ObjectName"", '; '), '')
+                                       FROM ""SchemaSmith"".""ChangeAudit"" WHERE ""SessionId"" = pg_backend_pid()
+                                        AND ""ObjectName"" LIKE '%{table}%'";
+                Assert.That(Convert.ToString(cmd.ExecuteScalar()), Is.Empty,
+                    $"pass {pass}: an identity column that already matches must not be re-modified");
+            }
+
+            // The declared options must still have reached the engine on creation.
+            cmd.CommandText = $@"SELECT seqstart FROM pg_sequence s
+                                   JOIN pg_class c ON c.oid = s.seqrelid
+                                  WHERE c.relname = '{table}_ByDefault_seq'";
+            var start = cmd.ExecuteScalar();
+            Assert.That(start, Is.Not.Null.And.EqualTo(5L),
+                "ignoring the options for COMPARISON must not stop the create path from applying them");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS public.\"{table}\" CASCADE";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+
 }

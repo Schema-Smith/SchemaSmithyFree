@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -72,7 +73,7 @@ public static class SettingsContract
             SettingsKeys.ArtifactPath, SettingsKeys.ScrubArtifacts, SettingsKeys.ScriptTokens
         ]), StringComparer.OrdinalIgnoreCase),
 
-        [SettingsTool.SchemaTongs] = new(BaseSourceKeys().Concat(ShouldCastKeys()).Concat(
+        [SettingsTool.SchemaTongs] = new(BaseSourceKeys().Concat(ShouldCastKeys(SettingsTool.SchemaTongs)).Concat(
         [
             SettingsKeys.ProductKeys.Name, SettingsKeys.ProductKeys.Path,
             SettingsKeys.ProductKeys.CheckConstraintStyle,
@@ -81,7 +82,7 @@ public static class SettingsContract
             SettingsKeys.ScriptTokens, SettingsKeys.TemplatePath
         ]), StringComparer.OrdinalIgnoreCase),
 
-        [SettingsTool.DataTongs] = new(BaseSourceKeys().Concat(ShouldCastKeys()).Concat(
+        [SettingsTool.DataTongs] = new(BaseSourceKeys().Concat(ShouldCastKeys(SettingsTool.DataTongs)).Concat(
         [
             SettingsKeys.ContentPath, SettingsKeys.ScriptPath, SettingsKeys.TemplatePath,
             SettingsKeys.TablesToExtract, SettingsKeys.ProductKeys.Name, SettingsKeys.TemplateKeys.Name,
@@ -113,9 +114,14 @@ public static class SettingsContract
         SettingsKeys.Source.ConnectionProperties, SettingsKeys.SourceCompatEncoding
     ];
 
-    private static IEnumerable<string> ShouldCastKeys() =>
+    // Only the keys the given tool actually reads. Handing both tools the whole set made the contract
+    // over-claim: SchemaTongs accepted ShouldCast:MergeUpdate and DataTongs accepted ShouldCast:Collations,
+    // neither of which those tools read, so a real key in the wrong settings file did nothing and said
+    // nothing. The reader is recorded on the constant itself (see ReadByAttribute).
+    private static IEnumerable<string> ShouldCastKeys(SettingsTool tool) =>
         typeof(SettingsKeys.ShouldCast).GetFields()
             .Where(f => f.IsLiteral && f.FieldType == typeof(string) && f.Name != nameof(SettingsKeys.ShouldCast.Section))
+            .Where(f => f.GetCustomAttribute<ReadByAttribute>()?.Tool == tool)
             .Select(f => (string)f.GetRawConstantValue());
 
     /// <summary>Every key the given tool accepts. Ordered for stable display.</summary>

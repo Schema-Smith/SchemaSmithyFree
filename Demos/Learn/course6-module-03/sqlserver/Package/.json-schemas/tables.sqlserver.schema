@@ -60,6 +60,9 @@
           "EncryptionAlgorithm": {
             "type": "string"
           },
+          "IsColumnSet": {
+            "type": "boolean"
+          },
           "Extensions": {
             "type": "object",
             "required": [
@@ -137,12 +140,33 @@
           "UpdateFillFactor": {
             "type": "boolean"
           },
+          "FileGroup": {
+            "type": "string"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
         "required": [
-          "Name",
-          "IndexColumns"
+          "Name"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "ColumnStore": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ColumnStore"
+              ]
+            },
+            "else": {
+              "required": [
+                "IndexColumns"
+              ]
+            }
+          }
         ]
       }
     },
@@ -512,6 +536,18 @@
     },
     "EnableCDC": {
       "type": "boolean"
+    },
+    "HistoryTableSchema": {
+      "type": "string"
+    },
+    "HistoryTableName": {
+      "type": "string"
+    },
+    "HistoryRetentionPeriod": {
+      "type": "string"
+    },
+    "FileGroup": {
+      "type": "string"
     },
     "Extensions": {
       "type": "object",

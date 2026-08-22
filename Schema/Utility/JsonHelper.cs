@@ -32,16 +32,31 @@ public static class JsonHelper
             throw new Exception($"File {filePath} does not exist");
 
         var text = FileWrapper.GetFromFactory().ReadAllText(filePath);
-        return JsonConvert.DeserializeObject<T>(text);
+        return WithFileContext(filePath, () => JsonConvert.DeserializeObject<T>(text));
     }
 
-    public static Product ProductLoad(string filePath)
+    // Matches --Validate (JSON-schema additionalProperties:false) and the generated editor
+    // .json-schemas — an unrecognised package property should error at deploy time too, not
+    // vanish (Newtonsoft's default is MissingMemberHandling.Ignore). Extensions is unaffected:
+    // DynamicBase declares it as a real property, so it always matches as a member.
+    // Scoped to ProductLoad only — Load&lt;T&gt; is SchemaTongs' own scaffolding/bookkeeping
+    // re-read (RepositoryHelper, LoadPackageTokens), never the editor/--Validate/deploy path this
+    // task reconciles, and hardening it risks breaking an exploratory re-extraction over content
+    // that was never meant to be re-validated there.
+    //
+    // Takes the handling as a parameter (default Error, unchanged for every existing caller)
+    // rather than a fixed setting: PackageLoader passes Ignore so `--Validate` can still determine
+    // Product.Platform — and therefore still run every other check — when Product.json itself
+    // carries an unrecognised property, instead of the whole run dying on a single SS-LOAD-001
+    // before JsonSchemaCheck ever gets to report the precise SS-JSON-001.
+    public static Product ProductLoad(string filePath, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
     {
         if (!ProductFileWrapper.GetFromFactory().Exists(filePath))
             throw new Exception($"File {filePath} does not exist");
 
         var text = ProductFileWrapper.GetFromFactory().ReadAllText(filePath);
-        return JsonConvert.DeserializeObject<Product>(text)
+        var settings = new JsonSerializerSettings { MissingMemberHandling = missingMemberHandling };
+        return WithFileContext(filePath, () => JsonConvert.DeserializeObject<Product>(text, settings))
             ?? throw new JsonSerializationException($"Failed to deserialize Product from {filePath}");
     }
 
@@ -51,16 +66,33 @@ public static class JsonHelper
             throw new Exception($"File {filePath} does not exist");
 
         var text = ProductFileWrapper.GetFromFactory().ReadAllText(filePath);
-        return PlatformDeserializer.DeserializeTable(text, platform);
+        return WithFileContext(filePath, () => PlatformDeserializer.DeserializeTable(text, platform));
     }
 
-    public static Template TemplateLoad(string filePath, Platform platform)
+    // missingMemberHandling defaults to Error (deploy path, unchanged) — PackageLoader passes
+    // Ignore for --Validate, mirroring ProductLoad's existing leniency parameter above.
+    public static Template TemplateLoad(string filePath, Platform platform, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
     {
         if (!ProductFileWrapper.GetFromFactory().Exists(filePath))
             throw new Exception($"File {filePath} does not exist");
 
         var text = ProductFileWrapper.GetFromFactory().ReadAllText(filePath);
-        return PlatformDeserializer.DeserializeTemplate(text, platform);
+        return WithFileContext(filePath, () => PlatformDeserializer.DeserializeTemplate(text, platform, missingMemberHandling));
+    }
+
+    // Every JsonHelper load path funnels through here so a JSON parse/member failure — including
+    // the MissingMemberHandling.Error rejection above — always names the file it came from, not
+    // just the in-document property path Newtonsoft reports on its own.
+    private static T WithFileContext<T>(string filePath, Func<T> deserialize)
+    {
+        try
+        {
+            return deserialize();
+        }
+        catch (JsonException e)
+        {
+            throw new JsonSerializationException($"Error parsing {filePath}: {e.Message}", e);
+        }
     }
 
     public static string Serialize<T>(T obj)

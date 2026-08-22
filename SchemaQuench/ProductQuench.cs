@@ -370,15 +370,24 @@ public class ProductQuench
     /// Filters product folders by their <c>ShouldApplyExpression</c> evaluated against the server.
     /// Blank expressions always apply; a false expression drops the folder (logged). Evaluation
     /// errors propagate so the run fails closed rather than silently skipping a folder.
+    /// Product-folder gates run before any database is selected (the third gate site, B6b, aligned
+    /// with the folder/delivery gates' N2 fix) — <see cref="ResolveProductScopeGateTokens"/> resolves
+    /// only what is meaningful at that scope.
     /// </summary>
     internal List<ProductFolder> GateProductFolders(IDbCommand command, IEnumerable<ProductFolder> folders, string server = null)
     {
+        var folderList = folders as IReadOnlyCollection<ProductFolder> ?? folders.ToList();
+        var tokens = ResolveProductScopeGateTokens(command, folderList);
+
         var survivors = new List<ProductFolder>();
-        foreach (var folder in folders)
+        foreach (var folder in folderList)
         {
+            var expression = tokens.Count == 0
+                ? folder.ShouldApplyExpression
+                : SqlScript.TokenReplace(folder.ShouldApplyExpression, tokens, _product.Platform);
             try
             {
-                if (!FolderGate.ShouldApply(command, folder.ShouldApplyExpression))
+                if (!FolderGate.ShouldApply(command, expression))
                 {
                     _progressLog.Info($"  Skipping folder '{folder.FolderPath}'{ServerSuffix(server)} — ShouldApplyExpression evaluated false");
                     continue;
@@ -396,6 +405,28 @@ public class ProductQuench
         }
 
         return survivors;
+    }
+
+    // {{ServerMajorVersion}} placeholder text, matched the same way DatabaseQuench's ContainsVersionToken
+    // checks for a version token before paying to resolve it.
+    private const string ServerMajorVersionPlaceholder = "{{ServerMajorVersion}}";
+
+    /// <summary>
+    /// Product-folder gates run before any database is selected, so <c>{{ServerMajorVersion}}</c> is the
+    /// only gate token resolvable here (the server connection is already open); <c>{{CompatibilityLevel}}</c>
+    /// and <c>{{SchemaName}}</c> stay out of scope — see <see cref="TokenHelper.AssembleProductScopeGateTokens"/>.
+    /// Detects the version only when some folder's expression actually references it, so a run with no
+    /// version-gated product folder pays no extra round trip beyond the gate evaluations it was already doing.
+    /// </summary>
+    private List<KeyValuePair<string, string>> ResolveProductScopeGateTokens(IDbCommand command, IReadOnlyCollection<ProductFolder> folders)
+    {
+        var needsVersion = folders.Any(f =>
+            !string.IsNullOrWhiteSpace(f.ShouldApplyExpression) &&
+            f.ShouldApplyExpression.Contains(ServerMajorVersionPlaceholder, StringComparison.OrdinalIgnoreCase));
+        if (!needsVersion) return [];
+
+        var versionInfo = TargetVersionDetector.Detect(command, _product.Platform);
+        return TokenHelper.AssembleProductScopeGateTokens(versionInfo.ServerComparable);
     }
 
     private static string ServerSuffix(string server) => string.IsNullOrEmpty(server) ? "" : $" on {server}";

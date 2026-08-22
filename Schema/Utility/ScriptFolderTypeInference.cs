@@ -21,6 +21,7 @@ public static class ScriptFolderTypeInference
         ["FullTextStopLists"] = ScriptObjectType.FullTextStopLists,
         ["XMLSchemaCollections"] = ScriptObjectType.XMLSchemaCollections,
         ["DDLTriggers"] = ScriptObjectType.DDLTriggers,
+        ["Synonyms"] = ScriptObjectType.Synonyms,
         ["Domain Types"] = ScriptObjectType.DomainTypes,
         ["Enum Types"] = ScriptObjectType.EnumTypes,
         ["Composite Types"] = ScriptObjectType.CompositeTypes,
@@ -29,6 +30,8 @@ public static class ScriptFolderTypeInference
         ["Aggregates"] = ScriptObjectType.Aggregates,
         ["Sequences"] = ScriptObjectType.Sequences,
         ["Rules"] = ScriptObjectType.Rules,
+        ["Collations"] = ScriptObjectType.Collations,
+        ["Publications"] = ScriptObjectType.Publications,
         ["Events"] = ScriptObjectType.Events,
     };
 

@@ -186,14 +186,9 @@ Three things are deliberately **not** reported:
 
 It is a warning, not an error -- the run continues. Treat one as a typo until proven otherwise.
 
-### The settings surface is enumerable
+### The settings surface is enforced, not just documented
 
-The set of settings each tool reads is not just documentation -- it is data, and the tools enforce it. That same set is available to anything that wraps or validates a SchemaSmith configuration:
-
-- **From .NET:** reference `SchemaSmith.Schema` and call `SettingsContract.AcceptedKeys(SettingsTool.SchemaQuench)`, or `SettingsContract.ToJson()` for the whole shape.
-- **Without .NET:** read `settings-contract.json`, published inside the `SchemaSmith.Schema` package. It lists every accepted key per tool, plus the open sections and array-valued settings.
-
-Both come from the same source the tools check against, so a wrapper can validate a settings file the way SchemaQuench does without maintaining its own copy of the key list.
+The set of settings each tool reads is data the tool checks itself against at startup, not a list maintained separately in prose. That is why an unrecognised key is reported rather than silently ignored: the reference above and the check the tool performs come from the same source, so they cannot drift apart.
 
 ---
 

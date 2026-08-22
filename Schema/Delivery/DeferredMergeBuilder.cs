@@ -25,18 +25,18 @@ internal static class DeferredMergeBuilder
     {
         var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
 
-        // B1: XML delivery is SQL-Server-only in this slice; a PG/MySQL delivery declaring Xml fails loudly
-        // rather than silently emitting a JSON shred (mirrors MergeScriptHelper.BuildMergeScript).
-        if (isXml && !platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
-            throw new NotSupportedException(
-                $"XML data-delivery encoding is not yet supported on {platform}; use JSON (its shred works at every supported version).");
-
         if (platform.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
             return BuildSqlServer(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, isXml);
         if (platform.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
-            return BuildPostgreSql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, disableRules, updateDescendents, pgServerVersionNum);
+            return BuildPostgreSql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, disableTriggers, deferredColumns, disableRules, updateDescendents, pgServerVersionNum, isXml);
         if (platform.Equals("MySQL", StringComparison.OrdinalIgnoreCase))
-            return BuildMySql(helper, cmd, schemaOrDb, tableName, tableData, keyColumns, deferredColumns);
+        {
+            // B3: MySQL/MariaDB reject dynamic XPath outright, so an Xml-encoded deferred pass is
+            // converted to JSON once, up front, and shredded through the same unchanged JSON row source
+            // BuildMySql already uses for a hand-authored JSON payload.
+            var mySqlTableData = isXml ? MergeScriptHelper.XmlPayloadToJson(tableData) : tableData;
+            return BuildMySql(helper, cmd, schemaOrDb, tableName, mySqlTableData, keyColumns, deferredColumns);
+        }
 
         throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform));
     }
@@ -142,7 +142,7 @@ internal static class DeferredMergeBuilder
     private static string BuildPostgreSql(IMergeScriptHelper helper, IDbCommand cmd,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
         bool disableTriggers, List<string> deferredColumns,
-        bool disableRules, bool updateDescendents, int pgServerVersionNum = 0)
+        bool disableRules, bool updateDescendents, int pgServerVersionNum = 0, bool isXml = false)
     {
         var schema = schemaOrDb.Trim().Trim('"');
         var table = tableName.Trim().Trim('"');
@@ -153,7 +153,10 @@ internal static class DeferredMergeBuilder
         var identAndSeq = helper.GetIdentitySequence(cmd, schemaOrDb, tableName);
 
         var columns = helper.GetColumnMetadata(cmd, schemaOrDb, tableName);
-        var jsonSelectColumns = BuildDeferredJsonColumnsPostgreSql(columns, deferredSet);
+        // B1: the row source is the only thing that differs by encoding — see BuildDeferredXmlColumnsPostgreSql.
+        var jsonSelectColumns = isXml ? null : BuildDeferredJsonColumnsPostgreSql(columns, deferredSet);
+        var xmlColumnList = isXml ? BuildDeferredXmlColumnsPostgreSql(columns, deferredSet) : null;
+        var xmlColumnExprs = isXml ? BuildDeferredXmlColumnExpressionsPostgreSql(columns, deferredSet) : null;
 
         var (disableRuleStmts, enableRuleStmts) = disableRules
             ? helper.GetRuleStatements(cmd, schemaOrDb, tableName, updateDescendents)
@@ -168,11 +171,17 @@ internal static class DeferredMergeBuilder
         if (!string.IsNullOrEmpty(disableRuleStmts)) sb.AppendLine(disableRuleStmts);
         sb.AppendLine("DO $$");
         sb.AppendLine("DECLARE");
-        sb.AppendLine($"  v_json JSON = '{tableData?.Replace("'", "''")}';");
+        // Only the JSON path needs a PL/pgSQL variable — xmltable() takes the payload as a literal argument.
+        if (!isXml) sb.AppendLine($"  v_json JSON = '{tableData?.Replace("'", "''")}';");
         sb.AppendLine("  nextval BIGINT;");
         sb.AppendLine("BEGIN");
         // ONLY belongs BEFORE the table name on ALTER TABLE (matching DELETE FROM ONLY elsewhere).
         if (disableTriggers) sb.AppendLine($"ALTER TABLE {only}\"{schema}\".\"{table}\" DISABLE TRIGGER ALL;");
+
+        var xmlRowSource = isXml
+            ? $@"SELECT {xmlColumnExprs} FROM xmltable('/rows/row' PASSING XMLPARSE(DOCUMENT '{tableData?.Replace("'", "''")}')
+             COLUMNS {xmlColumnList}) AS ""x"""
+            : null;
 
         if (legacyUpsert)
         {
@@ -190,18 +199,32 @@ internal static class DeferredMergeBuilder
             sb.AppendLine($" {insertColumns}");
             sb.AppendLine($"   ){overriding}");
             sb.AppendLine($"  SELECT {selectExprs}");
-            sb.AppendLine("    FROM (WITH my_tables(arr) AS (VALUES(v_json::JSON))");
-            sb.AppendLine($"          SELECT {jsonSelectColumns}");
-            sb.AppendLine("            FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS \"Source\"");
+            if (isXml)
+            {
+                sb.AppendLine($"    FROM ({xmlRowSource}) AS \"Source\"");
+            }
+            else
+            {
+                sb.AppendLine("    FROM (WITH my_tables(arr) AS (VALUES(v_json::JSON))");
+                sb.AppendLine($"          SELECT {jsonSelectColumns}");
+                sb.AppendLine("            FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS \"Source\"");
+            }
             sb.AppendLine($"   WHERE NOT EXISTS (SELECT 1 FROM {only}\"{schema}\".\"{table}\" AS \"Target\" WHERE {matchColumns});");
         }
         else
         {
             sb.AppendLine($"MERGE INTO {only}\"{schema}\".\"{table}\" AS \"Target\"");
             sb.AppendLine("USING (");
-            sb.AppendLine("    WITH my_tables(arr) AS (VALUES(v_json::JSON))");
-            sb.AppendLine($"    SELECT {jsonSelectColumns}");
-            sb.AppendLine("      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem");
+            if (isXml)
+            {
+                sb.AppendLine($"    {xmlRowSource}");
+            }
+            else
+            {
+                sb.AppendLine("    WITH my_tables(arr) AS (VALUES(v_json::JSON))");
+                sb.AppendLine($"    SELECT {jsonSelectColumns}");
+                sb.AppendLine("      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem");
+            }
             sb.AppendLine(") AS \"Source\"");
             sb.AppendLine($"ON {matchColumns}");
             sb.AppendLine();
@@ -262,6 +285,39 @@ internal static class DeferredMergeBuilder
                 return $"decode(elem ->> '{c.Name}', 'base64') AS \"{c.Name}\"";
             return $"(elem ->> '{c.Name}')::{c.JsonParseType} AS \"{c.Name}\"";
         }));
+    }
+
+    // B1: xmltable()'s COLUMNS list for the deferred pass. A deferred column's PATH is the literal string
+    // 'NULL' — an XPath that never matches a node — so xmltable emits SQL NULL typed as the real column
+    // type directly, without needing the JSON path's outer CAST(NULL AS type) wrapper. A non-deferred
+    // geometry/bytea/array column (MergeScriptHelper.RequiresXmlColumnTransformPostgreSql) is extracted as
+    // text instead — its real type is applied in the wrapping SELECT
+    // (BuildDeferredXmlColumnExpressionsPostgreSql), same as the direct MERGE path, so the two cannot drift.
+    private static string BuildDeferredXmlColumnsPostgreSql(List<MergeColumnInfo> columns, HashSet<string> deferredSet)
+    {
+        if (columns == null || columns.Count == 0) return "*";
+
+        return string.Join(",\n         ", columns.Select(c =>
+            deferredSet.Contains(c.Name)
+                ? $"\"{c.Name}\" {c.JsonParseType} PATH 'NULL'"
+                : MergeScriptHelper.RequiresXmlColumnTransformPostgreSql(c)
+                    ? $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'"
+                    : $"\"{c.Name}\" {c.JsonParseType} PATH 'c[@n=\"{c.Name}\"]/text()'"));
+    }
+
+    // B1: the outer SELECT list wrapping xmltable() for the deferred pass. A deferred column is already
+    // correctly typed (NULL cast to its real type) by BuildDeferredXmlColumnsPostgreSql's PATH 'NULL' form
+    // and just passes through; a non-deferred column reuses
+    // MergeScriptHelper.BuildXmlColumnExpressionPostgreSql — the same classification and expressions
+    // (ST_GeomFromText / decode base64 / STRING_TO_ARRAY) the direct MERGE path applies.
+    private static string BuildDeferredXmlColumnExpressionsPostgreSql(List<MergeColumnInfo> columns, HashSet<string> deferredSet)
+    {
+        if (columns == null || columns.Count == 0) return "*";
+
+        return string.Join(",\n         ", columns.Select(c =>
+            deferredSet.Contains(c.Name)
+                ? $"\"x\".\"{c.Name}\" AS \"{c.Name}\""
+                : $"{MergeScriptHelper.BuildXmlColumnExpressionPostgreSql(c, "x")} AS \"{c.Name}\""));
     }
 
     #endregion

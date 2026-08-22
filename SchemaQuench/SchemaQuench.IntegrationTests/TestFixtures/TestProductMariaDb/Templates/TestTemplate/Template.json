@@ -6,5 +6,5 @@
     "ScriptFolders": [],
     "ScriptTokens": {},
     "UpdateFillFactor": true,
-    "Required": true
+    "RequireAtLeastOneTarget": true
 }

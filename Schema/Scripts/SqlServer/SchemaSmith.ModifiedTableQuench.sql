@@ -71,7 +71,61 @@ BEGIN TRY
   BEGIN
     RAISERROR('One or more tables in this quench are already owned by another product', 16, 1) WITH NOWAIT
   END
-  
+
+  -- Filegroup placement (#filegroups): an EXISTING table (NewTable = 0) whose declared filegroup differs
+  -- from where it is currently deployed is a MOVE -- SQL Server rebuild territory (Table Rebuild Triggers,
+  -- deferred to RC2), so this errors naming both rather than silently rebuilding it. Declared NULL means
+  -- "the database's own default filegroup" (matches the extraction/create-side contract), so an ordinary
+  -- table with FileGroup unset -- every existing package -- compares its live default-filegroup placement
+  -- against itself and never trips this check.
+  RAISERROR('Validate declared table filegroup matches deployed', 10, 100) WITH NOWAIT
+  -- A partitioned table's heap/clustered data_space_id names a partition SCHEME, not a filegroup, so it has
+  -- no single filegroup to compare against and ISNULL(...,'') would read as "on no filegroup" and mismatch
+  -- every partitioned table. Resolve the data space once and branch on its type instead.
+  -- An UNSET FileGroup means "SchemaSmith does not manage placement here" -- it is NOT a declaration of
+  -- the default filegroup. Comparing ISNULL(declared, <db default>) made every undeclared object read as
+  -- declaring PRIMARY, so anything already living elsewhere failed its SECOND deploy: a table whose own
+  -- filegroup is declared but whose indexes are not (an index created with no ON clause follows its
+  -- table, not the database default), and any pre-existing DBA placement in a package that never
+  -- mentions filegroups -- which deployed fine before this feature existed. The first deploy always
+  -- succeeded, so a single-deploy test cannot see it.
+  -- Trade-off: clearing a declared FileGroup to move an object back to the default is now a silent
+  -- no-op rather than an error. That is the correct side to err on -- SchemaSmith never moves objects
+  -- between filegroups anyway, so the alternative is failing a package for a move it would refuse.
+  IF OBJECT_ID('tempdb..#DeployedTablePlacement') IS NOT NULL DROP TABLE #DeployedTablePlacement
+  SELECT t.[Schema] + '.' + t.[Name] AS FullName,
+         SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]) AS Declared,
+         t.[FileGroup] AS DeclaredRaw,
+         ds.[name] AS DeployedSpace,
+         ds.[type] AS DeployedSpaceType
+    INTO #DeployedTablePlacement
+    FROM #Tables t WITH (NOLOCK)
+    LEFT JOIN sys.indexes si WITH (NOLOCK)
+      ON si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name]) AND si.index_id IN (0, 1)
+    LEFT JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = si.data_space_id
+   WHERE t.NewTable = 0
+
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType = 'FG' AND Declared <> DeployedSpace)
+  BEGIN
+    DECLARE @v_MoveTable NVARCHAR(1010), @v_MoveDeclared NVARCHAR(500), @v_MoveLive NVARCHAR(500)
+    SELECT TOP 1 @v_MoveTable = FullName, @v_MoveDeclared = Declared, @v_MoveLive = DeployedSpace
+      FROM #DeployedTablePlacement
+     WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType = 'FG' AND Declared <> DeployedSpace
+    RAISERROR('Table %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing table to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_MoveTable, @v_MoveDeclared, @v_MoveLive)
+  END
+
+  -- An explicit FileGroup on a table living on a partition scheme is a placement we cannot honour, so it is
+  -- refused rather than silently ignored. Leaving FileGroup unset on such a table stays supported untouched.
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement
+              WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'FG')
+  BEGIN
+    DECLARE @v_PsTable NVARCHAR(1010), @v_PsDeclared NVARCHAR(500), @v_PsScheme NVARCHAR(500)
+    SELECT TOP 1 @v_PsTable = FullName, @v_PsDeclared = Declared, @v_PsScheme = DeployedSpace
+      FROM #DeployedTablePlacement
+     WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'FG'
+    RAISERROR('Table %s declares filegroup %s, but is currently deployed on partition scheme %s. SchemaSmith cannot place a partitioned table on a single filegroup -- remove the declared FileGroup, or migrate the table manually.', 16, 1, @v_PsTable, @v_PsDeclared, @v_PsScheme)
+  END
+
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropTablesRemovedFromProduct to 0 so the drop block below never runs. Record the tables that
   -- WOULD have been dropped by absence (owned by this product, absent from the package, not already
@@ -122,6 +176,30 @@ BEGIN TRY
 
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
     BEGIN
+      -- Data-loss guard: a partitioned table spreads data across partitions/filegroups that
+      -- DROP TABLE destroys outright. SchemaSmith has no partitioning support -- partitioning
+      -- only happens by hand, typically once a table has grown -- so an ordinary product-owned
+      -- table can be partitioned after deployment and later look like an ordinary
+      -- drop-by-absence candidate. Fail closed before any DDL below, in both live and WhatIf
+      -- mode, mirroring the Always Encrypted swap guard further down this proc. index_id < 2
+      -- (heap/clustered) + COUNT(*) > 1, not a bare scalar subquery: sys.partitions has one row
+      -- per index per partition, and a naive scalar subquery here is exactly what produced
+      -- Msg 512 "Subquery returned more than 1 value" during development.
+      IF EXISTS (SELECT 1
+                   FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                   WHERE (SELECT COUNT(*) FROM sys.partitions p WITH (NOLOCK)
+                            WHERE p.[object_id] = OBJECT_ID(t.[Schema] + '.[' + t.TableName + ']')
+                              AND p.index_id < 2) > 1)
+      BEGIN
+        SELECT @v_SQL = STUFF((SELECT ', ' + t.[Schema] + '.[' + t.TableName + ']'
+                                 FROM #TablesRemovedFromProduct t WITH (NOLOCK)
+                                 WHERE (SELECT COUNT(*) FROM sys.partitions p WITH (NOLOCK)
+                                          WHERE p.[object_id] = OBJECT_ID(t.[Schema] + '.[' + t.TableName + ']')
+                                            AND p.index_id < 2) > 1
+                                 FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+        RAISERROR('Partitioned table(s) removed from the product but NOT dropped: %s. SchemaSmith cannot verify that data spread across partitions can be safely destroyed by DROP TABLE. Drop the table manually after confirming the data is no longer needed, or mark it PreventDrop to keep it in the product permanently.', 16, 1, @v_SQL)
+      END
+
       -- A system-versioned temporal table can't be dropped while versioning is on (error 13552).
       -- Capture each removed temporal table's history table BEFORE turning versioning off
       -- (history_table_id is only valid while versioning is on), then turn versioning off so the
@@ -297,6 +375,22 @@ BEGIN TRY
               END AS [SpecialColumnScript],
          CAST(CASE WHEN cc.[definition] IS NOT NULL OR RTRIM(ISNULL([ComputedExpression], '')) <> ''
                      OR (ident.column_id IS NULL AND [DataType] LIKE '%IDENTITY%') -- switching to identity... requires drop and recreate column
+                     -- A column set cannot be altered in place (Microsoft docs: "The column set column cannot
+                     -- be changed or renamed" -- ALTER COLUMN does not even accept the COLUMN_SET clause), so
+                     -- toggling a column into/out of being one goes through drop+recreate like the identity
+                     -- switch above. The recreate re-adds it via THIS proc's own "Add Missing Physical Columns"
+                     -- step (below), reusing the same #Columns.[ColumnScript] expression the earlier, separate
+                     -- MissingTableAndColumnQuench phase builds new columns from -- but the two phases run as
+                     -- two SEPARATE statements in two SEPARATE proc calls (SchemaSmith.TableQuench.sql:24-25),
+                     -- never batched together. Confirmed (not assumed): a genuinely-new sparse column declared
+                     -- in the SAME quench as a conversion is already physically committed by
+                     -- MissingTableAndColumnQuench.sql's "Add New Physical Columns" step BEFORE this proc even
+                     -- starts, so by the time this drop+recreate's ADD runs, the table already has a sparse
+                     -- column -- SQL Server rejects it ("... because the table already contains one or more
+                     -- sparse columns"), the same restriction a table with sparse columns from a prior deploy
+                     -- hits. This is a real limitation of the two-phase quench design, not pre-validated or
+                     -- special-cased here -- see TableQuench_ColumnSetTests.cs for the covered/uncovered shapes.
+                     OR sc.is_column_set <> [IsColumnSet]
                    THEN 1 ELSE 0 END AS BIT) AS MustDropAndRecreate,
          CAST(CASE WHEN (ident.column_id IS NOT NULL AND [DataType] NOT LIKE '%IDENTITY%'
                         AND RTRIM(ISNULL([ComputedExpression], '')) = '') -- identity removal (data-preserving swap)
@@ -321,17 +415,11 @@ BEGIN TRY
                                                    AND cc.[object_id] = OBJECT_ID(C.[Schema] + '.' + C.[TableName])
     LEFT JOIN #ColMeta cm ON cm.[object_id] = sc.[object_id] AND cm.column_id = sc.column_id
     WHERE t.NewTable = 0
-      AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
-                                           THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
-                                           WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
-                                           THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
-                                           WHEN USER_TYPE = 'DATETIME2'
-                                           THEN  '(' + CONVERT(NVARCHAR(20), DATETIME_PRECISION) + ')'
-                                           WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
-                                           THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
-                                           WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
-                                           THEN  ' ROWGUIDCOL'
-                                           ELSE '' END +
+      AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(UPPER(USER_TYPE) + SchemaSmith.fn_ColumnTypeArguments(USER_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION,
+                                           CASE WHEN sc.xml_collection_id <> 0
+                                                THEN (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id)
+                                                END,
+                                           sc.is_rowguidcol) +
                                       CASE WHEN ident.column_id IS NOT NULL
                                            THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ident.seed_value) + ', ' + CONVERT(NVARCHAR(20), ident.increment_value) + ')' +
                                                 CASE WHEN ident.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
@@ -340,6 +428,7 @@ BEGIN TRY
         OR ISNULL(SchemaSmith.fn_StripParenWrapping(cc.[definition]), '') <> ISNULL(c.ComputedExpression, '')
         OR ISNULL(cc.is_persisted, 0) <> ISNULL(c.[Persisted], 0))
         OR sc.is_sparse <> [Sparse]
+        OR sc.is_column_set <> [IsColumnSet]
         OR ISNULL(cm.ExistingMaskFn, '') COLLATE DATABASE_DEFAULT <> [DataMaskFunction]
         OR ([Collation] <> 'IGNORE' AND ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') <> [Collation])
         OR ISNULL(cm.ExistingEncType, 'NONE') COLLATE DATABASE_DEFAULT <> [EncryptionType]
@@ -455,8 +544,21 @@ BEGIN TRY
          STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                             CASE WHEN fc.type_column_id IS NOT NULL
                                  THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                 ELSE '' END +
+                            -- Full-text LANGUAGE churn: LANGUAGE only when it deviates from the column's own
+                            -- collation-implied default -- stamping every column would churn every existing
+                            -- full-text index once. Must render byte-identical to GenerateTableJson.sql's /
+                            -- GenerateTableXml.sql's extraction and the declared-side parse in
+                            -- ParseTableJsonIntoTempTables.sql / ParseTableXmlIntoTempTables.sql; drift
+                            -- compares these as strings. Mirrors IndexOnlyQuench.sql's live-side build,
+                            -- including the JOIN (not subquery) form -- the two rendering forms must never
+                            -- be allowed to diverge again. NULL collation (non-character column) has no
+                            -- default to compare against, so LANGUAGE is always emitted for it.
+                            CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
+                                 THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                  ELSE '' END
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+            JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
             WHERE fi.[object_id] = fc.[object_id]
             ORDER BY COL_NAME(fc.[object_id], fc.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') AS [Columns],
          FullTextCatalog = '[' + (SELECT c.[name] COLLATE DATABASE_DEFAULT FROM sys.fulltext_catalogs c WITH (NOLOCK) WHERE c.fulltext_catalog_id = fi.fulltext_catalog_id) + ']',
@@ -526,7 +628,13 @@ BEGIN TRY
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS NVARCHAR(500)),
          IsConstraint = CAST(CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
          IsUnique = si.is_unique, IsClustered = CAST(CASE WHEN si.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT), [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
-         IndexScript = 'CREATE ' + 
+         -- Filegroup placement (#filegroups): the index's LIVE filegroup name, for the declared-vs-deployed
+         -- move check below. Deliberately NOT folded into [IndexScript] -- that string drives #IndexChanges'
+         -- drop+recreate detection, and a filegroup difference must ERROR, never trigger a silent rebuild
+         -- via the ordinary "index definition changed" path. NULL when data_space_id isn't a plain filegroup
+         -- (e.g. a partition scheme) -- out of scope, so those indexes never trip the move check.
+         [xFileGroup] = fg.[name],
+         IndexScript = 'CREATE ' +
                        CASE WHEN si.is_unique = 1 THEN 'UNIQUE ' ELSE '' END + 
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
                        CASE WHEN si.[type] IN (5, 6) THEN 'COLUMNSTORE ' ELSE '' END + 
@@ -562,9 +670,36 @@ BEGIN TRY
                                      AND is_disabled = 0
     LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
                                             AND p.index_id = si.index_id
+    LEFT JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
     WHERE t.NewTable = 0
       AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
-    
+
+  -- Filegroup placement (#filegroups): an EXISTING index (found live, still declared by name) whose
+  -- declared filegroup differs from where it is currently deployed is a MOVE -- same "error, don't rebuild"
+  -- contract as the table-level check above. Declared NULL means "the database's own default filegroup",
+  -- so an ordinary index with FileGroup unset never trips this against a live index already on the default.
+  RAISERROR('Validate declared index filegroup matches deployed', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #ExistingIndexes ei WITH (NOLOCK)
+               JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                            AND ei.[xTableName] = i.[TableName]
+                                            AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+               WHERE ei.[xFileGroup] IS NOT NULL AND i.[FileGroup] IS NOT NULL
+                 AND SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]) <> ei.[xFileGroup])
+  BEGIN
+    DECLARE @v_IdxMoveIndex NVARCHAR(1510), @v_IdxMoveDeclared NVARCHAR(500), @v_IdxMoveLive NVARCHAR(500)
+    SELECT TOP 1 @v_IdxMoveIndex = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName],
+                 @v_IdxMoveDeclared = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]),
+                 @v_IdxMoveLive = ei.[xFileGroup]
+      FROM #ExistingIndexes ei WITH (NOLOCK)
+      JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                   AND ei.[xTableName] = i.[TableName]
+                                   AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+      WHERE ei.[xFileGroup] IS NOT NULL AND i.[FileGroup] IS NOT NULL
+        AND SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]) <> ei.[xFileGroup]
+    RAISERROR('Index %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing index to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_IdxMoveIndex, @v_IdxMoveDeclared, @v_IdxMoveLive)
+  END
+
   RAISERROR('Detect Index Changes', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#IndexChanges') IS NOT NULL DROP TABLE #IndexChanges
   SELECT i.[Schema], i.[TableName], i.[IndexName], ei.[IsConstraint], IsUnique = i.[Unique], IsClustered = i.[Clustered]
@@ -1240,7 +1375,7 @@ BEGIN TRY
   IF OBJECT_ID('tempdb..#ExistingCheckConstraints') IS NOT NULL DROP TABLE #ExistingCheckConstraints
   SELECT t.[Schema], [TableName] = t.[Name], [CheckName] = ck.[name], 
          [CheckColumn] = CASE WHEN ck.parent_column_id <> 0 THEN COL_NAME(ck.parent_object_id, ck.parent_column_id) ELSE NULL END,
-         [CheckDefinition] = SchemaSmith.fn_StripParenWrapping(ck.[definition])
+         [CheckDefinition] = SchemaSmith.fn_NormalizeCheckExpression(ck.[definition])
     INTO #ExistingCheckConstraints
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.check_constraints ck WITH (NOLOCK) ON ck.[parent_object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
@@ -1255,7 +1390,7 @@ BEGIN TRY
                                  AND ec.[CheckColumn] = SchemaSmith.fn_StripBracketWrapping(c.[ColumnName])
     WHERE ec.[CheckColumn] IS NOT NULL
       AND ISNULL(c.[CheckExpression], '') <> ''
-      AND ec.[CheckDefinition] <> ISNULL(c.[CheckExpression], '')
+      AND ec.[CheckDefinition] <> SchemaSmith.fn_NormalizeCheckExpression(ISNULL(c.[CheckExpression], ''))
       AND NOT EXISTS (SELECT *
                         FROM #CheckConstraints cc WITH (NOLOCK)
                         WHERE ec.[Schema] = cc.[Schema]
@@ -1269,7 +1404,7 @@ BEGIN TRY
       JOIN #CheckConstraints cc WITH (NOLOCK) ON ec.[Schema] = cc.[Schema]
                                              AND ec.[TableName] = cc.[TableName]
                                              AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName])
-      WHERE ec.[CheckDefinition] <> cc.[Expression]
+      WHERE ec.[CheckDefinition] <> SchemaSmith.fn_NormalizeCheckExpression(cc.[Expression])
   
   RAISERROR('Drop Modified Check Constraints', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +

@@ -27,6 +27,9 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(column.CharacterSet, Is.Null);
             Assert.That(column.Collation, Is.Null);
             Assert.That(column.Comment, Is.Null);
+            Assert.That(column.Invisible, Is.False);
+            Assert.That(column.Srid, Is.Null);
+            Assert.That(column.OnUpdateCurrentTimestamp, Is.Null);
         }
 
         [Test]
@@ -44,7 +47,10 @@ namespace Schema.UnitTests.Domain.MySQL
                 Collation = "utf8mb4_unicode_ci",
                 Comment = "Full name computed column",
                 ShouldApplyExpression = "SELECT 1",
-                OldName = "desc"
+                OldName = "desc",
+                Invisible = true,
+                Srid = 4326,
+                OnUpdateCurrentTimestamp = "CURRENT_TIMESTAMP(3)"
             };
 
             var json = JsonConvert.SerializeObject(column);
@@ -55,6 +61,20 @@ namespace Schema.UnitTests.Domain.MySQL
             Assert.That(deserialized.CharacterSet, Is.EqualTo("utf8mb4"));
             Assert.That(deserialized.Collation, Is.EqualTo("utf8mb4_unicode_ci"));
             Assert.That(deserialized.Comment, Is.EqualTo("Full name computed column"));
+            Assert.That(deserialized.Invisible, Is.True);
+            Assert.That(deserialized.Srid, Is.EqualTo(4326));
+            Assert.That(deserialized.OnUpdateCurrentTimestamp, Is.EqualTo("CURRENT_TIMESTAMP(3)"),
+                "The precision must round-trip rather than collapsing to the bare form.");
+        }
+
+        [Test]
+        public void MySqlColumn_OmitsNullSrid_FromSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Columns":[{"Name":"Id","DataType":"int"}]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL);
+            Assert.That(JsonHelper.SerializeAll(table), Does.Not.Contain("Srid"));
         }
 
         [Test]
@@ -77,7 +97,7 @@ namespace Schema.UnitTests.Domain.MySQL
         public void MySqlColumn_PreservesCheckExpression_ThroughDeserializeAndSerializeAll()
         {
             const string json = """
-            {"Name":"T","Schema":"public","Columns":[
+            {"Name":"T","Columns":[
                 {"Name":"Quantity","DataType":"int","CheckExpression":"Quantity > 0"}
             ]}
             """;
@@ -95,6 +115,30 @@ namespace Schema.UnitTests.Domain.MySQL
             """;
             var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL);
             Assert.That(JsonHelper.SerializeAll(table), Does.Not.Contain("CheckExpression"));
+        }
+
+        [Test]
+        public void MySqlColumn_PreservesOnUpdateCurrentTimestamp_ThroughDeserializeAndSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Columns":[
+                {"Name":"UpdatedAt","DataType":"datetime","OnUpdateCurrentTimestamp":"CURRENT_TIMESTAMP"}
+            ]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL);
+            var roundTripped = JsonHelper.SerializeAll(table);
+            Assert.That(roundTripped, Does.Contain("OnUpdateCurrentTimestamp"));
+            Assert.That(roundTripped, Does.Contain("CURRENT_TIMESTAMP"));
+        }
+
+        [Test]
+        public void MySqlColumn_OmitsNullOnUpdateCurrentTimestamp_FromSerializeAll()
+        {
+            const string json = """
+            {"Name":"T","Columns":[{"Name":"Id","DataType":"int"}]}
+            """;
+            var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL);
+            Assert.That(JsonHelper.SerializeAll(table), Does.Not.Contain("OnUpdateCurrentTimestamp"));
         }
     }
 }

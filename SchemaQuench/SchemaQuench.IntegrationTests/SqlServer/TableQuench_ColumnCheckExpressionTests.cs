@@ -183,15 +183,22 @@ SELECT COUNT(*) FROM sys.check_constraints ck WITH (NOLOCK)
         }
     }
 
-    private static string Json(string table, string checkExpression) => $$"""
+    private static string Json(string table, string checkExpression, string column = "Quantity") => $$"""
 {
     "Schema": "[dbo]",
     "Name": "[{{table}}]",
     "Columns": [
-        { "Name": "[Quantity]", "DataType": "INT", "Nullable": true, "CheckExpression": "{{checkExpression}}" }
+        { "Name": "[{{column}}]", "DataType": "INT", "Nullable": true, "CheckExpression": "{{checkExpression}}" }
     ]
 }
 """;
+
+    private static int ConstraintObjectId(System.Data.IDbCommand cmd, string table)
+    {
+        cmd.CommandText = $@"SELECT ISNULL(MIN(ck.object_id), 0) FROM sys.check_constraints ck
+                              WHERE ck.parent_object_id = OBJECT_ID('dbo.[{table}]')";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
 
     private static void TryDrop(System.Data.IDbCommand cmd, string table)
     {
@@ -202,4 +209,51 @@ SELECT COUNT(*) FROM sys.check_constraints ck WITH (NOLOCK)
         }
         catch { /* best-effort cleanup */ }
     }
+    // Every other test here declares the expression already in SQL Server's canonical form
+    // ("[Quantity]>(0)"), which is why none of them caught this: a user writing the natural
+    // "[Quantity] > 0" -- or resolving a script token to a number -- gets a definition the engine rewrites
+    // to ([Quantity]>(0)), which never matched as text, so the constraint was dropped and re-created on
+    // every deploy. It exits 0 and logs success; the only signal is the same object changing on a re-run.
+    [Test]
+    public void TableQuench_CheckExpressionInNaturalForm_IsIdempotentAcrossRepeatedDeploys()
+    {
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        var table = $"ColChkIdem_{uniqueId}";
+
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            cmd.CommandText = $"CREATE TABLE dbo.[{table}] ([RetentionDays] INT NULL)";
+            cmd.ExecuteNonQuery();
+
+            // Spaces around the operator and a bare literal -- what a token resolves to, and what anyone
+            // would write by hand.
+            var json = Json(table, "[RetentionDays] <= 365", "RetentionDays");
+            RunTableQuenchProc(cmd, json);
+
+            // A re-created constraint gets a new object_id. That is the assumption-free signal: it does not
+            // depend on the change audit recording this particular object type.
+            var firstId = ConstraintObjectId(cmd, table);
+            Assert.That(firstId, Is.Not.Zero, "Setup: the check constraint must exist after the first deploy.");
+
+            for (var pass = 2; pass <= 3; pass++)
+            {
+                RunTableQuenchProc(cmd, json);
+                Assert.That(ConstraintObjectId(cmd, table), Is.EqualTo(firstId),
+                    $"pass {pass}: the constraint was dropped and re-created, so the declared expression is not "
+                    + "comparing equal to the engine's canonical rendering of it");
+            }
+        }
+        finally
+        {
+            TryDrop(cmd, table);
+            conn.Close();
+        }
+    }
+
 }

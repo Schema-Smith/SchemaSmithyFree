@@ -13,25 +13,89 @@ namespace Schema.UnitTests.Utility;
 [TestFixture]
 public class MergeScriptHelperTests
 {
-    #region B1 — XML delivery encoding guard
+    #region B3 — XmlPayloadToJson converter (MySQL/MariaDB XML delivery route)
 
     [Test]
-    public void BuildMergeScript_XmlEncoding_OnNonSqlServer_ThrowsNotSupported()
+    public void XmlPayloadToJson_ProducesTheJsonRowSourceEquivalent()
     {
-        // B1: XML delivery encoding is SQL-Server-only in this slice; a PG/MySQL delivery declaring Xml must
-        // fail loudly (before any catalog access) rather than silently emit a JSON shred.
-        var cmd = Substitute.For<IDbCommand>();
-        Assert.Multiple(() =>
-        {
-            Assert.Throws<NotSupportedException>(() =>
-                MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd, "public", "t", "<rows/>", "\"id\"",
-                    mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
-                    mergeFilter: null, contentEncoding: "Xml"));
-            Assert.Throws<NotSupportedException>(() =>
-                MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd, "db", "t", "<rows/>", "`id`",
-                    mergeUpdate: false, mergeDelete: false, disableTriggers: false, tokenizeScripts: false,
-                    mergeFilter: null, contentEncoding: "Xml"));
-        });
+        var json = MergeScriptHelper.XmlPayloadToJson(
+            "<rows><row><c n=\"code\">A001</c><c n=\"qty\">7</c></row></rows>");
+        Assert.That(json, Is.EqualTo(@"[{""code"":""A001"",""qty"":""7""}]"));
+    }
+
+    [Test]
+    public void XmlPayloadToJson_EscapesJsonMetacharactersFromXmlText()
+    {
+        var json = MergeScriptHelper.XmlPayloadToJson(
+            "<rows><row><c n=\"name\">He said \"hi\" \\ bye</c></row></rows>");
+        Assert.That(json, Does.Contain(@"\""hi\"""));
+        Assert.That(json, Does.Contain(@"\\"));
+    }
+
+    [Test]
+    public void XmlPayloadToJson_PreservesAnAbsentElementAsAbsent()
+    {
+        var json = MergeScriptHelper.XmlPayloadToJson(
+            "<rows><row><c n=\"code\">A001</c></row><row><c n=\"code\">B002</c><c n=\"qty\">3</c></row></rows>");
+        Assert.That(json, Is.EqualTo(@"[{""code"":""A001""},{""code"":""B002"",""qty"":""3""}]"));
+    }
+
+    #endregion
+
+    #region B4b — JsonPayloadToXml converter (non-SQL-Server DeliveryEncoding=Xml extraction)
+
+    [Test]
+    public void JsonPayloadToXml_RoundTripsWithXmlPayloadToJson()
+    {
+        const string json = @"[{""code"":""A001"",""name"":""An \""odd\"" name"",""qty"":""7""}]";
+        var xml = MergeScriptHelper.JsonPayloadToXml(json);
+        Assert.That(MergeScriptHelper.XmlPayloadToJson(xml), Is.EqualTo(json));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_OmitsNullColumnsRatherThanEmittingEmptyElements()
+    {
+        var xml = MergeScriptHelper.JsonPayloadToXml(@"[{""code"":""A001"",""note"":null}]");
+        Assert.That(xml, Does.Not.Contain("note"));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_EscapesXmlMetacharacters()
+    {
+        var xml = MergeScriptHelper.JsonPayloadToXml(@"[{""name"":""a < b & c""}]");
+        Assert.That(MergeScriptHelper.XmlPayloadToJson(xml), Is.EqualTo(@"[{""name"":""a < b & c""}]"));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_BooleanColumn_WritesZeroOrOneNotTrueFalse()
+    {
+        // The shred casts <c> text straight to the target SQL type via XQuery .value(); a literal
+        // "true"/"false" string fails a BIT cast there, so a JSON boolean must normalize to "0"/"1" —
+        // matching exactly what GetTableDataXmlSqlServer itself emits for a bit column.
+        var xml = MergeScriptHelper.JsonPayloadToXml(@"[{""active"":true},{""active"":false}]");
+        Assert.That(xml, Does.Contain("<c n=\"active\">1</c>"));
+        Assert.That(xml, Does.Contain("<c n=\"active\">0</c>"));
+        Assert.That(xml, Does.Not.Contain("true").IgnoreCase);
+        Assert.That(xml, Does.Not.Contain("false").IgnoreCase);
+    }
+
+    [Test]
+    public void JsonPayloadToXml_EmptyOrNullPayload_ReturnsEmptyString()
+    {
+        // Mirrors GetTableDataXmlSqlServer's own "no data" result, so DataTongs' existing
+        // IsNullOrEmpty(tableData) empty-content check recognizes it without any new special-casing.
+        Assert.That(MergeScriptHelper.JsonPayloadToXml(""), Is.EqualTo(""));
+        Assert.That(MergeScriptHelper.JsonPayloadToXml("null"), Is.EqualTo(""));
+        Assert.That(MergeScriptHelper.JsonPayloadToXml("[]"), Is.EqualTo(""));
+    }
+
+    [Test]
+    public void JsonPayloadToXml_MultipleRows_EachRowEmittedSeparately()
+    {
+        var xml = MergeScriptHelper.JsonPayloadToXml(
+            @"[{""code"":""A001""},{""code"":""B002"",""qty"":""3""}]");
+        Assert.That(MergeScriptHelper.XmlPayloadToJson(xml),
+            Is.EqualTo(@"[{""code"":""A001""},{""code"":""B002"",""qty"":""3""}]"));
     }
 
     #endregion
@@ -119,6 +183,51 @@ public class MergeScriptHelperTests
         for (var i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0;
              i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal)) n++;
         return n;
+    }
+
+    #endregion
+
+    #region EncodeTableDisplayName / BuildContentFileToken Tests (#390 — the single shared derivation)
+
+    [Test]
+    public void EncodeTableDisplayName_NonEmptySchema_NotForced_QualifiesWithSchema()
+    {
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("dbo", "Widget", forceUnqualified: false),
+            Is.EqualTo("dbo.Widget"));
+    }
+
+    [Test]
+    public void EncodeTableDisplayName_ForceUnqualified_IgnoresNonEmptySchema()
+    {
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("dbo", "Widget", forceUnqualified: true),
+            Is.EqualTo("Widget"));
+    }
+
+    [Test]
+    public void EncodeTableDisplayName_EmptySchema_UnqualifiesEvenWhenNotForced()
+    {
+        // The bug case: the old per-engine derivation only unqualified when an override was set,
+        // so an empty schema outside schema-template mode produced a leading-dot mismatch
+        // ("." + tableName) against the (correctly unqualified) filename. Empty schema must
+        // unqualify on its own, independent of forceUnqualified.
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("", "Widget", forceUnqualified: false),
+            Is.EqualTo("Widget"));
+    }
+
+    [Test]
+    public void EncodeTableDisplayName_NameNeedingEncoding_EncodesBothSchemaAndTable()
+    {
+        // The other bug case: the old per-engine derivation embedded raw names, disagreeing with
+        // the FileNameEncoder-encoded filename DataTongs writes.
+        Assert.That(MergeScriptHelper.EncodeTableDisplayName("Sales:Q1", "Report:Detail", forceUnqualified: false),
+            Is.EqualTo("Sales%3AQ1.Report%3ADetail"));
+    }
+
+    [Test]
+    public void BuildContentFileToken_AppendsTabledataSuffix()
+    {
+        Assert.That(MergeScriptHelper.BuildContentFileToken("dbo", "Widget", forceUnqualified: false),
+            Is.EqualTo("dbo.Widget.tabledata"));
     }
 
     #endregion
@@ -357,6 +466,29 @@ public class MergeScriptHelperTests
             tokenizeScripts: true, mergeFilter: null);
 
         Assert.That(result, Does.Contain("{{dbo.TestTable.tabledata}}"));
+    }
+
+    [Test]
+    public void BuildMergeScript_SqlServer_WithTokenize_ContentFileTokenParameter_IsEmbeddedVerbatim()
+    {
+        // #390 "derive the key once": DataTongs computes the key alongside the .tabledata filename
+        // and passes it here; BuildMergeScript must embed exactly that value, not re-derive it.
+        var cmd = CreateSqlServerMockCommand(
+            jsonSelectCols: "[Id]",
+            needsIdentity: false,
+            jsonColDefs: "           [Id] INT",
+            insertCols: "        [Id]",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.SqlServer, cmd,
+            "dbo", "TestTable", "[{\"Id\":1}]", "[Id]",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            contentFileToken: "Sales%3ATestTable.tabledata");
+
+        Assert.That(result, Does.Contain("{{Sales%3ATestTable.tabledata}}"));
+        Assert.That(result, Does.Not.Contain("{{dbo.TestTable.tabledata}}"),
+            "The passed-in token must win over the platform's own derivation.");
     }
 
     [Test]
@@ -644,6 +776,151 @@ public class MergeScriptHelperTests
         Assert.That(result, Does.Contain("{{public.test_table.tabledata}}"));
     }
 
+    [Test]
+    public void BuildMergeScript_PostgreSql_WithTokenize_ContentFileTokenParameter_IsEmbeddedVerbatim()
+    {
+        var cmd = CreatePostgreSqlMockCommand(
+            identAndSeq: null,
+            jsonColDefs: "(elem ->> 'id')::int4 AS \"id\"",
+            insertCols: "        \"id\"",
+            updateCols: null);
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.PostgreSQL, cmd,
+            "public", "test_table", "[]", "\"id\"",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            contentFileToken: "Sales%3Atest_table.tabledata");
+
+        Assert.That(result, Does.Contain("{{Sales%3Atest_table.tabledata}}"));
+        Assert.That(result, Does.Not.Contain("{{public.test_table.tabledata}}"),
+            "The passed-in token must win over the platform's own derivation.");
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_EmitsXmltableRowSource()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: "\"Name\"", insertCols: "        \"Id\",\r\n        \"Name\"");
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Widget",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Name\">Anvil</c></row></rows>",
+            "\"Id\"", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("xmltable("), "PostgreSQL shreds XML with xmltable.");
+            Assert.That(script, Does.Contain("'/rows/row'"), "Row path matches the SQL Server shred.");
+            // JSON_ARRAY_ELEMENTS is the real PostgreSQL JSON row-source function (verified in
+            // GetJsonColumnDefinitionsPostgreSql's caller) — an XML delivery must not fall back to it.
+            Assert.That(script, Does.Not.Contain("JSON_ARRAY_ELEMENTS"),
+                "An XML delivery must not fall back to the JSON row source.");
+        });
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_NoLongerThrows()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: "\"Name\"", insertCols: "        \"Id\",\r\n        \"Name\"");
+
+        Assert.DoesNotThrow(() => MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Widget",
+            "<rows><row><c n=\"Id\">1</c></row></rows>",
+            "\"Id\"", mergeUpdate: true, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml"));
+    }
+
+    // B1 fix round 1: geometry/bytea/array columns must get the same per-type transform the JSON row
+    // source applies (GetJsonColumnDefinitionsPostgreSql) — a plain PATH-typed cast is wrong for all
+    // three (WKT text isn't a valid geometry literal, base64 text isn't valid bytea escape/hex format,
+    // and the '*,*'-delimited text isn't a valid PG array literal). These three tests are the coverage
+    // that was missing when the gap shipped.
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_GeometryColumn_UsesStGeomFromText()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: null, insertCols: "        \"Id\",\r\n        \"Geom\"",
+            metadataColumns:
+            [
+                ("Id", "integer", "int4", "pg_catalog", null, false),
+                ("Geom", "USER-DEFINED", "geometry", "public", null, true)
+            ]);
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Shapes",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Geom\">POINT(1 2)</c></row></rows>",
+            "\"Id\"", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("\"Geom\" text PATH"),
+                "A geometry column must be shredded as text, not cast directly by xmltable's COLUMNS typing.");
+            Assert.That(script, Does.Contain("ST_GeomFromText(\"x\".\"Geom\")"),
+                "Same function GetJsonColumnDefinitionsPostgreSql applies to the JSON row source.");
+        });
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_ByteaColumn_UsesDecodeBase64()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: null, insertCols: "        \"Id\",\r\n        \"Data\"",
+            metadataColumns:
+            [
+                ("Id", "integer", "int4", "pg_catalog", null, false),
+                ("Data", "bytea", "bytea", "pg_catalog", null, true)
+            ]);
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Blobs",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Data\">QQ==</c></row></rows>",
+            "\"Id\"", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("\"Data\" text PATH"),
+                "A bytea column must be shredded as text — casting base64 text straight to bytea corrupts the bytes.");
+            Assert.That(script, Does.Contain("decode(\"x\".\"Data\", 'base64')"),
+                "Same function GetJsonColumnDefinitionsPostgreSql applies to the JSON row source.");
+        });
+    }
+
+    [Test]
+    public void BuildMergeScript_PostgreSql_XmlEncoding_ArrayColumn_UsesStringToArrayWithSameDelimiter()
+    {
+        var cmd = CreatePostgreSqlXmlMockCommand(
+            unsupportedComments: null, identAndSeq: null,
+            updateCols: null, insertCols: "        \"Id\",\r\n        \"Tags\"",
+            metadataColumns:
+            [
+                ("Id", "integer", "int4", "pg_catalog", null, false),
+                ("Tags", "ARRAY", "_int4", "pg_catalog", null, true)
+            ]);
+
+        var script = MergeScriptHelper.BuildMergeScript(
+            Platform.PostgreSQL, cmd, "public", "Tagged",
+            "<rows><row><c n=\"Id\">1</c><c n=\"Tags\">1*,*2</c></row></rows>",
+            "\"Id\"", mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("\"Tags\" text PATH"),
+                "An array column must be shredded as text — the '*,*'-delimited form is not a PG array literal.");
+            Assert.That(script,
+                Does.Contain("STRING_TO_ARRAY(\"x\".\"Tags\", '*,*', '*NULL_VALUE_REPRESENTATION*')::_int4"),
+                "Same function, delimiter, and NULL sentinel GetJsonColumnDefinitionsPostgreSql applies to the JSON row source.");
+        });
+    }
+
     #endregion
 
     #region BuildMergeScript - MySQL Tests
@@ -665,6 +942,47 @@ public class MergeScriptHelperTests
         Assert.That(result, Does.Contain("INSERT IGNORE INTO `testdb`.`testtable`"));
         Assert.That(result, Does.Contain("JSON_TABLE("));
         Assert.That(result, Does.Not.Contain("ON DUPLICATE KEY"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_WithTokenize_UsesTokenPlaceholder()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[{\"id\":1}]", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null);
+
+        // MySQL has no schema concept — always unqualified, unlike SQL Server/PostgreSQL's default.
+        Assert.That(result, Does.Contain("{{testtable.tabledata}}"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_WithTokenize_ContentFileTokenParameter_IsEmbeddedVerbatim()
+    {
+        // #390 "derive the key once": DataTongs computes the key alongside the .tabledata filename
+        // (through FileNameEncoder) and passes it here; BuildMergeScript must embed exactly that
+        // value rather than its own always-unqualified, always-unencoded derivation.
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable", "[{\"id\":1}]", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: true, mergeFilter: null,
+            contentFileToken: "Sales%3AWidget.tabledata");
+
+        Assert.That(result, Does.Contain("{{Sales%3AWidget.tabledata}}"));
+        Assert.That(result, Does.Not.Contain("{{testtable.tabledata}}"),
+            "The passed-in token must win over the platform's own derivation.");
     }
 
     [Test]
@@ -996,6 +1314,126 @@ public class MergeScriptHelperTests
         // Non-JSON column should use simple assignment
         Assert.That(result, Does.Contain("`name` = VALUES(`name`)"));
         Assert.That(result, Does.Not.Contain("IF(JSON_EXTRACT(VALUES(`name`)"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_XmlEncoding_NoLongerThrows()
+    {
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null)
+        });
+
+        Assert.DoesNotThrow(() => MergeScriptHelper.BuildMergeScript(
+            Platform.MySQL, cmd, "testdb", "testtable",
+            "<rows><row><c n=\"id\">1</c></row></rows>", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml"));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_XmlEncoding_RoutesThroughTheUnchangedJsonRowSource()
+    {
+        // B3: dynamic XPath is rejected outright on MySQL/MariaDB, so an Xml delivery is converted to
+        // JSON in C# and shredded exactly the way a hand-authored JSON payload would be — same
+        // JSON_TABLE row source, no XML-specific shred path exists on this platform.
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+        });
+
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable",
+            "<rows><row><c n=\"id\">1</c><c n=\"name\">Anvil</c></row></rows>", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.That(result, Does.Contain("JSON_TABLE("));
+        Assert.That(result, Does.Not.Contain("xmltable"));
+        Assert.That(result, Does.Not.Contain(".nodes("));
+    }
+
+    [Test]
+    public void BuildMergeScript_MySql_XmlEncoding_ExcludesColumnsNotInTheConvertedData()
+    {
+        // Column filtering must key off the JSON produced by the conversion, not the original XML —
+        // otherwise a column present in the XML but dropped by the converter (or vice versa) could
+        // desync the filter from what is actually being shredded.
+        var cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+        {
+            new("id", "int", null, 10L, 0L, null, "int", "", null),
+            new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null),
+            new("rowguid", "char", 36L, null, null, null, "char(36)", "", null)
+        });
+
+        // The payload only carries "id" and "name" — "rowguid" must be excluded.
+        var result = MergeScriptHelper.BuildMergeScript(Platform.MySQL, cmd,
+            "testdb", "testtable",
+            "<rows><row><c n=\"id\">1</c><c n=\"name\">Anvil</c></row></rows>", "`id`",
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml");
+
+        Assert.That(result, Does.Contain("`id`"));
+        Assert.That(result, Does.Contain("`name`"));
+        Assert.That(result, Does.Not.Contain("`rowguid`"));
+    }
+
+    #endregion
+
+    #region B4 — Xml content encoding is a four-engine parity feature, not a SQL-Server-only one
+
+    // The guard that made Xml a SqlServer-only ContentEncoding was removed once B3 gave MySQL/MariaDB a
+    // route (XML->JSON conversion in C#, since both reject dynamic XPath). This test is the parity check:
+    // every platform must accept ContentEncoding: "Xml" without throwing. MariaDb is exercised directly
+    // (not just inferred from MySQL coverage above) because BuildMergeScript takes it as its own enum
+    // member — GetBasePlatform() collapses it to MySQL internally, so the MySQL mock command is reused.
+    [TestCase(Platform.SqlServer)]
+    [TestCase(Platform.PostgreSQL)]
+    [TestCase(Platform.MySQL)]
+    [TestCase(Platform.MariaDb)]
+    public void BuildMergeScript_XmlEncoding_IsSupportedOnEveryEngine(Platform platform)
+    {
+        const string xmlPayload = "<rows><row><c n=\"id\">1</c><c n=\"name\">Anvil</c></row></rows>";
+
+        IDbCommand cmd;
+        string schemaOrDb;
+        string keyColumns;
+
+        switch (platform)
+        {
+            case Platform.SqlServer:
+                cmd = CreateSqlServerXmlMockCommand(
+                    unsupportedComments: null,
+                    insertCols: "        [id],\n        [name]");
+                schemaOrDb = "dbo";
+                keyColumns = "[id]";
+                break;
+            case Platform.PostgreSQL:
+                cmd = CreatePostgreSqlXmlMockCommand(
+                    unsupportedComments: null, identAndSeq: null, updateCols: null,
+                    insertCols: "        \"id\",\n        \"name\"");
+                schemaOrDb = "public";
+                keyColumns = "\"id\"";
+                break;
+            case Platform.MySQL:
+            case Platform.MariaDb:
+                cmd = CreateMySqlMockCommand(new MySqlColumnDef[]
+                {
+                    new("id", "int", null, 10L, 0L, null, "int", "", null),
+                    new("name", "varchar", 100L, null, null, null, "varchar(100)", "", null)
+                });
+                schemaOrDb = "testdb";
+                keyColumns = "`id`";
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unhandled platform in parity test.");
+        }
+
+        Assert.DoesNotThrow(() => MergeScriptHelper.BuildMergeScript(
+            platform, cmd, schemaOrDb, "Widget", xmlPayload, keyColumns,
+            mergeUpdate: false, mergeDelete: false, disableTriggers: false,
+            tokenizeScripts: false, mergeFilter: null, contentEncoding: "Xml"));
     }
 
     #endregion
@@ -1567,6 +2005,70 @@ public class MergeScriptHelperTests
     }
 
     /// <summary>
+    /// SQL Server mock command for the XML row-source path (isXml=true). Unlike CreateSqlServerMockCommand,
+    /// the XML path reads column metadata via GetColumnMetadataSqlServer (ExecuteReader) instead of the
+    /// STRING_AGG-based GetJsonSelectColumnsSqlServer, so it needs its own ExecuteReader stub. ExecuteScalar
+    /// order (mergeUpdate=false, needsIdentity=false, matching every call site here): 1. cliff-check for
+    /// GetUnsupportedColumnComments, 2. GetUnsupportedColumnComments, 3. NeedsIdentityInsertSqlServer,
+    /// 4. cliff-check for GetInsertColumns, 5. GetInsertColumns. ExecuteReader: GetColumnMetadataSqlServer
+    /// (called once, from BuildXmlShredSelectColumnsSqlServer) returns a fixed Id int / Name varchar(100) shape.
+    /// </summary>
+    private static IDbCommand CreateSqlServerXmlMockCommand(string unsupportedComments, string insertCols)
+    {
+        var cmd = Substitute.For<IDbCommand>();
+        var sequence = new List<object>
+        {
+            0,                    // cliff-check for GetUnsupportedColumnComments
+            unsupportedComments,  // GetUnsupportedColumnComments
+            false,                // NeedsIdentityInsertSqlServer
+            0,                    // cliff-check for GetInsertColumns
+            insertCols            // GetInsertColumns
+        };
+
+        var callCount = 0;
+        cmd.ExecuteScalar().Returns(ci =>
+        {
+            var idx = callCount++;
+            return idx < sequence.Count ? sequence[idx] : null;
+        });
+
+        cmd.ExecuteReader().Returns(ci => CreateSqlServerColumnMetadataReader());
+        return cmd;
+    }
+
+    private static IDataReader CreateSqlServerColumnMetadataReader(
+        (string Name, string DataType, string UserType, int? MaxLen, bool IsGeometry, bool IsBinary, bool IsXml)[] columns = null)
+    {
+        columns ??= new (string Name, string DataType, string UserType, int? MaxLen, bool IsGeometry, bool IsBinary, bool IsXml)[]
+        {
+            ("id", "int", "INT", null, false, false, false),
+            ("name", "varchar", "VARCHAR", 100, false, false, false)
+        };
+
+        var reader = Substitute.For<IDataReader>();
+        var idx = -1;
+        reader.Read().Returns(ci => { idx++; return idx < columns.Length; });
+        reader.GetString(0).Returns(ci => columns[idx].Name);
+        reader.GetString(1).Returns(ci => columns[idx].DataType);
+        reader.GetString(2).Returns(ci => columns[idx].UserType);
+        reader.IsDBNull(3).Returns(ci => columns[idx].MaxLen is null);
+        reader.GetValue(3).Returns(ci => (object)columns[idx].MaxLen ?? DBNull.Value);
+        reader.IsDBNull(4).Returns(true);
+        reader.GetValue(4).Returns(DBNull.Value);
+        reader.IsDBNull(5).Returns(true);
+        reader.GetValue(5).Returns(DBNull.Value);
+        reader.IsDBNull(6).Returns(true);
+        reader.GetValue(6).Returns(DBNull.Value);
+        reader.GetString(7).Returns("YES");
+        reader.GetValue(8).Returns(false);
+        reader.GetValue(9).Returns(false);
+        reader.GetValue(10).Returns(ci => columns[idx].IsGeometry);
+        reader.GetValue(11).Returns(ci => columns[idx].IsBinary);
+        reader.GetValue(12).Returns(ci => columns[idx].IsXml);
+        return reader;
+    }
+
+    /// <summary>
     /// Wires an NSubstitute command to record every parameter bound through
     /// CreateParameter()/Parameters.Add(...). Identifiers are now passed as parameters rather
     /// than interpolated into the SQL, so tests assert on the captured (name, value) pairs.
@@ -1636,6 +2138,75 @@ public class MergeScriptHelperTests
         cmd.ExecuteReader().Returns(reader);
 
         return cmd;
+    }
+
+    /// <summary>
+    /// PostgreSQL mock command for the XML row-source path. Unlike CreatePostgreSqlMockCommand, the XML
+    /// path reads column metadata via GetColumnMetadataPostgreSql (ExecuteReader) instead of the
+    /// STRING_AGG-based jsonColumns query, so ExecuteReader is routed by CommandText rather than fed a
+    /// single fixed reader. ExecuteScalar order: 1. GetUnsupportedColumnComments,
+    /// 2. GetIdentityColumnAndSequence, 3. GetUpdateColumns, 4. GetXmlColumns (both mergeUpdate-only),
+    /// 5. GetInsertColumns. ExecuteReader: GetColumnMetadataPostgreSql (its pg_attribute/attidentity join
+    /// distinguishes it) returns metadataColumns (defaults to a fixed Id int4 / Name varchar(100) shape —
+    /// see CreatePostgreSqlColumnMetadataReader); GetJsonColumnsPostgreSql (mergeUpdate-only) returns no
+    /// rows (no json/jsonb-typed target columns).
+    /// </summary>
+    private static IDbCommand CreatePostgreSqlXmlMockCommand(
+        string unsupportedComments, string identAndSeq, string updateCols, string insertCols,
+        (string Name, string DataType, string UdtName, string UdtSchema, int? MaxLen, bool Nullable)[] metadataColumns = null)
+    {
+        var cmd = Substitute.For<IDbCommand>();
+        var sequence = new List<object> { unsupportedComments, identAndSeq };
+        if (updateCols != null)
+        {
+            sequence.Add(updateCols);
+            sequence.Add(null); // GetXmlColumnsPostgreSql: no xml-typed target columns
+        }
+        sequence.Add(insertCols);
+
+        var callCount = 0;
+        cmd.ExecuteScalar().Returns(ci =>
+        {
+            var idx = callCount++;
+            return idx < sequence.Count ? sequence[idx] : null;
+        });
+
+        cmd.ExecuteReader().Returns(ci =>
+            cmd.CommandText != null && cmd.CommandText.Contains("attidentity")
+                ? CreatePostgreSqlColumnMetadataReader(metadataColumns)
+                : CreateEmptyMockReader());
+
+        return cmd;
+    }
+
+    private static IDataReader CreatePostgreSqlColumnMetadataReader(
+        (string Name, string DataType, string UdtName, string UdtSchema, int? MaxLen, bool Nullable)[] columns = null)
+    {
+        columns ??= new (string Name, string DataType, string UdtName, string UdtSchema, int? MaxLen, bool Nullable)[]
+        {
+            ("Id", "integer", "int4", "pg_catalog", null, false),
+            ("Name", "character varying", "varchar", "pg_catalog", 100, true)
+        };
+
+        var reader = Substitute.For<IDataReader>();
+        var idx = -1;
+        reader.Read().Returns(ci => { idx++; return idx < columns.Length; });
+        reader.GetString(0).Returns(ci => columns[idx].Name);
+        reader.GetString(1).Returns(ci => columns[idx].DataType);
+        reader.GetString(2).Returns(ci => columns[idx].UdtName);
+        reader.GetString(3).Returns(ci => columns[idx].UdtSchema);
+        reader.IsDBNull(4).Returns(ci => columns[idx].MaxLen is null);
+        reader.GetValue(4).Returns(ci => (object)columns[idx].MaxLen ?? DBNull.Value);
+        reader.IsDBNull(5).Returns(true);
+        reader.GetValue(5).Returns(DBNull.Value);
+        reader.IsDBNull(6).Returns(true);
+        reader.GetValue(6).Returns(DBNull.Value);
+        reader.IsDBNull(7).Returns(true);
+        reader.GetValue(7).Returns(DBNull.Value);
+        reader.GetString(8).Returns(ci => columns[idx].Nullable ? "YES" : "NO");
+        reader.GetValue(9).Returns(false);
+        reader.GetValue(10).Returns(false);
+        return reader;
     }
 
     #endregion

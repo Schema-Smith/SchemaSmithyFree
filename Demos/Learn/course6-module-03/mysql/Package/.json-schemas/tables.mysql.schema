@@ -54,6 +54,15 @@
           "CheckExpression": {
             "type": "string"
           },
+          "Invisible": {
+            "type": "boolean"
+          },
+          "Srid": {
+            "type": "integer"
+          },
+          "OnUpdateCurrentTimestamp": {
+            "type": "string"
+          },
           "Extensions": {
             "type": "object",
             "required": [

@@ -230,12 +230,35 @@ public abstract class SchemaTongsSharedTests
             var config = SetupConfig();
             config["ShouldCast:Events"] = "true";
 
+            string disabledScript = null;
+            string enabledScript = null;
+            string slaveDisabledScript = null;
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEvent.sql")), Arg.Any<string>()))
+                .Do(ci => disabledScript = ci.ArgAt<string>(1));
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventEnabled.sql")), Arg.Any<string>()))
+                .Do(ci => enabledScript = ci.ArgAt<string>(1));
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventSlaveDisabled.sql")), Arg.Any<string>()))
+                .Do(ci => slaveDisabledScript = ci.ArgAt<string>(1));
+
             var tongs = new SchemaTongs(Platform);
             tongs.CastTemplate();
 
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEvent.sql")), Arg.Any<string>());
+            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventEnabled.sql")), Arg.Any<string>());
+            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventSlaveDisabled.sql")), Arg.Any<string>());
+
+            // INFORMATION_SCHEMA.EVENTS.STATUS reports ENABLED/DISABLED/SLAVESIDE_DISABLED, but
+            // CREATE EVENT only accepts the ENABLE/DISABLE/DISABLE ON SLAVE keywords; assert the
+            // emitted DDL keyword, not just that extraction produced a file (#391). Each check is
+            // anchored on both sides ("\n  " before, "\n" after) so a catalog value that merely
+            // contains the keyword as a substring - DISABLED contains DISABLE, SLAVESIDE_DISABLED
+            // contains DISABLE - cannot pass: the anchor after the keyword only matches on the
+            // fixed-form DDL text, not the catalog spelling.
+            Assert.That(disabledScript, Does.Contain("\n  DISABLE\n"));
+            Assert.That(enabledScript, Does.Contain("\n  ENABLE\n"));
+            Assert.That(slaveDisabledScript, Does.Contain("\n  DISABLE ON SLAVE\n"));
 
             config["ShouldCast:Events"] = "false";
             FactoryContainer.Clear();
@@ -400,6 +423,30 @@ CREATE EVENT TestEvent
   ON COMPLETION PRESERVE
   DISABLE
   COMMENT 'Test event for integration tests'
+  DO BEGIN
+    SET @dummy = 1;
+  END;";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $@"
+DROP EVENT IF EXISTS TestEventEnabled;
+CREATE EVENT TestEventEnabled
+  ON SCHEDULE EVERY 1 DAY
+  ON COMPLETION PRESERVE
+  ENABLE
+  COMMENT 'Enabled test event for integration tests'
+  DO BEGIN
+    SET @dummy = 1;
+  END;";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $@"
+DROP EVENT IF EXISTS TestEventSlaveDisabled;
+CREATE EVENT TestEventSlaveDisabled
+  ON SCHEDULE EVERY 1 DAY
+  ON COMPLETION PRESERVE
+  DISABLE ON SLAVE
+  COMMENT 'Slave-disabled test event for integration tests'
   DO BEGIN
     SET @dummy = 1;
   END;";

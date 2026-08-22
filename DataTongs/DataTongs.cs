@@ -87,25 +87,22 @@ public class DataTongs
         var updateDescendents = config[SettingsKeys.ShouldCast.UpdateDescendents]?.ToLower() != "false";
 
         var outputContents = config[SettingsKeys.ShouldCast.OutputContentFiles]?.ToLower() != "false";
-        var outputScripts = config[SettingsKeys.ShouldCast.OutputScripts]?.ToLower() != "false";
+        var outputScriptsSetting = config[SettingsKeys.ShouldCast.OutputScripts];
+        var outputScripts = outputScriptsSetting?.ToLower() != "false";
         var contentsPath = config[SettingsKeys.ContentPath] ?? ".";
         var scriptPath = config[SettingsKeys.ScriptPath] ?? ".";
         var configureDataDelivery = CommandLineParser.ContainsSwitch("ConfigureDataDelivery")
             || config[SettingsKeys.ShouldCast.ConfigureDataDelivery]?.ToLower() == "true";
 
-        // B1 slice 3: a global switch to extract delivery content in the XML encoding (default Json),
-        // so a package can be authored to deploy on a legacy-compatibility SQL Server (below the
-        // OPENJSON cliff). SQL Server only — XML delivery deploys there alone; on the other engines
-        // JSON shreds at every supported version, so an Xml request is warned-and-ignored.
+        // B1 slice 3 / B4b: a global switch to extract delivery content in the XML encoding (default
+        // Json) — most commonly so a package can be authored to deploy on a legacy-compatibility SQL
+        // Server (below the OPENJSON cliff), but the .tabledata file is also a standalone artifact useful
+        // to any downstream consumer that wants XML rather than JSON. SQL Server extracts XML natively;
+        // every other engine extracts its normal JSON and converts it to the identical delivery XML shape
+        // in C# (MergeScriptHelper.JsonPayloadToXml), so the file is the same dialect on every engine.
         var deliveryEncoding = CommandLineParser.ValueOfSwitch("DeliveryEncoding", null)
             ?? config[SettingsKeys.ShouldCast.DeliveryEncoding] ?? "Json";
         var extractAsXml = deliveryEncoding.Trim().Equals("Xml", StringComparison.OrdinalIgnoreCase);
-        if (extractAsXml && _platform.GetBasePlatform() != Platform.SqlServer)
-        {
-            _progressLog.Warn($"  DeliveryEncoding=Xml is SQL Server only (XML data delivery deploys on SQL Server alone; " +
-                              $"{_platform} shreds its JSON delivery at every supported version). Extracting as JSON.");
-            extractAsXml = false;
-        }
         var templatePath = CommandLineParser.ValueOfSwitch("TemplatePath", null)
             ?? config[SettingsKeys.TemplatePath];
         var sourceSchemaSetting = config[SettingsKeys.Source.Schema] ?? "";
@@ -122,6 +119,20 @@ public class DataTongs
                 _progressLog.Warn($"  ContentPath '{contentsPath}' is not within a template (no Template.json found walking up). Disabling ConfigureDataDelivery.");
                 configureDataDelivery = false;
             }
+        }
+
+        // Delivery takes precedence over merge scripts, per table (Paul, 2026-08-20): a table whose
+        // data delivery got configured this run does not also get a merge script — the two are two
+        // delivery paths for the same rows. One statement here, not a line per table; the per-table
+        // "Updated data delivery config" log already covers the detail. Distinguish a defaulted
+        // OutputScripts (quiet Info) from an explicit OutputScripts=true alongside ConfigureDataDelivery
+        // (Warn — contradictory config that is still overridden, just loudly).
+        if (configureDataDelivery && outputScripts)
+        {
+            if (outputScriptsSetting == null)
+                _progressLog.Info("  ConfigureDataDelivery is enabled; merge scripts will be suppressed for tables where data delivery is configured (OutputScripts defaulted).");
+            else
+                _progressLog.Warn("  ConfigureDataDelivery is enabled and OutputScripts is explicitly true — merge scripts will still be suppressed for tables where data delivery is configured. Delivery takes precedence.");
         }
 
         // Two-signal schema-template mode detection (design §8.1):
@@ -238,9 +249,15 @@ public class DataTongs
                 var displayName = FormatTableName(tableSchema, tableName);
                 // Schema-template mode emits unqualified filenames: Customers.tabledata,
                 // Populate Customers.sql. The merge script's content-file token must match.
-                var encodedDisplayName = schemaTemplateMode || string.IsNullOrEmpty(tableSchema)
-                    ? FileNameEncoder.Encode(tableName)
-                    : $"{FileNameEncoder.Encode(tableSchema)}.{FileNameEncoder.Encode(tableName)}";
+                // #390: MergeScriptHelper.EncodeTableDisplayName is the ONE place this is derived —
+                // its own per-engine fallback (when contentFileToken isn't supplied) calls the same
+                // function, so filename and token can never disagree, here or in any other caller.
+                var encodedDisplayName = MergeScriptHelper.EncodeTableDisplayName(tableSchema, tableName, schemaTemplateMode);
+
+                // Single source of truth for both the .tabledata filename stem and the {{key}} token
+                // embedded in the merge script: MergeScriptHelper embeds this value verbatim instead
+                // of re-deriving it, so filename and token can never disagree.
+                var contentFileToken = $"{encodedDisplayName}.tabledata";
 
                 if (!TableExists(cmd, querySchema, tableName))
                 {
@@ -270,14 +287,17 @@ public class DataTongs
 
                 string tableData;
                 string selectColumns = null;
-                if (extractAsXml)
+                if (extractAsXml && _platform.GetBasePlatform() == Platform.SqlServer)
                 {
-                    // SQL-Server-only (guarded above). Emits the delivery XML shape the legacy-tier shred consumes.
+                    // Native producer — emits the delivery XML shape the legacy-tier shred consumes directly.
                     tableData = GetTableDataXmlSqlServer(cmd, tableSchema, tableName, orderColumns, table.Filter);
                 }
                 else if (_platform.GetBasePlatform() == Platform.MySQL)
                 {
                     tableData = GetTableDataJsonMySql(cmd, querySchema, tableName, orderColumns, table.Filter, table.SelectColumns);
+                    // B4b: no native XML producer on this engine — convert the same JSON the Json path would
+                    // have extracted into the delivery XML shape, so the file deploys through the SQL Server shred.
+                    if (extractAsXml) tableData = MergeScriptHelper.JsonPayloadToXml(tableData);
                 }
                 else
                 {
@@ -285,6 +305,7 @@ public class DataTongs
                         ? GetSelectColumns(cmd, querySchema, tableName)
                         : table.SelectColumns;
                     tableData = GetTableDataJson(cmd, selectColumns, tableSchema, tableName, orderColumns, table.Filter);
+                    if (extractAsXml) tableData = MergeScriptHelper.JsonPayloadToXml(tableData);
                 }
 
                 // Empty markers differ by encoding: XML delivery shreds <rows></rows>, JSON shreds [].
@@ -295,7 +316,7 @@ public class DataTongs
 
                     if (outputContents)
                     {
-                        var emptyContentFilePath = Path.Combine(contentsPath, $"{encodedDisplayName}.tabledata");
+                        var emptyContentFilePath = Path.Join(contentsPath, contentFileToken);
                         _progressLog.Info($"    Writing contents to : {emptyContentFilePath}");
                         FileWrapper.GetFromFactory().WriteAllText(emptyContentFilePath, emptyContent);
                     }
@@ -312,14 +333,15 @@ public class DataTongs
                 string contentFilePath = null;
                 if (outputContents)
                 {
-                    contentFilePath = Path.Combine(contentsPath, $"{encodedDisplayName}.tabledata");
+                    contentFilePath = Path.Join(contentsPath, contentFileToken);
                     _progressLog.Info($"    Writing contents to : {contentFilePath}");
                     FileWrapper.GetFromFactory().WriteAllText(contentFilePath, tableData);
                 }
 
+                var deliveryConfigured = false;
                 if (configureDataDelivery && !string.IsNullOrWhiteSpace(templatePath) && !string.IsNullOrEmpty(contentFilePath))
                 {
-                    DataDeliveryConfiguratorImpl.GetFromFactory().Configure(new DataDeliveryConfiguratorContext
+                    deliveryConfigured = DataDeliveryConfiguratorImpl.GetFromFactory().Configure(new DataDeliveryConfiguratorContext
                     {
                         TemplateRootPath = templatePath,
                         Platform = _platform.ToString(),
@@ -341,7 +363,9 @@ public class DataTongs
                     });
                 }
 
-                if (!outputScripts) { tablesProcessed++; continue; }
+                // Delivery takes precedence, per table: a table whose delivery was actually configured
+                // this run does not also get a merge script (§ "Delivery takes precedence" above).
+                if (!outputScripts || deliveryConfigured) { tablesProcessed++; continue; }
 
                 if (mySqlServerVersionNum is > 0 and < 800)
                 {
@@ -351,11 +375,36 @@ public class DataTongs
                     continue;
                 }
 
+                // #390: wire the ScriptTokens entry the merge script's {{key}} placeholder needs to
+                // resolve, using the exact key already embedded in the filename (contentFileToken) —
+                // never re-derived. Requires both a written content file and a known template root;
+                // without either, the token cannot be wired and the script will fail to deploy.
+                if (tokenizeScripts)
+                {
+                    if (!string.IsNullOrEmpty(contentFilePath) && !string.IsNullOrWhiteSpace(templatePath))
+                    {
+                        MergeScriptTokenConfiguratorImpl.GetFromFactory().Configure(new MergeScriptTokenConfiguratorContext
+                        {
+                            TemplateRootPath = templatePath,
+                            TokenKey = contentFileToken,
+                            ContentFilePath = contentFilePath,
+                            ProgressLog = _progressLog.Info,
+                            WarningLog = _progressLog.Warn
+                        });
+                    }
+                    else
+                    {
+                        _progressLog.Warn($"    Cannot wire the '{{{{{contentFileToken}}}}}' token for {tableName}: " +
+                                          $"{(string.IsNullOrWhiteSpace(templatePath) ? $"ContentPath '{contentsPath}' is not within a template" : "OutputContentFiles is disabled, so no .tabledata file was written")}. " +
+                                          "The generated script will not deploy without manual ScriptTokens configuration.");
+                    }
+                }
+
                 var destSchemaOverride = schemaTemplateMode ? "{{SchemaName}}" : null;
                 var mergeSQL = MergeScriptHelper.BuildMergeScript(_platform, cmd, querySchema, tableName, tableData,
                     keyColumns, mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, table.Filter,
                     disableRules, updateDescendents, destSchemaOverride, pgServerVersionNum, mySqlServerVersionNum,
-                    extractAsXml ? "Xml" : "Json");
+                    extractAsXml ? "Xml" : "Json", contentFileToken);
 
                 var scriptFilePath = Path.Combine(scriptPath, $"Populate {encodedDisplayName}.sql");
                 _progressLog.Info($"    Writing merge script to : {scriptFilePath}");
@@ -749,7 +798,8 @@ ORDER BY {orderColumns};";
     // omitted (absent <c> = NULL). Per-type text forms match the shred's typed .value(): bit -> 0/1,
     // datetime -> ISO-8601 (style 126), geometry -> WKT + a <c n="Col.STSrid"> companion, binary ->
     // base64 (xs:base64Binary decodes it in-shred). The whole shape was verified round-trip on a live
-    // instance. SQL Server only — XML delivery deploys on SQL Server alone (see the caller's guard).
+    // instance. Native producer used only when extracting FROM SQL Server (see the caller's platform
+    // check) — every other engine extracts JSON and converts via MergeScriptHelper.JsonPayloadToXml (B4b).
     internal string GetTableDataXmlSqlServer(IDbCommand cmd, string tableSchema, string tableName,
         string orderColumns, string filter)
     {

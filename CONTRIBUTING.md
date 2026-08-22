@@ -31,7 +31,7 @@ The CLI tools target:
 
 - **.NET:** `net10.0` (single target, set in `Directory.Build.props`)
 - **IDEs:** Visual Studio 2026 or JetBrains Rider (both with full ReSharper / built-in analyzer support)
-- **Databases tested in CI:** SQL Server (`2019-CU27-ubuntu-20.04`), PostgreSQL 15+, MySQL 8.x. Should work on any version at compatibility level 130+ (SQL Server) or the documented minimum for the platform.
+- **Databases tested in CI:** SQL Server (`2019-CU27-ubuntu-20.04`), PostgreSQL 12 through latest, MySQL 5.7 and 8.0, MariaDB 10.2 / 10.6 / 11.4. The supported floors are SQL Server 2008 (database compatibility level 100+), PostgreSQL 12, MySQL 5.7, and MariaDB 10.2.
 
 ### Running Locally with Docker
 
@@ -72,7 +72,7 @@ The solution is organized around the three end-user CLI tools and the shared sch
 - **`SchemaQuench/`** — CLI that deploys a schema package to a target database.
 - **`SchemaTongs/`** — CLI that extracts a live database into a clean, source-controllable schema package.
 - **`DataTongs/`** — CLI that captures and deploys reference data alongside schema.
-- **`Schema/`** — Shared library containing the domain model (`Domain/`, with platform-specific `Domain.SqlServer/`, `Domain.PostgreSQL/`, `Domain.MySQL/` projections), data access (`DataAccess/`), data delivery (`Delivery/`), checkpointing, isolators, embedded SQL scripts (`Scripts/`), and utilities. Published as the `SchemaSmith.Schema` NuGet package for downstream consumers.
+- **`Schema/`** — Shared library containing the domain model (`Domain/`, with platform-specific `Domain.SqlServer/`, `Domain.PostgreSQL/`, `Domain.MySQL/` projections), data access (`DataAccess/`), data delivery (`Delivery/`), checkpointing, isolators, embedded SQL scripts (`Scripts/`), and utilities. Referenced by the four CLI projects in this repository.
 - **`TestProducts/`** — Schema packages used by integration tests as fixtures.
 - **`Demos/`** — Demo schema packages and Docker compose stack for local development.
 - **`packaging/`** — Release packaging assets (install scripts, package templates, etc.).

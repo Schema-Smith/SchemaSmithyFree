@@ -48,6 +48,6 @@ public static class Program
     {
         Console.WriteLine("  --ConfigureDataDelivery          Write data delivery configuration into table JSON files after extraction.");
         Console.WriteLine("  --TemplatePath:<path>            Template root (containing Tables/) used by --ConfigureDataDelivery.");
-        Console.WriteLine("  --DeliveryEncoding:<encoding>    Content-file encoding for extracted data: Json (default) | Xml. Xml is SQL Server only.");
+        Console.WriteLine("  --DeliveryEncoding:<encoding>    Content-file encoding for extracted data: Json (default) | Xml. Both work on every source engine.");
     }
 }

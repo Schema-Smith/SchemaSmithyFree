@@ -2,7 +2,9 @@
 
 using System.Data;
 using System;
+using System.Linq;
 using Schema.DataAccess;
+using Schema.Delivery;
 using Schema.Domain;
 using Schema.Domain.SqlServer;
 using Schema.Utility;
@@ -384,7 +386,10 @@ EXEC sys.sp_addextendedproperty 'Description', 'An integer column', 'SCHEMA', [d
         AssertColumnProperties(result.Columns[22], "MySmallint", "SMALLINT", true, null, null);
         AssertColumnProperties(result.Columns[23], "MyString", "VARCHAR(200)", true, null, null);
         AssertColumnProperties(result.Columns[24], "MySysname", "SYSNAME", true, null, null);
-        AssertColumnProperties(result.Columns[25], "MyTime", "TIME", true, null, null);
+        // Bare TIME defaults to precision 7 -- extraction always renders it explicitly (matching
+        // DATETIME2's established behavior and the canonicalization ParseTableJsonIntoTempTables.sql
+        // applies to a bare-declared JSON DataType in this family), so it round-trips as TIME(7).
+        AssertColumnProperties(result.Columns[25], "MyTime", "TIME(7)", true, null, null);
         AssertColumnProperties(result.Columns[26], "MyTinyint", "TINYINT", true, null, null);
         AssertColumnProperties(result.Columns[27], "MyUniqueIdentifier", "UNIQUEIDENTIFIER", true, null, null);
         AssertColumnProperties(result.Columns[28], "MyXml", "XML", true, null, null);
@@ -420,6 +425,73 @@ EXEC sys.sp_addextendedproperty 'Description', 'An integer column', 'SCHEMA', [d
         Assert.That(sqlColumn.Nullable, Is.EqualTo(nullable), $"Nullability of {name}");
         Assert.That(sqlColumn.Default, Is.EqualTo(defaultValue), $"Default of {name}");
         Assert.That(sqlColumn.CheckExpression, Is.EqualTo(check), $"Check of {name}");
+    }
+
+    [Test]
+    public void ShouldPreserveFractionalSecondsPrecisionOnExtraction()
+    {
+        // TIME(3)/DATETIMEOFFSET(3) precision-loss regression: the extraction CASE covered DATETIME2
+        // among the fractional-seconds-precision types but not its two siblings, so both extracted as
+        // the bare type name — the declared precision was silently dropped. Bare TIME (default
+        // precision 7) is covered by ShouldGenerateCorrectJsonForColumns; this locks in the explicit-
+        // precision case for both siblings.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.TestFractionalSecondsPrecision (
+    MyInt INT NOT NULL PRIMARY KEY,
+    MyTimePrecise TIME(3) NULL,
+    MyDateTimeOffsetPrecise DATETIMEOFFSET(3) NULL
+)
+";
+        cmd.ExecuteNonQuery();
+        var result = GenerateTable(cmd, "dbo", "TestFractionalSecondsPrecision");
+        Assert.That(result.Columns, Has.Count.EqualTo(3));
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "[MyDateTimeOffsetPrecise]"), "MyDateTimeOffsetPrecise", "DATETIMEOFFSET(3)", true, null, null);
+        AssertColumnProperties(result.Columns.Single(c => c.Name == "[MyTimePrecise]"), "MyTimePrecise", "TIME(3)", true, null, null);
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldExtractColumnSetAndSparseColumns()
+    {
+        // Backlog E3: COLUMN_SET FOR ALL_SPARSE_COLUMNS aggregates a table's sparse columns into one
+        // updatable XML column. Both halves of the pairing must round-trip: the sparse columns keep
+        // Sparse:true, and the aggregator gets the new IsColumnSet:true (not folded into DataType, so it
+        // extracts as plain "XML" -- see SqlServerColumn.IsColumnSet).
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.TestColumnSet (
+    MyInt INT NOT NULL PRIMARY KEY,
+    SparseA VARCHAR(20) SPARSE NULL,
+    SparseB INT SPARSE NULL,
+    Aggregated XML COLUMN_SET FOR ALL_SPARSE_COLUMNS
+)
+";
+        cmd.ExecuteNonQuery();
+        var result = GenerateTable(cmd, "dbo", "TestColumnSet");
+        Assert.That(result.Columns, Has.Count.EqualTo(4));
+
+        var sparseA = (SqlServerColumn)result.Columns.Single(c => c.Name == "[SparseA]");
+        var sparseB = (SqlServerColumn)result.Columns.Single(c => c.Name == "[SparseB]");
+        var aggregated = (SqlServerColumn)result.Columns.Single(c => c.Name == "[Aggregated]");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sparseA.Sparse, Is.True, "SparseA must extract as Sparse:true");
+            Assert.That(sparseA.IsColumnSet, Is.False, "SparseA is not itself the column set");
+            Assert.That(sparseB.Sparse, Is.True, "SparseB must extract as Sparse:true");
+            Assert.That(sparseB.IsColumnSet, Is.False, "SparseB is not itself the column set");
+            Assert.That(aggregated.IsColumnSet, Is.True, "Aggregated must extract as IsColumnSet:true");
+            Assert.That(aggregated.Sparse, Is.False, "the column set column is not itself sparse");
+            Assert.That(aggregated.DataType, Is.EqualTo("XML"), "the column set is an XML column -- COLUMN_SET FOR ALL_SPARSE_COLUMNS is carried by IsColumnSet, not folded into DataType");
+        });
+
+        conn.Close();
     }
 
     [Test]
@@ -542,6 +614,41 @@ EXEC sys.sp_addextendedproperty 'PreventDrop', 'true', 'SCHEMA', [dbo], 'TABLE',
     }
 
     [Test]
+    public void ShouldRoundTripAuthoredDataDeliveryAcrossReExtraction()
+    {
+        // DataDelivery is authored config, not catalog metadata -- GenerateTableJson never emits it
+        // (the vestigial table-level ContentFile/MergeType this proc used to emit instead were the
+        // strict-deserialization bug; they are now gone). Re-extraction must still deserialize the raw
+        // proc output cleanly, then let ImportTableHelper carry a previously-authored DataDelivery block
+        // forward onto the freshly-extracted table.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "CREATE TABLE dbo.DeliveryRoundTripTable (Id INT NOT NULL PRIMARY KEY)";
+        cmd.ExecuteNonQuery();
+
+        var extracted = GenerateTable(cmd, "dbo", "DeliveryRoundTripTable");
+        Assert.That(extracted.DataDelivery, Is.Empty, "Raw extraction carries no DataDelivery -- it is authored config, not catalog metadata.");
+
+        var original = new SqlServerTable
+        {
+            Name = "DeliveryRoundTripTable",
+            DataDelivery = [new DataDelivery { ContentFile = "DeliveryRoundTripTable.tabledata", MergeType = "Insert/Update" }]
+        };
+
+        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(extracted, original, _ => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(extracted.DataDelivery, Has.Count.EqualTo(1));
+            Assert.That(extracted.DataDelivery[0].ContentFile, Is.EqualTo("DeliveryRoundTripTable.tabledata"));
+            Assert.That(extracted.DataDelivery[0].MergeType, Is.EqualTo("Insert/Update"));
+        });
+
+        conn.Close();
+    }
+
+    [Test]
     public void ShouldRoundTripSystemVersionedTemporalTable()
     {
         // #369: SchemaTongs extraction previously emitted no IsTemporal for a system-versioned (temporal)
@@ -579,6 +686,212 @@ CREATE TABLE dbo.MyTemporalExtract (
         conn.Close();
     }
 
+    [Test]
+    public void ShouldRoundTripNonDefaultHistoryTableNameAndRetentionPeriod()
+    {
+        // #depth-gap: extraction previously emitted only IsTemporal, so a temporal table with a
+        // non-default history table (name/schema) or an explicit retention policy silently lost both on
+        // an extract -> re-deploy round trip -- a retention policy disappearing is compliance-shaped loss.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE SCHEMA history
+CREATE TABLE dbo.MyCustomHistTemporal (
+    Id INT NOT NULL,
+    Somedata VARCHAR(500) NOT NULL,
+    ValidFrom DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    ValidTo DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    CONSTRAINT [PK_MyCustomHistTemporal] PRIMARY KEY NONCLUSTERED (Id),
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)
+) WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = history.MyCustomHistTemporal_Archive, HISTORY_RETENTION_PERIOD = 5 YEARS))
+";
+        cmd.ExecuteNonQuery();
+
+        var result = GenerateTable(cmd, "dbo", "MyCustomHistTemporal");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsTemporal, Is.True);
+            Assert.That(result.HistoryTableSchema, Is.EqualTo("[history]"), "a non-default history schema must round-trip");
+            Assert.That(result.HistoryTableName, Is.EqualTo("[MyCustomHistTemporal_Archive]"), "a non-default history table name must round-trip");
+            Assert.That(result.HistoryRetentionPeriod, Is.EqualTo("5 YEARS"), "an explicit retention period must round-trip");
+        });
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldOmitHistoryTableNameAndRetentionWhenDefault()
+    {
+        // Default-named history table + no explicit retention (SQL Server's own INFINITE default) must
+        // stay minimal, matching how IsTemporal/PreventDrop/etc. only emit when non-default -- otherwise
+        // every existing temporal table's extracted JSON would grow two new properties for nothing.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.MyDefaultHistTemporal (
+    Id INT NOT NULL,
+    Somedata VARCHAR(500) NOT NULL,
+    ValidFrom DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    ValidTo DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    CONSTRAINT [PK_MyDefaultHistTemporal] PRIMARY KEY NONCLUSTERED (Id),
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)
+) WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.MyDefaultHistTemporal_Hist))
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "dbo", "MyDefaultHistTemporal");
+        var result = GenerateTable(cmd, "dbo", "MyDefaultHistTemporal");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsTemporal, Is.True);
+            Assert.That(result.HistoryTableSchema, Is.Null);
+            Assert.That(result.HistoryTableName, Is.Null);
+            Assert.That(result.HistoryRetentionPeriod, Is.Null);
+            Assert.That(json, Does.Not.Contain("HistoryTableSchema"));
+            Assert.That(json, Does.Not.Contain("HistoryTableName"));
+            Assert.That(json, Does.Not.Contain("HistoryRetentionPeriod"));
+        });
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldRoundTripFileGroupOnTableAndIndex()
+    {
+        // #filegroups: a table can sit on a different filegroup from its own indexes (the normal reason
+        // to use them at all), so this exercises the table-level and both index-level (default vs.
+        // non-default) FileGroup extraction independently. Indexes extract ORDER BY [Name], so
+        // "IX_..." sorts before "PK_..." -- Indexes[0]/[1] below are deterministic, matching this file's
+        // established convention (see ShouldFlagMixedCompressionAcrossPartitionsRatherThanPickOne).
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.MyFileGroupTable (
+    Id INT NOT NULL,
+    Somedata VARCHAR(50) NULL,
+    CONSTRAINT [PK_MyFileGroupTable] PRIMARY KEY NONCLUSTERED (Id) ON [PRIMARY]
+) ON [FG_Test]
+
+CREATE NONCLUSTERED INDEX [IX_MyFileGroupTable_Somedata] ON dbo.MyFileGroupTable (Somedata) ON [FG_Test]
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "dbo", "MyFileGroupTable");
+        var result = GenerateTable(cmd, "dbo", "MyFileGroupTable");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.FileGroup, Is.EqualTo("[FG_Test]"), "the table's own (heap) data lives on the non-default filegroup");
+            Assert.That(result.Indexes, Has.Count.EqualTo(2));
+            Assert.That(((SqlServerIndex)result.Indexes[0]).FileGroup, Is.EqualTo("[FG_Test]"), "IX_MyFileGroupTable_Somedata was explicitly placed on the non-default filegroup");
+            Assert.That(((SqlServerIndex)result.Indexes[1]).FileGroup, Is.Null, "PK_MyFileGroupTable was explicitly placed on PRIMARY (the default) -- must stay minimal, not emit '[PRIMARY]'");
+        });
+        Assert.That(json, Does.Not.Contain("PRIMARY"), "the default-filegroup PK index must not carry a FileGroup value anywhere in the extracted JSON");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldOmitFileGroupWhenDefault()
+    {
+        // Backward-compat guard: an ordinary table/index with no explicit filegroup placement (every
+        // existing package) must extract exactly as before this feature -- no FileGroup key anywhere.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.MyOrdinaryPlacementTable (
+    Id INT NOT NULL,
+    Somedata VARCHAR(50) NULL,
+    CONSTRAINT [PK_MyOrdinaryPlacementTable] PRIMARY KEY CLUSTERED (Id)
+)
+";
+        cmd.ExecuteNonQuery();
+
+        var json = GenerateTableJson(cmd, "dbo", "MyOrdinaryPlacementTable");
+        var result = GenerateTable(cmd, "dbo", "MyOrdinaryPlacementTable");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.FileGroup, Is.Null);
+            Assert.That(((SqlServerIndex)result.Indexes[0]).FileGroup, Is.Null);
+            Assert.That(json, Does.Not.Contain("\"FileGroup\""));
+        });
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldGenerateCorrectJsonForPartitionedTable()
+    {
+        // Repro for the extraction-abort defect (task C1-0b): sys.partitions is one row PER PARTITION,
+        // so the prior scalar CompressionType subquery raised Msg 512 ("Subquery returned more than
+        // one value") the moment a table had more than one partition -- independent of what compression
+        // was actually set. Four partitions (matching the field repro) with the default uniform NONE
+        // compression must extract cleanly and round-trip a single shared value, not throw.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE PARTITION FUNCTION PF_TestPartitioned (INT) AS RANGE LEFT FOR VALUES (100, 200, 300)
+CREATE PARTITION SCHEME PS_TestPartitioned AS PARTITION PF_TestPartitioned ALL TO ([PRIMARY])
+
+CREATE TABLE dbo.TestPartitioned (
+    Id INT NOT NULL,
+    Val VARCHAR(50) NULL,
+    CONSTRAINT PK_TestPartitioned PRIMARY KEY CLUSTERED (Id) ON PS_TestPartitioned(Id)
+) ON PS_TestPartitioned(Id)
+";
+        cmd.ExecuteNonQuery();
+
+        var result = GenerateTable(cmd, "dbo", "TestPartitioned");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.CompressionType, Is.EqualTo("NONE"), "a partitioned table with uniform per-partition compression must round-trip the shared value, not throw or emit MIXED");
+        Assert.That(result.Indexes, Has.Count.EqualTo(1));
+        Assert.That(((SqlServerIndex)result.Indexes[0]).CompressionType, Is.EqualTo("NONE"));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void ShouldFlagMixedCompressionAcrossPartitionsRatherThanPickOne()
+    {
+        // Compression can legitimately differ per partition. Extraction must not silently report one
+        // partition's value as if it applied to the whole table/index -- that would mislead a reader of
+        // the extracted JSON into thinking a mixed table is uniformly compressed. 'MIXED' is a sentinel
+        // deliberately outside ModifiedTableQuench.sql's managed NONE/ROW/PAGE/COLUMNSTORE* set, so
+        // re-deploy leaves an already-mixed table alone instead of flattening it to one compression.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE PARTITION FUNCTION PF_TestPartitionedMixed (INT) AS RANGE LEFT FOR VALUES (100, 200, 300)
+CREATE PARTITION SCHEME PS_TestPartitionedMixed AS PARTITION PF_TestPartitionedMixed ALL TO ([PRIMARY])
+
+CREATE TABLE dbo.TestPartitionedMixed (
+    Id INT NOT NULL,
+    Val VARCHAR(50) NULL,
+    CONSTRAINT PK_TestPartitionedMixed PRIMARY KEY CLUSTERED (Id) ON PS_TestPartitionedMixed(Id)
+) ON PS_TestPartitionedMixed(Id)
+
+ALTER TABLE dbo.TestPartitionedMixed REBUILD PARTITION = 2 WITH (DATA_COMPRESSION = PAGE)
+";
+        cmd.ExecuteNonQuery();
+
+        var result = GenerateTable(cmd, "dbo", "TestPartitionedMixed");
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.CompressionType, Is.EqualTo("MIXED"));
+        Assert.That(result.Indexes, Has.Count.EqualTo(1));
+        Assert.That(((SqlServerIndex)result.Indexes[0]).CompressionType, Is.EqualTo("MIXED"));
+
+        conn.Close();
+    }
+
     private string GenerateTableJson(IDbCommand cmd, string schema, string table)
     {
         cmd.CommandText = $"EXEC [SchemaSmith].GenerateTableJson @p_Schema = '{schema}', @p_Table = '{table}'";
@@ -611,6 +924,16 @@ CREATE TABLE dbo.MyTemporalExtract (
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @$"
 CREATE DATABASE [{_integrationDb}];
+";
+        cmd.ExecuteNonQuery();
+
+        // A non-default filegroup for the #filegroups extraction round-trip tests below. Reuses the
+        // new database's own data-file directory rather than assuming one, so this works regardless of
+        // where the SQL Server instance's default data path is.
+        cmd.CommandText = @$"
+DECLARE @v_DataPath NVARCHAR(500) = (SELECT LEFT(physical_name, LEN(physical_name) - CHARINDEX('\', REVERSE(physical_name)) + 1) FROM sys.master_files WHERE database_id = DB_ID('{_integrationDb}') AND file_id = 1);
+ALTER DATABASE [{_integrationDb}] ADD FILEGROUP [FG_Test];
+EXEC('ALTER DATABASE [{_integrationDb}] ADD FILE (NAME = ''FG_Test_1'', FILENAME = ''' + @v_DataPath + 'FG_Test_1.ndf'') TO FILEGROUP [FG_Test]');
 ";
         cmd.ExecuteNonQuery();
 

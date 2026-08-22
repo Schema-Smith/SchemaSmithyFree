@@ -95,10 +95,10 @@ namespace Schema.Domain
         /// this template and the run continues to subsequent templates.
         /// <para>This property replaces the prior <c>Required</c> field. The rename is a breaking
         /// change in the v2.1 Schema Templates release; user-authored <c>Template.json</c> files
-        /// that still use <c>Required</c> need to be updated. Unknown JSON properties are ignored
-        /// at deserialization, so an unmigrated file silently picks up the default <c>true</c> —
-        /// which surfaces as a clear "no targets discovered" error rather than a silent
-        /// behavior change. See the CHANGELOG for migration guidance.</para>
+        /// that still use <c>Required</c> need to be updated. Deserialization now rejects unknown
+        /// package properties, so an unmigrated file fails to load with an error naming
+        /// <c>Required</c> and the offending file — pointing straight at the rename — rather than
+        /// the old silent default-<c>true</c> fallback. See the CHANGELOG for migration guidance.</para>
         /// </summary>
         [JsonProperty(Order = 9)]
         [DefaultValue(true)]
@@ -176,6 +176,26 @@ namespace Schema.Domain
 
         [JsonIgnore]
         public List<Table> Tables { get; } = [];
+
+        /// <summary>
+        /// Component files (tables / materialized views / indexed views) that
+        /// <see cref="InstanceLoad"/> skipped because they could not be parsed as JSON at all —
+        /// populated only when loading with <c>tolerateComponentLoadErrors: true</c>. PackageLoader
+        /// turns each entry into an SS-LOAD-001 finding so a skip is always reported, never silently
+        /// dropped. Empty on the deploy path, which never tolerates a component load failure.
+        /// </summary>
+        [JsonIgnore]
+        public List<ComponentLoadError> ComponentLoadErrors { get; } = [];
+
+        /// <summary>
+        /// File-token resolution failures collected instead of thrown when <see cref="Load"/> is
+        /// called with <c>tolerateFileTokenErrors: true</c> (--Validate's lenient load). Empty on
+        /// the deploy path, which never tolerates an unresolvable file token. Mirrors
+        /// <see cref="Product.FileTokenErrors"/> — PackageLoader turns each entry into an
+        /// SS-TOK-004 finding.
+        /// </summary>
+        [JsonIgnore]
+        public List<FileTokenError> FileTokenErrors { get; } = [];
 
         [JsonIgnore]
         public string TableSchema { get; set; } = "";
@@ -344,17 +364,51 @@ namespace Schema.Domain
             return clone;
         }
 
+        // Single source of truth for the "Templates/<name>/Template.json" on-disk convention —
+        // Load() uses it to locate the file, and PackageLoader uses it independently (via
+        // TryLoadTemplate) to name a template whose Load() call threw before ever returning a
+        // Template instance, so there's no loaded object to read FilePath off of.
+        internal static string GetTemplateFilePath(Product product, string templateName)
+        {
+            var schemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
+            return Path.Join(schemaPackagePath, "Templates", templateName, "Template.json");
+        }
+
         /// <summary>
         /// Loads a Template and its Tables from disk using platform-aware deserialization.
         /// Resolves file tokens, merges product + template tokens, loads scripts, and applies token replacement.
         /// </summary>
-        public static Template Load(string templateName, Product product)
+        /// <param name="tolerateComponentLoadErrors">
+        /// Deploy path leaves this false: a Table/Materialized-View/Indexed-View that fails to
+        /// deserialize (e.g. a misnamed property) throws immediately and aborts the whole load —
+        /// deploying against a package the tool couldn't fully parse is the risk that behavior
+        /// closes. `--Validate` (PackageLoader) passes true: its contract is to report every
+        /// problem it can find in one pass, so a single bad component file is excluded from the
+        /// loaded template instead of taking down every other finding the run would otherwise
+        /// produce. JsonSchemaCheck re-validates every package file straight off disk regardless
+        /// of what loaded here, so the excluded file's precise SS-JSON-001 finding still surfaces.
+        /// </param>
+        /// <param name="tolerateFileTokenErrors">
+        /// Deploy path leaves this false: an unresolvable <c>ScriptTokens</c> file reference
+        /// throws immediately and aborts the template load, same as always. `--Validate`
+        /// (PackageLoader) passes true so the failure lands in <see cref="FileTokenErrors"/> as a
+        /// reportable finding instead of aborting the load.
+        /// </param>
+        /// <param name="missingMemberHandling">
+        /// Deploy path leaves this at the default (Error) so an unrecognised Template.json property
+        /// still stops the run. `--Validate` (PackageLoader) passes Ignore instead — the same
+        /// leniency <see cref="Product.Load"/> already has for Product.json — so a parseable-but-
+        /// wrong Template.json loads fully (full check coverage for that template) instead of
+        /// excluding the whole template over one bad property; JsonSchemaCheck independently
+        /// re-validates the raw file and reports the precise SS-JSON-001 regardless of which way
+        /// this loaded.
+        /// </param>
+        public static Template Load(string templateName, Product product, bool tolerateComponentLoadErrors = false, bool tolerateFileTokenErrors = false, MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error)
         {
-            var schemaPackagePath = Path.GetDirectoryName(product.FilePath) ?? "";
-            var templatePath = Path.Combine(schemaPackagePath, "Templates", templateName);
-            var templateFilePath = Path.Combine(templatePath, "Template.json");
+            var templateFilePath = GetTemplateFilePath(product, templateName);
+            var templatePath = Path.GetDirectoryName(templateFilePath) ?? "";
 
-            var template = JsonHelper.TemplateLoad(templateFilePath, product.Platform);
+            var template = JsonHelper.TemplateLoad(templateFilePath, product.Platform, missingMemberHandling);
             template.FilePath = templateFilePath;
             template.Product = product;
 
@@ -368,7 +422,9 @@ namespace Schema.Domain
             foreach (var token in template.ScriptTokens)
                 template.LoggableTokens.Add(token.Key, token.Value);
 
-            TokenHelper.ResolveFileTokens(template.ScriptTokens, templatePath, product.Platform);
+            var tokenErrors = TokenHelper.ResolveFileTokens(template.ScriptTokens, templatePath, product.Platform, tolerateFileTokenErrors);
+            foreach (var tokenError in tokenErrors)
+                template.FileTokenErrors.Add(new FileTokenError(template.FilePath, tokenError));
 
             // Merge template and product script tokens — template takes precedence
             var scriptTokens = template.ScriptTokens
@@ -376,7 +432,7 @@ namespace Schema.Domain
                     .Where(st => !template.ScriptTokens.ContainsKey(st.Key)))
                 .ToDictionary(k => k.Key, v => v.Value);
 
-            template.InstanceLoad(scriptTokens, product.Platform);
+            template.InstanceLoad(scriptTokens, product.Platform, tolerateComponentLoadErrors);
 
             // Resolve the per-token TokenScope map so the SchemaQuench dispatcher can decide which
             // <*Query*> tokens need re-running per schema iteration vs. once per DB. Idempotent on
@@ -414,12 +470,12 @@ namespace Schema.Domain
             SchemaIdentificationScript = null;
         }
 
-        private void InstanceLoad(Dictionary<string, string> scriptTokens, Platform platform)
+        private void InstanceLoad(Dictionary<string, string> scriptTokens, Platform platform, bool tolerateComponentLoadErrors)
         {
-            LoadTables(platform);
+            LoadTables(platform, tolerateComponentLoadErrors);
             MigrateMySqlColumnCheckExpressionAlias(platform);
-            LoadMaterializedViews(platform);
-            LoadIndexedViews(platform);
+            LoadMaterializedViews(platform, tolerateComponentLoadErrors);
+            LoadIndexedViews(platform, tolerateComponentLoadErrors);
 
             // Run schema-default resolution BEFORE any token serialization touches the in-memory
             // Tables / MaterializedViews / IndexedViews. The resolver fills unset Schema fields
@@ -516,6 +572,9 @@ namespace Schema.Domain
         /// <see cref="ScriptObjectType.FullTextStopLists"/> — database-scoped on SQL Server; fanning out
         /// per tenant would either fail with duplicate-name errors or create N copies that all fire on
         /// every DDL change.</item>
+        /// <item><see cref="ScriptObjectType.Publications"/> — <c>CREATE PUBLICATION</c> has no schema
+        /// qualifier on PostgreSQL, so it is database-scoped for the same reason as the SQL Server trio
+        /// above.</item>
         /// </list>
         /// MySQL has no schema-template path; the parameter is ignored on MySQL.
         /// </summary>
@@ -534,6 +593,12 @@ namespace Schema.Domain
                     new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
                     new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Views },
                     new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
+                    // Sequences (2012) and Synonyms (2005) are SCRIPTED-ONLY like every other folder here —
+                    // no drop-by-absence for scripted types (see DatabaseQuench), so wiring them in is additive.
+                    // Sequences post-dates the 2008 floor; gate a target below 2012 via the folder's own
+                    // ShouldApplyExpression (the existing per-folder gate mechanism) rather than a new check here.
+                    new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences },
+                    new TemplateFolder { FolderPath = "Synonyms", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Synonyms },
                     new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
                     new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers },
                     new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
@@ -546,12 +611,18 @@ namespace Schema.Domain
                     new TemplateFolder { FolderPath = "Domain Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.DomainTypes },
                     new TemplateFolder { FolderPath = "Enum Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.EnumTypes },
                     new TemplateFolder { FolderPath = "Composite Types", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.CompositeTypes },
+                    // Collations are schema-scoped (like Domain/Enum/Composite Types above), so this folder
+                    // fans out per schema in schema-template mode the same as those three — no exclusion needed.
+                    new TemplateFolder { FolderPath = "Collations", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Collations },
                     new TemplateFolder { FolderPath = "Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Functions },
                     new TemplateFolder { FolderPath = "Trigger Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.TriggerFunctions },
                     new TemplateFolder { FolderPath = "Window Functions", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.WindowFunctions },
                     new TemplateFolder { FolderPath = "Aggregates", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Aggregates },
                     new TemplateFolder { FolderPath = "Procedures", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Procedures },
                     new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences },
+                    // Publications are database-scoped (CREATE PUBLICATION has no schema qualifier), so —
+                    // like Schemas above — this folder is excluded from schema-template fan-out below.
+                    new TemplateFolder { FolderPath = "Publications", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Publications },
                     new TemplateFolder { FolderPath = "Rules", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Rules },
                     new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
                     new TemplateFolder { FolderPath = "Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Views },
@@ -573,6 +644,14 @@ namespace Schema.Domain
                 _ => new List<TemplateFolder>()
             };
 
+            // MariaDb-only: MySQL has no native SEQUENCE object at all (not a version gap — the base MySQL
+            // folder set never carries this type). The switch above is keyed on GetBasePlatform(), which maps
+            // MariaDb and MySQL to the same case, so the one MariaDb-only addition is layered on afterward
+            // against the raw `platform` parameter instead — no other folder-set divergence exists to mirror.
+            if (platform == Platform.MariaDb)
+                folders.Insert(folders.FindIndex(f => f.FolderPath == "Triggers"),
+                    new TemplateFolder { FolderPath = "Sequences", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Sequences });
+
             if (!isSchemaTemplate) return folders;
 
             // Database-scoped objects cannot legitimately fan out per schema (design §3.3).
@@ -580,7 +659,8 @@ namespace Schema.Domain
                 f.ObjectType != ScriptObjectType.Schemas &&
                 f.ObjectType != ScriptObjectType.DDLTriggers &&
                 f.ObjectType != ScriptObjectType.FullTextCatalogs &&
-                f.ObjectType != ScriptObjectType.FullTextStopLists).ToList();
+                f.ObjectType != ScriptObjectType.FullTextStopLists &&
+                f.ObjectType != ScriptObjectType.Publications).ToList();
         }
 
         /// <summary>
@@ -609,7 +689,7 @@ namespace Schema.Domain
             }
         }
 
-        private void LoadMaterializedViews(Platform platform)
+        private void LoadMaterializedViews(Platform platform, bool tolerateComponentLoadErrors)
         {
             if (platform != Platform.PostgreSQL) return;
             var matViewsPath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Materialized Views");
@@ -617,21 +697,31 @@ namespace Schema.Domain
             var files = ProductDirectoryWrapper.GetFromFactory()
                 .GetFiles(matViewsPath, "*.json", SearchOption.AllDirectories)
                 .OrderBy(x => x);
-            MaterializedViews.AddRange(files.Select(f =>
+            foreach (var f in files)
             {
                 try
                 {
                     var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
-                    return PlatformDeserializer.DeserializeMaterializedView(json, platform);
+                    MaterializedViews.Add(PlatformDeserializer.DeserializeMaterializedView(json, platform));
                 }
-                catch (Exception e)
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it; narrowing would let one escape unlabelled
+                catch (Exception e) when (!tolerateComponentLoadErrors)
                 {
                     throw new Exception($"Error loading materialized view from {f}\r\n{e.Message}", e);
                 }
-            }));
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure, and DeserializeMaterializedView rewraps into plain Exception
+                catch (Exception e)
+                {
+                    // --Validate: excluded here so the rest of the template still loads. An
+                    // Recorded either way (see RecordComponentLoadError). An unparseable file surfaces as
+                    // SS-LOAD-001; a parseable-but-wrong one is classified and left for JsonSchemaCheck's
+                    // on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadError(f, e);
+                }
+            }
         }
 
-        private void LoadIndexedViews(Platform platform)
+        private void LoadIndexedViews(Platform platform, bool tolerateComponentLoadErrors)
         {
             if (platform != Platform.SqlServer) return;
             var indexedViewsPath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Indexed Views");
@@ -639,18 +729,28 @@ namespace Schema.Domain
             var files = ProductDirectoryWrapper.GetFromFactory()
                 .GetFiles(indexedViewsPath, "*.json", SearchOption.AllDirectories)
                 .OrderBy(x => x);
-            IndexedViews.AddRange(files.Select(f =>
+            foreach (var f in files)
             {
                 try
                 {
                     var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
-                    return PlatformDeserializer.DeserializeIndexedView(json, platform);
+                    IndexedViews.Add(PlatformDeserializer.DeserializeIndexedView(json, platform));
                 }
-                catch (Exception e)
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it; narrowing would let one escape unlabelled
+                catch (Exception e) when (!tolerateComponentLoadErrors)
                 {
                     throw new Exception($"Error loading indexed view from {f}\r\n{e.Message}", e);
                 }
-            }));
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure, and DeserializeIndexedView rewraps into plain Exception
+                catch (Exception e)
+                {
+                    // --Validate: excluded here so the rest of the template still loads. An
+                    // Recorded either way (see RecordComponentLoadError). An unparseable file surfaces as
+                    // SS-LOAD-001; a parseable-but-wrong one is classified and left for JsonSchemaCheck's
+                    // on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadError(f, e);
+                }
+            }
         }
 
         /// <summary>
@@ -703,14 +803,73 @@ namespace Schema.Domain
             }
         }
 
-        private void LoadTables(Platform platform)
+        private void LoadTables(Platform platform, bool tolerateComponentLoadErrors)
         {
             var tablesPath = Path.Combine(Path.GetDirectoryName(FilePath) ?? "", "Tables");
             if (!ProductDirectoryWrapper.GetFromFactory().Exists(tablesPath)) return;
             var files = ProductDirectoryWrapper.GetFromFactory()
                 .GetFiles(tablesPath, "*.json", SearchOption.AllDirectories)
                 .OrderBy(x => x);
-            Tables.AddRange(files.Select(f => Table.Load(f, platform)));
+            foreach (var f in files)
+            {
+                try
+                {
+                    Tables.Add(Table.Load(f, platform));
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure, and Table.Load rewraps its own into plain Exception (Table.cs:99)
+                catch (Exception e) when (tolerateComponentLoadErrors)
+                {
+                    // --Validate: excluded here so the rest of the template still loads (and
+                    // Duplication/Coherence still run against the tables that DID parse). An
+                    // Recorded either way (see RecordComponentLoadError). An unparseable file surfaces as
+                    // SS-LOAD-001; a parseable-but-wrong one is classified and left for JsonSchemaCheck's
+                    // on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadError(f, e);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Records <paramref name="filePath"/> in <see cref="ComponentLoadErrors"/> when the file
+        /// itself is not valid JSON — the file isn't parseable at all, so there is no object for
+        /// JsonSchemaCheck to schema-check and nothing else would ever report it. A parseable-but-
+        /// wrong file (an unrecognised/misnamed property rejected by MissingMemberHandling.Error) is
+        /// left unrecorded here on purpose: JsonSchemaCheck re-validates the raw file straight off
+        /// disk regardless of what loaded here, so that case already gets its own precise SS-JSON-001
+        /// — recording it here too would report the same file under two different codes.
+        /// </summary>
+        // EVERY component that failed to load is recorded. Gating the record on unparseability made the
+        // tolerant path strictly worse than the strict one: a file that is valid JSON but carries an
+        // unrecognised property -- the exact class MissingMemberHandling.Error rejects, and the most common
+        // authoring mistake -- was caught, not loaded, and not reported, so the table simply vanished from
+        // the template with nothing said. ComponentLoadErrors cannot mean "the components that did not load"
+        // with a guard like that in place, and that contract is the only thing a consumer can build on.
+        // Parseability is kept as CLASSIFICATION (see ComponentLoadError.IsValidJson) so `--Validate` can
+        // still report only the unparseable ones as SS-LOAD-001 and leave the rest to JsonSchemaCheck.
+        private void RecordComponentLoadError(string filePath, Exception e) =>
+            ComponentLoadErrors.Add(new ComponentLoadError(filePath, e.Message, IsParseableJson(filePath)));
+
+        // Deliberately does NOT infer parseability from the CLR exception type that surfaced out of
+        // Table.Load / PlatformDeserializer — that inference is unsound. MissingMemberHandling.Error
+        // (an unrecognised/misnamed property: parseable, wrong shape) and a truncated/malformed
+        // document (not parseable at all) both surface from Newtonsoft as JsonSerializationException
+        // ("Unexpected end when deserializing object..." is a JsonSerializationException, not a
+        // JsonReaderException, despite being a pure syntax failure) — so exception type cannot tell
+        // the two cases apart. Re-parsing the raw text directly answers the actual question ("is this
+        // valid JSON at all?") and stays correct regardless of which exception type Newtonsoft raises
+        // for a given malformation, or whether a future deserialization setting changes that shape.
+        private static bool IsParseableJson(string filePath)
+        {
+            try
+            {
+                var text = ProductFileWrapper.GetFromFactory().ReadAllText(filePath);
+                JToken.Parse(text);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>

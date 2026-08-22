@@ -222,7 +222,6 @@ namespace Schema.UnitTests.Domain
             var tableJson = @"{
                 ""Name"": ""[TestTable]"",
                 ""CompressionType"": ""PAGE"",
-                ""FileGroup"": ""PRIMARY"",
                 ""Columns"": []
             }";
             var filePath = Path.Combine("C:", "tables", "test.json");
@@ -270,6 +269,52 @@ namespace Schema.UnitTests.Domain
 
             Assert.That(table, Is.Not.Null);
             Assert.That(table.Engine, Is.EqualTo("InnoDB"));
+        }
+
+        // Closes the gap this test used to demonstrate: a table named "PreservesPlatformSpecificProperties"
+        // let an unrecognized "FileGroup" property vanish silently (Newtonsoft's default
+        // MissingMemberHandling.Ignore) while still passing, because the assertion was on
+        // CompressionType, not FileGroup. Deploy now agrees with the editor (.json-schemas'
+        // additionalProperties:false) and --Validate, both of which already rejected this.
+        [Test]
+        public void Load_UnrecognizedProperty_ThrowsNamingPropertyAndFile()
+        {
+            var tableJson = @"{
+                ""Name"": ""[TestTable]"",
+                ""NotARealTableProperty"": ""x"",
+                ""Columns"": []
+            }";
+            var filePath = Path.Join("C:", "tables", "dbo.TestTable.json");
+            _mockFile.Exists(filePath).Returns(true);
+            _mockFile.ReadAllText(filePath).Returns(tableJson);
+
+            var ex = Assert.Throws<Exception>(() => Table.Load(filePath, Platform.SqlServer));
+
+            Assert.That(ex.Message, Does.Contain("NotARealTableProperty"));
+            Assert.That(ex.Message, Does.Contain(filePath));
+        }
+
+        [Test]
+        public void Load_ExtensionsContent_RoundTripsUntouched()
+        {
+            var tableJson = @"{
+                ""Name"": ""[TestTable]"",
+                ""Columns"": [],
+                ""Extensions"": {
+                    ""CustomFlag"": true,
+                    ""Nested"": { ""Deep"": [1, 2, 3] }
+                }
+            }";
+            var filePath = Path.Join("C:", "tables", "dbo.TestTable.json");
+            _mockFile.Exists(filePath).Returns(true);
+            _mockFile.ReadAllText(filePath).Returns(tableJson);
+
+            var table = Table.Load(filePath, Platform.SqlServer);
+
+            Assert.That(table.Extensions, Is.Not.Null);
+            Assert.That(table.GetExtensionProperty("CustomFlag"), Is.EqualTo(true));
+            Assert.That(((Newtonsoft.Json.Linq.JObject)table.Extensions)["Nested"]?["Deep"]?.ToString(),
+                Does.Contain("1"));
         }
     }
 }

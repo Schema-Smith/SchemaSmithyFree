@@ -5,7 +5,8 @@
       "type": "string"
     },
     "ValidationScript": {
-      "type": "string"
+      "type": "string",
+      "description": "Recommended. SQL run after deployment to validate the product; skipped when unset."
     },
     "TemplateOrder": {
       "type": "array",
@@ -33,7 +34,7 @@
           },
           "ObjectType": {
             "type": "string",
-            "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Events"
+            "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|Synonyms|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Collations|Publications|Events"
           },
           "ShouldApplyExpression": {
             "type": "string",
@@ -99,7 +100,6 @@
   },
   "additionalProperties": false,
   "required": [
-    "Name",
-    "ValidationScript"
+    "Name"
   ]
 }

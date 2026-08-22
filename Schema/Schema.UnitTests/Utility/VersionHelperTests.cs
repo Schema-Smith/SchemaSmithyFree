@@ -12,6 +12,7 @@ namespace Schema.UnitTests.Utility
         [TestCase("2017", Platform.SqlServer, 14)]
         [TestCase("2019", Platform.SqlServer, 15)]
         [TestCase("2022", Platform.SqlServer, 16)]
+        [TestCase("2025", Platform.SqlServer, 17)]
         [TestCase("2008", Platform.SqlServer, 10)]   // floor lowered to 2008 — years 2008-2016 declarable again
         [TestCase("2012", Platform.SqlServer, 11)]
         [TestCase("2014", Platform.SqlServer, 12)]
@@ -50,6 +51,7 @@ namespace Schema.UnitTests.Utility
         [TestCase("16", Platform.SqlServer, 16)]
         [TestCase("10.50.4000.0", Platform.SqlServer, 10)] // SERVERPROPERTY('ProductVersion') on 2008 R2 -> major 10
         [TestCase("16.0.1000.6", Platform.SqlServer, 16)]  // ProductVersion on 2022 -> major 16
+        [TestCase("17.0.4075.5", Platform.SqlServer, 17)]  // ProductVersion on 2025 -> major 17
         [TestCase("10.6.27-MariaDB", Platform.MariaDb, 1006)]
         [TestCase("11.4.2-MariaDB-1:11.4.2+maria~ubu2404", Platform.MariaDb, 1104)]
         public void ParseDetectedVersion_NormalizesToComparable(string raw, Platform platform, int expected)

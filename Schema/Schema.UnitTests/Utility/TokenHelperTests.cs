@@ -137,6 +137,35 @@ public class TokenHelperTests
     }
 
     [Test]
+    public void ShouldCollectAllErrorsWithoutThrowing_WhenTolerateErrorsIsTrue()
+    {
+        var basePath = "C:/Projects/MyMetadata";
+        var tokens = new Dictionary<string, string>
+        {
+            {"FirstMissing", "<*File*>Tables/first.data"},
+            {"SecondMissing", "<*File*>Tables/second.data"}
+        };
+
+        var mockFileWrapper = Substitute.For<IFile>();
+        mockFileWrapper.Exists(Arg.Any<string>()).Returns(false);
+        lock (FactoryContainer.SharedLockObject)
+        {
+            FactoryContainer.Register(mockFileWrapper);
+            var errors = TokenHelper.ResolveFileTokens(tokens, basePath, Platform.SqlServer, tolerateErrors: true);
+            Assert.That(errors, Has.Count.EqualTo(2), "Both unresolvable tokens must be reported, not just the first.");
+            Assert.That(errors, Has.Some.Contains("FirstMissing"));
+            Assert.That(errors, Has.Some.Contains("SecondMissing"));
+            Assert.That(errors, Has.Some.Contains(Path.Join(basePath, "Tables/first.data")));
+            Assert.That(errors, Has.Some.Contains(Path.Join(basePath, "Tables/second.data")));
+            // Unresolved tokens are left as their original literal — the caller (PackageLoader)
+            // relies on this to keep loading the rest of the package without crashing on a
+            // downstream {{Key}} substitution.
+            Assert.That(tokens["FirstMissing"], Is.EqualTo("<*File*>Tables/first.data"));
+            FactoryContainer.Clear();
+        }
+    }
+
+    [Test]
     public void ShouldSplitOutQueryTokens()
     {
         var tokens = new Dictionary<string, string>

@@ -61,7 +61,7 @@ public sealed class CoherenceCheck : ISchemaCheck
         var fkColumns = SplitNames(fk.Columns);
         var fkRelatedColumns = SplitNames(fk.RelatedColumns);
 
-        foreach (var column in fkColumns.Where(column => !localColumnNames.Contains(column)))
+        foreach (var column in fkColumns.Where(column => !localColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, LocalColumnCode, Category, location,
                 $"{location}: local column '{column}' referenced in Columns does not exist on table '{table.Name}'.");
 
@@ -84,7 +84,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             relatedTables.SelectMany(ColumnNames),
             StringComparer.OrdinalIgnoreCase);
 
-        foreach (var column in fkRelatedColumns.Where(column => !relatedColumnNames.Contains(column)))
+        foreach (var column in fkRelatedColumns.Where(column => !relatedColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, RelatedColumnCode, Category, location,
                 $"{location}: related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
     }
@@ -95,7 +95,8 @@ public sealed class CoherenceCheck : ISchemaCheck
         var localColumnNames = ColumnNames(table);
 
         foreach (var column in SplitNames(index.IndexColumns).Select(StripOrderingSuffix)
-                     .Where(column => !localColumnNames.Contains(column)))
+                     .Where(column => !IsExpressionKeyPart(column))
+                     .Where(column => !localColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, IndexColumnCode, Category, location,
                 $"{location}: index column '{column}' referenced in IndexColumns does not exist on table '{table.Name}'.");
     }
@@ -119,32 +120,106 @@ public sealed class CoherenceCheck : ISchemaCheck
         var dotIndex = rawRelatedTable.IndexOf('.');
         var hasDotPrefix = dotIndex > 0;
         var prefixSchema = hasDotPrefix ? rawRelatedTable[..dotIndex] : null;
-        var name = (hasDotPrefix ? rawRelatedTable[(dotIndex + 1)..] : rawRelatedTable).Trim().ToLowerInvariant();
+        var name = IdentityKey(hasDotPrefix ? rawRelatedTable[(dotIndex + 1)..] : rawRelatedTable);
 
         var schema = hasExplicitSchemaProperty ? relatedTableSchema
             : prefixSchema ?? NormalizedSchema(owningTable);
 
-        return (schema.Trim().ToLowerInvariant(), name);
+        return (IdentityKey(schema), name);
     }
 
     // IDeliverableTable.Schema is resolved uniformly across platforms (SchemaDefaultResolver
     // fills "dbo"/"public"/the "{{SchemaName}}" token; MySqlTable's explicit interface
     // implementation always returns null) — matches the identity accessor DuplicationCheck uses.
+    // Both sides of the identity comparison must strip identifier wrapping. SchemaDefaultResolver
+    // preserves a declared Schema verbatim -- "[dbo]" stays bracketed -- but an FK that OMITS
+    // RelatedTableSchema has it filled with the platform default, "dbo", unbracketed. Comparing the raw
+    // strings therefore made every such FK unresolvable, which is the ordinary hand-authored shape: two
+    // shipped demos reported SS-FK-002 against a table sitting in the same template. Packages that spell
+    // RelatedTableSchema out explicitly matched by luck, because then both sides carry the brackets.
+    private static string IdentityKey(string identifier) =>
+        NormalizeIdentifier(identifier).ToLowerInvariant();
+
     private static (string Schema, string Name) TableKey(Table table) =>
-        (NormalizedSchema(table), table.Name?.Trim().ToLowerInvariant() ?? "");
+        (NormalizedSchema(table), IdentityKey(table.Name));
 
     private static string NormalizedSchema(Table table) =>
-        ((table as IDeliverableTable)?.Schema ?? "").Trim().ToLowerInvariant();
+        IdentityKey((table as IDeliverableTable)?.Schema ?? "");
 
     private static HashSet<string> ColumnNames(Table table) =>
-        new(table.Columns.Select(c => c.Name?.Trim() ?? ""), StringComparer.OrdinalIgnoreCase);
+        new(table.Columns.Select(c => NormalizeIdentifier(c.Name ?? "")), StringComparer.OrdinalIgnoreCase);
 
-    private static List<string> SplitNames(string csv) =>
-        (csv ?? "")
-            .Split(',')
-            .Select(c => c.Trim())
-            .Where(c => c.Length > 0)
-            .ToList();
+    // Mirrors SchemaSmith_StripBacktickWrapping.sql (source of truth for the backtick case — keep in
+    // sync), generalized to the other two engines' wrapping so a hand-authored/hand-edited package
+    // can mix quoting styles without producing a false SS-FK-*/SS-IDX-001: backtick (MySQL/MariaDB),
+    // [bracket] (SQL Server), "double-quote" (PostgreSQL). Strips only a matched pair around the
+    // WHOLE identifier — a lone/unbalanced quote character is left untouched, and interior content is
+    // never touched (in particular, no expression key part reaches here — those are filtered out
+    // before comparison). Comparison is OrdinalIgnoreCase everywhere in this class, so an unwrapped
+    // PostgreSQL identifier (folds to lower case) and a "quoted" one (case-sensitive) are compared
+    // case-insensitively too — a deliberate slight loosening: the failure mode this check should have
+    // is a missed nit, never a false error on a valid package.
+    private static string NormalizeIdentifier(string identifier)
+    {
+        var trimmed = (identifier ?? "").Trim();
+        if (trimmed.Length < 2)
+            return trimmed;
+
+        if (trimmed[0] == '`' && trimmed[^1] == '`')
+            return trimmed[1..^1].Replace("``", "`");
+        if (trimmed[0] == '[' && trimmed[^1] == ']')
+            return trimmed[1..^1];
+        if (trimmed[0] == '"' && trimmed[^1] == '"')
+            return trimmed[1..^1];
+
+        return trimmed;
+    }
+
+    // Mirrors SchemaSmith_NormalizeIndexColumns.sql's top-level-comma split (source of truth — keep
+    // in sync, along with StripOrderingSuffix below): splits on a comma only at paren depth 0 and
+    // outside a backtick-quoted span, so a functional/expression key part's own internal comma (e.g.
+    // `(concat(\`a\`,\`b\`))`) isn't mistaken for a key-part boundary. Also used for FK Columns/
+    // RelatedColumns — a no-op there, since FK column lists never contain parens or backticks.
+    private static List<string> SplitNames(string csv)
+    {
+        var text = csv ?? "";
+        var len = text.Length;
+        var result = new List<string>();
+        var pos = 0;
+
+        while (pos < len)
+        {
+            var depth = 0;
+            var inBacktick = false;
+            var comma = -1;
+
+            for (var scan = pos; scan < len; scan++)
+            {
+                var c = text[scan];
+                if (c == '`')
+                    inBacktick = !inBacktick;
+                else if (!inBacktick && c == '(')
+                    depth++;
+                else if (!inBacktick && c == ')')
+                    depth--;
+                else if (!inBacktick && c == ',' && depth == 0)
+                {
+                    comma = scan;
+                    break;
+                }
+            }
+            if (comma < 0)
+                comma = len;
+
+            var part = text[pos..comma].Trim();
+            if (part.Length > 0)
+                result.Add(part);
+
+            pos = comma + 1;
+        }
+
+        return result;
+    }
 
     // Mirrors SchemaSmith_NormalizeIndexColumns.sql's DESC/ASC suffix handling (source of truth —
     // keep in sync): a trailing " DESC" or " ASC" (case-insensitive) is ordering, not part of the
@@ -157,4 +232,10 @@ public sealed class CoherenceCheck : ISchemaCheck
             return column[..^4].TrimEnd();
         return column;
     }
+
+    // A functional/expression key part starts with '(' rather than a backtick — extraction always
+    // backtick-wraps a plain column name, so this is an unambiguous discriminator (mirrors
+    // SchemaSmith_NormalizeIndexColumns.sql). Validating the identifiers inside the expression would
+    // need a real SQL parser and is out of scope — skip rather than false-flag.
+    private static bool IsExpressionKeyPart(string column) => column.StartsWith('(');
 }

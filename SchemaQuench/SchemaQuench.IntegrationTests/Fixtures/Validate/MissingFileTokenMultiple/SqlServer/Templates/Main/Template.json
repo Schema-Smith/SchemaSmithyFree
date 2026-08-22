@@ -1,0 +1,9 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT 1",
+  "ScriptFolders": [],
+  "ScriptTokens": {
+    "TemplateMissingA": "<*File*>data/TemplateA.dat",
+    "TemplateMissingB": "<*File*>data/TemplateB.dat"
+  }
+}

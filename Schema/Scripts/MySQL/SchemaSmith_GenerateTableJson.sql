@@ -24,6 +24,10 @@ BEGIN
     -- Set session variables for proper GROUP_CONCAT handling
     SET SESSION group_concat_max_len = 1000000;
 
+    -- NULLIF(x, '') is NOT used inside JSON_OBJECT here. On MySQL 5.7 it collapses to a BOOLEAN --
+    -- JSON_OBJECT emits `false` in place of the value -- so a table/column/index comment and a
+    -- generated column's expression all extracted as `false` at the floor while 8.0 was correct.
+    -- The CASE form evaluates identically on both. Verified live against 5.7 and 8.0.
     -- Get table metadata
     SELECT JSON_OBJECT(
         'Name', CONCAT('`', t.TABLE_NAME, '`'),
@@ -31,7 +35,7 @@ BEGIN
         'RowFormat', t.ROW_FORMAT,
         'CharacterSet', SUBSTRING_INDEX(t.TABLE_COLLATION, '_', 1),
         'Collation', t.TABLE_COLLATION,
-        'Comment', NULLIF(t.TABLE_COMMENT, ''),
+        'Comment', CASE WHEN t.TABLE_COMMENT = '' THEN NULL ELSE t.TABLE_COMMENT END,
         'AutoIncrementValue', t.AUTO_INCREMENT,
         -- Emit the sticky drop-protection marker first-class. Emitted as NULL when unset and stripped by the
         -- JSON_REMOVE pass below, so only protected tables carry "PreventDrop": true. Read from ProductOwnership. #270
@@ -80,13 +84,35 @@ BEGIN
                 -- String literals: normalize (strips MariaDB's outer quotes) then wrap consistently
                 ELSE CONVERT(CONCAT('''', REPLACE(CONVERT(SchemaSmith_NormalizeColumnDefault(c.COLUMN_DEFAULT) USING utf8mb4), '''', ''''''), '''') USING utf8mb4)
             END,
+            -- ON UPDATE CURRENT_TIMESTAMP[(n)] -- deliberately independent of Default above: a column's
+            -- DEFAULT CURRENT_TIMESTAMP governs INSERT-time initialization, this governs UPDATE-time
+            -- refresh, and a column can carry either, both, or neither. Predates both engines' hard
+            -- floors (MySQL 5.6.5; MariaDB inherited it), unlike Invisible/Srid below, so no
+            -- SchemaSmith_Supports... gate is needed here or anywhere else in this feature.
+            -- SchemaSmith_ColumnOnUpdateClause isolates the EXTRA parsing (EXTRA can carry several flags
+            -- at once, e.g. 'DEFAULT_GENERATED on update CURRENT_TIMESTAMP') and preserves a declared
+            -- precision (CURRENT_TIMESTAMP(3)) rather than collapsing it to the bare form.
+            'OnUpdateCurrentTimestamp', SchemaSmith_ColumnOnUpdateClause(c.EXTRA),
             'AutoIncrement', CASE WHEN c.EXTRA LIKE '%auto_increment%' THEN TRUE ELSE FALSE END,
+            -- EXTRA is a single column shared by both engines and predates the invisible-column feature,
+            -- so (unlike SchemaSmith_IndexIsVisible's IS_VISIBLE/IGNORED divergence, which required a
+            -- per-engine wrapper to avoid binding a column that doesn't exist below its floor) reading it
+            -- here is safe on every version: below MySQL 8.0.23 / MariaDB 10.3 the INVISIBLE marker simply
+            -- never appears, so the LIKE is always false there -- no version gate needed at extraction time.
+            'Invisible', CASE WHEN c.EXTRA LIKE '%INVISIBLE%' THEN TRUE ELSE FALSE END,
+            -- SRS_ID does not exist on MariaDB's INFORMATION_SCHEMA.COLUMNS at all (unlike EXTRA above,
+            -- which both engines carry), so it cannot be read as a plain c.SRS_ID here without breaking
+            -- extraction for every table on MariaDB (ER_BAD_FIELD_ERROR). SchemaSmith_ColumnSrid isolates
+            -- the divergence: its MySQL body reads SRS_ID (gated below MySQL 8.0.3), its MariaDb override
+            -- (Scripts/MariaDb/SchemaSmith_ColumnSrid.sql) always returns NULL. See
+            -- SchemaSmith_SupportsColumnSrid for the full per-engine rationale.
+            'Srid', SchemaSmith_ColumnSrid(p_Schema, p_Table, c.COLUMN_NAME),
             'Generated', CASE
                 WHEN c.EXTRA LIKE '%VIRTUAL GENERATED%' THEN 'VIRTUAL'
                 WHEN c.EXTRA LIKE '%STORED GENERATED%' THEN 'STORED'
                 ELSE NULL
             END,
-            'GenerationExpression', NULLIF(c.GENERATION_EXPRESSION, ''),
+            'GenerationExpression', CASE WHEN c.GENERATION_EXPRESSION = '' THEN NULL ELSE c.GENERATION_EXPRESSION END,
             'CharacterSet', c.CHARACTER_SET_NAME,
             'Collation', CASE
                 WHEN c.COLLATION_NAME = (SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES
@@ -94,7 +120,7 @@ BEGIN
                 THEN NULL  -- Don't include if same as table default
                 ELSE c.COLLATION_NAME
             END,
-            'Comment', NULLIF(c.COLUMN_COMMENT, '')
+            'Comment', CASE WHEN c.COLUMN_COMMENT = '' THEN NULL ELSE c.COLUMN_COMMENT END
         )
         ORDER BY c.ORDINAL_POSITION
         SEPARATOR ','
@@ -103,32 +129,101 @@ BEGIN
     WHERE c.TABLE_SCHEMA = p_Schema
       AND c.TABLE_NAME = p_Table;
 
-    -- Get indexes (excluding FULLTEXT which are handled separately)
-    SELECT CONCAT('[', IFNULL(GROUP_CONCAT(idx_json SEPARATOR ','), ''), ']') INTO v_indexes
-    FROM (
-        SELECT JSON_OBJECT(
-            'Name', s.INDEX_NAME,
-            'PrimaryKey', CASE WHEN s.INDEX_NAME = 'PRIMARY' THEN TRUE ELSE FALSE END,
-            'Unique', CASE WHEN s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
-            'UniqueConstraint', CASE WHEN s.INDEX_NAME = 'PRIMARY' OR s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
-            'IndexType', s.INDEX_TYPE,
-            'IndexColumns', GROUP_CONCAT(
-                CONCAT('`', s.COLUMN_NAME, '`',
-                    CASE WHEN s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL' THEN CONCAT('(', s.SUB_PART, ')') ELSE '' END,
-                    CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
-                )
-                ORDER BY s.SEQ_IN_INDEX
-                SEPARATOR ','
-            ),
-            'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
-            'Comment', NULLIF(s.INDEX_COMMENT, '')
-        ) AS idx_json
-        FROM INFORMATION_SCHEMA.STATISTICS s
-        WHERE s.TABLE_SCHEMA = p_Schema
-          AND s.TABLE_NAME = p_Table
-          AND s.INDEX_TYPE != 'FULLTEXT'
-        GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
-    ) idx_subquery;
+    -- Get indexes (excluding FULLTEXT which are handled separately). A functional/expression key part
+    -- (MySQL 8.0.13+) has NULL COLUMN_NAME and reports its text via EXPRESSION instead; that column does
+    -- not exist below the floor or on MariaDB, so the branch that reads it is gated behind
+    -- SchemaSmith_SupportsFunctionalIndex() as two whole statements rather than one CASE inside a single
+    -- statement -- column resolution is deferred to the execution of whichever statement actually runs (see
+    -- SchemaSmith_IndexIsVisible / SchemaSmith_SnapshotIndexVisibility for the same IS_VISIBLE-below-8.0
+    -- shape), so the unreached branch's EXPRESSION reference is never bound on an engine that lacks it.
+    -- The expression is wrapped in one extra paren pair, matching what MySQL's own SHOW CREATE TABLE
+    -- renders for a functional key part -- the form a user hand-authoring the JSON would recognize.
+    -- EXPRESSION also carries a charset-introducer prefix (e.g. _latin1'...', _utf8mb4'...' -- it
+    -- reflects the connection charset in effect when the index was CREATEd, so it is not a fixed
+    -- value) on any string literal -- the same MySQL re-serialization quirk already stripped from
+    -- CHECK_CLAUSE below, generalized here to any introducer rather than an enumerated list. AND,
+    -- confirmed live (unlike SHOW CREATE TABLE, which does not do this): EXPRESSION additionally
+    -- backslash-escapes that literal's quotes, e.g. _latin1\'$.tags\' -- so a two-pass clean is
+    -- needed: (1) turn every backslash-escaped quote into a plain quote (a targeted `\'`-to-`'`
+    -- substitution via CHAR(92)/CHAR(39), NOT a blanket backslash strip -- a JSON path or literal
+    -- may legitimately contain an unrelated backslash, and destroying it would corrupt the compare
+    -- more subtly than the bug being fixed here), THEN (2) strip the now-plainly-quoted introducer.
+    -- Stripped so a multi-valued key part's mandatory JSON-path literal (CAST(col->'$.path' AS ...
+    -- ARRAY) always carries one) round-trips clean instead of leaving internal charset/escaping
+    -- noise the user never typed, which would otherwise never match the declared side and rebuild
+    -- forever. Applies to any functional index whose expression contains a string literal, not just
+    -- a multi-valued one -- lower(`name`) (C1-1's test case) has none, which is why it never surfaced
+    -- this. Applied identically at both _SchemaSmith_IdxDetectSnap builds so drift comparison converges.
+    -- REGEXP_REPLACE (MySQL 8.0.4+) IS safe here despite the 5.7 floor: this whole branch only
+    -- executes when SchemaSmith_SupportsFunctionalIndex() = 1 (8.0.13+), and MySQL stored-routine
+    -- bodies are not semantically validated at CREATE time -- function-name resolution, like the
+    -- EXPRESSION column reference above, is deferred to the execution of whichever branch actually
+    -- runs, so REGEXP_REPLACE compiles fine into an unreached branch on 5.7/MariaDB. This differs
+    -- from SchemaSmith_StripLeadingSelect.sql and the CHECK_CLAUSE case in ParseTableJson.sql: both
+    -- of those run unconditionally on every target regardless of version, so REGEXP_REPLACE there
+    -- would actually be invoked on 5.7 and fail -- an execution-time constraint, not a compile-time
+    -- one, and not the situation here.
+    IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
+        SELECT CONCAT('[', IFNULL(GROUP_CONCAT(idx_json SEPARATOR ','), ''), ']') INTO v_indexes
+        FROM (
+            SELECT JSON_OBJECT(
+                'Name', s.INDEX_NAME,
+                'PrimaryKey', CASE WHEN s.INDEX_NAME = 'PRIMARY' THEN TRUE ELSE FALSE END,
+                'Unique', CASE WHEN s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'UniqueConstraint', CASE WHEN s.INDEX_NAME = 'PRIMARY' OR s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'IndexType', s.INDEX_TYPE,
+                'IndexColumns', GROUP_CONCAT(
+                    CASE WHEN s.COLUMN_NAME IS NOT NULL THEN
+                        CONCAT('`', s.COLUMN_NAME, '`',
+                            CASE WHEN s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL' THEN CONCAT('(', s.SUB_PART, ')') ELSE '' END,
+                            CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
+                        )
+                    ELSE
+                        CONCAT('(', REGEXP_REPLACE(
+                            REPLACE(s.EXPRESSION, CONCAT(CHAR(92), CHAR(39)), CHAR(39)),
+                            '_[A-Za-z0-9]+''', ''''), ')',
+                            CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
+                        )
+                    END
+                    ORDER BY s.SEQ_IN_INDEX
+                    SEPARATOR ','
+                ),
+                'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
+                'Comment', CASE WHEN s.INDEX_COMMENT = '' THEN NULL ELSE s.INDEX_COMMENT END
+            ) AS idx_json
+            FROM INFORMATION_SCHEMA.STATISTICS s
+            WHERE s.TABLE_SCHEMA = p_Schema
+              AND s.TABLE_NAME = p_Table
+              AND s.INDEX_TYPE != 'FULLTEXT'
+            GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
+        ) idx_subquery;
+    ELSE
+        SELECT CONCAT('[', IFNULL(GROUP_CONCAT(idx_json SEPARATOR ','), ''), ']') INTO v_indexes
+        FROM (
+            SELECT JSON_OBJECT(
+                'Name', s.INDEX_NAME,
+                'PrimaryKey', CASE WHEN s.INDEX_NAME = 'PRIMARY' THEN TRUE ELSE FALSE END,
+                'Unique', CASE WHEN s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'UniqueConstraint', CASE WHEN s.INDEX_NAME = 'PRIMARY' OR s.NON_UNIQUE = 0 THEN TRUE ELSE FALSE END,
+                'IndexType', s.INDEX_TYPE,
+                'IndexColumns', GROUP_CONCAT(
+                    CONCAT('`', s.COLUMN_NAME, '`',
+                        CASE WHEN s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL' THEN CONCAT('(', s.SUB_PART, ')') ELSE '' END,
+                        CASE WHEN s.COLLATION = 'D' THEN ' DESC' ELSE '' END
+                    )
+                    ORDER BY s.SEQ_IN_INDEX
+                    SEPARATOR ','
+                ),
+                'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
+                'Comment', CASE WHEN s.INDEX_COMMENT = '' THEN NULL ELSE s.INDEX_COMMENT END
+            ) AS idx_json
+            FROM INFORMATION_SCHEMA.STATISTICS s
+            WHERE s.TABLE_SCHEMA = p_Schema
+              AND s.TABLE_NAME = p_Table
+              AND s.INDEX_TYPE != 'FULLTEXT'
+            GROUP BY s.INDEX_NAME, s.NON_UNIQUE, s.INDEX_TYPE, s.INDEX_COMMENT
+        ) idx_subquery;
+    END IF;
 
     -- Get foreign keys
     SELECT CONCAT('[', IFNULL(GROUP_CONCAT(fk_json SEPARATOR ','), ''), ']') INTO v_foreign_keys
@@ -200,7 +295,7 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         SELECT JSON_OBJECT(
             'Name', s.INDEX_NAME,
             'Columns', GROUP_CONCAT(CONCAT('`', s.COLUMN_NAME, '`') ORDER BY s.SEQ_IN_INDEX SEPARATOR ','),
-            'Comment', NULLIF(MAX(s.INDEX_COMMENT), '')
+            'Comment', CASE WHEN MAX(s.INDEX_COMMENT) = '' THEN NULL ELSE MAX(s.INDEX_COMMENT) END
         ) AS ft_json
         FROM INFORMATION_SCHEMA.STATISTICS s
         WHERE s.TABLE_SCHEMA = p_Schema

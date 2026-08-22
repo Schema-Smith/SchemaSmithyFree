@@ -20,7 +20,10 @@ namespace Schema.Domain
         [JsonProperty(Order = 1)]
         public string Name { get; set; } = "";
 
-        [SchemaProperty(Required = true)]
+        // Recommended, not required: SchemaQuench runs it only when it is set
+        // (ProductQuench: `if (!string.IsNullOrWhiteSpace(...))`), so marking it Required made
+        // --Validate reject packages that deploy perfectly well.
+        [SchemaProperty(Description = "Recommended. SQL run after deployment to validate the product; skipped when unset.")]
         [JsonProperty(Order = 2)]
         public string ValidationScript { get; set; }
 
@@ -101,6 +104,16 @@ namespace Schema.Domain
         public Dictionary<string, string> NonQueryTokens { get; set; } = [];
 
         /// <summary>
+        /// File-token resolution failures collected instead of thrown when <see cref="Load"/> is
+        /// called with <c>tolerateFileTokenErrors: true</c> (--Validate's lenient load). Empty on
+        /// the deploy path, which never tolerates an unresolvable file token. Mirrors
+        /// <see cref="Template.FileTokenErrors"/> — PackageLoader turns each entry into an
+        /// SS-TOK-004 finding.
+        /// </summary>
+        [JsonIgnore]
+        public List<FileTokenError> FileTokenErrors { get; } = [];
+
+        /// <summary>
         /// Loads a Product from a Product.json file path for display purposes only.
         /// Does NOT resolve tokens or load scripts. Use Load() (config-based) for runtime use.
         /// </summary>
@@ -115,7 +128,21 @@ namespace Schema.Domain
         /// Loads a Product from the configured SchemaPackagePath (config or zip).
         /// Unified: no platform validation — accepts all platforms.
         /// </summary>
-        public static Product Load()
+        /// <param name="missingMemberHandling">
+        /// Deploy path leaves this at the default (Error) so an unrecognised property still stops
+        /// the run. `--Validate` (PackageLoader) passes Ignore instead — it needs Product.Platform
+        /// to run its checks at all, and a single misnamed property in Product.json shouldn't take
+        /// down every other finding the run would otherwise report; JsonSchemaCheck independently
+        /// re-validates the raw Product.json against products.*.schema and reports SS-JSON-001 for
+        /// the property regardless of which way this loaded.
+        /// </param>
+        /// <param name="tolerateFileTokenErrors">
+        /// Deploy path leaves this false: an unresolvable <c>ScriptTokens</c> file reference
+        /// throws immediately and aborts the run, same as always. `--Validate` (PackageLoader)
+        /// passes true so the failure lands in <see cref="FileTokenErrors"/> as a reportable
+        /// finding instead of aborting the whole load.
+        /// </param>
+        public static Product Load(MissingMemberHandling missingMemberHandling = MissingMemberHandling.Error, bool tolerateFileTokenErrors = false)
         {
             var config = FactoryContainer.ResolveOrCreate<IConfigurationRoot>();
             var schemaPackagePath = config[SettingsKeys.SchemaPackagePath] ?? "";
@@ -130,10 +157,12 @@ namespace Schema.Domain
                 throw new Exception($"SchemaPackagePath not found '{schemaPackagePath}'");
 
             var productFilePath = Path.Combine(schemaPackagePath, "Product.json");
-            var product = JsonHelper.ProductLoad(productFilePath);
+            var product = JsonHelper.ProductLoad(productFilePath, missingMemberHandling);
             product.FilePath = productFilePath;
             OverrideProductScriptTokens(config, product);
-            TokenHelper.ResolveFileTokens(product.ScriptTokens, schemaPackagePath, product.Platform);
+            var tokenErrors = TokenHelper.ResolveFileTokens(product.ScriptTokens, schemaPackagePath, product.Platform, tolerateFileTokenErrors);
+            foreach (var tokenError in tokenErrors)
+                product.FileTokenErrors.Add(new FileTokenError(product.FilePath, tokenError));
             product.ScriptTokens.Add("ProductName", product.Name);
 
             product.InstanceLoad();

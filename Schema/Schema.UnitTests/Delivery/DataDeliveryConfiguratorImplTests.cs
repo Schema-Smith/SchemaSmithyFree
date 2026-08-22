@@ -302,4 +302,79 @@ public class DataDeliveryConfiguratorImplTests
         _file.DidNotReceiveWithAnyArgs().WriteAllText(default, default);
         Assert.That(_warnings, Has.Some.Matches<string>(w => w.ContainsIgnoringCase("ambiguous")));
     }
+
+    // Delivery-precedence (#390 part 2) keys merge-script suppression off this return value, per
+    // table -- so it must be true whenever delivery was actually configured (changed or already up
+    // to date) and false whenever Configure declined.
+    [Test]
+    public void Configure_TableJsonFound_ReturnsTrue()
+    {
+        _file.ReadAllText(TableJsonPath).Returns("""
+            { "Schema": "dbo", "Name": "TestTable", "Columns": [] }
+            """);
+
+        var result = DataDeliveryConfiguratorImpl.GetFromFactory().Configure(MakeContext());
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void Configure_AlreadyUpToDate_StillReturnsTrue()
+    {
+        var tableJson = """
+            {
+              "Schema": "dbo",
+              "Name": "TestTable",
+              "Columns": [],
+              "DataDelivery": {
+                "ContentFile": "Content/dbo.TestTable.tabledata",
+                "MergeType": "Insert/Update"
+              }
+            }
+            """;
+        _file.ReadAllText(TableJsonPath).Returns(tableJson);
+
+        var result = DataDeliveryConfiguratorImpl.GetFromFactory().Configure(MakeContext());
+
+        _file.DidNotReceiveWithAnyArgs().WriteAllText(default, default);
+        Assert.That(result, Is.True, "Already-up-to-date is still 'delivery configured for this table'.");
+    }
+
+    [Test]
+    public void Configure_TableJsonNotFound_ReturnsFalse()
+    {
+        _file.Exists(TableJsonPath).Returns(false);
+
+        var result = DataDeliveryConfiguratorImpl.GetFromFactory().Configure(MakeContext());
+
+        Assert.That(result, Is.False, "A table delivery never covered must not be reported as configured.");
+    }
+
+    [Test]
+    public void Configure_ArrayWithNoVariantProvided_ReturnsFalse()
+    {
+        var tableJson = """
+            {
+              "Schema": "dbo",
+              "Name": "TestTable",
+              "Columns": [],
+              "DataDelivery": [
+                {
+                  "ContentFile": "Content/dbo.TestTable.eu.tabledata",
+                  "MergeType": "Insert",
+                  "ShouldApplyExpression": "Target.Region == 'EU'",
+                  "VariantName": "EU"
+                }
+              ]
+            }
+            """;
+        _file.ReadAllText(TableJsonPath).Returns(tableJson);
+
+        var context = MakeContext();
+        context.VariantName = null;
+
+        var result = DataDeliveryConfiguratorImpl.GetFromFactory().Configure(context);
+
+        Assert.That(result, Is.False);
+    }
 }

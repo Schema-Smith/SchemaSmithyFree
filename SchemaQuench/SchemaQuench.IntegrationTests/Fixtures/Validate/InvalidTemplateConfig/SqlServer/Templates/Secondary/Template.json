@@ -1,0 +1,5 @@
+{
+  "Name": "Secondary",
+  "DatabaseIdentificationScript": "SELECT 1",
+  "ScriptFolders": []
+}

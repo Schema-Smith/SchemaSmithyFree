@@ -21,6 +21,7 @@ namespace Schema.Domain
         XMLSchemaCollections,
         DDLTriggers,
         IndexedViews,
+        Synonyms,
         // PostgreSQL
         DomainTypes,
         EnumTypes,
@@ -31,6 +32,8 @@ namespace Schema.Domain
         Sequences,
         Rules,
         MaterializedViews,
+        Collations,
+        Publications,
         // MySQL
         Events
     }

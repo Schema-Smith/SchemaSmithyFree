@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Domain.SqlServer;
 using Schema.Utility;
 
 namespace SchemaTongs.IntegrationTests.SqlServer;
@@ -41,6 +42,14 @@ public class GenerateTableXmlEquivalenceTests
         cmd.CommandText = $"CREATE DATABASE [{_integrationDb}];";
         cmd.ExecuteNonQuery();
 
+        // A non-default filegroup for the #filegroups JSON/XML equivalence test below -- reuses the new
+        // database's own data-file directory rather than assuming one.
+        cmd.CommandText = $@"
+DECLARE @v_DataPath NVARCHAR(500) = (SELECT LEFT(physical_name, LEN(physical_name) - CHARINDEX('\', REVERSE(physical_name)) + 1) FROM sys.master_files WHERE database_id = DB_ID('{_integrationDb}') AND file_id = 1);
+ALTER DATABASE [{_integrationDb}] ADD FILEGROUP [FG_Test];
+EXEC('ALTER DATABASE [{_integrationDb}] ADD FILE (NAME = ''FG_Test_1'', FILENAME = ''' + @v_DataPath + 'FG_Test_1.ndf'') TO FILEGROUP [FG_Test]');";
+        cmd.ExecuteNonQuery();
+
         conn.ChangeDatabase(_integrationDb);
         ForgeKindler.KindleTheForge(cmd, Platform.SqlServer);
 
@@ -67,7 +76,9 @@ CREATE FULLTEXT STOPLIST [SL_Test];";
         // A rich table exercising every array container: identity, computed+persisted, default, NOT NULL/NULL
         // mix, PK clustered, a nonclustered index with a DESC key + INCLUDE + filter, an FK with a referential
         // action, a user statistic, an XML column with primary + secondary XML indexes, a genuine table-level
-        // check (parent_column_id = 0), and a full-text index (the single-object, no-json:Array container).
+        // check (parent_column_id = 0), a full-text index (the single-object, no-json:Array container), and
+        // (backlog E3) a pair of sparse columns plus their COLUMN_SET FOR ALL_SPARSE_COLUMNS aggregator --
+        // the JSON/XML twin pairing the new IsColumnSet property must keep in lockstep.
         cmd.CommandText = @"
 CREATE TABLE dbo.Parent (Id INT NOT NULL PRIMARY KEY, Code VARCHAR(20) NOT NULL);
 CREATE UNIQUE INDEX UX_Parent_Code ON dbo.Parent (Code);
@@ -80,6 +91,8 @@ CREATE TABLE dbo.Rich (
     Computed AS (Amount * 2) PERSISTED,
     Flag BIT NOT NULL,
     Doc XML NULL,
+    SparseProp VARCHAR(20) SPARSE NULL,
+    SpecialCols XML COLUMN_SET FOR ALL_SPARSE_COLUMNS,
     CONSTRAINT PK_Rich PRIMARY KEY CLUSTERED (Id),
     CONSTRAINT CK_Rich_Amount CHECK (Amount >= 0),
     CONSTRAINT CK_Rich_Table CHECK (Amount < 100000 OR Name IS NOT NULL),
@@ -103,6 +116,76 @@ EXEC sys.sp_addextendedproperty 'MS_Description', 'A rich table', 'SCHEMA', [dbo
         // The JSON path carries Extensions; the XML (legacy) path drops it by design. Strip Extensions from
         // both and assert the rest of the model is identical.
         Assert.That(NormalizeMinusExtensions(xmlModel), Is.EqualTo(NormalizeMinusExtensions(jsonModel)));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableXml_PartitionedTableWithMixedCompression_ExtractsSameModelAs_GenerateTableJson()
+    {
+        // Task C1-0b: sys.partitions is one row PER PARTITION; the prior scalar CompressionType
+        // subquery raised Msg 512 the moment a table had more than one partition. Partition 2 is
+        // rebuilt to PAGE while the rest stay NONE so the two encodings are compared on the highest-
+        // risk case -- non-uniform compression producing the 'MIXED' sentinel -- not just the already-
+        // covered uniform case, since a JSON/XML divergence here is an encoding-dependent bug that
+        // would only surface on a legacy-compat target.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE PARTITION FUNCTION PF_XmlEquivPartitioned (INT) AS RANGE LEFT FOR VALUES (100, 200, 300);
+CREATE PARTITION SCHEME PS_XmlEquivPartitioned AS PARTITION PF_XmlEquivPartitioned ALL TO ([PRIMARY]);
+
+CREATE TABLE dbo.XmlEquivPartitioned (
+    Id INT NOT NULL,
+    Val VARCHAR(50) NULL,
+    CONSTRAINT PK_XmlEquivPartitioned PRIMARY KEY CLUSTERED (Id) ON PS_XmlEquivPartitioned(Id)
+) ON PS_XmlEquivPartitioned(Id);
+
+ALTER TABLE dbo.XmlEquivPartitioned REBUILD PARTITION = 2 WITH (DATA_COMPRESSION = PAGE);
+";
+        cmd.ExecuteNonQuery();
+
+        var jsonModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(GenerateTableJson(cmd, "dbo", "XmlEquivPartitioned"), Platform.SqlServer);
+        var xmlModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(
+            ModelXmlSerializer.FromIngestXml(GenerateTableXml(cmd, "dbo", "XmlEquivPartitioned")), Platform.SqlServer);
+
+        Assert.That(jsonModel.CompressionType, Is.EqualTo("MIXED"), "the JSON proc must flag non-uniform per-partition compression rather than emit one partition's value");
+        Assert.That(xmlModel.CompressionType, Is.EqualTo("MIXED"), "the XML twin must agree with the JSON proc's compression reading");
+        Assert.That(NormalizeMinusExtensions(xmlModel), Is.EqualTo(NormalizeMinusExtensions(jsonModel)));
+
+        conn.Close();
+    }
+
+    [Test]
+    public void GenerateTableXml_FileGroupPlacement_ExtractsSameModelAs_GenerateTableJson()
+    {
+        // #filegroups: table on a non-default filegroup, one index left on the default (PRIMARY) and one
+        // explicitly placed on the same non-default filegroup -- exercising the emit-only-when-non-default
+        // rule on both sides (table AND index) and both encodings at once.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+CREATE TABLE dbo.XmlEquivFileGroup (
+    Id INT NOT NULL,
+    Somedata VARCHAR(50) NULL,
+    CONSTRAINT PK_XmlEquivFileGroup PRIMARY KEY NONCLUSTERED (Id) ON [PRIMARY]
+) ON [FG_Test];
+CREATE NONCLUSTERED INDEX IX_XmlEquivFileGroup_Somedata ON dbo.XmlEquivFileGroup (Somedata) ON [FG_Test];
+";
+        cmd.ExecuteNonQuery();
+
+        var jsonModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(GenerateTableJson(cmd, "dbo", "XmlEquivFileGroup"), Platform.SqlServer);
+        var xmlModel = (SqlServerTable)PlatformDeserializer.DeserializeTable(
+            ModelXmlSerializer.FromIngestXml(GenerateTableXml(cmd, "dbo", "XmlEquivFileGroup")), Platform.SqlServer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(jsonModel.FileGroup, Is.EqualTo("[FG_Test]"));
+            Assert.That(xmlModel.FileGroup, Is.EqualTo("[FG_Test]"), "the XML twin must agree with the JSON proc's table-level filegroup reading");
+            Assert.That(NormalizeMinusExtensions(xmlModel), Is.EqualTo(NormalizeMinusExtensions(jsonModel)));
+        });
 
         conn.Close();
     }

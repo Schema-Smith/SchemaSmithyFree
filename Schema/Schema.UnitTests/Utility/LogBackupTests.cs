@@ -52,6 +52,52 @@ public class LogBackupTests
         _mockDirectory.Received().CreateDirectory(Arg.Is<string>(s => s.Contains("TestApp.0001")));
     }
 
+    // Two runs from one install both pass the Exists check and land on the same directory --
+    // CreateDirectory is idempotent, so nothing stops them. The loser's Copy then hit an existing
+    // destination, threw, and the catch exited 4: a run that had just reported success was recorded as a
+    // failure. It must take the next directory and keep its own exit code.
+    [Test]
+    public void BackupLogsAndExit_AnotherRunAlreadyClaimedTheDirectory_TakesTheNextOneAndKeepsItsExitCode()
+    {
+        _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
+        _mockDirectory.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>())
+            .Returns(new[] { Path.Join("logs", "TestApp - run.log") });
+        // The run that won the race already wrote this file, so the copy into 0001 fails.
+        _mockFile.When(f => f.Copy(Arg.Any<string>(), Arg.Is<string>(s => s.Contains("TestApp.0001")),
+                                  Arg.Any<bool>()))
+                 .Do(_ => throw new IOException("file exists"));
+
+        LogBackup.BackupLogsAndExit("TestApp");
+
+        Assert.Multiple(() =>
+        {
+            _mockFile.Received().Copy(Arg.Any<string>(), Arg.Is<string>(s => s.Contains("TestApp.0002")),
+                Arg.Any<bool>());
+            _mockEnvironment.Received().Exit(0);
+            _mockEnvironment.DidNotReceive().Exit(4);
+        });
+    }
+
+    // Even when no directory can be claimed at all, archiving logs is a convenience: it must not replace
+    // the result the run actually reached.
+    [Test]
+    public void BackupLogsAndExit_CannotBackUpAtAll_StillReportsTheRunsOwnExitCode()
+    {
+        _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
+        _mockDirectory.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>())
+            .Returns(new[] { Path.Join("logs", "TestApp - run.log") });
+        _mockFile.When(f => f.Copy(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>()))
+                 .Do(_ => throw new IOException("every destination is taken"));
+
+        LogBackup.BackupLogsAndExit("TestApp", 2);
+
+        Assert.Multiple(() =>
+        {
+            _mockEnvironment.Received().Exit(2);
+            _mockEnvironment.DidNotReceive().Exit(4);
+        });
+    }
+
     [Test]
     public void BackupLogsAndExit_IncrementsDirectoryWhenExists()
     {

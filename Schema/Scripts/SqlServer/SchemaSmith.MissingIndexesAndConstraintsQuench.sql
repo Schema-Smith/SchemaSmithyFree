@@ -53,6 +53,27 @@ BEGIN TRY
         FROM #Columns c WITH (NOLOCK)
         WHERE c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) <> ''
 
+  -- Filegroup placement (#filegroups): a NEW index/constraint declaring a filegroup name that does not
+  -- exist on this target must fail loudly BEFORE any DDL runs, naming both the index and the filegroup --
+  -- same contract as the table-create check in MissingTableAndColumnQuench.sql. Only indexes not yet
+  -- present are checked; an already-existing index's declared vs. deployed filegroup is the "move"
+  -- question, handled in ModifiedTableQuench.
+  RAISERROR('Validate declared index filegroups exist', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #Indexes i WITH (NOLOCK)
+               WHERE i.[FileGroup] IS NOT NULL
+                 AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]))
+                 AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])))
+  BEGIN
+    DECLARE @v_IdxFGIndex NVARCHAR(1510), @v_IdxFGName NVARCHAR(500)
+    SELECT TOP 1 @v_IdxFGIndex = i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName], @v_IdxFGName = i.[FileGroup]
+      FROM #Indexes i WITH (NOLOCK)
+      WHERE i.[FileGroup] IS NOT NULL
+        AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]))
+        AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
+    RAISERROR('Index %s declares filegroup %s, which does not exist on this database. SchemaSmith does not create filegroups -- create it on the target first, or correct the declared name.', 16, 1, @v_IdxFGIndex, @v_IdxFGName)
+  END
+
   RAISERROR('Add Missing Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + 'RAISERROR(''  Creating ' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + CASE WHEN RTRIM(ISNULL(i.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(i.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1
@@ -68,7 +89,11 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
 							                          ')'
-                                                 ELSE '' END
+                                                 ELSE '' END +
+                                            -- Filegroup placement (#filegroups): ON comes AFTER the WITH
+                                            -- clause for ADD CONSTRAINT, per its own grammar (unlike CREATE
+                                            -- TABLE, where ON precedes WITH). Existence validated above.
+                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
                                        ELSE 'CREATE ' + 
                                             CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
                                             CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
@@ -93,7 +118,10 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
 							                          ')'
-                                                 ELSE '' END
+                                                 ELSE '' END +
+                                            -- Filegroup placement (#filegroups): ON comes AFTER the WITH
+                                            -- clause for CREATE INDEX too. Existence validated above.
+                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
                                        END + ';' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ''', ''' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', ''created'');'
     FROM #Indexes i WITH (NOLOCK)
@@ -140,16 +168,100 @@ BEGIN TRY
                               AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
 
   RAISERROR('Turn on Temporal Tracking for tables defined as temporal', 10, 100) WITH NOWAIT
+  -- HISTORY_TABLE + HISTORY_RETENTION_PERIOD only take effect here on the transition to versioned; see the
+  -- reissue block below for an already-versioned table. ISNULL falls back to today's own-schema/<Table>_Hist
+  -- default, so an IsTemporal-only package (HistoryTableSchema/Name both NULL) emits byte-for-byte the same
+  -- ALTER as before this change. HistoryRetentionPeriod arrives already normalized to a canonical
+  -- plural-unit form from the parse step (fn_NormalizeTemporalRetentionPeriod), so it is used as-is.
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Turn ON Temporal Tracking for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' ADD [ValidFrom] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL DEFAULT ''0001-01-01 00:00:00.0000000'', ' +
                                                                                       '[ValidTo] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL DEFAULT ''9999-12-31 23:59:59.9999999'', ' +
                                                                                       'PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo);' + CHAR(13) + CHAR(10) +
-                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = ' + T.[Schema] + '.[' + SchemaSmith.fn_StripBracketWrapping(T.[Name]) + '_Hist]));' AS NVARCHAR(MAX))
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = ' +
+                                       ISNULL(T.[HistoryTableSchema], T.[Schema]) + '.[' + ISNULL(SchemaSmith.fn_StripBracketWrapping(T.[HistoryTableName]), SchemaSmith.fn_StripBracketWrapping(T.[Name]) + '_Hist') + ']' +
+                                       CASE WHEN RTRIM(ISNULL(T.[HistoryRetentionPeriod], '')) <> '' THEN ', HISTORY_RETENTION_PERIOD = ' + T.[HistoryRetentionPeriod] ELSE '' END +
+                                       '));' AS NVARCHAR(MAX))
                            FROM #Tables T WITH (NOLOCK)
                            WHERE t.IsTemporal = 1
                              AND OBJECTPROPERTY(OBJECT_ID([Schema] + '.' + [Name]), 'TableTemporalType') = 0
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- #depth-gap: re-declaring HISTORY_TABLE on an already-versioned table needs no live-state pre-check --
+  -- verified against a live SQL Server: re-issuing the SAME history table is a silent no-op (no error, no
+  -- state change), and a DIFFERENT one raises SQL Server's own clear, actionable error (Msg 13757,
+  -- "Temporal table '...' already has history table defined. Consider dropping system_versioning first if
+  -- you want to use different history table."). That message names the table, states the cause, and gives
+  -- the remedy -- strictly better than a hand-written check, so the engine is left to be the drift
+  -- detector rather than reading live catalog state ourselves to pre-validate it. No 2016+ version gate is
+  -- needed either: OBJECTPROPERTY(...,'TableTemporalType') itself is safe on every SQL Server version
+  -- (0/NULL pre-2016, where DegradeUnsupportedFeatures has already forced IsTemporal off).
+  RAISERROR('Reconcile history table for already-versioned temporal tables', 10, 100) WITH NOWAIT
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST(
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = ' +
+                                       ISNULL(T.[HistoryTableSchema], T.[Schema]) + '.[' + ISNULL(SchemaSmith.fn_StripBracketWrapping(T.[HistoryTableName]), SchemaSmith.fn_StripBracketWrapping(T.[Name]) + '_Hist') + ']' +
+                                       '));' AS NVARCHAR(MAX))
+                           FROM #Tables T WITH (NOLOCK)
+                           WHERE T.IsTemporal = 1
+                             AND OBJECTPROPERTY(OBJECT_ID(T.[Schema] + '.' + T.[Name]), 'TableTemporalType') = 2
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- HISTORY_RETENTION_PERIOD alone IS documented as safely alterable on an already-versioned table (no
+  -- OFF/ON cycle, no data at risk). Unlike the history table identity above, this DOES compare against
+  -- live state first -- re-issuing the same retention every quench would be indistinguishable from a real
+  -- change in the ChangeAudit/log output, so an unchanged retention must stay a true no-op deploy-to-deploy
+  -- (see TableQuench_TemporalHistoryAndRetentionTests.TableQuench_RetentionPeriodDeployIsIdempotent).
+  -- history_retention_period(_unit_desc) are 2016+ columns -- gate via a fn_ServerMajorVersion()>=13
+  -- dynamic read (same pattern as ModifiedTableQuench.sql's #RemovedTemporalHistory) so this proc still
+  -- CREATEs on a genuine pre-2016 binary. The live value is canonicalized to the SAME plural-unit form
+  -- fn_NormalizeTemporalRetentionPeriod produces at parse time. Reads history_retention_period_unit_desc
+  -- ('DAY'/'WEEK'/'MONTH'/'YEAR'/'INFINITE') rather than the numeric history_retention_period_unit code --
+  -- a first pass mapped the numeric codes from documentation (1/2/3/4) and got it wrong: measured live
+  -- against a real server, DAY/WEEK/MONTH/YEAR are actually 3/4/5/6. The desc string needs no separately
+  -- maintained code table (its 4 finite values pluralize by simple concatenation) and is what actually
+  -- shipped correct. An ELSE this CASE cannot reach today (the 5 values above are exhaustive) still forces
+  -- a loud Msg 245 rather than a silently-dropped-to-NULL retention if Microsoft ever adds a unit --
+  -- CONVERT(INT, <text>) always fails on non-numeric text, and the outer CONVERT(NVARCHAR(50), ...) keeps
+  -- this branch's static type matching its siblings so the CASE still compiles.
+  RAISERROR('Update history retention period for already-versioned temporal tables', 10, 100) WITH NOWAIT
+  IF OBJECT_ID('tempdb..#LiveTemporalRetention') IS NOT NULL DROP TABLE #LiveTemporalRetention
+  CREATE TABLE #LiveTemporalRetention ([Schema] NVARCHAR(500) COLLATE DATABASE_DEFAULT NOT NULL, [Name] NVARCHAR(500) COLLATE DATABASE_DEFAULT NOT NULL,
+                                        LiveRetentionText NVARCHAR(50) COLLATE DATABASE_DEFAULT NULL)
+  IF SchemaSmith.fn_ServerMajorVersion() >= 13
+    EXEC sp_executesql N'
+      INSERT INTO #LiveTemporalRetention ([Schema], [Name], LiveRetentionText)
+      SELECT T.[Schema], T.[Name],
+             CASE mt.history_retention_period_unit_desc
+               WHEN ''INFINITE'' THEN ''INFINITE''
+               WHEN ''DAY'' THEN CAST(mt.history_retention_period AS NVARCHAR(10)) + '' DAYS''
+               WHEN ''WEEK'' THEN CAST(mt.history_retention_period AS NVARCHAR(10)) + '' WEEKS''
+               WHEN ''MONTH'' THEN CAST(mt.history_retention_period AS NVARCHAR(10)) + '' MONTHS''
+               WHEN ''YEAR'' THEN CAST(mt.history_retention_period AS NVARCHAR(10)) + '' YEARS''
+               ELSE CONVERT(NVARCHAR(50), CONVERT(INT, ''Unrecognized SYSTEM_VERSIONING retention unit: '' + ISNULL(mt.history_retention_period_unit_desc, CONVERT(NVARCHAR(20), mt.history_retention_period_unit))))
+             END
+        FROM #Tables T WITH (NOLOCK)
+        JOIN sys.tables mt WITH (NOLOCK) ON mt.[object_id] = OBJECT_ID(T.[Schema] + ''.'' + T.[Name]) AND mt.temporal_type = 2'
+
+  SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Updating history retention period for ' + T.[Schema] + '.' + T.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                  'ALTER TABLE ' + T.[Schema] + '.' + T.[Name] + ' SET (SYSTEM_VERSIONING = ON (HISTORY_RETENTION_PERIOD = ' +
+                                       ISNULL(T.[HistoryRetentionPeriod], 'INFINITE') + '));' + CHAR(13) + CHAR(10) +
+                                  'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''temporal'', ''' + T.[Schema] + '.' + T.[Name] + ' (retention)'', ''changed'');' AS NVARCHAR(MAX))
+                           FROM #Tables T WITH (NOLOCK)
+                           JOIN #LiveTemporalRetention L WITH (NOLOCK) ON L.[Schema] = T.[Schema] AND L.[Name] = T.[Name]
+                           WHERE T.IsTemporal = 1
+                             AND ISNULL(T.[HistoryRetentionPeriod], 'INFINITE') <> L.LiveRetentionText
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+  IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- #363: WhatIf twin of the embedded 'temporal'/'changed' audit above; same predicate.
+  IF @WhatIf = 1
+    INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+      SELECT @@SPID, 'temporal', T.[Schema] + '.' + T.[Name] + ' (retention)', 'wouldChange'
+        FROM #Tables T WITH (NOLOCK)
+        JOIN #LiveTemporalRetention L WITH (NOLOCK) ON L.[Schema] = T.[Schema] AND L.[Name] = T.[Name]
+        WHERE T.IsTemporal = 1
+          AND ISNULL(T.[HistoryRetentionPeriod], 'INFINITE') <> L.LiveRetentionText
 
   RAISERROR('Add missing ProductName extended property to indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('EXEC sp_addextendedproperty @name = N''ProductName'', @value = ''' + @ProductName + ''', ' +

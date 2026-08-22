@@ -14,7 +14,13 @@ public interface IDataDeliveryConfigurator
     /// Configure data delivery settings for a single table.
     /// </summary>
     /// <param name="context">All inputs needed to locate and update the table JSON.</param>
-    void Configure(DataDeliveryConfiguratorContext context);
+    /// <returns>
+    /// True when delivery was actually configured for this table (Table.json found and reconciled,
+    /// whether changed or already up to date); false when it declined (no Table.json found, or an
+    /// authored DataDelivery array had no matching/unambiguous VariantName). Callers use this to key
+    /// merge-script suppression to delivery having actually been configured, per table.
+    /// </returns>
+    bool Configure(DataDeliveryConfiguratorContext context);
 }
 
 /// <summary>

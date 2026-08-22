@@ -3,6 +3,7 @@
 using System.Data;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Utility;
 using System;
 using System.Linq;
 
@@ -263,6 +264,55 @@ INSERT IGNORE INTO `{MainDb}`.`legacy_types` (`id`, `blob_data`, `longblob_data`
         var result = global::DataTongs.DataTongs.FormatColumnForJsonObject(column);
 
         Assert.That(result, Is.EqualTo("'actor_id', `actor_id`"));
+    }
+
+    #endregion
+
+    #region XML Delivery Extraction (B4b)
+
+    [Test]
+    public void XmlDeliveryExtraction_ConvertsExtractedJsonToTheDeliveryXmlShape()
+    {
+        // No native XML producer on MySQL/MariaDb: DataTongs extracts the same JSON the Json path would
+        // have, then MergeScriptHelper.JsonPayloadToXml converts it. A MySQL bit column is already emitted
+        // as a JSON NUMBER (0/1, via CAST(... AS UNSIGNED) in FormatColumnForJsonObject) rather than a JSON
+        // boolean literal, so this also proves the converter's boolean normalization doesn't need to fire
+        // here — the "0"/"1" text the shred needs falls out of MySQL's own JSON producer already.
+        var tableName = $"xmldeliv_{Guid.NewGuid():N}".Substring(0, 20);
+        using (var command = _connection.CreateCommand())
+        {
+            command.CommandText = $@"
+CREATE TABLE `{_testDb}`.`{tableName}` (
+    `code` VARCHAR(20) NOT NULL PRIMARY KEY, `flag` BIT(1), `amount` DECIMAL(10,2),
+    `note` VARCHAR(100), `ts` DATETIME, `bin` VARBINARY(16));
+INSERT INTO `{_testDb}`.`{tableName}` VALUES
+    ('A001', b'1', 7.25, 'a & b < c', '2026-08-11 06:00:00', UNHEX('DEADBEEF')),
+    ('B002', b'0', NULL, NULL, NULL, NULL);";
+            command.ExecuteNonQuery();
+        }
+
+        try
+        {
+            string xml;
+            using (var command = _connection.CreateCommand())
+            {
+                var json = _dataTongs.GetTableDataJson(command, null, _testDb, tableName, "`code`", null);
+                xml = MergeScriptHelper.JsonPayloadToXml(json);
+            }
+
+            Assert.That(xml, Does.Contain("<c n=\"code\">A001</c>"));
+            Assert.That(xml, Does.Contain("<c n=\"flag\">1</c>"));
+            Assert.That(xml, Does.Contain("a &amp; b &lt; c"), "XML-special characters must be escaped.");
+            Assert.That(xml, Does.Contain("<c n=\"bin\">3q2+7w==</c>"), "Binary must be base64, matching the SQL Server reference producer's encoding.");
+            Assert.That(xml, Does.Contain("<row><c n=\"code\">B002</c><c n=\"flag\">0</c></row>"),
+                "B002's NULL columns (amount/note/ts/bin) must be omitted entirely, and its 0 flag must be '0'.");
+        }
+        finally
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = $"DROP TABLE IF EXISTS `{_testDb}`.`{tableName}`";
+            command.ExecuteNonQuery();
+        }
     }
 
     #endregion

@@ -16,37 +16,74 @@ INSERT @InternalEPNames VALUES (N'ProductName'), (N'PreventDrop')  -- PreventDro
 SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE(REPLACE(REPLACE((
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
-       COALESCE((SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
-                   FROM sys.partitions AS p WITH (NOLOCK) 
+       -- sys.partitions is one row PER PARTITION, and compression can legitimately differ across
+       -- partitions of the same index -- a scalar read here raised Msg 512 on a partitioned table.
+       -- Aggregate instead: a single shared value round-trips as before; non-uniform compression
+       -- emits 'MIXED', a sentinel outside Quench's managed NONE/ROW/PAGE/COLUMNSTORE* set so
+       -- re-deploy leaves an already-mixed table alone rather than flattening it to one value.
+       COALESCE((SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                           WHEN 0 THEN NULL
+                           WHEN 1 THEN MIN(p.data_compression_desc)
+                           ELSE 'MIXED'
+                         END COLLATE DATABASE_DEFAULT
+                   FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
+       -- Filegroup placement (#filegroups): emit only when the table's data (heap/clustered index,
+       -- index_id 0/1) lives on a non-default filegroup, so an ordinary table on PRIMARY (or whatever
+       -- the target's default filegroup is) stays exactly as minimal as before this change. Filegroups
+       -- predate every supported SQL Server version -- no version gate needed.
+       (SELECT '[' + fg.[name] + ']'
+          FROM sys.indexes tfg WITH (NOLOCK)
+          JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = tfg.data_space_id
+         WHERE tfg.[object_id] = st.[object_id]
+           AND tfg.index_id IN (0, 1)
+           AND fg.is_default = 0) AS [FileGroup],
        st.is_tracked_by_cdc AS [EnableCDC],
        -- System-versioning round-trip (#369): emit IsTemporal so an extracted temporal table re-deploys
        -- as temporal (previously omitted -> silently lost on round-trip). Only when true, to keep non-
        -- temporal tables minimal. sys.tables.temporal_type is 2016+ (safe at the current 2017 floor;
        -- gate this + generated_always_type below when the SQL Server floor drops below 2016).
        CASE WHEN st.temporal_type = 2 THEN CAST(1 AS BIT) END AS [IsTemporal],
+       -- History table identity/retention (#depth-gap): emit only when they deviate from SchemaSmith's own
+       -- apply-side default (same schema, "<Table>_Hist", INFINITE retention) so a default-named temporal
+       -- table's JSON stays exactly as minimal as it was before this change. history_table_id /
+       -- history_retention_period(_unit_desc) are 2016+ columns -- safe to reference statically at the
+       -- current 2017 floor, same reasoning as temporal_type above.
+       CASE WHEN st.temporal_type = 2 AND (hs.[name] <> TABLE_SCHEMA OR h.[name] <> TABLE_NAME + '_Hist')
+            THEN '[' + hs.[name] + ']' END AS [HistoryTableSchema],
+       CASE WHEN st.temporal_type = 2 AND (hs.[name] <> TABLE_SCHEMA OR h.[name] <> TABLE_NAME + '_Hist')
+            THEN '[' + h.[name] + ']' END AS [HistoryTableName],
+       -- Reads history_retention_period_unit_desc ('DAY'/'WEEK'/'MONTH'/'YEAR'/'INFINITE') rather than the
+       -- numeric history_retention_period_unit code: the desc needs no separately-maintained code table
+       -- (its 4 finite values pluralize by simple string concatenation), which is exactly what went wrong
+       -- here once already -- the numeric codes actually measured on a live server are 3/4/5/6 for
+       -- DAY/WEEK/MONTH/YEAR, not the 1/2/3/4 a first pass assumed from documentation. An ELSE branch this
+       -- CASE cannot reach today (the 5 values above are exhaustive) still forces a loud runtime error
+       -- rather than a silently-dropped-to-NULL retention if Microsoft ever adds a unit: CONVERT(INT,
+       -- <text>) always fails to convert non-numeric text, so the surrounding CONVERT(NVARCHAR(10), ...)
+       -- keeps this branch's static type consistent with its siblings while still raising Msg 245 with the
+       -- offending unit named in the message text.
+       CASE WHEN st.temporal_type = 2 AND st.history_retention_period_unit_desc <> 'INFINITE'
+            THEN CAST(st.history_retention_period AS NVARCHAR(10)) + ' ' +
+                 CASE st.history_retention_period_unit_desc
+                   WHEN 'DAY' THEN 'DAYS' WHEN 'WEEK' THEN 'WEEKS' WHEN 'MONTH' THEN 'MONTHS' WHEN 'YEAR' THEN 'YEARS'
+                   ELSE CONVERT(NVARCHAR(10), CONVERT(INT, 'Unrecognized SYSTEM_VERSIONING retention unit: ' + ISNULL(st.history_retention_period_unit_desc, CONVERT(NVARCHAR(20), st.history_retention_period_unit))))
+                 END
+            END AS [HistoryRetentionPeriod],
        -- Emit the sticky drop-protection marker first-class (only when set true, so unprotected tables stay minimal).
        -- Read from the PreventDrop extended property (excluded from generic Extensions via @InternalEPNames). #270
        CASE WHEN (SELECT CONVERT(NVARCHAR(50), [value])
                     FROM fn_listextendedproperty(N'PreventDrop', N'Schema', @p_Schema, N'Table', @p_Table, default, default)) = 'true'
             THEN CAST(1 AS BIT) END AS [PreventDrop],
        '' AS [OldName],
-       '' AS [ContentFile],
-       'NONE' AS [MergeType],
-       (SELECT * 
+       (SELECT *
           FROM (SELECT '[' + c.COLUMN_NAME + ']' AS [Name],
-                       UPPER(USER_TYPE) + CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
-                                               THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
-                                               WHEN USER_TYPE IN ('NUMERIC', 'DECIMAL')
-                                               THEN  '(' + CONVERT(NVARCHAR(20), NUMERIC_PRECISION) + ', ' + CONVERT(NVARCHAR(20), NUMERIC_SCALE) + ')'
-                                               WHEN USER_TYPE = 'DATETIME2'
-                                               THEN  '(' + CONVERT(NVARCHAR(20), DATETIME_PRECISION) + ')'
-                                               WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
-                                               THEN  '(' + (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id) + ')'
-                                               WHEN USER_TYPE = 'UNIQUEIDENTIFIER' AND sc.is_rowguidcol = 1
-                                               THEN  ' ROWGUIDCOL'
-                                               ELSE '' END +
+                       UPPER(USER_TYPE) + SchemaSmith.fn_ColumnTypeArguments(USER_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION,
+                                               CASE WHEN sc.xml_collection_id <> 0
+                                                    THEN (SELECT '[' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + ']' FROM sys.xml_schema_collections xc WHERE xc.xml_collection_id = sc.xml_collection_id)
+                                                    END,
+                                               sc.is_rowguidcol) +
                                           CASE WHEN ic.column_id IS NOT NULL
                                                THEN ' IDENTITY(' + CONVERT(NVARCHAR(20), ic.seed_value) + ', ' + CONVERT(NVARCHAR(20), ic.increment_value) + ')' +
                                                     CASE WHEN ic.is_not_for_replication = 1 THEN ' NOT FOR REPLICATION' ELSE '' END
@@ -60,6 +97,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        ISNULL(cc.is_persisted, CAST(0 AS BIT)) AS [Persisted],
                        sc.is_sparse AS [Sparse],
+                       sc.is_column_set AS [IsColumnSet],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
                        ISNULL(sc.encryption_type_desc, 'NONE') COLLATE DATABASE_DEFAULT AS EncryptionType,
@@ -88,12 +126,24 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     AND sc.generated_always_type = 0) x
           ORDER BY [Name]
           FOR JSON AUTO) AS [Columns],
-       (SELECT '[' + [Name] + ']' AS [Name], 
-               (SELECT p.data_compression_desc COLLATE DATABASE_DEFAULT
-                  FROM sys.partitions AS p WITH (NOLOCK) 
+       (SELECT '[' + [Name] + ']' AS [Name],
+               -- Same per-partition aggregation as the table-level [CompressionType] above.
+               (SELECT CASE COUNT(DISTINCT p.data_compression_desc)
+                          WHEN 0 THEN NULL
+                          WHEN 1 THEN MIN(p.data_compression_desc)
+                          ELSE 'MIXED'
+                        END COLLATE DATABASE_DEFAULT
+                  FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
-               is_primary_key AS [PrimaryKey], 
+               -- Same emit-only-when-non-default rule as the table-level [FileGroup] above -- a table and
+               -- its indexes are commonly split across filegroups on purpose, so this reads si's own
+               -- data_space_id independently of the table's.
+               (SELECT '[' + fg.[name] + ']'
+                  FROM sys.filegroups fg WITH (NOLOCK)
+                 WHERE fg.data_space_id = si.data_space_id
+                   AND fg.is_default = 0) AS [FileGroup],
+               is_primary_key AS [PrimaryKey],
                is_unique AS [Unique],
                is_unique_constraint AS [UniqueConstraint], 
                CAST(CASE WHEN [type] IN (1, 5) THEN 1 ELSE 0 END AS BIT) AS [Clustered], 
@@ -177,8 +227,23 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                (SELECT STRING_AGG(CAST('[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
                                        CASE WHEN fc.type_column_id IS NOT NULL
                                             THEN ' TYPE COLUMN [' + COL_NAME(fc.[object_id], fc.type_column_id) + ']'
+                                            ELSE '' END +
+                                       -- Full-text LANGUAGE churn: emit only when it deviates from the column's
+                                       -- own collation-implied default -- stamping every column would churn every
+                                       -- existing full-text index once. Must render byte-identical to the
+                                       -- live-side build in IndexOnlyQuench.sql/ModifiedTableQuench.sql; drift
+                                       -- detection compares these as strings. c.collation_name comes from a JOIN,
+                                       -- not a correlated subquery -- STRING_AGG rejects an aggregate expression
+                                       -- containing a subquery. A NULL collation (a non-character column, e.g. a
+                                       -- VARBINARY document column indexed via TYPE COLUMN) has no collation-implied
+                                       -- default to compare against, so it is always treated as non-default and
+                                       -- LANGUAGE is always emitted for it -- the alternative (never emitting) would
+                                       -- make such a column's language permanently unrepresentable.
+                                       CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
+                                            THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                             ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+                  JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
                   WHERE fi.[object_id] = fc.[object_id]) AS [Columns]
           FROM sys.fulltext_indexes fi WITH (NOLOCK)
           WHERE fi.[object_id] = st.[object_id]
@@ -186,6 +251,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
 	   JSON_QUERY('{"ExtendedProperties": {' + (SELECT STRING_AGG(CAST('"' + [Name] + '": "' + CONVERT(NVARCHAR(MAX), [Value]) + '"' AS NVARCHAR(MAX)), ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, default, default) x WHERE x.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)) + '}}') AS [Extensions]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+  LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
+  LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
   WHERE TABLE_NAME = @p_Table
     AND TABLE_SCHEMA = @p_Schema
   FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER

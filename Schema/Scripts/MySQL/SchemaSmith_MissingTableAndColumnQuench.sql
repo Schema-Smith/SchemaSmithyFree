@@ -51,13 +51,19 @@ BEGIN
                      ELSE '' END,
                 CASE WHEN t.AutoIncrementValue IS NOT NULL
                      THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
+                     ELSE '' END,
+                -- Escaping matches the established _SchemaSmith_FullTextIndexes.Comment form (double
+                -- the embedded single quotes) -- see SchemaSmith_IndexOnlyQuench.sql.
+                CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
+                     THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
                      ELSE '' END
             ) AS CreateTableStatement
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue;
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
 
@@ -71,6 +77,144 @@ BEGIN
                                WHERE CONVERT(ROUTINE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
                                  AND ROUTINE_NAME = 'SchemaSmith_CustomTableRestore'
                                  AND ROUTINE_TYPE = 'PROCEDURE');
+
+    -- =========================================================================
+    -- Degrade column DEFAULT expressions below MySQL 8.0.13 (extraction already recognises this stored
+    -- form -- COLUMN_DEFAULT LIKE '(%' -- see GenerateTableJson). MariaDB has supported expression
+    -- defaults since 10.2.1 (MDEV-10134), at/below our 10.2 floor, so SchemaSmith_SupportsDefaultExpression()
+    -- never gates MariaDB -- this branch is MySQL-only. Below the threshold DEFAULT (<expr>) is a hard
+    -- syntax error (unlike a parse-and-ignored clause), so there is no safe partial emit: 'fail' aborts
+    -- naming the offending column(s); 'warn' (default) skips the column entirely -- the CREATE TABLE and
+    -- ADD COLUMN emit sites below exclude it via the identical predicate -- and records a 'downgraded'
+    -- manifest row per column so the run stays idempotent and visible.
+    -- =========================================================================
+    IF SchemaSmith_SupportsDefaultExpression() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+                     AND c.IsAutoIncrement = 0
+                     AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+                     AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%') THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column DEFAULT expression unsupported (requires MySQL 8.0.13): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+            SET @ss_msg = CONCAT('Column DEFAULT expressions require MySQL 8.0.13 (detected ',
+                                 SchemaSmith_ServerVersionNum(), '); see the deploy log for the unsupported column(s).');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping column (DEFAULT expression requires MySQL 8.0.13 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (DEFAULT expression, MySQL 8.0.13)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+        END IF;
+    END IF;
+
+    -- =========================================================================
+    -- Degrade invisible columns below MySQL 8.0.23 / MariaDB 10.3 (mirrors the invisible-index guard in
+    -- MissingIndexesAndConstraintsQuench, one level down). Below the threshold the INVISIBLE keyword is a
+    -- hard syntax error, so ColumnScript (built in ParseTableJson) never emits it there -- the column is
+    -- created visible instead, which is the safe degrade; the CREATE TABLE and ADD COLUMN emit sites below
+    -- need no exclusion for it. This block only adds the user-facing report: 'fail' aborts naming the
+    -- offending column(s); 'warn' (default) records a 'downgraded' manifest row per column so a
+    -- silently-visible column stays discoverable.
+    -- =========================================================================
+    IF SchemaSmith_SupportsInvisibleColumn() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+                     AND c.IsInvisible = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsInvisible = 1;
+            SET @ss_msg = 'Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column stored visible (requires MySQL 8.0.23 / MariaDB 10.3 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsInvisible = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (invisible, MySQL 8.0.23 / MariaDB 10.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsInvisible = 1;
+        END IF;
+    END IF;
+
+    -- =========================================================================
+    -- Degrade column SRID restriction below MySQL 8.0.3 (mirrors the invisible-column guard directly
+    -- above). MariaDB has no equivalent attribute at any version, so SchemaSmith_SupportsColumnSrid()
+    -- is 0 there unconditionally, not a floor it ever crosses -- this block fires for MariaDB the same
+    -- way it fires for a genuinely old MySQL. Below the threshold the SRID clause is a hard syntax
+    -- error, so ColumnScript (built in ParseTableJson) never emits it there -- the column is created
+    -- unrestricted instead, which is the safe degrade; the CREATE TABLE and ADD COLUMN emit sites below
+    -- need no exclusion for it. This block only adds the user-facing report: 'fail' aborts naming the
+    -- offending column(s); 'warn' (default) records a 'downgraded' manifest row per column so a
+    -- silently-unrestricted spatial column stays discoverable.
+    -- =========================================================================
+    IF SchemaSmith_SupportsColumnSrid() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+                     AND c.Srid IS NOT NULL) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.Srid IS NOT NULL;
+            SET @ss_msg = 'Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID stored unrestricted (requires MySQL 8.0.3, MariaDB unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.Srid IS NOT NULL;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (SRID, MySQL 8.0.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.Srid IS NOT NULL;
+        END IF;
+    END IF;
 
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
@@ -123,12 +267,16 @@ BEGIN
                            ELSE '' END,
                       CASE WHEN t.AutoIncrementValue IS NOT NULL
                            THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
+                           ELSE '' END,
+                      CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
+                           THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
                            ELSE '' END)
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue;
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
 
         -- Step 2: Show ALTER TABLE ADD COLUMN for new columns on existing tables (set-based;
         -- one row per column, matching the per-column statement the ELSE branch would issue
@@ -142,6 +290,7 @@ BEGIN
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         ORDER BY c.TableName, c.OrdinalPosition;
 
         -- #363: WhatIf twins of the ELSE-branch 'table'/'created' (cursor loop) and 'column'/'created'
@@ -158,7 +307,8 @@ BEGIN
         INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
-          AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '');
+          AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0);
 
     ELSE
         -- =======================
@@ -235,7 +385,12 @@ BEGIN
         -- collate / nullability / generated / auto_increment / comment). DEFAULT is intentionally OMITTED:
         -- the subsequent ModifiedTableQuench pass reconciles the column to its desired default in the same
         -- deploy, which sidesteps the cross-engine COLUMN_DEFAULT-quoting divergence (MySQL 5.7 returns
-        -- string defaults unquoted, MariaDB/8.0 quoted) and keeps the rename data-preserving.
+        -- string defaults unquoted, MariaDB/8.0 quoted) and keeps the rename data-preserving. INVISIBLE
+        -- (MySQL 8.0.23 / MariaDB 10.3) is omitted for the same reason and reconciled the same way -- see
+        -- InvisibleColumnGatingTests.RenameOfInvisibleColumnNullableNoDefault_InRenameColumnFallbackBand_VisibilityPredicateAloneRestoresInvisible,
+        -- which isolates that predicate and reddens if it's removed. ON UPDATE CURRENT_TIMESTAMP[(n)] is
+        -- omitted here too, for the same reason: it is unconditionally dropped by this CHANGE COLUMN and
+        -- restored by ModifiedTableQuench's ON UPDATE compare against the new column name in the same deploy.
         INSERT INTO _SchemaSmith_ColRenameStmts (Stmt)
         SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
                       GROUP_CONCAT(
@@ -394,6 +549,7 @@ BEGIN
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         ORDER BY c.TableName, c.OrdinalPosition;
 
         -- Fold each table's missing-column adds into one multi-clause ALTER, materialize, execute.
@@ -408,6 +564,7 @@ BEGIN
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         GROUP BY c.TableName;
 
         SET @v_addcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_AddColumnStmts);
@@ -428,7 +585,8 @@ BEGIN
         INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
-          AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '');
+          AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0);
 
     END IF;
 

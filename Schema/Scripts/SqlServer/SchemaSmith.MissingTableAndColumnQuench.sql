@@ -10,6 +10,27 @@ AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = ''
 
+  -- Filegroup placement (#filegroups): a NEW table declaring a filegroup name that does not exist on this
+  -- target must fail loudly BEFORE any DDL runs, naming both the table and the filegroup -- not create the
+  -- filegroup (that is the user's job -- provisioning stays out of package portability) and not silently
+  -- fall back to the default. Only NewTable=1 rows are checked here; an already-existing table's declared
+  -- vs. deployed filegroup is a different question (a possible "move"), handled in ModifiedTableQuench.
+  RAISERROR('Validate declared table filegroups exist', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #Tables t WITH (NOLOCK)
+               WHERE t.NewTable = 1
+                 AND t.[FileGroup] IS NOT NULL
+                 AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(t.[FileGroup])))
+  BEGIN
+    DECLARE @v_FGTable NVARCHAR(1010), @v_FGName NVARCHAR(500)
+    SELECT TOP 1 @v_FGTable = t.[Schema] + '.' + t.[Name], @v_FGName = t.[FileGroup]
+      FROM #Tables t WITH (NOLOCK)
+      WHERE t.NewTable = 1
+        AND t.[FileGroup] IS NOT NULL
+        AND NOT EXISTS (SELECT * FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.[name] = SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]))
+    RAISERROR('Table %s declares filegroup %s, which does not exist on this database. SchemaSmith does not create filegroups -- create it on the target first, or correct the declared name.', 16, 1, @v_FGTable, @v_FGName)
+  END
+
   RAISERROR('Handle Table Renames', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Rename ' + T.[Schema] + '.' + T.[OldName] + ' to ' + T.[Schema] + '.' + T.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'EXEC sp_rename ''' + SchemaSmith.fn_StripBracketWrapping(T.[Schema]) + '.' + SchemaSmith.fn_StripBracketWrapping(T.[OldName]) + ''', ''' + SchemaSmith.fn_StripBracketWrapping(T.[Name]) + ''';' + CHAR(13) + CHAR(10) AS NVARCHAR(MAX))
@@ -54,9 +75,19 @@ BEGIN TRY
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] +
                                   CASE WHEN RTRIM(ISNULL(T.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(T.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   'EXEC(''CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + REPLACE(ScriptColumns, '''', '''''') + ')' +
-                                  CASE WHEN ISNULL(t.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + ISNULL(t.[CompressionType], 'NONE') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
+                                  -- Filegroup placement (#filegroups): ON comes right after the column list,
+                                  -- BEFORE the WITH clause, per CREATE TABLE's own grammar. Existence was
+                                  -- already validated above, so this can emit unconditionally.
+                                  CASE WHEN T.[FileGroup] IS NOT NULL THEN ' ON ' + T.[FileGroup] ELSE '' END +
+                                  -- Sparse columns and a COLUMN_SET are incompatible with data compression, and SQL Server 2008
+                                  -- REJECTS the clause outright on such a table -- even DATA_COMPRESSION=NONE. Modern servers
+                                  -- accept the redundant NONE, so this only fails at the floor, where the XML ingest path runs.
+                                  CASE WHEN t.[HasSparseOrColumnSet] = 0 AND ISNULL(t.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + ISNULL(t.[CompressionType], 'NONE') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + T.[Schema] + '.' + T.[Name] + ''', ''created'');' AS NVARCHAR(MAX))
-                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], T.[VariantName],
+                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[FileGroup], T.[VariantName],
+                                        HasSparseOrColumnSet = CASE WHEN EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
+                                                                                  WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
+                                                                                    AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1)) THEN 1 ELSE 0 END,
                                         ScriptColumns = STUFF((SELECT ', ' + [ColumnScript] FROM #Columns C WITH (NOLOCK) WHERE C.[Schema] = T.[Schema] AND C.[TableName] = T.[Name] AND RTRIM(ISNULL([ComputedExpression], '')) = '' ORDER BY c.[ColumnName] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
                                    FROM #Tables T WITH (NOLOCK)
                                    WHERE NewTable = 1) T

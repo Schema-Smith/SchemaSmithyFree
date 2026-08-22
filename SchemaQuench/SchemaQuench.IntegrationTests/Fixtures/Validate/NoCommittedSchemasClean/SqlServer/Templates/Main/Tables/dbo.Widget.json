@@ -1,0 +1,13 @@
+{
+  "Name": "[Widget]",
+  "Columns": [
+    { "Name": "[Id]", "DataType": "INT" },
+    { "Name": "[Label]", "DataType": "NVARCHAR(50)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Widget]", "PrimaryKey": true, "Unique": true, "IndexColumns": "[Id]" }
+  ],
+  "ForeignKeys": [],
+  "CheckConstraints": [],
+  "Schema": "[dbo]"
+}

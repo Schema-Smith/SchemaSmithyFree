@@ -198,13 +198,30 @@ public static class DeploymentSummaryAssembler
         return new ObjectChangeSummary(true, created, modified, dropped, scriptsRan, details);
     }
 
+    /// <summary>
+    /// Object-script WhatIf logging (<c>WhatIfLogScripts</c> in <see cref="DatabaseQuench"/>) runs
+    /// once per dependency-resolution pass with no checkpoint gate — unlike the real run, where
+    /// <c>QuenchDatabaseObjectsWithCheckpoint</c> only records a script as "ran" the first time its
+    /// <c>HasBeenQuenched</c> flips true and excludes it from every later pass. So the same
+    /// (scope, script) pair can land in <paramref name="whatIfEntries"/> multiple times for one
+    /// scope. Dedupe on first occurrence, preserving encounter order, for all three categories —
+    /// not just Apply — so there is one dedup rule instead of a category-specific special case
+    /// that could drift.
+    /// </summary>
     private static WhatIfSummary BuildWhatIfSummary(IReadOnlyList<WhatIfRun> whatIfEntries)
     {
-        IReadOnlyList<WhatIfEntry> ForCategory(WhatIfCategory category) =>
-            whatIfEntries
-                .Where(w => w.Category == category)
-                .Select(w => new WhatIfEntry(w.Scope, w.Script))
-                .ToList();
+        IReadOnlyList<WhatIfEntry> ForCategory(WhatIfCategory category)
+        {
+            var seen = new HashSet<(string Scope, string Script)>();
+            var result = new List<WhatIfEntry>();
+            foreach (var w in whatIfEntries)
+            {
+                if (w.Category != category || !seen.Add((w.Scope, w.Script)))
+                    continue;
+                result.Add(new WhatIfEntry(w.Scope, w.Script));
+            }
+            return result;
+        }
 
         return new WhatIfSummary(
             WouldApply: ForCategory(WhatIfCategory.Apply),

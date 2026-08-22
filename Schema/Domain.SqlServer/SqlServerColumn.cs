@@ -18,6 +18,11 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 103)]
         public bool Sparse { get; set; }
 
+        // COLUMN_SET FOR ALL_SPARSE_COLUMNS: an XML column that aggregates the table's sparse columns.
+        // Legal at the 2008 floor alongside Sparse (SqlServerColumn:19) -- no version gate needed.
+        [JsonProperty(Order = 109)]
+        public bool IsColumnSet { get; set; }
+
         [JsonProperty(Order = 104)]
         public string Collation { get; set; }
 

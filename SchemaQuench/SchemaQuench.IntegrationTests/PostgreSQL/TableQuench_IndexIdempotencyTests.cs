@@ -91,4 +91,76 @@ SELECT con.oid
         var result = cmd.ExecuteScalar();
         return result is null || result is DBNull ? null : Convert.ToInt64(result);
     }
+    // A multi-column index declared the natural way -- "Note, Id", with a space after the comma -- was dropped
+    // and re-created on EVERY deploy: the catalog renders the key list with a bare comma, and the declared
+    // string was compared verbatim. Reported as an unset-FillFactor problem, but the fill factor is not
+    // involved at all: this reproduces with no storage parameter set anywhere, and stops reproducing if the
+    // declaration is written without the space. Asserting on the index OID, which changes if and only if the
+    // index was actually re-created.
+    // DESC is included because the normalization strips whitespace around COMMAS only -- a key's own
+    // ' DESC' suffix has to survive it.
+    [Test]
+    public void TableQuench_MultiColumnIndexDeclaredWithSpaces_IsIdempotent()
+    {
+        var schema = "public";
+        var tableName = "ff_idem_" + Guid.NewGuid().ToString("N")[..8];
+        var indexName = $"ix_{tableName}_note";
+
+        using var conn = (NpgsqlConnection)DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var json = $$"""
+{
+    "Schema": "{{schema}}",
+    "Name": "{{tableName}}",
+    "Columns": [
+        { "Name": "Id",   "DataType": "integer",     "Nullable": false },
+        { "Name": "Note", "DataType": "varchar(50)", "Nullable": true }
+    ],
+    "Indexes": [
+        { "Name": "PK_{{tableName}}", "PrimaryKey": true, "IndexColumns": "Id" },
+        { "Name": "{{indexName}}", "IndexColumns": "Note DESC, Id" }
+    ]
+}
+""";
+
+        try
+        {
+            RunTableQuenchProc(cmd, json);
+
+            // Put the index on an explicit non-default storage parameter, as a DBA (or the shipped demo
+            // package this was found in) would have.
+
+
+            var oidBefore = GetIndexOid(cmd, schema, indexName);
+            Assert.That(oidBefore, Is.Not.Null.And.Not.EqualTo(0L), "Setup: the index must exist.");
+
+            for (var pass = 2; pass <= 3; pass++)
+            {
+                RunTableQuenchProc(cmd, json);
+                Assert.That(GetIndexOid(cmd, schema, indexName), Is.EqualTo(oidBefore),
+                    $"pass {pass}: a multi-column index whose declaration already matches must be left alone");
+            }
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS {schema}.\"{tableName}\" CASCADE";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    private static long? GetIndexOid(IDbCommand cmd, string tableSchema, string indexName)
+    {
+        cmd.CommandText = $@"
+SELECT c.oid FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = '{tableSchema}' AND c.relname = '{indexName}' AND c.relkind = 'i';";
+        var result = cmd.ExecuteScalar();
+        return result == null || result == DBNull.Value ? null : Convert.ToInt64(result);
+    }
+
 }

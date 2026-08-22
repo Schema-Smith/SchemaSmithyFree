@@ -1,0 +1,12 @@
+{
+  "Name": "FileTokenResolvesProduct",
+  "ValidationScript": "SELECT 1",
+  "TemplateOrder": [
+    "Main"
+  ],
+  "ScriptTokens": {
+    "ProductSeed": "<*File*>data/product-seed.sql"
+  },
+  "ScriptFolders": [],
+  "Platform": "SqlServer"
+}

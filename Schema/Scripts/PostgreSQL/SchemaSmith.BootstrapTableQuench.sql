@@ -3,11 +3,18 @@
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
 -- Lightweight bootstrap procedure with ZERO SchemaSmith_* table or proc dependencies.
--- Parses a TableQuench-shaped JSON definition and applies:
---   1. CREATE TABLE IF NOT EXISTS (built from Columns + any PrimaryKey index)
---   2. ALTER TABLE ADD COLUMN IF NOT EXISTS per missing column
---   3. CREATE INDEX IF NOT EXISTS per missing non-PK index
--- Out of scope: column type changes, drops, FKs, check constraints, ownership tracking.
+-- Parses a TableQuench-shaped JSON definition and applies, in order:
+--   1. TABLE rename when OldName is set (old table present, new absent) -- BEFORE CREATE TABLE so a
+--      renamed table's history is not orphaned under an empty freshly-created new table
+--   2. CREATE TABLE IF NOT EXISTS (built from Columns + any PrimaryKey index)
+--   3. COLUMN rename when a column's OldName is set (old column present, new absent) -- BEFORE
+--      ADD COLUMN so a renamed column's data is not left behind under an empty new column
+--   4. ALTER TABLE ADD COLUMN IF NOT EXISTS per missing column
+--   5. CREATE INDEX IF NOT EXISTS per missing non-PK index
+-- Both a rename's old AND new name already present (table or column) is a hard failure, not a
+-- silent skip -- it means an object exists that the model does not expect.
+-- Out of scope: column type changes (beyond a same-shape rename), drops, FKs, check constraints,
+-- ownership tracking.
 -- Idempotent: a second call on the same definition is a no-op.
 
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."BootstrapTableQuench"
@@ -29,6 +36,8 @@ DECLARE
     v_col_default TEXT;
     v_idx_name TEXT;
     v_idx_cols TEXT;
+    v_old_name TEXT;
+    v_col_old_name TEXT;
 BEGIN
     v_schema := TRIM(BOTH FROM (v_def->>'Schema'));
     v_name := TRIM(BOTH FROM (v_def->>'Name'));
@@ -37,7 +46,23 @@ BEGIN
         RAISE EXCEPTION 'BootstrapTableQuench: JSON must contain non-blank Schema and Name.';
     END IF;
 
-    -- Step 1: CREATE TABLE IF NOT EXISTS, built from Columns + optional inline PK.
+    -- Step 1: TABLE-level declarative rename (OldName), run BEFORE CREATE TABLE IF NOT EXISTS below --
+    -- a freshly-created empty table under the new name would otherwise orphan the old table and every
+    -- row of its history. #375's blank/whitespace-OldName trap (SchemaSmith_ParseTableJson.sql) applies
+    -- here too: NULLIF(TRIM(...), '') normalizes a blank OldName to "no rename", not a bogus empty name.
+    v_old_name := NULLIF(TRIM(v_def->>'OldName'), '');
+    IF v_old_name IS NOT NULL THEN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = v_schema AND table_name = v_old_name)
+           AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = v_schema AND table_name = v_name) THEN
+            RAISE EXCEPTION 'BootstrapTableQuench: both "%"."%" (OldName) and "%"."%" already exist; resolve manually before bootstrap can rename.',
+                v_schema, v_old_name, v_schema, v_name;
+        ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = v_schema AND table_name = v_old_name)
+          AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = v_schema AND table_name = v_name) THEN
+            EXECUTE 'ALTER TABLE "' || v_schema || '"."' || v_old_name || '" RENAME TO "' || v_name || '"';
+        END IF;
+    END IF;
+
+    -- Step 2: CREATE TABLE IF NOT EXISTS, built from Columns + optional inline PK.
     -- We always emit CREATE TABLE IF NOT EXISTS — it is a no-op against existing tables.
     FOR v_col IN SELECT * FROM jsonb_array_elements(v_def->'Columns')
     LOOP
@@ -69,12 +94,31 @@ BEGIN
     v_sql := 'CREATE TABLE IF NOT EXISTS "' || v_schema || '"."' || v_name || '" (' || v_column_list || v_pk_clause || ')';
     EXECUTE v_sql;
 
-    -- Step 2: ADD each genuinely-missing column, folded into one multi-clause ALTER, declared order
+    -- Step 3: COLUMN-level declarative rename (OldName), run BEFORE Step 4's add-missing-columns so
+    -- a renamed column's data is not left behind under an empty freshly-added new column. Works
+    -- across the whole PostgreSQL support range -- no version gate needed (unlike MySQL/MariaDB).
+    FOR v_col IN SELECT * FROM jsonb_array_elements(v_def->'Columns')
+    LOOP
+        v_col_name := v_col->>'Name';
+        v_col_old_name := NULLIF(TRIM(v_col->>'OldName'), '');
+        IF v_col_old_name IS NOT NULL THEN
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = v_schema AND table_name = v_name AND column_name = v_col_old_name)
+               AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = v_schema AND table_name = v_name AND column_name = v_col_name) THEN
+                RAISE EXCEPTION 'BootstrapTableQuench: both "%"."%"."%" (OldName) and "%" already exist; resolve manually before bootstrap can rename.',
+                    v_schema, v_name, v_col_old_name, v_col_name;
+            ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = v_schema AND table_name = v_name AND column_name = v_col_old_name)
+              AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = v_schema AND table_name = v_name AND column_name = v_col_name) THEN
+                EXECUTE 'ALTER TABLE "' || v_schema || '"."' || v_name || '" RENAME COLUMN "' || v_col_old_name || '" TO "' || v_col_name || '"';
+            END IF;
+        END IF;
+    END LOOP;
+
+    -- Step 4: ADD each genuinely-missing column, folded into one multi-clause ALTER, declared order
     -- preserved. Missing-ness is checked explicitly against information_schema rather than relying on
     -- ADD COLUMN IF NOT EXISTS: on PostgreSQL 12, ADD COLUMN IF NOT EXISTS "<col>" ... GENERATED AS IDENTITY
     -- leaks an orphan owned sequence even when it skips an already-present column, leaving the column
     -- owning two sequences and failing every later INSERT with "more than one owned sequence found". Since
-    -- Step 1 already created every column inline, on a fresh table this ADD set is empty (no leak); on an
+    -- Step 2 already created every column inline, on a fresh table this ADD set is empty (no leak); on an
     -- existing table it adds only the columns that are truly absent.
     SELECT string_agg(
              'ADD COLUMN "' || (col->>'Name') || '" ' || (col->>'DataType') ||
@@ -90,7 +134,7 @@ BEGIN
         EXECUTE 'ALTER TABLE "' || v_schema || '"."' || v_name || '" ' || v_sql;
     END IF;
 
-    -- Step 3: CREATE INDEX IF NOT EXISTS for non-PK indexes, folded into one batch
+    -- Step 5: CREATE INDEX IF NOT EXISTS for non-PK indexes, folded into one batch
     -- (PG supports IF NOT EXISTS natively and runs a multi-statement EXECUTE string). Order preserved.
     SELECT string_agg(
              'CREATE ' ||

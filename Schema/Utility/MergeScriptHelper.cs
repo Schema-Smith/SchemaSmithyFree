@@ -70,6 +70,66 @@ public static class MergeScriptHelper
         }
     }
 
+    // B3: MySQL/MariaDB reject dynamic XPath outright, so there is no in-engine XML shred at the floor.
+    // Instead an Xml-encoded delivery is converted to the same shape a hand-authored JSON payload would
+    // have and run through the already-tuned, version-adaptive JSON row source unchanged. XDocument
+    // decodes XML entities on parse and JObject/JArray serialize proper JSON escaping on the way out, so
+    // a value round-trips byte-for-byte through both hops without any hand-built string concatenation.
+    // A <c> element absent from a <row> stays absent from that row's JObject (never null/""), matching
+    // GetJsonDataKeys' "keys present in the data" contract used for column filtering.
+    internal static string XmlPayloadToJson(string tableData)
+    {
+        if (string.IsNullOrWhiteSpace(tableData)) return "[]";
+        var doc = System.Xml.Linq.XDocument.Parse(tableData);
+        var rows = new JArray();
+        foreach (var row in doc.Descendants("row"))
+        {
+            var obj = new JObject();
+            foreach (var c in row.Elements("c"))
+            {
+                var name = (string)c.Attribute("n");
+                if (!string.IsNullOrEmpty(name))
+                    obj.Add(name, c.Value);
+            }
+            rows.Add(obj);
+        }
+        return rows.ToString(Newtonsoft.Json.Formatting.None);
+    }
+
+    // B4b: the inverse of XmlPayloadToJson, used by DataTongs extraction on PostgreSQL/MySQL/MariaDB to
+    // produce the same delivery XML shape GetTableDataXmlSqlServer emits natively, so a package extracted
+    // on any engine deploys through the same SQL Server shred. A JSON null property is dropped rather than
+    // emitted as an empty <c> — the reference producer omits NULL columns entirely (absent <c> = NULL). A
+    // JSON boolean is written as "0"/"1" rather than .NET's "True"/"False": the shred casts a <c> element's
+    // text straight to the target SQL type via XQuery .value(), and a literal "true"/"false" string fails a
+    // BIT cast there (see ParseTableXmlIntoTempTables.sql's identical problem with schema-definition
+    // booleans), while "0"/"1" is exactly what GetTableDataXmlSqlServer itself emits for a bit column.
+    // XElement/XDocument handle XML-metacharacter escaping — the mirror of JObject's JSON escaping above.
+    // Public (unlike XmlPayloadToJson): DataTongs, in a separate project, calls this at extraction time —
+    // the same cross-project visibility GetKeyColumns/BuildMergeScript already use below.
+    public static string JsonPayloadToXml(string tableData)
+    {
+        if (string.IsNullOrWhiteSpace(tableData) || tableData == "null") return "";
+        var array = JArray.Parse(tableData);
+        if (array.Count == 0) return "";
+
+        var rows = new System.Xml.Linq.XElement("rows");
+        foreach (var rowToken in array)
+        {
+            var row = new System.Xml.Linq.XElement("row");
+            foreach (var prop in ((JObject)rowToken).Properties())
+            {
+                if (prop.Value.Type == JTokenType.Null) continue;
+                var text = prop.Value.Type == JTokenType.Boolean
+                    ? (prop.Value.Value<bool>() ? "1" : "0")
+                    : prop.Value.ToString();
+                row.Add(new System.Xml.Linq.XElement("c", new System.Xml.Linq.XAttribute("n", prop.Name), text));
+            }
+            rows.Add(row);
+        }
+        return rows.ToString(System.Xml.Linq.SaveOptions.DisableFormatting);
+    }
+
     // B1: the SQL Server data-delivery metadata helpers below aggregate column lists with
     // STRING_AGG … WITHIN GROUP, which requires database compatibility level 130+. On a compat-100
     // target (the lowered floor), that parse-errors during the merge BUILD — so each helper detects the
@@ -244,7 +304,19 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE,
             var scale = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5));
             var dtPrecision = reader.IsDBNull(6) ? 0 : Convert.ToInt32(reader.GetValue(6));
 
-            // Build JSON parse type with proper size/precision qualifiers
+            // Build JSON parse type with proper size/precision qualifiers. This is a cast target for
+            // shredding delivered data (OPENJSON WITH / .value()), not a faithful DDL rendering, so it
+            // deliberately does NOT share the catalog-derived DataType function C1-0a introduced for the
+            // engine scripts' drift comparison and extraction — those two jobs have different correctness
+            // requirements (faithful DDL text vs. "a type the shred can safely cast to").
+            //
+            // There is no TIME case below (unlike DATETIME2) — that gap looks like C1-0a's defect but is
+            // not reachable the same way: this is a cast target, and an unqualified TIME/DATETIME2 casts
+            // at precision 7 (the max), so the destination column governs final rounding regardless.
+            // The DATETIME2 precision suffix just above is defensive, not load-bearing: forcing it to
+            // `(dtPrecision * 0)` and rerunning the full suite left every test green, including the
+            // delivery round-trip tests below — proof, not just the documented-defaults argument, that
+            // nothing downstream depends on this value being correct. Do not "fix" the missing TIME case.
             var parseType = userType
                 .Replace("HIERARCHYID", "NVARCHAR(4000)")
                 .Replace("GEOGRAPHY", "NVARCHAR(4000)")
@@ -313,6 +385,14 @@ SELECT c.column_name, c.data_type, c.udt_name, c.udt_schema,
             var fullType = udtSchema is not "pg_catalog" and not "information_schema"
                 ? $"{udtSchema}.{udtName}" : udtName;
 
+            // Same cast-target-not-DDL reasoning as GetColumnMetadataSqlServer above applies here — this
+            // stays separate from C1-0a's catalog-derived function by design. Unlike the SQL Server twin,
+            // this branch already covers time/timestamp precision (no gap to record).
+            //
+            // maxLen > 0 ? "(n)" : "" (no "MAX" keyword, unlike SQL Server's -1-sentinel case above) is
+            // correct PostgreSQL syntax, not a missing case: an unbounded varchar/text has no length
+            // parameter at all in PostgreSQL — there is no "(MAX)"-equivalent token to emit. maxLen is 0
+            // here only when the column is genuinely unbounded (a bare "char" reports length 1, not 0).
             var parseType = fullType;
             var dataType = reader.GetString(1);
             if (dataType.Contains("char", StringComparison.OrdinalIgnoreCase) || dataType.Contains("binary", StringComparison.OrdinalIgnoreCase))
@@ -544,42 +624,81 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
     /// <param name="updateDescendents">PostgreSQL only: whether to update descendant tables (omits ONLY keyword).</param>
     /// <param name="destSchemaOverride">When non-empty, used in place of <paramref name="schemaOrDb"/> for
     /// destination-side refs in the emitted script body (MERGE INTO / ALTER TABLE / IDENTITY_INSERT / SETVAL)
-    /// AND for the content-file token (which becomes unqualified — just <c>{{tableName.tabledata}}</c>).
-    /// Source-side catalog probes still use <paramref name="schemaOrDb"/>. Exists for DataTongs schema-template
-    /// extraction (design §8) where the caller passes <c>{{SchemaName}}</c> so the engine resolves the destination
-    /// schema at quench time. MySQL ignores the override (no schema-inside-database concept).</param>
+    /// AND for the content-file token (which becomes unqualified — just <c>{{tableName.tabledata}}</c>) when
+    /// <paramref name="contentFileToken"/> is not supplied. Source-side catalog probes still use
+    /// <paramref name="schemaOrDb"/>. Exists for DataTongs schema-template extraction (design §8) where the
+    /// caller passes <c>{{SchemaName}}</c> so the engine resolves the destination schema at quench time.
+    /// MySQL ignores the override (no schema-inside-database concept).</param>
+    /// <param name="contentFileToken">The exact <c>{{key}}</c> the content-file placeholder should embed
+    /// (e.g. <c>Sales.Widget.tabledata</c>). DataTongs computes this once — identical, by construction, to
+    /// the .tabledata filename stem it writes — and passes it here so the token can never drift from the
+    /// filename. When omitted (all callers other than DataTongs, none of which tokenize), the legacy
+    /// per-platform derivation below is used instead.</param>
     public static string BuildMergeScript(Platform platform, IDbCommand cmd,
         string schemaOrDb, string tableName, string tableData, string keyColumns,
         bool mergeUpdate, bool mergeDelete, bool disableTriggers,
         bool tokenizeScripts, string mergeFilter,
         bool disableRules = false, bool updateDescendents = false,
         string destSchemaOverride = null, int pgServerVersionNum = 0, int mySqlServerVersionNum = 0,
-        string contentEncoding = "Json")
+        string contentEncoding = "Json", string contentFileToken = null)
     {
         var isXml = string.Equals(contentEncoding, "Xml", StringComparison.OrdinalIgnoreCase);
 
-        // B1: XML delivery shreds the payload with .nodes()/.value() (every SQL Server compat level) instead
-        // of OPENJSON (compat 130+). SQL Server is the only engine wired for it in this slice; a PG/MySQL
-        // delivery that declares Xml fails loudly rather than silently emitting a JSON shred.
-        if (isXml && platform.GetBasePlatform() != Platform.SqlServer)
-            throw new NotSupportedException(
-                $"XML data-delivery encoding is not yet supported on {platform.GetBasePlatform()}; use JSON (its shred works at every supported version).");
+        // B1/B3: XML delivery shreds the payload with .nodes()/.value() on SQL Server (every compat level)
+        // and xmltable() on PostgreSQL (every version at/above the floor — no version gate needed). MySQL
+        // and MariaDB reject dynamic XPath outright, so there is no in-engine shred there; instead the
+        // payload is converted to JSON once, up front, and run through the unchanged, already
+        // version-adaptive JSON row source exactly as a hand-authored JSON payload would be. Tokenized
+        // scripts replace the payload with a placeholder at runtime, so there is nothing real to convert.
+        var mySqlIsXml = isXml && platform.GetBasePlatform() == Platform.MySQL && !tokenizeScripts;
+        var mySqlTableData = mySqlIsXml ? XmlPayloadToJson(tableData) : tableData;
 
-        // Extract the data keys to filter columns — only include columns present in the data.
-        // For tokenized scripts, data is replaced at runtime so we include all columns.
-        var dataKeys = tokenizeScripts ? null : (isXml ? GetXmlDataKeys(tableData) : GetJsonDataKeys(tableData));
+        // Extract the data keys to filter columns — only include columns present in the data. The MySQL
+        // XML route filters from the converted JSON so the keys match what is actually being shredded,
+        // not the original XML shape. For tokenized scripts, data is replaced at runtime so we include
+        // all columns.
+        var dataKeys = tokenizeScripts ? null
+            : mySqlIsXml ? GetJsonDataKeys(mySqlTableData)
+            : isXml ? GetXmlDataKeys(tableData) : GetJsonDataKeys(tableData);
 
         return platform.GetBasePlatform() switch
         {
             Platform.SqlServer => BuildMergeScriptSqlServer(cmd, schemaOrDb, tableName, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, isXml),
+                mergeUpdate, mergeDelete, disableTriggers, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, isXml, contentFileToken),
             Platform.PostgreSQL => BuildMergeScriptPostgreSql(cmd, schemaOrDb, tableName, updateDescendents, tableData, keyColumns,
-                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum),
-            Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, tableData, keyColumns,
-                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, dataKeys, mySqlServerVersionNum),
+                mergeUpdate, mergeDelete, disableTriggers, disableRules, tokenizeScripts, mergeFilter, dataKeys, destSchemaOverride, pgServerVersionNum, isXml, contentFileToken),
+            Platform.MySQL => BuildMergeScriptMySql(cmd, schemaOrDb, tableName, mySqlTableData, keyColumns,
+                mergeUpdate, mergeDelete, tokenizeScripts, mergeFilter, dataKeys, mySqlServerVersionNum, contentFileToken),
             _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
         };
     }
+
+    #endregion
+
+    #region Content-file token derivation (#390 — single source for filename stem and token key)
+
+    /// <summary>
+    /// The one derivation of a table's encoded, optionally schema-qualified display name — the
+    /// content-file filename stem, and (suffixed with ".tabledata" via <see cref="BuildContentFileToken"/>)
+    /// the ScriptTokens/content-file token key embedded in a tokenized merge script. Unqualified when
+    /// <paramref name="forceUnqualified"/> is set (DataTongs schema-template mode, or a per-engine
+    /// builder's destSchemaOverride) or <paramref name="schema"/> is empty; otherwise
+    /// "{encoded schema}.{encoded tableName}". DataTongs and every per-engine BuildMergeScript fallback
+    /// call this — do not re-derive either quantity anywhere else.
+    /// </summary>
+    public static string EncodeTableDisplayName(string schema, string tableName, bool forceUnqualified)
+    {
+        return forceUnqualified || string.IsNullOrEmpty(schema)
+            ? FileNameEncoder.Encode(tableName)
+            : $"{FileNameEncoder.Encode(schema)}.{FileNameEncoder.Encode(tableName)}";
+    }
+
+    /// <summary>
+    /// The content-file token key: <see cref="EncodeTableDisplayName"/> suffixed with ".tabledata" —
+    /// the same string DataTongs uses for the .tabledata filename stem, by construction.
+    /// </summary>
+    public static string BuildContentFileToken(string schema, string tableName, bool forceUnqualified)
+        => $"{EncodeTableDisplayName(schema, tableName, forceUnqualified)}.tabledata";
 
     #endregion
 
@@ -641,7 +760,7 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
     private static string BuildMergeScriptSqlServer(IDbCommand cmd, string tableSchema, string tableName,
         string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null, bool isXml = false)
+        string destSchemaOverride = null, bool isXml = false, string contentFileToken = null)
     {
         tableSchema = tableSchema.Trim().Trim('[', ']');
         tableName = tableName.Trim().Trim('[', ']');
@@ -667,12 +786,12 @@ SELECT STRING_AGG('-- Column ""' || c.column_name || '"" skipped: ' || c.udt_nam
                              && IdentityColumnInJsonKeysSqlServer(cmd, tableSchema, tableName, jsonKeys);
         var jsonColumns = isXml ? null : GetJsonColumnDefinitionsSqlServer(cmd, tableSchema, tableName, jsonKeys);
 
-        // Content-file token: when destination is overridden, the .tabledata file is unqualified
-        // (DataTongs writes Customers.tabledata, not tenant_seed.Customers.tabledata in schema-
-        // template mode), so the token must match by name. Otherwise stays schema-qualified.
-        var contentToken = string.IsNullOrEmpty(destSchemaOverride)
-            ? $"{tableSchema}.{tableName}.tabledata"
-            : $"{tableName}.tabledata";
+        // Content-file token: DataTongs passes the exact key it wrote alongside the .tabledata filename
+        // (see MergeScriptHelper.BuildMergeScript's contentFileToken doc). The fallback below — the same
+        // shared derivation DataTongs itself uses — only serves callers that never tokenize (e.g.
+        // DataDeliveryProcessor), kept for backward compatibility.
+        var contentToken = contentFileToken
+            ?? BuildContentFileToken(tableSchema, tableName, !string.IsNullOrEmpty(destSchemaOverride));
         var contentValue = tokenizeScripts
             ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
@@ -844,6 +963,14 @@ SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.identity_columns c WITH (NOLOCK)
         return cmd.ExecuteScalar() as bool? ?? false;
     }
 
+    // Builds the OPENJSON WITH clause's column types — the T-SQL twin of GetColumnMetadataSqlServer's
+    // parseType above, evaluated server-side (STRING_AGG) instead of client-side because this feeds the
+    // JSON row source directly rather than a per-column MergeColumnInfo list. Same reasoning applies: a
+    // cast target for shredding, not a DDL rendering, so it stays separate from C1-0a's catalog-derived
+    // DataType function; and the missing TIME precision case (only DATETIME2 is handled here too) is not
+    // reachable for the same mechanism proven at the C# twin above (zeroing its DATETIME2 precision left
+    // the full suite green) — this copy's DATETIME2 case was not itself mutated, but it is a cast target
+    // read by the same OPENJSON/INSERT machinery, so the same "destination column governs" argument holds.
     private static string GetJsonColumnDefinitionsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
@@ -946,7 +1073,7 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
     private static string BuildMergeScriptPostgreSql(IDbCommand cmd, string tableSchema, string tableName,
         bool updateDescendents, string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete,
         bool disableTriggers, bool disableRules, bool tokenizeScripts, string mergeFilter, HashSet<string> jsonKeys,
-        string destSchemaOverride = null, int pgServerVersionNum = 0)
+        string destSchemaOverride = null, int pgServerVersionNum = 0, bool isXml = false, string contentFileToken = null)
     {
         tableSchema = tableSchema.Trim().Trim('"');
         tableName = tableName.Trim().Trim('"');
@@ -961,7 +1088,17 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
         var unsupportedComments = GetUnsupportedColumnCommentsPostgreSql(cmd, tableSchema, tableName);
         var matchColumns = BuildPostgreSqlMatchColumns(keyColumns);
         var identAndSeq = GetIdentityColumnAndSequencePostgreSql(cmd, tableSchema, tableName);
-        var jsonColumns = GetJsonColumnDefinitionsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
+        // B1: the row source is the only thing that differs by encoding — xmltable() is PostgreSQL's
+        // structural twin of JSON_ARRAY_ELEMENTS + jsonColumns, addressed by the same <c n="Col"> shape the
+        // SQL Server XML shred reads. Column set comes from GetColumnMetadataPostgreSql (shared with the
+        // deferred-merge path) rather than the STRING_AGG-based jsonColumns query. geometry/bytea/array
+        // columns are extracted as text and cast in the wrapping SELECT (BuildXmlColumnExpressionsPostgreSql)
+        // via the same classification/expressions GetJsonColumnDefinitionsPostgreSql uses, so the two row
+        // sources cannot drift.
+        var jsonColumns = isXml ? null : GetJsonColumnDefinitionsPostgreSql(cmd, tableSchema, tableName, jsonKeys);
+        var xmlShredColumns = isXml ? GetColumnMetadataPostgreSql(cmd, tableSchema, tableName, jsonKeys) : null;
+        var xmlColumnList = isXml ? BuildXmlColumnsPostgreSql(xmlShredColumns) : null;
+        var xmlColumnExprs = isXml ? BuildXmlColumnExpressionsPostgreSql(xmlShredColumns) : null;
 
         // PostgreSQL does not support DISABLE/ENABLE RULE ALL — each rule must be named individually.
         // Rules cannot be disabled inside PL/pgSQL blocks, so these statements go outside the DO $$ block.
@@ -971,11 +1108,10 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
             ? GetRuleDisableEnableStatements(cmd, tableSchema, tableName, updateDescendents, destSchema)
             : ("", "");
 
-        // Content-file token: see SQL Server method — unqualified when destSchemaOverride is set
-        // so the token matches the unqualified filename DataTongs writes in schema-template mode.
-        var contentToken = string.IsNullOrEmpty(destSchemaOverride)
-            ? $"{tableSchema}.{tableName}.tabledata"
-            : $"{tableName}.tabledata";
+        // Content-file token: see SQL Server method — DataTongs passes the exact key it wrote, so
+        // the fallback derivation below (the same shared derivation) only serves non-tokenizing callers.
+        var contentToken = contentFileToken
+            ?? BuildContentFileToken(tableSchema, tableName, !string.IsNullOrEmpty(destSchemaOverride));
         var jsonValue = tokenizeScripts
             ? $"{{{{{contentToken}}}}}"
             : tableData?.Replace("'", "''");
@@ -991,23 +1127,28 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
         {
             mergeSQL = BuildPostgreSqlLegacyUpsert(cmd, tableSchema, tableName, destSchema, updateDescendents,
                 mergeUpdate, disableTriggers, jsonValue, jsonColumns, keyColumns, identAndSeq,
-                unsupportedComments, disableRuleStatements, enableRuleStatements, jsonKeys);
+                unsupportedComments, disableRuleStatements, enableRuleStatements, jsonKeys, isXml, xmlColumnList, xmlColumnExprs);
         }
         else
         {
+        var jsonDeclareLine = isXml ? "" : $"  v_json JSON = '{jsonValue}';\n";
+        var rowSource = isXml
+            ? $@"SELECT {xmlColumnExprs} FROM xmltable('/rows/row' PASSING XMLPARSE(DOCUMENT '{jsonValue}')
+             COLUMNS {xmlColumnList}) AS ""x"""
+            : $@"WITH my_tables(arr) AS (VALUES(v_json::JSON))
+    SELECT {jsonColumns}
+      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem";
+
         mergeSQL = (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
             + (string.IsNullOrEmpty(disableRuleStatements) ? "" : disableRuleStatements + "\n") + $@"
 DO $$
 DECLARE
-  v_json JSON = '{jsonValue}';
-  nextval BIGINT;
+{jsonDeclareLine}  nextval BIGINT;
 BEGIN
 {(disableTriggers ? $"ALTER TABLE {(updateDescendents ? "" : "ONLY ")}\"{destSchema}\".\"{tableName}\" DISABLE TRIGGER ALL;" : "")}
 MERGE INTO {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
 USING (
-    WITH my_tables(arr) AS (VALUES(v_json::JSON))
-    SELECT {jsonColumns}
-      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
+    {rowSource}
 ) AS ""Source""
 ON {matchColumns}
 ";
@@ -1073,8 +1214,8 @@ END $$ LANGUAGE plpgsql;
         {
             // PG < 17 has no MERGE WHEN NOT MATCHED BY SOURCE. Emit a standalone DELETE outside the
             // DO $$ block targeting rows with no matching source row, keyed on the same columns the
-            // MERGE matched on, honoring the same mergeFilter. Source is the JSON array reprojected
-            // identically to the MERGE USING clause so key correspondence is exact.
+            // MERGE matched on, honoring the same mergeFilter. Source is the payload reprojected
+            // identically to the MERGE USING clause (JSON or XML) so key correspondence is exact.
             // Per-key correspondence mirrors BuildPostgreSqlMatchColumns' *-prefix NULL-safe
             // handling (source of truth — keep in sync). A leading '*' is a user-config NULL-safe
             // marker: strip it and emit the (l = r OR (l IS NULL AND r IS NULL)) form.
@@ -1091,13 +1232,21 @@ END $$ LANGUAGE plpgsql;
                         : $"{l} = {r}";
                 }));
 
+            // No PL/pgSQL variable scope out here (this DELETE stands outside the DO $$ block), so the
+            // payload is embedded as a literal in both encodings — mirrors the JSON reprojection's
+            // '{jsonValue}'::JSON literal immediately below.
+            var deleteSource = isXml
+                ? $@"(SELECT {xmlColumnExprs} FROM xmltable('/rows/row' PASSING XMLPARSE(DOCUMENT '{jsonValue}')
+             COLUMNS {xmlColumnList}) AS ""x"") AS ""DeleteSource"""
+                : $@"(WITH my_tables(arr) AS (VALUES('{jsonValue}'::JSON))
+           SELECT {jsonColumns}
+             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""DeleteSource""";
+
             mergeSQL += $@"
 DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}"" AS ""Target""
  WHERE {(string.IsNullOrWhiteSpace(mergeFilter) ? "" : $"({mergeFilter}) AND ")}NOT EXISTS (
    SELECT 1
-     FROM (WITH my_tables(arr) AS (VALUES('{jsonValue}'::JSON))
-           SELECT {jsonColumns}
-             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""DeleteSource""
+     FROM {deleteSource}
     WHERE {deleteKeyPredicate}
  );";
         }
@@ -1118,13 +1267,17 @@ DELETE FROM {(updateDescendents ? "" : "ONLY ")}""{destSchema}"".""{tableName}""
     private static string BuildPostgreSqlLegacyUpsert(IDbCommand cmd, string tableSchema, string tableName,
         string destSchema, bool updateDescendents, bool mergeUpdate, bool disableTriggers, string jsonValue,
         string jsonColumns, string keyColumns, string identAndSeq,
-        string unsupportedComments, string disableRuleStatements, string enableRuleStatements, HashSet<string> jsonKeys)
+        string unsupportedComments, string disableRuleStatements, string enableRuleStatements, HashSet<string> jsonKeys,
+        bool isXml = false, string xmlColumnList = null, string xmlColumnExprs = null)
     {
         var only = updateDescendents ? "" : "ONLY ";
         // NULL-safe key predicate (same as the MERGE ON clause) — handles '*'-prefixed nullable keys and
-        // needs no unique/exclusion constraint. "Target" is the table, "Source" the reprojected JSON.
+        // needs no unique/exclusion constraint. "Target" is the table, "Source" the reprojected payload.
         var matchColumns = BuildPostgreSqlMatchColumns(keyColumns);
-        var source = $@"(WITH my_tables(arr) AS (VALUES(v_json::JSON))
+        var source = isXml
+            ? $@"(SELECT {xmlColumnExprs} FROM xmltable('/rows/row' PASSING XMLPARSE(DOCUMENT '{jsonValue}')
+             COLUMNS {xmlColumnList}) AS ""x"") AS ""Source"""
+            : $@"(WITH my_tables(arr) AS (VALUES(v_json::JSON))
           SELECT {jsonColumns}
             FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem) AS ""Source""";
 
@@ -1164,12 +1317,12 @@ UPDATE {only}""{destSchema}"".""{tableName}"" AS ""Target""
             ? ""
             : $"OVERRIDING {identAndSeq.Split("=")[2]} VALUE\n  ";
 
+        var jsonDeclareLine = isXml ? "" : $"  v_json JSON = '{jsonValue}';\n";
         return (string.IsNullOrEmpty(unsupportedComments) ? "" : unsupportedComments + "\n")
             + (string.IsNullOrEmpty(disableRuleStatements) ? "" : disableRuleStatements + "\n") + $@"
 DO $$
 DECLARE
-  v_json JSON = '{jsonValue}';
-  nextval BIGINT;
+{jsonDeclareLine}  nextval BIGINT;
 BEGIN
 {(disableTriggers ? $"ALTER TABLE {only}\"{destSchema}\".\"{tableName}\" DISABLE TRIGGER ALL;" : "")}{updateSql}
 INSERT INTO ""{destSchema}"".""{tableName}"" (
@@ -1250,6 +1403,9 @@ SELECT c.column_name || '=' || COALESCE(PG_GET_SERIAL_SEQUENCE(c.table_schema ||
         return cmd.ExecuteScalar()?.ToString();
     }
 
+    // The PostgreSQL twin of GetJsonColumnDefinitionsSqlServer above. Unlike the SQL Server pair, this one
+    // has no time/timestamp precision gap to record — it already handles it (see the `time%`/`timestamp%`
+    // branch below), matching GetColumnMetadataPostgreSql's C# parseType builder.
     private static string GetJsonColumnDefinitionsPostgreSql(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys = null)
     {
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
@@ -1291,6 +1447,49 @@ SELECT STRING_AGG(
 ";
         return cmd.ExecuteScalar()?.ToString() ?? "";
     }
+
+    // B1: xmltable()'s COLUMNS list — the PostgreSQL twin of BuildXmlShredSelectColumnsSqlServer. Each
+    // column is addressed by the same <c n="Col"> shape the SQL Server XML shred reads. Geometry/bytea/
+    // array columns (RequiresXmlColumnTransformPostgreSql) are extracted as text here — their real type
+    // gets applied by BuildXmlColumnExpressionPostgreSql in the wrapping SELECT instead, because a base64
+    // bytea value or a '*,*'-delimited array cannot be cast to its target type directly by xmltable's
+    // COLUMNS typing (silent data corruption for bytea, a parse error for arrays). Everything else is
+    // typed directly here with the same JsonParseType the JSON row source casts to.
+    private static string BuildXmlColumnsPostgreSql(List<MergeColumnInfo> columns) =>
+        string.Join(",\n         ", columns.Select(c =>
+            RequiresXmlColumnTransformPostgreSql(c)
+                ? $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'"
+                : $"\"{c.Name}\" {c.JsonParseType} PATH 'c[@n=\"{c.Name}\"]/text()'"));
+
+    // B1: same udt_name test GetJsonColumnDefinitionsPostgreSql uses for the array case
+    // (LEFT(udt_name,1)='_' — PostgreSQL's own array-of-type naming convention), ported to C# rather than
+    // duplicated with a different type-name list. Geometry/bytea reuse MergeColumnInfo.IsGeometry/IsBinary,
+    // which are themselves already the JSON path's C#-side mirrors (IsGeometryTypePostgreSql/
+    // IsByteaTypePostgreSql). internal: shared with DeferredMergeBuilder so the 2-pass path classifies
+    // columns identically rather than drifting.
+    internal static bool RequiresXmlColumnTransformPostgreSql(MergeColumnInfo c) =>
+        c.IsGeometry || c.IsBinary || c.DataType.StartsWith("_", StringComparison.Ordinal);
+
+    // B1: the per-type expression GetJsonColumnDefinitionsPostgreSql applies to `elem ->> 'col'`,
+    // reapplied here to xmltable()'s text output for the same three cases — ST_GeomFromText, decode(...,
+    // 'base64'), and STRING_TO_ARRAY with the identical '*,*' delimiter and '*NULL_VALUE_REPRESENTATION*'
+    // sentinel — so the two row sources cannot drift. A column that needs no transform is already
+    // correctly typed by BuildXmlColumnsPostgreSql's direct PATH form and just passes through.
+    internal static string BuildXmlColumnExpressionPostgreSql(MergeColumnInfo c, string sourceAlias)
+    {
+        var raw = $"\"{sourceAlias}\".\"{c.Name}\"";
+        if (c.IsGeometry) return $"ST_GeomFromText({raw})";
+        if (c.IsBinary) return $"decode({raw}, 'base64')";
+        if (c.DataType.StartsWith("_", StringComparison.Ordinal))
+            return $"STRING_TO_ARRAY({raw}, '*,*', '*NULL_VALUE_REPRESENTATION*')::{c.JsonParseType}";
+        return raw;
+    }
+
+    // B1: the outer SELECT list wrapping xmltable() in the direct (non-deferred) MERGE path — applies
+    // BuildXmlColumnExpressionPostgreSql to every column, including the pass-through case, so the FROM-item
+    // always projects exactly the column set BuildXmlColumnsPostgreSql declared.
+    private static string BuildXmlColumnExpressionsPostgreSql(List<MergeColumnInfo> columns) =>
+        string.Join(",\n         ", columns.Select(c => $"{BuildXmlColumnExpressionPostgreSql(c, "x")} AS \"{c.Name}\""));
 
     private static string GetInsertColumnsPostgreSql(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys = null)
     {
@@ -1426,7 +1625,7 @@ SELECT c.column_name, c.udt_name
 
     private static string BuildMergeScriptMySql(IDbCommand cmd, string databaseName, string tableName,
         string tableData, string keyColumns, bool mergeUpdate, bool mergeDelete, bool tokenizeScripts, string mergeFilter,
-        HashSet<string> jsonKeys, int mySqlServerVersionNum = 0)
+        HashSet<string> jsonKeys, int mySqlServerVersionNum = 0, string contentFileToken = null)
     {
         databaseName = databaseName.Trim().Trim('`');
         tableName = tableName.Trim().Trim('`');
@@ -1466,8 +1665,8 @@ SELECT c.column_name, c.udt_name
                     mergeUpdate ? updateColumns : null, keyColumns, payloadRows, columns, stringKeys, mergeFilter);
 
             var upsert = mergeUpdate
-                ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts)
-                : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts);
+                ? BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts, contentFileToken)
+                : BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts, contentFileToken);
             var delete = BuildDeleteStatementMySql(databaseName, tableName, jsonSource, keyColumns, mergeFilter, stringKeys);
             return upsert + "\n" + delete;
         }
@@ -1477,12 +1676,12 @@ SELECT c.column_name, c.udt_name
             if (chunked)
                 return BuildChunkedMergeMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource,
                     updateColumns, keyColumns, payloadRows, columns, null, null);
-            return BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts);
+            return BuildUpsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, updateColumns, tableData, keyColumns, tokenizeScripts, contentFileToken);
         }
         if (chunked)
             return BuildChunkedMergeMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource,
                 null, keyColumns, payloadRows, columns, null, null);
-        return BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts);
+        return BuildInsertStatementMySql(databaseName, tableName, insertColumns, selectExpressions, jsonSource, tableData, tokenizeScripts, contentFileToken);
     }
 
     private static List<MySqlColumnInfo> GetColumnInfoMySql(IDbCommand cmd, string databaseName, string tableName, bool excludeAutoIncrement, HashSet<string> jsonKeys = null)
@@ -1689,7 +1888,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
 
     private static string BuildUpsertStatementMySql(string databaseName, string tableName,
         string insertColumns, string selectExpressions, string jsonSource, string updateColumns,
-        string tableData, string keyColumns, bool tokenizeScripts)
+        string tableData, string keyColumns, bool tokenizeScripts, string contentFileToken = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"INSERT INTO `{databaseName}`.`{tableName}` ({insertColumns})");
@@ -1699,7 +1898,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
         var keyColNames = ParseKeyColumnsMySql(keyColumns);
         sb.AppendLine(BuildUpsertClauseMySql(databaseName, tableName, insertColumns, updateColumns, keyColNames) + ";");
 
-        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts);
+        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts, contentFileToken);
     }
 
     // The ON DUPLICATE KEY UPDATE clause, shared by the single-statement and chunked paths so the two
@@ -1741,14 +1940,14 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
 
     private static string BuildInsertStatementMySql(string databaseName, string tableName,
         string insertColumns, string selectExpressions, string jsonSource,
-        string tableData, bool tokenizeScripts)
+        string tableData, bool tokenizeScripts, string contentFileToken = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"INSERT IGNORE INTO `{databaseName}`.`{tableName}` ({insertColumns})");
         sb.AppendLine($"SELECT {selectExpressions}");
         sb.AppendLine($"FROM {jsonSource};");
 
-        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts);
+        return BuildWithJsonVariableMySql(tableName, tableData, sb.ToString(), tokenizeScripts, contentFileToken);
     }
 
     // Emits the MariaDB 10.2-10.5 shred as one SET + statement pair per chunk, so the quadratic
@@ -1817,12 +2016,17 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
         return sb.ToString();
     }
 
-    private static string BuildWithJsonVariableMySql(string tableName, string tableData, string sqlStatement, bool tokenizeScripts)
+    private static string BuildWithJsonVariableMySql(string tableName, string tableData, string sqlStatement,
+        bool tokenizeScripts, string contentFileToken = null)
     {
         var sb = new StringBuilder();
         if (tokenizeScripts)
         {
-            sb.AppendLine($"SET @json_data = '{{{{{tableName}.tabledata}}}}';");
+            // DataTongs passes the exact key it wrote alongside the .tabledata filename; the fallback
+            // below (the same shared derivation, always unqualified — MySQL has no schema concept)
+            // only serves non-DataTongs callers.
+            var tokenKey = contentFileToken ?? BuildContentFileToken(null, tableName, forceUnqualified: true);
+            sb.AppendLine($"SET @json_data = '{{{{{tokenKey}}}}}';");
         }
         else
         {

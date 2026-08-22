@@ -18,21 +18,45 @@ public static class LogBackup
             var ext = 0;
 
             var cwd = ConfigHelper.ResolveLogPath();
-            backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
-            while (directory.Exists(backupDir))
-                backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
 
-            directory.CreateDirectory(backupDir);
+            // Two runs from one install race here: CreateDirectory is idempotent, so both settle on the
+            // same App.0001 and the loser's Copy hits a destination that already exists. That threw into
+            // the catch below and exited 4 -- a run that had just printed PASS reported as a failure, which
+            // CI parallelism makes routine. On a collision, take the next index and try again.
+            const int maxAttempts = 50;
+            var copied = false;
+            for (var attempt = 0; attempt < maxAttempts && !copied; attempt++)
+            {
+                backupDir = Path.Join(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
+                if (directory.Exists(backupDir)) continue;
 
-            var logFiles = directory.GetFiles(cwd, $"{appName} - *.log", SearchOption.TopDirectoryOnly);
-            foreach (var logFile in logFiles)
-                file.Copy(logFile, Path.Combine(backupDir, Path.GetFileName(logFile)));
+                directory.CreateDirectory(backupDir);
+                try
+                {
+                    foreach (var logFile in directory.GetFiles(cwd, $"{appName} - *.log", SearchOption.TopDirectoryOnly))
+                        file.Copy(logFile, Path.Join(backupDir, Path.GetFileName(logFile)));
 
-            // Deployment summary report (#243, E4e): archive the always-on Summary.json/.md
-            // alongside the run's logs. Harmless on tools that never write them (SchemaTongs,
-            // DataTongs) — GetFiles simply matches nothing.
-            foreach (var summaryFile in directory.GetFiles(cwd, $"{appName} - Summary.*", SearchOption.TopDirectoryOnly))
-                file.Copy(summaryFile, Path.Join(backupDir, Path.GetFileName(summaryFile)));
+                    // Deployment summary report (#243, E4e): archive the always-on Summary.json/.md
+                    // alongside the run's logs. Harmless on tools that never write them (SchemaTongs,
+                    // DataTongs) -- GetFiles simply matches nothing.
+                    foreach (var summaryFile in directory.GetFiles(cwd, $"{appName} - Summary.*", SearchOption.TopDirectoryOnly))
+                        file.Copy(summaryFile, Path.Join(backupDir, Path.GetFileName(summaryFile)));
+
+                    copied = true;
+                }
+                catch (IOException)
+                {
+                    // Another run got here first. Leave its files alone and try the next directory.
+                }
+            }
+
+            // Archiving logs is a convenience. Failing to do it must not overwrite the outcome the run
+            // actually reached -- that is what turned a passing run into an exit-4 failure.
+            if (!copied)
+            {
+                Console.WriteLine("");
+                Console.WriteLine($"UNABLE TO BACKUP LOG FILES TO {backupDir} -- the run's own result stands.");
+            }
 
             EnvironmentWrapper.GetFromFactory().Exit(exitCode);
         }

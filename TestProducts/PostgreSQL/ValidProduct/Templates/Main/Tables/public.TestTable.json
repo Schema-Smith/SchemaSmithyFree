@@ -11,31 +11,27 @@
       "DataType": "UUID",
       "Nullable": true,
       "Default": "",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     },
     {
       "Name": "DateCreated",
       "DataType": "TIMESTAMP",
       "Nullable": true,
       "Default": "",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     },
     {
       "Name": "Status",
       "DataType": "SMALLINT",
       "Default": "0",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     },
     {
       "Name": "SomeText",
       "DataType": "VARCHAR(2000)",
       "Nullable": true,
       "Default": "",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     }
   ],
   "Indexes": [

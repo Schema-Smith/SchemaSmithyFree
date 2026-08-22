@@ -11,24 +11,21 @@
       "DataType": "INT",
       "Nullable": false,
       "Default": "",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     },
     {
       "Name": "unit",
       "DataType": "VARCHAR(16)",
       "Nullable": true,
       "Default": "",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     },
     {
       "Name": "reading_value",
       "DataType": "NUMERIC(9,2)",
       "Nullable": true,
       "Default": "",
-      "CheckExpression": "",
-      "ComputedExpression": ""
+      "CheckExpression": ""
     }
   ],
   "Indexes": [

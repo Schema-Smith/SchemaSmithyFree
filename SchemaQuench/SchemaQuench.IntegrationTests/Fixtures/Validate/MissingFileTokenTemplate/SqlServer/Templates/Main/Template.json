@@ -1,0 +1,8 @@
+{
+  "Name": "Main",
+  "DatabaseIdentificationScript": "SELECT 1",
+  "ScriptFolders": [],
+  "ScriptTokens": {
+    "Widget.tabledata": "<*File*>data/NOPE.tabledata"
+  }
+}

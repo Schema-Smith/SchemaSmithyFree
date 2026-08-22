@@ -14,17 +14,16 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                t.table_name AS "Name",
                (SELECT JSON_AGG(ROW_TO_JSON(sub))
                   FROM (SELECT c.column_name AS "Name",
+                               -- An array column reports udt_name '_text' while the package declares 'text[]', so the composed
+                               -- form was never equal to the declared one and the column was re-modified on every deploy --
+                               -- for ANY PostgreSQL array column, not one type. format_type renders the canonical declared
+                               -- spelling directly, including element typmods (character varying(20)[], numeric(10,2)[]).
+                               CASE WHEN c.data_type = 'ARRAY' THEN REGEXP_REPLACE(c.udt_name, '^_', '') || COALESCE(SUBSTRING(format_type(a.atttypid, a.atttypmod) FROM '\(.*\)'), '') || '[]' ELSE
                                CASE WHEN c.domain_name IS NOT NULL
                                     THEN CASE WHEN c.domain_schema != 'pg_catalog' THEN '"' || c.domain_schema || '".' ELSE '' END || '"' || c.domain_name || '"'
                                     ELSE CASE WHEN c.udt_schema != 'pg_catalog' THEN c.udt_schema || '.' ELSE '' END || REGEXP_REPLACE(c.udt_name, 'bpchar', 'CHAR', 'i')
                                     END ||
-                               CASE WHEN c.domain_name IS NULL AND UPPER(c.udt_name) LIKE '%CHAR'
-                                    THEN CASE WHEN COALESCE(c.character_maximum_length, -1) = -1 THEN '' ELSE '(' || c.character_maximum_length || ')' END
-                                    WHEN c.domain_name IS NULL AND UPPER(c.udt_name) IN ('NUMERIC', 'DECIMAL') AND c.numeric_precision IS NOT NULL
-                                    THEN '(' || c.numeric_precision || CASE WHEN COALESCE(c.numeric_scale, 0) != 0 THEN ', ' || c.numeric_scale ELSE '' END || ')'
-                                    WHEN c.domain_name IS NULL AND UPPER(c.udt_name) = 'TIMESTAMP' AND COALESCE(c.datetime_precision, 6) != 6
-                                    THEN '(' || c.datetime_precision || ')'
-                                    ELSE '' END AS "DataType",
+                               "SchemaSmith"."ColumnTypeArguments"(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision) END AS "DataType",
                                CASE WHEN c.is_nullable = 'YES' THEN TRUE ELSE FALSE END AS "Nullable",
                                "SchemaSmith"."StripParenWrapping"(c.column_default) AS "Default",
                                c.collation_name AS "Collation",
@@ -110,8 +109,8 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                                   WHERE a.attrelid = frel.oid
                                     AND a.attnum = element) AS "RelatedColumns",
                                '' AS "ShouldApplyExpression",
-                               CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "DeleteAction",
-                               CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' END AS "UpdateAction",
+                               CASE con.confdeltype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "DeleteAction",
+                               CASE con.confupdtype WHEN 'a' THEN '' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' END AS "UpdateAction",
                                COALESCE(con.condeferrable, FALSE) AS "Deferrable",
                                COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred",
                                CASE con.confmatchtype
@@ -172,9 +171,6 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                           WHERE idx.indrelid = ('"' || t.table_schema || '"."' || t.table_name || '"')::regclass
                           ORDER BY i.relname) sub) AS "ExcludeConstraints",
                '' AS "ShouldApplyExpression",
-               '' AS "ContentFile",
-               'NONE' AS "MergeType",
-               TRUE AS "MergeUpdateDescendents",
                '' AS "OldName",
                rls.relrowsecurity AS "RowLevelSecurity",
                rls.relforcerowsecurity AS "ForceRowLevelSecurity",

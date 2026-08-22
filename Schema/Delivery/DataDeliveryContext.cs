@@ -36,6 +36,16 @@ public class DataDeliveryContext
     public string SchemaName { get; set; } = "";
 
     /// <summary>
+    /// Per-target version tokens (<c>{{ServerMajorVersion}}</c>, <c>{{CompatibilityLevel}}</c>) —
+    /// the same list <c>DatabaseQuench.ResolveFolderGateExpression</c> assembles for folder gates,
+    /// via the shared <see cref="Schema.Utility.TokenHelper.AssembleGateTokens"/>. Threaded through so a
+    /// delivery's <see cref="DataDelivery.ShouldApplyExpression"/> can gate on the target version the same
+    /// way a folder or table gate already can, instead of only resolving <see cref="SchemaName"/> (N2).
+    /// Empty for a caller with no version tokens to offer (e.g. a unit test harness).
+    /// </summary>
+    public List<KeyValuePair<string, string>> VersionTokens { get; set; } = [];
+
+    /// <summary>
     /// Detected PostgreSQL server major (e.g. 16). 0 = unknown/not-PostgreSQL; codegen treats
     /// unknown as modern (>= 17). Drives the MERGE-vs-DELETE branch in MergeScriptHelper (#241).
     /// </summary>

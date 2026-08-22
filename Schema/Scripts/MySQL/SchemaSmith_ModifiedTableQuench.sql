@@ -29,6 +29,7 @@ BEGIN
     -- 3. Column modifications (type, nullable, etc.)
     -- 4. Engine changes
     -- 5. Collation changes
+    -- 5.5. Comment changes (table-level)
     -- 6. Row format changes
     -- 7. Auto-increment seed changes
     -- 8. ProductOwnership updates
@@ -42,6 +43,144 @@ BEGIN
     -- Folded multi-clause ALTER/RENAME statements below can GROUP_CONCAT many clauses for a
     -- wide table; raise the session limit so long clause lists aren't silently truncated.
     SET SESSION group_concat_max_len = 1000000;
+
+    -- =========================================================================
+    -- Degrade column DEFAULT expressions below MySQL 8.0.13 for EXISTING columns (new columns are
+    -- gated in MissingTableAndColumnQuench, which runs earlier in the same deploy). MariaDB has
+    -- supported expression defaults since 10.2.1 (MDEV-10134), at/below our 10.2 floor, so this branch
+    -- is MySQL-only. Below the threshold an existing plain-default column cannot legally acquire an
+    -- expression default -- a hard syntax error, not parsed-and-ignored -- so there is no safe partial
+    -- MODIFY: 'fail' aborts naming the column(s); 'warn' (default) skips the column's modification
+    -- entirely -- STEP 3 below excludes it via the identical predicate, leaving its current default in
+    -- place -- and records a 'downgraded' manifest row per column.
+    -- =========================================================================
+    IF SchemaSmith_SupportsDefaultExpression() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE t.NewTable = 0 AND c.NewColumn = 0
+                     AND c.IsAutoIncrement = 0
+                     AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+                     AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%') THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column DEFAULT expression unsupported (requires MySQL 8.0.13): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+            SET @ss_msg = CONCAT('Column DEFAULT expressions require MySQL 8.0.13 (detected ',
+                                 SchemaSmith_ServerVersionNum(), '); see the deploy log for the unsupported column(s).');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Skipping column modification (DEFAULT expression requires MySQL 8.0.13 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (DEFAULT expression, MySQL 8.0.13)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsAutoIncrement = 0
+              AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
+              AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%';
+        END IF;
+    END IF;
+
+    -- =========================================================================
+    -- Degrade invisible columns below MySQL 8.0.23 / MariaDB 10.3 for EXISTING columns (new columns are
+    -- gated in MissingTableAndColumnQuench, which runs earlier in the same deploy). Below the threshold
+    -- the INVISIBLE keyword is a hard syntax error, so ColumnScript never emits it there -- the MODIFY
+    -- COLUMN emitted below (STEP 3) is still syntactically valid, it just leaves the column visible -- and
+    -- STEP 3's predicate ignores the visibility difference so the deploy stays idempotent. This block only
+    -- adds the user-facing report: 'fail' aborts naming the column(s); 'warn' (default) records a
+    -- 'downgraded' manifest row per column.
+    -- =========================================================================
+    IF SchemaSmith_SupportsInvisibleColumn() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE t.NewTable = 0 AND c.NewColumn = 0
+                     AND c.IsInvisible = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsInvisible = 1;
+            SET @ss_msg = 'Invisible column requires MySQL 8.0.23 / MariaDB 10.3 (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Invisible column stored visible (requires MySQL 8.0.23 / MariaDB 10.3 - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsInvisible = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (invisible, MySQL 8.0.23 / MariaDB 10.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.IsInvisible = 1;
+        END IF;
+    END IF;
+
+    -- =========================================================================
+    -- Degrade column SRID restriction below MySQL 8.0.3 for EXISTING columns (new columns are gated in
+    -- MissingTableAndColumnQuench, which runs earlier in the same deploy). MariaDB has no equivalent
+    -- attribute at any version, so SchemaSmith_SupportsColumnSrid() is 0 there unconditionally -- this
+    -- block fires for MariaDB the same way it fires for a genuinely old MySQL. Below the threshold the
+    -- SRID keyword is a hard syntax error, so ColumnScript never emits it there -- the MODIFY COLUMN
+    -- emitted below (STEP 3) is still syntactically valid, it just leaves the column unrestricted -- and
+    -- STEP 3's predicate ignores the SRID difference so the deploy stays idempotent. This block only
+    -- adds the user-facing report: 'fail' aborts naming the column(s); 'warn' (default) records a
+    -- 'downgraded' manifest row per column.
+    -- =========================================================================
+    IF SchemaSmith_SupportsColumnSrid() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE t.NewTable = 0 AND c.NewColumn = 0
+                     AND c.Srid IS NOT NULL) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.Srid IS NOT NULL;
+            SET @ss_msg = 'Column SRID requires MySQL 8.0.3 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column SRID stored unrestricted (requires MySQL 8.0.3, MariaDB unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.Srid IS NOT NULL;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column (SRID, MySQL 8.0.3)',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE t.NewTable = 0 AND c.NewColumn = 0
+              AND c.Srid IS NOT NULL;
+        END IF;
+    END IF;
 
     -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
@@ -194,6 +333,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
               -- synonym so a hand-authored type that differs only by spacing/synonym is not a
@@ -214,7 +357,11 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               -- Collation changes (only when JSON specifies a collation)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
@@ -223,6 +370,26 @@ BEGIN
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
 
         -- #363: WhatIf twin of the ELSE-branch 'column'/'modified' audit; same source/predicate, wouldModify.
@@ -243,6 +410,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
@@ -255,12 +426,36 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
     ELSE
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Modify columns');
@@ -289,6 +484,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               -- Normalize whitespace adjacent to structural delimiters and the DECIMAL/NUMERIC
               -- synonym so a hand-authored type that differs only by spacing/synonym is not a
@@ -309,7 +508,11 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               -- Collation changes (only when JSON specifies a collation)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
@@ -318,6 +521,26 @@ BEGIN
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               -- AUTO_INCREMENT removal/addition (live EXTRA vs declared IsAutoIncrement) — parity with identity removal
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
 
         -- Object-change audit (#243 E5): one row per column about to be modified. Same join +
@@ -341,6 +564,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
@@ -353,12 +580,36 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           );
 
         -- Materialize: fold each table's column modifications into one multi-clause ALTER, then drain.
@@ -383,6 +634,10 @@ BEGIN
               ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
                AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
           )
+          -- A desired expression-form default this target cannot legally MODIFY into (below MySQL
+          -- 8.0.13 / see the degrade guard above) drops the whole column out of this pass; its
+          -- current default is left in place rather than emitting a MODIFY that would hit a syntax error.
+          AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
           AND (
               CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
                      OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
@@ -395,12 +650,36 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
                   AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
               OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+              -- Invisible-column visibility differs. Gated behind SchemaSmith_SupportsInvisibleColumn(): below
+              -- the floor (MySQL 8.0.23 / MariaDB 10.3) the column can never actually become invisible (the
+              -- degrade guard above already reports it), so ignore the difference there or it churns every run.
+              -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
+              -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
+              OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+              -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
+              -- never -- the degrade guard above already reports it there), so ignore the difference below
+              -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
+              -- MariaDB -- see SchemaSmith_ColumnSrid); <=> is null-safe so an unrestricted<->restricted
+              -- change (NULL on one side) is detected the same as a value change on both sides.
+              OR (SchemaSmith_SupportsColumnSrid() = 1
+                  AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+              -- Comment differs (symmetric: covers added, changed, and cleared -- a declared NULL
+              -- comment against a live comment counts as a difference the same as a value change).
+              OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+              -- ON UPDATE CURRENT_TIMESTAMP[(n)] differs (symmetric: added, changed -- e.g. a precision
+              -- change --, or removed). No SchemaSmith_Supports... gate: unlike Invisible/Srid above,
+              -- this clause predates both engines' hard floors, so it is always legal to compare/emit.
+              OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
           )
         GROUP BY c.TableName;
 
@@ -1008,6 +1287,67 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
 
             DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_CollationDone = TRUE;
 
+            -- CONVERT TO CHARACTER SET rewrites every character column on the table, and the engine refuses
+            -- outright while a foreign key references any of them ("Cannot change column ... used in a
+            -- foreign key constraint") -- a hard deploy failure, not churn. Drop the dependents first; the
+            -- foreign-key phase that runs after this reconciles declared FKs and puts them back, which is
+            -- the same division of labour the drop-column path above relies on.
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CollationFKsToDrop;
+            CREATE TEMPORARY TABLE _SchemaSmith_CollationFKsToDrop (
+                TableName VARCHAR(128) NOT NULL,
+                ConstraintName VARCHAR(128) NOT NULL,
+                PRIMARY KEY (TableName, ConstraintName)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            -- FKs declared ON a converting table.
+            INSERT IGNORE INTO _SchemaSmith_CollationFKsToDrop (TableName, ConstraintName)
+            SELECT DISTINCT CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                            CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+              FROM _SchemaSmith_Tables t
+              INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                  ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                  AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+              INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                  ON CONVERT(kcu.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                  AND CONVERT(kcu.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
+                  AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+             WHERE t.NewTable = 0 AND t.Collation IS NOT NULL AND ist.TABLE_COLLATION != t.Collation;
+
+            -- And FKs POINTING AT one: the referencing column must keep a matching collation, so the engine
+            -- rejects the convert from that side too. Separate INSERT for the optimizer bug noted above.
+            INSERT IGNORE INTO _SchemaSmith_CollationFKsToDrop (TableName, ConstraintName)
+            SELECT DISTINCT CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                            CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+              FROM _SchemaSmith_Tables t
+              INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                  ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                  AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+              INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                  ON CONVERT(kcu.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                  AND CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
+             WHERE t.NewTable = 0 AND t.Collation IS NOT NULL AND ist.TABLE_COLLATION != t.Collation;
+
+            BEGIN
+                DECLARE v_ColFkDone INT DEFAULT FALSE;
+                DECLARE v_ColFkSql TEXT;
+                DECLARE cur_ColFks CURSOR FOR
+                    SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                                  '`.`', TableName, '` DROP FOREIGN KEY `', ConstraintName, '`')
+                      FROM _SchemaSmith_CollationFKsToDrop;
+                DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ColFkDone = TRUE;
+
+                OPEN cur_ColFks;
+                collation_fk_loop: LOOP
+                    FETCH cur_ColFks INTO v_ColFkSql;
+                    IF v_ColFkDone THEN LEAVE collation_fk_loop; END IF;
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+                    VALUES (CONNECTION_ID(), CONCAT('  Drop FK for collation change: ', v_ColFkSql));
+                    SET @exec_sql = v_ColFkSql;
+                    PREPARE stmt FROM @exec_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+                END LOOP;
+                CLOSE cur_ColFks;
+            END;
+
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Change table collation');
             SET v_CollationDone = FALSE;
             OPEN cur_CollationChanges;
@@ -1026,6 +1366,62 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
             END LOOP;
 
             CLOSE cur_CollationChanges;
+        END;
+    END IF;
+
+    -- =======================
+    -- STEP 5.5: ALTER TABLE COMMENT
+    -- =======================
+    -- Symmetric compare (unlike Engine/RowFormat above, which only ever apply a declared value and
+    -- never clear one): a declared NULL comment against a live comment counts as a difference the
+    -- same as a value change, so removing a Comment from the JSON clears it in the database too --
+    -- matching the symmetric column-comment predicate in STEP 3 above. Escaping matches the
+    -- established _SchemaSmith_FullTextIndexes.Comment form (double the embedded single quotes).
+    IF p_WhatIf = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Change table comment');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName,
+                      ' COMMENT=''', REPLACE(COALESCE(t.Comment, ''), '''', ''''''), '''')
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        WHERE t.NewTable = 0
+          AND BINARY COALESCE(ist.TABLE_COMMENT, '') != BINARY COALESCE(t.Comment, '');
+    ELSE
+        BEGIN
+            DECLARE v_CommentDone INT DEFAULT FALSE;
+            DECLARE v_CommentSql TEXT;
+            DECLARE cur_CommentChanges CURSOR FOR
+                SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName,
+                              ' COMMENT=''', REPLACE(COALESCE(t.Comment, ''), '''', ''''''), '''') AS AlterCommentStatement
+                FROM _SchemaSmith_Tables t
+                INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                    ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                    AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+                WHERE t.NewTable = 0
+                  AND BINARY COALESCE(ist.TABLE_COMMENT, '') != BINARY COALESCE(t.Comment, '');
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_CommentDone = TRUE;
+
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Change table comment');
+            SET v_CommentDone = FALSE;
+            OPEN cur_CommentChanges;
+
+            comment_changes_loop: LOOP
+                FETCH cur_CommentChanges INTO v_CommentSql;
+                IF v_CommentDone THEN
+                    LEAVE comment_changes_loop;
+                END IF;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Change comment: ', v_CommentSql));
+                SET @exec_sql = v_CommentSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+
+            CLOSE cur_CommentChanges;
         END;
     END IF;
 
@@ -1201,6 +1597,39 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     -- =======================
     -- Drop tables that are owned by this product but no longer in the definition
     IF p_DropTablesRemovedFromProduct = 1 THEN
+        -- Data-loss guard: a partitioned table spreads data across partitions that DROP TABLE
+        -- destroys outright. SchemaSmith has no partitioning support -- partitioning only happens
+        -- by hand, typically once a table has grown -- so an ordinary product-owned table can be
+        -- partitioned after deployment and later look like an ordinary drop-by-absence candidate.
+        -- Fail closed before any DDL below, in both live and WhatIf mode, mirroring the
+        -- UnsupportedFeaturePolicy=fail SIGNAL pattern used elsewhere in this proc. Table names are
+        -- logged individually first (the SIGNAL MESSAGE_TEXT below stays well under MySQL's 128-char
+        -- limit -- see STEP 4's comment on that limit).
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT DISTINCT CONNECTION_ID(), CONCAT('  Partitioned table removed from product, not dropped (data-loss guard): ', po.ObjectName)
+        FROM SchemaSmith_ProductOwnership po
+        INNER JOIN INFORMATION_SCHEMA.PARTITIONS ip
+            ON CONVERT(ip.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+           AND CONVERT(ip.TABLE_NAME USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+           AND ip.PARTITION_NAME IS NOT NULL
+        WHERE CONVERT(po.ProductName USING utf8mb4) = CONVERT(p_ProductName USING utf8mb4)
+          AND CONVERT(po.ObjectSchema USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+          AND po.ObjectType = 'TABLE'
+          AND COALESCE(po.PreventDrop, 0) = 0
+          AND EXISTS (
+              SELECT 1 FROM _SchemaSmith_ExistingTables ist
+              WHERE CONVERT(ist.TableName USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM _SchemaSmith_Tables t
+              WHERE CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4) = CONVERT(po.ObjectName USING utf8mb4)
+          );
+
+        IF ROW_COUNT() > 0 THEN
+            SET @ss_msg = 'Partitioned table(s) skipped by drop-by-absence guard; drop manually or mark PreventDrop.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        END IF;
+
         -- #289: drop any foreign key that REFERENCES a table about to be removed BEFORE the table
         -- drop below, otherwise the DROP TABLE fails on a still-present inbound dependency.
         IF p_WhatIf = 1 THEN

@@ -155,6 +155,81 @@ EXEC sys.sp_addextendedproperty @name=N'IdxNote', @value=N'hot', @level0type=N'S
         conn.Close();
     }
 
+    [Test]
+    public void BootstrapTableXmlQuench_ColumnRename_AtCompatibilityLevel100_DataSurvives()
+    {
+        // The XML twin is easy to miss: it is a separate, hand-maintained copy of
+        // BootstrapTableQuench's logic (OPENJSON-free), and a rename left out of it would be invisible
+        // on a modern server (JSON encoding masks it) and silently wrong only below the compat cliff.
+        var db = CreateCompat100Database("BootstrapXmlColRename100");
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(DbConnectionString(db));
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: true, IngestEncoding.Xml);
+
+        cmd.CommandText = "CREATE TABLE dbo.XmlColRenameTest ([Id] INT IDENTITY(1,1) PRIMARY KEY, [OldCol] VARCHAR(50) NOT NULL DEFAULT '0')";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "INSERT INTO dbo.XmlColRenameTest ([OldCol]) VALUES ('distinguishing-value')";
+        cmd.ExecuteNonQuery();
+
+        var json = "{\"Schema\": \"[dbo]\", \"Name\": \"[XmlColRenameTest]\","
+            + "\"Columns\": ["
+            + "{\"Name\": \"[Id]\", \"DataType\": \"INT\", \"Nullable\": false},"
+            + "{\"Name\": \"[Value]\", \"DataType\": \"VARCHAR(50)\", \"Nullable\": false, \"Default\": \"'0'\", \"OldName\": \"[OldCol]\"}"
+            + "],"
+            + "\"Indexes\": [{\"Name\": \"[PK_XmlColRenameTest]\", \"PrimaryKey\": true, \"Unique\": true, \"Clustered\": true, \"IndexColumns\": \"[Id]\"}]"
+            + "}";
+        var xml = ModelXmlSerializer.ToIngestXmlObject(json, "Table");
+        cmd.CommandText = $"DECLARE @x XML = N'{xml.Replace("'", "''")}'; EXEC SchemaSmith.BootstrapTableQuench @TableDefinitions = @x;";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.XmlColRenameTest') AND name = 'Value'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1), "Renamed column must exist under the new name.");
+        cmd.CommandText = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.XmlColRenameTest') AND name = 'OldCol'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(0), "Old column name must be gone after rename.");
+
+        cmd.CommandText = "SELECT [Value] FROM dbo.XmlColRenameTest WHERE [Id] = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo("distinguishing-value"),
+            "The pre-existing row's value must survive the rename under the XML-ingest twin, not read back as the column's DEFAULT.");
+
+        conn.Close();
+    }
+
+    [Test]
+    public void BootstrapTableXmlQuench_TableRename_AtCompatibilityLevel100_DataSurvives()
+    {
+        var db = CreateCompat100Database("BootstrapXmlTblRename100");
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(DbConnectionString(db));
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, forceReKindle: true, IngestEncoding.Xml);
+
+        cmd.CommandText = "CREATE TABLE dbo.XmlTblRenameTestOld ([Id] INT IDENTITY(1,1) PRIMARY KEY, [Value] VARCHAR(50) NOT NULL DEFAULT '0')";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "INSERT INTO dbo.XmlTblRenameTestOld ([Value]) VALUES ('distinguishing-value')";
+        cmd.ExecuteNonQuery();
+
+        var json = "{\"Schema\": \"[dbo]\", \"Name\": \"[XmlTblRenameTest]\", \"OldName\": \"[XmlTblRenameTestOld]\","
+            + "\"Columns\": ["
+            + "{\"Name\": \"[Id]\", \"DataType\": \"INT\", \"Nullable\": false},"
+            + "{\"Name\": \"[Value]\", \"DataType\": \"VARCHAR(50)\", \"Nullable\": false, \"Default\": \"'0'\"}"
+            + "],"
+            + "\"Indexes\": [{\"Name\": \"[PK_XmlTblRenameTest]\", \"PrimaryKey\": true, \"Unique\": true, \"Clustered\": true, \"IndexColumns\": \"[Id]\"}]"
+            + "}";
+        var xml = ModelXmlSerializer.ToIngestXmlObject(json, "Table");
+        cmd.CommandText = $"DECLARE @x XML = N'{xml.Replace("'", "''")}'; EXEC SchemaSmith.BootstrapTableQuench @TableDefinitions = @x;";
+        cmd.ExecuteNonQuery();
+
+        Assert.That(ObjectExists(cmd, "dbo.XmlTblRenameTest", "U"), Is.True, "Renamed table must exist under the new name.");
+        Assert.That(ObjectExists(cmd, "dbo.XmlTblRenameTestOld", "U"), Is.False, "Old table name must be gone after rename.");
+
+        cmd.CommandText = "SELECT [Value] FROM dbo.XmlTblRenameTest WHERE [Id] = 1";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo("distinguishing-value"),
+            "The old table's row must survive the rename under the XML-ingest twin, not be orphaned under an empty new table.");
+
+        conn.Close();
+    }
+
     private static bool ObjectExists(IDbCommand cmd, string name, string type)
     {
         cmd.CommandText = $"SELECT CASE WHEN OBJECT_ID('{name}', '{type}') IS NULL THEN 0 ELSE 1 END";
