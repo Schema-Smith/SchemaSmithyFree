@@ -1,7 +1,9 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Schema.Configuration;
 
@@ -153,5 +155,45 @@ public class SettingsContractTests
         while (dir != null && !System.IO.File.Exists(System.IO.Path.Join(dir.FullName, "SchemaSmith.sln")))
             dir = dir.Parent;
         return dir?.FullName ?? "";
+    }
+    
+    // The ShouldCast keys live in one class but are read by two different tools. Handing both tools the whole
+    // set meant a real key in the wrong settings file did nothing and warned about nothing -- the unrecognised-
+    // key check missing inside its own problem space. A new key with no ReadBy would silently rejoin that
+    // behaviour, so the attribute is required rather than optional.
+    [Test]
+    public void EveryShouldCastKey_DeclaresExactlyOneReadingTool()
+    {
+        var unattributed = typeof(SettingsKeys.ShouldCast).GetFields()
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string)
+                        && f.Name != nameof(SettingsKeys.ShouldCast.Section))
+            .Where(f => f.GetCustomAttribute<ReadByAttribute>() == null)
+            .Select(f => f.Name)
+            .ToList();
+
+        Assert.That(unattributed, Is.Empty,
+            "every ShouldCast key must name the tool that reads it with [ReadBy]; without one it is accepted "
+            + "by no tool and silently does nothing: " + string.Join(", ", unattributed));
+    }
+
+    [Test]
+    public void ShouldCastKeys_ArePartitionedBetweenTheTwoExtractionTools()
+    {
+        var schemaTongs = SettingsContract.AcceptedKeys(SettingsTool.SchemaTongs)
+            .Where(k => k.StartsWith("ShouldCast:", StringComparison.OrdinalIgnoreCase)).ToHashSet();
+        var dataTongs = SettingsContract.AcceptedKeys(SettingsTool.DataTongs)
+            .Where(k => k.StartsWith("ShouldCast:", StringComparison.OrdinalIgnoreCase)).ToHashSet();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(schemaTongs.Intersect(dataTongs), Is.Empty,
+                "no ShouldCast key is read by both tools, so none should be accepted by both");
+            Assert.That(schemaTongs, Is.Not.Empty);
+            Assert.That(dataTongs, Is.Not.Empty);
+            Assert.That(dataTongs, Does.Not.Contain(SettingsKeys.ShouldCast.Collations),
+                "SchemaTongs reads this one; DataTongs accepting it is the over-claim");
+            Assert.That(schemaTongs, Does.Not.Contain(SettingsKeys.ShouldCast.MergeUpdate),
+                "DataTongs reads this one");
+        });
     }
 }

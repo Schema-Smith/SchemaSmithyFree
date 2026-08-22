@@ -78,42 +78,79 @@ public static class SettingsKeys
     public static class ShouldCast
     {
         public const string Section = "ShouldCast";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Aggregates = "ShouldCast:Aggregates";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Catalogs = "ShouldCast:Catalogs";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Collations = "ShouldCast:Collations";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string CompositeTypes = "ShouldCast:CompositeTypes";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string ConfigureDataDelivery = "ShouldCast:ConfigureDataDelivery";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string DdlTriggers = "ShouldCast:DDLTriggers";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string DeliveryEncoding = "ShouldCast:DeliveryEncoding";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string DisableRules = "ShouldCast:DisableRules";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string DisableTriggers = "ShouldCast:DisableTriggers";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string DomainTypes = "ShouldCast:DomainTypes";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string EnumTypes = "ShouldCast:EnumTypes";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Events = "ShouldCast:Events";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Functions = "ShouldCast:Functions";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string IndexedViews = "ShouldCast:IndexedViews";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string MaterializedViews = "ShouldCast:MaterializedViews";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string MergeDelete = "ShouldCast:MergeDelete";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string MergeUpdate = "ShouldCast:MergeUpdate";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string ObjectList = "ShouldCast:ObjectList";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string OutputContentFiles = "ShouldCast:OutputContentFiles";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string OutputScripts = "ShouldCast:OutputScripts";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Procedures = "ShouldCast:Procedures";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Publications = "ShouldCast:Publications";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Rules = "ShouldCast:Rules";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string SaveInvalidScripts = "ShouldCast:SaveInvalidScripts";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Schemas = "ShouldCast:Schemas";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string ScriptDynamicDependencyRemovalForFunctions = "ShouldCast:ScriptDynamicDependencyRemovalForFunctions";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Sequences = "ShouldCast:Sequences";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string StopLists = "ShouldCast:StopLists";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Synonyms = "ShouldCast:Synonyms";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string TableTriggers = "ShouldCast:TableTriggers";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Tables = "ShouldCast:Tables";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string TokenizeScripts = "ShouldCast:TokenizeScripts";
+        [ReadBy(SettingsTool.DataTongs)]
         public const string UpdateDescendents = "ShouldCast:UpdateDescendents";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string UserDefinedTypes = "ShouldCast:UserDefinedTypes";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string ValidateScripts = "ShouldCast:ValidateScripts";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string Views = "ShouldCast:Views";
+        [ReadBy(SettingsTool.SchemaTongs)]
         public const string XmlSchemaCollections = "ShouldCast:XMLSchemaCollections";
     }
 
