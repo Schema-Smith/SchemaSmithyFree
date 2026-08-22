@@ -432,6 +432,133 @@ END";
 ]
 """;
 
+    // Every other filegroup test deploys exactly once, so none of them exercises the move guard against a
+    // package that has already been deployed. All three cases below fail only on the SECOND deploy.
+
+    // A table declares a filegroup; its PK declares nothing. An index created with no ON clause lands on
+    // the TABLE's filegroup, not the database default -- and ParseTableJson deliberately does not default an
+    // index's FileGroup from its table's. So the undeclared PK read as declared-PRIMARY against live-FG_A and
+    // the redeploy failed, naming a filegroup the package never mentions. This is the shape of the fixture
+    // WithTableFileGroup itself produces: the documented hand-authoring style.
+    [Test]
+    public void TableQuench_TableLevelFileGroupOnly_RedeploysCleanly()
+    {
+        var uid = Guid.NewGuid().ToString("N")[..8];
+        var product = $"FGRedeployProduct_{uid}";
+        var table = $"FGRedeployTable_{uid}";
+
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            RunTableQuenchProc(cmd, WithTableFileGroup(table, FileGroupA), productName: product);
+            Assert.That(LiveIndexFileGroup(cmd, table, $"PK_{table}"), Is.EqualTo(FileGroupA),
+                "Setup: an index with no ON clause follows its table onto the non-default filegroup.");
+
+            Assert.DoesNotThrow(
+                () => RunTableQuenchProc(cmd, WithTableFileGroup(table, FileGroupA), productName: product),
+                "Redeploying the identical package must be a no-op, not a move-guard failure.");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS [dbo].[{table}];";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    // A regression for users who never touch the feature: a table already sitting on a non-default filegroup
+    // -- a DBA's placement -- whose package declares nothing. That deployed fine before filegroups existed,
+    // and unset must keep meaning "SchemaSmith does not manage placement".
+    [Test]
+    public void TableQuench_UndeclaredTableAlreadyOnNonDefaultFileGroup_IsLeftAlone()
+    {
+        var uid = Guid.NewGuid().ToString("N")[..8];
+        var product = $"FGUndeclaredProduct_{uid}";
+        var table = $"FGUndeclaredTable_{uid}";
+
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            // Placed by hand on a non-default filegroup, exactly as a DBA would have.
+            cmd.CommandText = $@"CREATE TABLE [dbo].[{table}] ([Id] INT NOT NULL, [Somedata] VARCHAR(100) NULL,
+                                 CONSTRAINT [PK_{table}] PRIMARY KEY CLUSTERED ([Id]) ON [{FileGroupA}]) ON [{FileGroupA}];";
+            cmd.ExecuteNonQuery();
+
+            Assert.DoesNotThrow(
+                () => RunTableQuenchProc(cmd, WithTableNoFileGroup(table), productName: product),
+                "A package that declares no filegroup must not fight a placement it never asked about.");
+            Assert.That(LiveTableFileGroup(cmd, table), Is.EqualTo(FileGroupA),
+                "The pre-existing placement must be left exactly where it was.");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS [dbo].[{table}];";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    // The IndexOnly twin of the regression above, and the case an --IndexOnly package is FOR: a vendor
+    // database whose tables someone else placed. The existing unaffected-test passes only because its table
+    // sits on PRIMARY, so the undeclared index compared equal to the default by luck.
+    [Test]
+    public void IndexOnly_NoFileGroupDeclared_AgainstTableOnNonDefaultFileGroup_IsUnaffected()
+    {
+        var uid = Guid.NewGuid().ToString("N")[..8];
+        var product = $"FGIdxOnlyOffDefaultProduct_{uid}";
+        var table = $"FGIdxOnlyOffDefaultTable_{uid}";
+
+        using var conn = (SqlConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        try
+        {
+            cmd.CommandText = $"CREATE TABLE [dbo].[{table}] (Id INT NOT NULL, Somedata VARCHAR(100) NULL) ON [{FileGroupA}];";
+            cmd.ExecuteNonQuery();
+
+            RunTableQuenchProc(cmd, WithIndexOnlyIndex(table), indexOnly: true, productName: product);
+            Assert.That(LiveIndexFileGroup(cmd, table, $"IX_{table}_Somedata"), Is.EqualTo(FileGroupA),
+                "An index created with no ON clause follows its table, not the database default.");
+
+            Assert.DoesNotThrow(
+                () => RunTableQuenchProc(cmd, WithIndexOnlyIndex(table), indexOnly: true, productName: product),
+                "Declaring no filegroup must stay a no-op against a table someone else placed.");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS [dbo].[{table}];";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    private static string WithTableNoFileGroup(string table) => $$"""
+[
+  {
+    "Schema": "[dbo]",
+    "Name": "[{{table}}]",
+    "Columns": [
+      { "Name": "[Id]",       "DataType": "INT",          "Nullable": false },
+      { "Name": "[Somedata]", "DataType": "VARCHAR(100)", "Nullable": true }
+    ],
+    "Indexes": [ { "Name": "[PK_{{table}}]", "PrimaryKey": true, "Clustered": true, "IndexColumns": "[Id]" } ]
+  }
+]
+""";
+
     private static string WithTableFileGroup(string table, string fileGroup) => $$"""
 [
   {

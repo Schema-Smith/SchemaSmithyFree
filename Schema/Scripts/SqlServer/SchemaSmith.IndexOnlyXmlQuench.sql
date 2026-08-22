@@ -275,19 +275,19 @@ BEGIN TRY
                JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                             AND ei.[xTableName] = i.[TableName]
                                             AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-               WHERE ei.[xFileGroup] IS NOT NULL
-                 AND ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) <> ei.[xFileGroup])
+               WHERE ei.[xFileGroup] IS NOT NULL AND i.[FileGroup] IS NOT NULL
+                 AND SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]) <> ei.[xFileGroup])
   BEGIN
     DECLARE @v_IdxMoveIndex NVARCHAR(1510), @v_IdxMoveDeclared NVARCHAR(500), @v_IdxMoveLive NVARCHAR(500)
     SELECT TOP 1 @v_IdxMoveIndex = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName],
-                 @v_IdxMoveDeclared = ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)),
+                 @v_IdxMoveDeclared = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]),
                  @v_IdxMoveLive = ei.[xFileGroup]
       FROM #ExistingIndexes ei WITH (NOLOCK)
       JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                    AND ei.[xTableName] = i.[TableName]
                                    AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-      WHERE ei.[xFileGroup] IS NOT NULL
-        AND ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) <> ei.[xFileGroup]
+      WHERE ei.[xFileGroup] IS NOT NULL AND i.[FileGroup] IS NOT NULL
+        AND SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]) <> ei.[xFileGroup]
     DECLARE @v_IdxMoveMsg NVARCHAR(2000) = 'Index ' + @v_IdxMoveIndex + ' declares filegroup ' + @v_IdxMoveDeclared +
       ', but is currently deployed on filegroup ' + @v_IdxMoveLive + '. SchemaSmith does not move an existing index to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.';
     RAISERROR(@v_IdxMoveMsg, 16, 1);

@@ -82,10 +82,19 @@ BEGIN TRY
   -- A partitioned table's heap/clustered data_space_id names a partition SCHEME, not a filegroup, so it has
   -- no single filegroup to compare against and ISNULL(...,'') would read as "on no filegroup" and mismatch
   -- every partitioned table. Resolve the data space once and branch on its type instead.
+  -- An UNSET FileGroup means "SchemaSmith does not manage placement here" -- it is NOT a declaration of
+  -- the default filegroup. Comparing ISNULL(declared, <db default>) made every undeclared object read as
+  -- declaring PRIMARY, so anything already living elsewhere failed its SECOND deploy: a table whose own
+  -- filegroup is declared but whose indexes are not (an index created with no ON clause follows its
+  -- table, not the database default), and any pre-existing DBA placement in a package that never
+  -- mentions filegroups -- which deployed fine before this feature existed. The first deploy always
+  -- succeeded, so a single-deploy test cannot see it.
+  -- Trade-off: clearing a declared FileGroup to move an object back to the default is now a silent
+  -- no-op rather than an error. That is the correct side to err on -- SchemaSmith never moves objects
+  -- between filegroups anyway, so the alternative is failing a package for a move it would refuse.
   IF OBJECT_ID('tempdb..#DeployedTablePlacement') IS NOT NULL DROP TABLE #DeployedTablePlacement
   SELECT t.[Schema] + '.' + t.[Name] AS FullName,
-         ISNULL(SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]),
-                (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) AS Declared,
+         SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]) AS Declared,
          t.[FileGroup] AS DeclaredRaw,
          ds.[name] AS DeployedSpace,
          ds.[type] AS DeployedSpaceType
@@ -96,12 +105,12 @@ BEGIN TRY
     LEFT JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = si.data_space_id
    WHERE t.NewTable = 0
 
-  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement WHERE DeployedSpaceType = 'FG' AND Declared <> DeployedSpace)
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType = 'FG' AND Declared <> DeployedSpace)
   BEGIN
     DECLARE @v_MoveTable NVARCHAR(1010), @v_MoveDeclared NVARCHAR(500), @v_MoveLive NVARCHAR(500)
     SELECT TOP 1 @v_MoveTable = FullName, @v_MoveDeclared = Declared, @v_MoveLive = DeployedSpace
       FROM #DeployedTablePlacement
-     WHERE DeployedSpaceType = 'FG' AND Declared <> DeployedSpace
+     WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType = 'FG' AND Declared <> DeployedSpace
     RAISERROR('Table %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing table to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_MoveTable, @v_MoveDeclared, @v_MoveLive)
   END
 
@@ -675,19 +684,19 @@ BEGIN TRY
                JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                             AND ei.[xTableName] = i.[TableName]
                                             AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-               WHERE ei.[xFileGroup] IS NOT NULL
-                 AND ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) <> ei.[xFileGroup])
+               WHERE ei.[xFileGroup] IS NOT NULL AND i.[FileGroup] IS NOT NULL
+                 AND SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]) <> ei.[xFileGroup])
   BEGIN
     DECLARE @v_IdxMoveIndex NVARCHAR(1510), @v_IdxMoveDeclared NVARCHAR(500), @v_IdxMoveLive NVARCHAR(500)
     SELECT TOP 1 @v_IdxMoveIndex = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName],
-                 @v_IdxMoveDeclared = ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)),
+                 @v_IdxMoveDeclared = SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]),
                  @v_IdxMoveLive = ei.[xFileGroup]
       FROM #ExistingIndexes ei WITH (NOLOCK)
       JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                    AND ei.[xTableName] = i.[TableName]
                                    AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
-      WHERE ei.[xFileGroup] IS NOT NULL
-        AND ISNULL(SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]), (SELECT fg.[name] FROM sys.filegroups fg WITH (NOLOCK) WHERE fg.is_default = 1)) <> ei.[xFileGroup]
+      WHERE ei.[xFileGroup] IS NOT NULL AND i.[FileGroup] IS NOT NULL
+        AND SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]) <> ei.[xFileGroup]
     RAISERROR('Index %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing index to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_IdxMoveIndex, @v_IdxMoveDeclared, @v_IdxMoveLive)
   END
 
