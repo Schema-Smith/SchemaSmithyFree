@@ -135,7 +135,11 @@ lab_sql_file() {
     esac
   else
     container="$(lab_container "$engine")"
-    MSYS_NO_PATHCONV=1 docker cp "$path" "${container}:/tmp/lab-seed.sql" >/dev/null 2>&1
+    clientpath="$(lab_winpath "$path")"
+    if ! MSYS_NO_PATHCONV=1 docker cp "$clientpath" "${container}:/tmp/lab-seed.sql" >/dev/null 2>&1; then
+      echo "LAB-SQL: could not stage '$(basename "$path")' into $container." >&2
+      return 1
+    fi
     case "$engine" in
       sqlserver) out=$(MSYS_NO_PATHCONV=1 docker exec "$container" /opt/mssql-tools18/bin/sqlcmd \
                          -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d "$db" -i /tmp/lab-seed.sql 2>&1); rc=$? ;;

@@ -136,6 +136,9 @@ function Invoke-LabSqlFile {
     else {
         $container = Get-LabContainer $Engine
         docker cp $Path "${container}:/tmp/lab-seed.sql" 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "LAB-SQL: could not stage '$([System.IO.Path]::GetFileName($Path))' into $container."
+        }
         switch ($Engine) {
             'sqlserver' { $out = docker exec $container /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Learn!Passw0rd' -C -b -d $Database -i /tmp/lab-seed.sql 2>&1 }
             'postgres'  { $out = docker exec $container psql -U postgres -d $Database -v ON_ERROR_STOP=1 -f /tmp/lab-seed.sql 2>&1 }
