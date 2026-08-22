@@ -347,6 +347,7 @@ public static class ForgeKindler
                 new("SchemaSmith_UpperDataType.sql"),
                 new("SchemaSmith_StripIntDisplayWidth.sql"),
                 new("SchemaSmith_NormalizeColumnDefault.sql"),
+                new("SchemaSmith_NumericDefaultsEqual.sql"),
                 new("SchemaSmith_ColumnOnUpdateClause.sql"),
                 new("SchemaSmith_IndexIsVisible.sql"),
                 new("SchemaSmith_ColumnSrid.sql"),

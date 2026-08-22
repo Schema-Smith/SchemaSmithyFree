@@ -357,7 +357,11 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               -- Collation changes (only when JSON specifies a collation)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
@@ -422,7 +426,11 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
@@ -500,7 +508,11 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               -- Collation changes (only when JSON specifies a collation)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
@@ -568,7 +580,11 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
@@ -634,7 +650,11 @@ BEGIN
                   AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
                       CASE WHEN c.DefaultValue LIKE '''%'''
                            THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
-                           ELSE c.DefaultValue END))
+                           ELSE c.DefaultValue END)
+                  -- A DECIMAL default comes back at the column's scale ('0' declared, '0.00' stored), which
+                  -- never matched as text and re-ALTERed the column on every deploy.
+                  AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                      c.DefaultValue, isc.DATA_TYPE) = 0)
               OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
               OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
               OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''

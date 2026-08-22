@@ -410,4 +410,67 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`ModifyColumnCollation` (`Column1` VAR
             // Ignore cleanup errors
         }
     }
+    // MySQL stores a DECIMAL default at the column's scale, so DEFAULT 0 on DECIMAL(12,2) reads back as
+    // '0.00' and never matched the declared '0' as text -- the column was re-ALTERed on every deploy. An
+    // idempotency break exits 0 and logs success, so the only signal is the same object changing again on a
+    // re-run. Three passes, because the first may legitimately do work.
+    [Test]
+    public void AlterColumn_DecimalDefault_IsIdempotentAcrossRepeatedDeploys()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var table = "dec_default_idem";
+        var json = $$"""
+        [
+            {
+                "Name": "{{table}}",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "Amount", "DataType": "DECIMAL(12,2)", "Nullable": false, "Default": "0" },
+                    { "Name": "Rate", "DataType": "DECIMAL(8,4)", "Nullable": false, "Default": "1.5" }
+                ]
+            }
+        ]
+        """;
+
+        try
+        {
+            Deploy(cmd, json);
+
+            for (var pass = 2; pass <= 3; pass++)
+            {
+                cmd.CommandText = $"DELETE FROM `{_mainDb}`.SchemaSmith_ChangeAudit WHERE SessionId = CONNECTION_ID()";
+                cmd.ExecuteNonQuery();
+
+                Deploy(cmd, json);
+
+                cmd.CommandText = $@"SELECT COALESCE(GROUP_CONCAT(CONCAT(ObjectType, '/', ActionType, ' ', ObjectName)), '')
+                                       FROM `{_mainDb}`.SchemaSmith_ChangeAudit
+                                      WHERE SessionId = CONNECTION_ID() AND ObjectName LIKE '%{table}%'";
+                var changed = Convert.ToString(cmd.ExecuteScalar());
+                Assert.That(changed, Is.Empty,
+                    $"pass {pass}: a DECIMAL column whose default already matches must not be re-altered");
+            }
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{table}`";
+            cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    private void Deploy(System.Data.IDbCommand cmd, string json)
+    {
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ParseTableJson('{TestSchema}', '{json.Replace("'", "''")}')";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
+        cmd.ExecuteNonQuery();
+    }
+
 }
