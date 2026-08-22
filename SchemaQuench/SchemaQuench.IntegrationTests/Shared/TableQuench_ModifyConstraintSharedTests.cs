@@ -331,4 +331,93 @@ VALUES ('{_productName}', '', '{TestSchema}', 'FOREIGN KEY', 'ModFKCascUpd.FK_Mo
         }
         catch { /* Ignore cleanup errors */ }
     }
+    // CONVERT TO CHARACTER SET rewrites every character column on the table, and MySQL refuses outright
+    // while a foreign key references one (error 3780, "Referencing column ... are incompatible"). That is a
+    // hard deploy failure, not churn. Note the direction: converting the REFERENCED table is what fails, so
+    // the FK that has to go is the one on the child.
+    [Test]
+    public void TableQuench_CollationChange_DropsDependentForeignKeysAndRestoresThem()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var parent = "coll_fk_parent";
+        var child = "coll_fk_child";
+        var json = $$"""
+        [
+            {
+                "Name": "{{parent}}",
+                "Collation": "utf8mb4_unicode_ci",
+                "Columns": [ { "Name": "Code", "DataType": "VARCHAR(20)", "Nullable": false } ],
+                "Indexes": [ { "Name": "PK_{{parent}}", "PrimaryKey": true, "Unique": true, "IndexColumns": "Code" } ]
+            },
+            {
+                "Name": "{{child}}",
+                "Collation": "utf8mb4_unicode_ci",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "Code", "DataType": "VARCHAR(20)", "Nullable": false }
+                ],
+                "Indexes": [ { "Name": "PK_{{child}}", "PrimaryKey": true, "Unique": true, "IndexColumns": "Id" } ],
+                "ForeignKeys": [ { "Name": "FK_{{child}}_{{parent}}", "Columns": "Code",
+                                    "RelatedTable": "{{parent}}", "RelatedColumns": "Code" } ]
+            }
+        ]
+        """;
+
+        try
+        {
+            // Live tables start on a DIFFERENT collation, so the deploy must convert them.
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{child}`"; cmd.ExecuteNonQuery();
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{parent}`"; cmd.ExecuteNonQuery();
+            cmd.CommandText = $@"CREATE TABLE `{TestSchema}`.`{parent}` (Code VARCHAR(20) NOT NULL,
+                                  CONSTRAINT PK_{parent} PRIMARY KEY (Code)) COLLATE=utf8mb4_general_ci";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = $@"CREATE TABLE `{TestSchema}`.`{child}` (Id INT NOT NULL, Code VARCHAR(20) NOT NULL,
+                                  CONSTRAINT PK_{child} PRIMARY KEY (Id),
+                                  CONSTRAINT FK_{child}_{parent} FOREIGN KEY (Code)
+                                    REFERENCES `{TestSchema}`.`{parent}`(Code)) COLLATE=utf8mb4_general_ci";
+            cmd.ExecuteNonQuery();
+
+            // Its own product name: FK reconciliation is ownership-scoped, so sharing the fixture product
+            // would let this package's two tables look like the whole product and strip sibling tests' FKs.
+            var product = $"CollFkProduct_{Guid.NewGuid():N}"[..24];
+            Assert.DoesNotThrow(() => RunFullQuench(cmd, json, product),
+                "a collation change must drop the dependent foreign key rather than let the engine refuse");
+
+            cmd.CommandText = $@"SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES
+                                  WHERE TABLE_SCHEMA = '{TestSchema}' AND TABLE_NAME = '{parent}'";
+            Assert.That(Convert.ToString(cmd.ExecuteScalar()), Is.EqualTo("utf8mb4_unicode_ci"),
+                "the declared collation must actually be applied");
+
+            cmd.CommandText = $@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                                  WHERE TABLE_SCHEMA = '{TestSchema}' AND TABLE_NAME = '{child}'
+                                    AND REFERENCED_TABLE_NAME = '{parent}'";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1),
+                "the foreign key must be put back by the foreign-key phase, not left dropped");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{child}`"; cmd.ExecuteNonQuery();
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{parent}`"; cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
+    private void RunFullQuench(System.Data.IDbCommand cmd, string json, string product)
+    {
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ParseTableJson('{TestSchema}', '{json.Replace("'", "''")}')";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{product}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{product}', '{TestSchema}', 0, 0, 1, 1)";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{product}', '{TestSchema}', 0, 0, 1)";
+        cmd.ExecuteNonQuery();
+    }
+
 }
