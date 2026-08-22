@@ -27,14 +27,14 @@ public static class LogBackup
             var copied = false;
             for (var attempt = 0; attempt < maxAttempts && !copied; attempt++)
             {
-                backupDir = Path.Combine(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
+                backupDir = Path.Join(cwd, $"{appName}.{$"{++ext}".PadLeft(4, '0')}");
                 if (directory.Exists(backupDir)) continue;
 
                 directory.CreateDirectory(backupDir);
                 try
                 {
                     foreach (var logFile in directory.GetFiles(cwd, $"{appName} - *.log", SearchOption.TopDirectoryOnly))
-                        file.Copy(logFile, Path.Combine(backupDir, Path.GetFileName(logFile)));
+                        file.Copy(logFile, Path.Join(backupDir, Path.GetFileName(logFile)));
 
                     // Deployment summary report (#243, E4e): archive the always-on Summary.json/.md
                     // alongside the run's logs. Harmless on tools that never write them (SchemaTongs,

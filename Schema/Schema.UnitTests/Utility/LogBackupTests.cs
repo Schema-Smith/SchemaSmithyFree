@@ -61,7 +61,7 @@ public class LogBackupTests
     {
         _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
         _mockDirectory.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>())
-            .Returns(new[] { Path.Combine("logs", "TestApp - run.log") });
+            .Returns(new[] { Path.Join("logs", "TestApp - run.log") });
         // The run that won the race already wrote this file, so the copy into 0001 fails.
         _mockFile.When(f => f.Copy(Arg.Any<string>(), Arg.Is<string>(s => s.Contains("TestApp.0001")),
                                   Arg.Any<bool>()))
@@ -85,7 +85,7 @@ public class LogBackupTests
     {
         _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
         _mockDirectory.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>())
-            .Returns(new[] { Path.Combine("logs", "TestApp - run.log") });
+            .Returns(new[] { Path.Join("logs", "TestApp - run.log") });
         _mockFile.When(f => f.Copy(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>()))
                  .Do(_ => throw new IOException("every destination is taken"));
 
