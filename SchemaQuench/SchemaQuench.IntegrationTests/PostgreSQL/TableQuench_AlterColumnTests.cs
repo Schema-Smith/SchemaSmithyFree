@@ -777,6 +777,8 @@ CREATE TABLE ""AlterColumnTests"".""ModifyColumnCollation"" (""Column1"" VARCHAR
                     {{ ""Name"": ""Id"", ""DataType"": ""integer"", ""Nullable"": false }},
                     {{ ""Name"": ""Counts"", ""DataType"": ""int4[]"", ""Nullable"": true }},
                     {{ ""Name"": ""Tags"", ""DataType"": ""text[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Legacy"", ""DataType"": ""_text"", ""Nullable"": true }},
+                    {{ ""Name"": ""Sizes"", ""DataType"": ""integer[]"", ""Nullable"": true }},
                     {{ ""Name"": ""Codes"", ""DataType"": ""varchar(20)[]"", ""Nullable"": true }},
                     {{ ""Name"": ""Amounts"", ""DataType"": ""numeric(10,2)[]"", ""Nullable"": true }}
                 ]

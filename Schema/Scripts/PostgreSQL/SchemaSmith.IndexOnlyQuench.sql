@@ -46,7 +46,7 @@ BEGIN
            COALESCE((celem ->> 'Unique')::BOOLEAN, false) AS "Unique",
            COALESCE((celem ->> 'UniqueConstraint')::BOOLEAN, false) AS "UniqueConstraint",
            COALESCE((celem ->> 'Clustered')::BOOLEAN, false) AS "Clustered",
-           COALESCE(celem ->> 'IndexColumns', '') AS "IndexColumns",
+           REGEXP_REPLACE(COALESCE(celem ->> 'IndexColumns', ''), '\s*,\s*', ',', 'g') AS "IndexColumns",
            COALESCE(celem ->> 'IncludeColumns', '') AS "IncludeColumns",
            COALESCE(celem ->> 'AccessMethod', 'btree') AS "AccessMethod",
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",

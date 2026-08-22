@@ -61,9 +61,25 @@
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Columns')::JSON) AS celem(value);
 
+    -- PostgreSQL names an array type _element in the catalog, and that is what extraction used to emit, so
+    -- packages in the wild carry both spellings: "_text" and "text[]". They mean the same column. Fold the
+    -- catalog spelling to the SQL one FIRST, so the synonym mapping below sees a normal element name and
+    -- whichever spelling a package happens to use stops re-modifying the column on every deploy.
+    UPDATE temp_columns
+       SET "DataType" = REGEXP_REPLACE("DataType", '^_(.+)$', '\1[]')
+     WHERE "DataType" ~ '^_';
+
     -- Synonym mapping
     UPDATE temp_columns
        SET "DataType" = CASE WHEN TRIM(UPPER("DataType")) = 'BIGINT' THEN 'INT8'
+                             WHEN TRIM(UPPER("DataType")) = 'BIGINT[]' THEN 'INT8[]'
+                             WHEN TRIM(UPPER("DataType")) = 'BOOLEAN[]' THEN 'BOOL[]'
+                             WHEN TRIM(UPPER("DataType")) = 'DOUBLE PRECISION[]' THEN 'FLOAT8[]'
+                             WHEN TRIM(UPPER("DataType")) = 'FLOAT[]' THEN 'FLOAT8[]'
+                             WHEN TRIM(UPPER("DataType")) = 'INTEGER[]' THEN 'INT4[]'
+                             WHEN TRIM(UPPER("DataType")) = 'INT[]' THEN 'INT4[]'
+                             WHEN TRIM(UPPER("DataType")) = 'REAL[]' THEN 'FLOAT4[]'
+                             WHEN TRIM(UPPER("DataType")) = 'SMALLINT[]' THEN 'INT2[]'
                              WHEN TRIM(UPPER("DataType")) = 'BIGSERIAL' THEN 'SERIAL8'
                              WHEN TRIM(UPPER("DataType")) = 'BOOLEAN' THEN 'BOOL'
                              WHEN TRIM(UPPER("DataType")) = 'DOUBLE PRECISION' THEN 'FLOAT8'
@@ -98,7 +114,7 @@
            COALESCE((celem ->> 'Unique')::BOOLEAN, false) AS "Unique",
            COALESCE((celem ->> 'UniqueConstraint')::BOOLEAN, false) AS "UniqueConstraint",
            COALESCE((celem ->> 'Clustered')::BOOLEAN, false) AS "Clustered",
-           COALESCE(celem ->> 'IndexColumns', '') AS "IndexColumns",
+           REGEXP_REPLACE(COALESCE(celem ->> 'IndexColumns', ''), '\s*,\s*', ',', 'g') AS "IndexColumns",
            COALESCE(celem ->> 'IncludeColumns', '') AS "IncludeColumns",
            COALESCE(celem ->> 'AccessMethod', 'btree') AS "AccessMethod",
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
