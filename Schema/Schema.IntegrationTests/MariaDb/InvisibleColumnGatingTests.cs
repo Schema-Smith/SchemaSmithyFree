@@ -223,8 +223,14 @@ public class InvisibleColumnGatingTests
             while (reader.Read())
                 json += reader[0];
         }
-        var table = PlatformDeserializer.DeserializeTable(json, Platform.MariaDb) as MySqlTable;
-        var secret = (MySqlColumn)table!.Columns.Find(c => c.Name.Contains("secret"));
+        // Pattern-matched rather than dereferenced with '!': the null case is real if the JSON
+        // is wrong, and this fails on it explicitly instead of as a NullReferenceException.
+        if (PlatformDeserializer.DeserializeTable(json, Platform.MariaDb) is not MySqlTable table)
+        {
+            Assert.Fail("Extraction must deserialize to a table.");
+            return;
+        }
+        var secret = (MySqlColumn)table.Columns.Find(c => c.Name.Contains("secret"));
 
         Assert.That(secret, Is.Not.Null);
         Assert.That(secret!.Invisible, Is.True, "Extraction must round-trip the declared Invisible=true.");

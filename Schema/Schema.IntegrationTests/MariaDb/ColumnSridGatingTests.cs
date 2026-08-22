@@ -156,18 +156,30 @@ public class ColumnSridGatingTests
         Assert.DoesNotThrow(() => json = ExtractJson(),
             "Extraction must not error on MariaDB -- SRS_ID does not exist on INFORMATION_SCHEMA.COLUMNS there.");
 
-        var table = PlatformDeserializer.DeserializeTable(json, Platform.MariaDb) as MySqlTable;
-        Assert.That(table, Is.Not.Null,
-            "Extraction must deserialize to a MariaDB table; a null here means the JSON itself is wrong,"
-            + " which is worth failing on explicitly rather than as a NullReferenceException below.");
-        var loc = (MySqlColumn)table.Columns.Find(c => c.Name.Contains("loc"));
+        // Pattern-matched rather than asserted non-null: an assertion does not narrow the variable for
+        // flow analysis, so every later use still reads as a possible null dereference.
+        if (PlatformDeserializer.DeserializeTable(json, Platform.MariaDb) is not MySqlTable table)
+        {
+            Assert.Fail("Extraction must deserialize to a MariaDB table; a null here means the JSON itself"
+                        + " is wrong, which is worth failing on explicitly rather than as a"
+                        + " NullReferenceException below.");
+            return;
+        }
+
+        // Assert.Multiple keeps going after a failed assertion, so asserting loc non-null there would not
+        // stop the dereference on the next line. Establish it first.
+        if (table.Columns.Find(c => c.Name.Contains("loc")) is not MySqlColumn loc)
+        {
+            Assert.Fail("The spatial column must be extracted on MariaDB, only without an SRID.");
+            return;
+        }
+
         var name = table.Columns.Find(c => c.Name.Contains("name"));
 
         Assert.Multiple(() =>
         {
             Assert.That(name, Is.Not.Null, "Extraction of the ordinary (non-spatial) column must still succeed.");
-            Assert.That(loc, Is.Not.Null);
-            Assert.That(loc!.Srid, Is.Null, "No SRID was declared, so extraction must report none.");
+            Assert.That(loc.Srid, Is.Null, "No SRID was declared, so extraction must report none.");
         });
     }
 
@@ -187,10 +199,19 @@ public class ColumnSridGatingTests
             Assert.That(DowngradedAuditCount(), Is.EqualTo(1), "The unsupported SRID must record a 'downgraded' manifest row.");
         });
 
-        var table = PlatformDeserializer.DeserializeTable(ExtractJson(), Platform.MariaDb) as MySqlTable;
-        Assert.That(table, Is.Not.Null, "Extraction must deserialize to a MariaDB table.");
-        var loc = (MySqlColumn)table.Columns.Find(c => c.Name.Contains("loc"));
-        Assert.That(loc!.Srid, Is.Null, "The SRID restriction never reached the engine, so extraction must round-trip none.");
+        if (PlatformDeserializer.DeserializeTable(ExtractJson(), Platform.MariaDb) is not MySqlTable table)
+        {
+            Assert.Fail("Extraction must deserialize to a MariaDB table.");
+            return;
+        }
+
+        if (table.Columns.Find(c => c.Name.Contains("loc")) is not MySqlColumn loc)
+        {
+            Assert.Fail("The spatial column must still be extracted, only without its SRID.");
+            return;
+        }
+
+        Assert.That(loc.Srid, Is.Null, "The SRID restriction never reached the engine, so extraction must round-trip none.");
     }
 
     [Test]

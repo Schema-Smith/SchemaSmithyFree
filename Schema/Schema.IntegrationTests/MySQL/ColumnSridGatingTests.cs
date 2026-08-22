@@ -229,8 +229,14 @@ public class ColumnSridGatingTests
             while (reader.Read())
                 json += reader[0];
         }
-        var table = PlatformDeserializer.DeserializeTable(json, Platform.MySQL) as MySqlTable;
-        var loc = (MySqlColumn)table!.Columns.Find(c => c.Name.Contains("loc"));
+        // Pattern-matched rather than dereferenced with '!': the null case is real if the JSON
+        // is wrong, and this fails on it explicitly instead of as a NullReferenceException.
+        if (PlatformDeserializer.DeserializeTable(json, Platform.MySQL) is not MySqlTable table)
+        {
+            Assert.Fail("Extraction must deserialize to a table.");
+            return;
+        }
+        var loc = (MySqlColumn)table.Columns.Find(c => c.Name.Contains("loc"));
 
         Assert.That(loc, Is.Not.Null);
         Assert.That(loc!.Srid, Is.EqualTo(4326), "Extraction must round-trip the declared Srid=4326.");
