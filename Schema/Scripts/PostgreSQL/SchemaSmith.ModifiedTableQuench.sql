@@ -194,11 +194,18 @@ BEGIN
       SELECT t."Schema" AS "TableSchema",
              t."Name" AS "TableName",
              c.column_name AS "ColumnName",
+             -- An array column reports udt_name '_text' while the package declares 'text[]', so the composed
+             -- form was never equal to the declared one and the column was re-modified on every deploy --
+             -- for ANY PostgreSQL array column, not one type. format_type renders the canonical declared
+             -- element spelling this codebase uses everywhere else (udt_name), with the element typmod taken from
+             -- format_type, which is the only place it survives: information_schema reports NULL length for
+             -- an array column, which is why the composed form had no (20) to begin with.
+             CASE WHEN c.data_type = 'ARRAY' THEN REGEXP_REPLACE(c.udt_name, '^_', '') || COALESCE(SUBSTRING(format_type(a.atttypid, a.atttypmod) FROM '\(.*\)'), '') || '[]' ELSE
              CASE WHEN c.domain_name IS NOT NULL
                   THEN CASE WHEN c.domain_schema != 'pg_catalog' THEN '"' || c.domain_schema || '".' ELSE '' END || '"' || c.domain_name || '"'
                   ELSE CASE WHEN c.udt_schema != 'pg_catalog' THEN c.udt_schema || '.' ELSE '' END || REGEXP_REPLACE(c.udt_name, 'bpchar', 'CHAR', 'i')
                   END ||
-             "SchemaSmith"."ColumnTypeArguments"(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision) AS "DataType",
+             "SchemaSmith"."ColumnTypeArguments"(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision) END AS "DataType",
              CAST(CASE WHEN c.is_nullable = 'YES' THEN TRUE ELSE FALSE END AS BOOLEAN) AS "Nullable",
              c.column_default AS "Default",
              c.collation_name AS "Collation",

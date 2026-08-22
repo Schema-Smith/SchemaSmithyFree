@@ -14,11 +14,16 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                t.table_name AS "Name",
                (SELECT JSON_AGG(ROW_TO_JSON(sub))
                   FROM (SELECT c.column_name AS "Name",
+                               -- An array column reports udt_name '_text' while the package declares 'text[]', so the composed
+                               -- form was never equal to the declared one and the column was re-modified on every deploy --
+                               -- for ANY PostgreSQL array column, not one type. format_type renders the canonical declared
+                               -- spelling directly, including element typmods (character varying(20)[], numeric(10,2)[]).
+                               CASE WHEN c.data_type = 'ARRAY' THEN REGEXP_REPLACE(c.udt_name, '^_', '') || COALESCE(SUBSTRING(format_type(a.atttypid, a.atttypmod) FROM '\(.*\)'), '') || '[]' ELSE
                                CASE WHEN c.domain_name IS NOT NULL
                                     THEN CASE WHEN c.domain_schema != 'pg_catalog' THEN '"' || c.domain_schema || '".' ELSE '' END || '"' || c.domain_name || '"'
                                     ELSE CASE WHEN c.udt_schema != 'pg_catalog' THEN c.udt_schema || '.' ELSE '' END || REGEXP_REPLACE(c.udt_name, 'bpchar', 'CHAR', 'i')
                                     END ||
-                               "SchemaSmith"."ColumnTypeArguments"(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision) AS "DataType",
+                               "SchemaSmith"."ColumnTypeArguments"(c.domain_name, c.udt_name, c.character_maximum_length, c.numeric_precision, c.numeric_scale, c.datetime_precision) END AS "DataType",
                                CASE WHEN c.is_nullable = 'YES' THEN TRUE ELSE FALSE END AS "Nullable",
                                "SchemaSmith"."StripParenWrapping"(c.column_default) AS "Default",
                                c.collation_name AS "Collation",

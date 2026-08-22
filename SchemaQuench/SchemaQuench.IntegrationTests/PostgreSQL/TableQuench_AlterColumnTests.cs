@@ -1,6 +1,7 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 ﻿using System.Data;
+using System;
 using Schema.DataAccess;
 using Schema.Domain;
 
@@ -753,4 +754,65 @@ CREATE TABLE ""AlterColumnTests"".""ModifyColumnCollation"" (""Column1"" VARCHAR
 
         conn.Close();
     }
+    // An array column reports data_type=ARRAY / udt_name=_text in the catalog while the package declares
+    // text[]. The two were never reconciled, so the column compared unequal to itself and was re-modified on
+    // EVERY deploy -- for any PostgreSQL array column, not one type. An idempotency break like this exits 0
+    // and logs "Successfully Quenched", so nothing surfaces it; the only signal is the same object changing
+    // again on a re-run, which is what this asserts.
+    [Test]
+    public void AlterColumn_ArrayColumns_AreIdempotentAcrossRepeatedDeploys()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var table = "arr_idempotent_" + Guid.NewGuid().ToString("N")[..8];
+        var json = $@"[
+            {{
+                ""Schema"": ""public"",
+                ""Name"": ""{table}"",
+                ""Columns"": [
+                    {{ ""Name"": ""Id"", ""DataType"": ""integer"", ""Nullable"": false }},
+                    {{ ""Name"": ""Counts"", ""DataType"": ""int4[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Tags"", ""DataType"": ""text[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Codes"", ""DataType"": ""varchar(20)[]"", ""Nullable"": true }},
+                    {{ ""Name"": ""Amounts"", ""DataType"": ""numeric(10,2)[]"", ""Nullable"": true }}
+                ]
+            }}
+        ]";
+
+        try
+        {
+            RunTableQuenchProc(cmd, json);   // creates
+
+            // Two further isolated passes: the catalog now matches the declaration exactly, so neither may
+            // touch the columns again.
+            for (var pass = 2; pass <= 3; pass++)
+            {
+                cmd.CommandText = "DELETE FROM \"SchemaSmith\".\"ChangeAudit\" WHERE \"SessionId\" = pg_backend_pid()";
+                cmd.ExecuteNonQuery();
+
+                RunTableQuenchProc(cmd, json);
+
+                cmd.CommandText = $@"SELECT COUNT(*) FROM ""SchemaSmith"".""ChangeAudit""
+                                      WHERE ""SessionId"" = pg_backend_pid()
+                                        AND ""ObjectName"" LIKE '%{table}%'";
+                var changes = Convert.ToInt32(cmd.ExecuteScalar());
+                if (changes != 0)
+                {
+                    cmd.CommandText = $@"SELECT string_agg(""ObjectType"" || '/' || ""ActionType"" || ' ' || ""ObjectName"", '; ')
+                                          FROM ""SchemaSmith"".""ChangeAudit"" WHERE ""SessionId"" = pg_backend_pid()";
+                    Assert.Fail($"pass {pass}: expected no changes, got {changes}: {cmd.ExecuteScalar()}");
+                }
+            }
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS public.\"{table}\"";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
 }
