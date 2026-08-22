@@ -290,7 +290,14 @@ BEGIN
                     CASE WHEN IsAutoIncrement = 1 THEN ' AUTO_INCREMENT' ELSE '' END,
                     CASE WHEN DefaultValue IS NOT NULL AND TRIM(DefaultValue) != '' AND IsAutoIncrement = 0
                          THEN CONCAT(' DEFAULT ',
+                              -- A default containing '(' is wrapped so a function default (UUID()) emits as
+                              -- MySQL 8.0.13's expression-default form. The temporal defaults must NOT be:
+                              -- CURRENT_TIMESTAMP(3) and its synonyms are ordinary column defaults that
+                              -- predate expression defaults entirely, and wrapping them turns a clause every
+                              -- version accepts into a hard syntax error below 8.0.13.
                               CASE WHEN DefaultValue REGEXP '\\(' AND LEFT(DefaultValue, 1) != '('
+                                    AND UPPER(TRIM(DefaultValue)) NOT REGEXP
+                                        '^(CURRENT_TIMESTAMP|NOW|LOCALTIME|LOCALTIMESTAMP)[[:space:]]*\\([0-9]*\\)$'
                                    THEN CONCAT('(', DefaultValue, ')')
                                    ELSE DefaultValue END)
                          ELSE '' END,

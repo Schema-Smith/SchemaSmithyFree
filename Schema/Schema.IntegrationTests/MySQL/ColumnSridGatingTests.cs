@@ -41,6 +41,18 @@ public class ColumnSridGatingTests
         _connection = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(FixtureSetup.GetMainDbConnectionString());
         _connection.Open();
         // ForgeKindler is already deployed into MainDb by the fixture.
+
+        // This fixture proves the DEGRADE LOGIC on a modern binary by forcing the version override,
+        // and verifies the result by reading INFORMATION_SCHEMA.COLUMNS.SRS_ID. On a GENUINE server
+        // below 8.0.3 that column does not exist, so the verification query itself fails -- and there
+        // is nothing left to prove: the attribute cannot be created there under any policy. Skip,
+        // rather than assert against a catalog column the server has never had.
+        var hasSrsId = Scalar(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'information_schema'"
+            + " AND TABLE_NAME = 'COLUMNS' AND COLUMN_NAME = 'SRS_ID'") > 0;
+        if (!hasSrsId)
+            Assert.Ignore("Server has no INFORMATION_SCHEMA.COLUMNS.SRS_ID (genuine pre-8.0.3); "
+                          + "the SRID attribute cannot exist here, so there is no degrade to observe.");
     }
 
     [OneTimeTearDown]

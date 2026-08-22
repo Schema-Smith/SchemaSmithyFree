@@ -24,6 +24,10 @@ BEGIN
     -- Set session variables for proper GROUP_CONCAT handling
     SET SESSION group_concat_max_len = 1000000;
 
+    -- NULLIF(x, '') is NOT used inside JSON_OBJECT here. On MySQL 5.7 it collapses to a BOOLEAN --
+    -- JSON_OBJECT emits `false` in place of the value -- so a table/column/index comment and a
+    -- generated column's expression all extracted as `false` at the floor while 8.0 was correct.
+    -- The CASE form evaluates identically on both. Verified live against 5.7 and 8.0.
     -- Get table metadata
     SELECT JSON_OBJECT(
         'Name', CONCAT('`', t.TABLE_NAME, '`'),
@@ -31,7 +35,7 @@ BEGIN
         'RowFormat', t.ROW_FORMAT,
         'CharacterSet', SUBSTRING_INDEX(t.TABLE_COLLATION, '_', 1),
         'Collation', t.TABLE_COLLATION,
-        'Comment', NULLIF(t.TABLE_COMMENT, ''),
+        'Comment', CASE WHEN t.TABLE_COMMENT = '' THEN NULL ELSE t.TABLE_COMMENT END,
         'AutoIncrementValue', t.AUTO_INCREMENT,
         -- Emit the sticky drop-protection marker first-class. Emitted as NULL when unset and stripped by the
         -- JSON_REMOVE pass below, so only protected tables carry "PreventDrop": true. Read from ProductOwnership. #270
@@ -108,7 +112,7 @@ BEGIN
                 WHEN c.EXTRA LIKE '%STORED GENERATED%' THEN 'STORED'
                 ELSE NULL
             END,
-            'GenerationExpression', NULLIF(c.GENERATION_EXPRESSION, ''),
+            'GenerationExpression', CASE WHEN c.GENERATION_EXPRESSION = '' THEN NULL ELSE c.GENERATION_EXPRESSION END,
             'CharacterSet', c.CHARACTER_SET_NAME,
             'Collation', CASE
                 WHEN c.COLLATION_NAME = (SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES
@@ -116,7 +120,7 @@ BEGIN
                 THEN NULL  -- Don't include if same as table default
                 ELSE c.COLLATION_NAME
             END,
-            'Comment', NULLIF(c.COLUMN_COMMENT, '')
+            'Comment', CASE WHEN c.COLUMN_COMMENT = '' THEN NULL ELSE c.COLUMN_COMMENT END
         )
         ORDER BY c.ORDINAL_POSITION
         SEPARATOR ','
@@ -185,7 +189,7 @@ BEGIN
                     SEPARATOR ','
                 ),
                 'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
-                'Comment', NULLIF(s.INDEX_COMMENT, '')
+                'Comment', CASE WHEN s.INDEX_COMMENT = '' THEN NULL ELSE s.INDEX_COMMENT END
             ) AS idx_json
             FROM INFORMATION_SCHEMA.STATISTICS s
             WHERE s.TABLE_SCHEMA = p_Schema
@@ -211,7 +215,7 @@ BEGIN
                     SEPARATOR ','
                 ),
                 'Visible', CASE WHEN SchemaSmith_IndexIsVisible(p_Schema, p_Table, s.INDEX_NAME) = 1 THEN TRUE ELSE FALSE END,
-                'Comment', NULLIF(s.INDEX_COMMENT, '')
+                'Comment', CASE WHEN s.INDEX_COMMENT = '' THEN NULL ELSE s.INDEX_COMMENT END
             ) AS idx_json
             FROM INFORMATION_SCHEMA.STATISTICS s
             WHERE s.TABLE_SCHEMA = p_Schema
@@ -291,7 +295,7 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         SELECT JSON_OBJECT(
             'Name', s.INDEX_NAME,
             'Columns', GROUP_CONCAT(CONCAT('`', s.COLUMN_NAME, '`') ORDER BY s.SEQ_IN_INDEX SEPARATOR ','),
-            'Comment', NULLIF(MAX(s.INDEX_COMMENT), '')
+            'Comment', CASE WHEN MAX(s.INDEX_COMMENT) = '' THEN NULL ELSE MAX(s.INDEX_COMMENT) END
         ) AS ft_json
         FROM INFORMATION_SCHEMA.STATISTICS s
         WHERE s.TABLE_SCHEMA = p_Schema
