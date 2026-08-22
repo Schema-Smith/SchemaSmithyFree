@@ -60,13 +60,15 @@ public static class PackageLoader
         }
 
         // Skip-and-report, not skip-and-forget: a component file Template.Load excluded because it
-        // wasn't valid JSON at all (Template.ComponentLoadErrors) still needs to surface as a
-        // finding, or the run would exit clean over a package it silently loaded less of. A
-        // parseable-but-wrong component (misnamed property) never lands here — see
-        // Template.RecordComponentLoadErrorIfUnparseable — because JsonSchemaCheck's own pass
-        // already reports that precisely as SS-JSON-001.
+        // wasn't valid JSON at all still needs to surface as a finding, or the run would exit clean
+        // over a package it silently loaded less of. ComponentLoadErrors records EVERY component that
+        // failed to load — consumers listing the bad files depend on that — so the filter lives here,
+        // where the question is what `--Validate` should PRINT: a parseable-but-wrong component is
+        // dropped because JsonSchemaCheck's own pass reports it precisely as SS-JSON-001, and emitting
+        // both would report one file twice.
         var loadFindings = templates
             .SelectMany(t => t.ComponentLoadErrors)
+            .Where(e => !e.IsValidJson)
             .Select(e => new Finding(Severity.Error, "SS-LOAD-001", "Load", e.FilePath, e.Message))
             // A template whose own Template.json couldn't be loaded at all — see TryLoadTemplate.
             .Concat(templateLoadFindings)

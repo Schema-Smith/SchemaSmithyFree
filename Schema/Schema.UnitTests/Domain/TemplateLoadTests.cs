@@ -36,6 +36,48 @@ namespace Schema.UnitTests.Domain
             FactoryContainer.Clear();
         }
 
+        // The tolerant load must record EVERY component it could not load. It used to record only files that
+        // were not valid JSON at all, so the most common authoring mistake -- valid JSON carrying an
+        // unrecognised property, exactly what strict deserialization rejects -- was caught, skipped, and
+        // never reported: the table just vanished from the template. That made the tolerant path strictly
+        // worse than the strict one, which at least fails loudly naming the file.
+        [Test]
+        public void Load_Tolerant_RecordsAComponentThatIsValidJsonButFailsToLoad()
+        {
+            var templateJson = @"{ ""Name"": ""Main"", ""DatabaseIdentificationScript"": ""SELECT 1"" }";
+            var templatePath = Path.Combine("C:", "products", "Templates", "Main", "Template.json");
+            _mockFile.Exists(templatePath).Returns(true);
+            _mockFile.ReadAllText(templatePath).Returns(templateJson);
+
+            var tablesPath = Path.Combine("C:", "products", "Templates", "Main", "Tables");
+            var typoFile = Path.Combine(tablesPath, "dbo.TypoProperty.json");
+            _mockDirectory.Exists(tablesPath).Returns(true);
+            _mockDirectory.GetFiles(tablesPath, "*.json", SearchOption.AllDirectories).Returns(new[] { typoFile });
+            _mockFile.Exists(typoFile).Returns(true);
+            // Well-formed JSON; 'Colums' is not a property of a table.
+            _mockFile.ReadAllText(typoFile)
+                .Returns(@"{ ""Name"": ""[T]"", ""Colums"": [] }");
+
+            var product = new Product
+            {
+                Name = "TestProduct",
+                Platform = Platform.SqlServer,
+                FilePath = Path.Combine("C:", "products", "Product.json")
+            };
+
+            var template = Template.Load("Main", product, tolerateComponentLoadErrors: true);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(template.Tables, Is.Empty, "the component did not load");
+                Assert.That(template.ComponentLoadErrors, Has.Exactly(1).Items,
+                    "a component that did not load must be reported, not silently dropped");
+                Assert.That(template.ComponentLoadErrors[0].FilePath, Is.EqualTo(typoFile));
+                Assert.That(template.ComponentLoadErrors[0].IsValidJson, Is.True,
+                    "classified as parseable so --Validate can leave it to JsonSchemaCheck's precise SS-JSON-001");
+            });
+        }
+
         [Test]
         public void Load_SqlServer_ReturnsTemplateWithCorrectProperties()
         {

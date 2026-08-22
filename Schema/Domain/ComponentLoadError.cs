@@ -12,4 +12,10 @@ namespace Schema.Domain;
 /// code. See <see cref="Template"/>'s component loaders for the exception-type check that decides
 /// which bucket a given failure falls into.
 /// </summary>
-public sealed record ComponentLoadError(string FilePath, string Message);
+/// <param name="IsValidJson">
+/// True when the file parsed as JSON but would not load (an unrecognised property, say); false when it
+/// is not valid JSON at all. Consumers listing "files that failed to load" want every entry; `--Validate`
+/// reports only the unparseable ones as SS-LOAD-001, because JsonSchemaCheck's independent pass already
+/// describes a parseable-but-wrong file more precisely as SS-JSON-001.
+/// </param>
+public sealed record ComponentLoadError(string FilePath, string Message, bool IsValidJson);

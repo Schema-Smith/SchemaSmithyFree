@@ -713,10 +713,10 @@ namespace Schema.Domain
                 catch (Exception e)
                 {
                     // --Validate: excluded here so the rest of the template still loads. An
-                    // unparseable file gets its own SS-LOAD-001 (see RecordComponentLoadErrorIfUnparseable);
-                    // a parseable-but-wrong one (e.g. a misnamed property) is left for
-                    // JsonSchemaCheck's on-disk pass to report precisely as SS-JSON-001.
-                    RecordComponentLoadErrorIfUnparseable(f, e);
+                    // Recorded either way (see RecordComponentLoadError). An unparseable file surfaces as
+                    // SS-LOAD-001; a parseable-but-wrong one is classified and left for JsonSchemaCheck's
+                    // on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadError(f, e);
                 }
             }
         }
@@ -745,10 +745,10 @@ namespace Schema.Domain
                 catch (Exception e)
                 {
                     // --Validate: excluded here so the rest of the template still loads. An
-                    // unparseable file gets its own SS-LOAD-001 (see RecordComponentLoadErrorIfUnparseable);
-                    // a parseable-but-wrong one (e.g. a misnamed property) is left for
-                    // JsonSchemaCheck's on-disk pass to report precisely as SS-JSON-001.
-                    RecordComponentLoadErrorIfUnparseable(f, e);
+                    // Recorded either way (see RecordComponentLoadError). An unparseable file surfaces as
+                    // SS-LOAD-001; a parseable-but-wrong one is classified and left for JsonSchemaCheck's
+                    // on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadError(f, e);
                 }
             }
         }
@@ -821,10 +821,10 @@ namespace Schema.Domain
                 {
                     // --Validate: excluded here so the rest of the template still loads (and
                     // Duplication/Coherence still run against the tables that DID parse). An
-                    // unparseable file gets its own SS-LOAD-001 (see RecordComponentLoadErrorIfUnparseable);
-                    // a parseable-but-wrong one (e.g. a misnamed property) is left for
-                    // JsonSchemaCheck's on-disk pass to report precisely as SS-JSON-001.
-                    RecordComponentLoadErrorIfUnparseable(f, e);
+                    // Recorded either way (see RecordComponentLoadError). An unparseable file surfaces as
+                    // SS-LOAD-001; a parseable-but-wrong one is classified and left for JsonSchemaCheck's
+                    // on-disk pass to report precisely as SS-JSON-001.
+                    RecordComponentLoadError(f, e);
                 }
             }
         }
@@ -838,11 +838,16 @@ namespace Schema.Domain
         /// disk regardless of what loaded here, so that case already gets its own precise SS-JSON-001
         /// — recording it here too would report the same file under two different codes.
         /// </summary>
-        private void RecordComponentLoadErrorIfUnparseable(string filePath, Exception e)
-        {
-            if (IsParseableJson(filePath)) return;
-            ComponentLoadErrors.Add(new ComponentLoadError(filePath, e.Message));
-        }
+        // EVERY component that failed to load is recorded. Gating the record on unparseability made the
+        // tolerant path strictly worse than the strict one: a file that is valid JSON but carries an
+        // unrecognised property -- the exact class MissingMemberHandling.Error rejects, and the most common
+        // authoring mistake -- was caught, not loaded, and not reported, so the table simply vanished from
+        // the template with nothing said. ComponentLoadErrors cannot mean "the components that did not load"
+        // with a guard like that in place, and that contract is the only thing a consumer can build on.
+        // Parseability is kept as CLASSIFICATION (see ComponentLoadError.IsValidJson) so `--Validate` can
+        // still report only the unparseable ones as SS-LOAD-001 and leave the rest to JsonSchemaCheck.
+        private void RecordComponentLoadError(string filePath, Exception e) =>
+            ComponentLoadErrors.Add(new ComponentLoadError(filePath, e.Message, IsParseableJson(filePath)));
 
         // Deliberately does NOT infer parseability from the CLR exception type that surfaced out of
         // Table.Load / PlatformDeserializer — that inference is unsound. MissingMemberHandling.Error
