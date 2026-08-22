@@ -604,8 +604,11 @@ public abstract class TableQuench_IndexOnlySharedTests
         // populated EXPRESSION -- so it rides the same SchemaSmith_SupportsFunctionalIndex() gate as any
         // other functional index; there is no dedicated gate to check (see SchemaSmith_SupportsFunctionalIndex.sql).
         // MariaDB has no equivalent feature at all.
-        if (Platform == Platform.MariaDb)
-            Assert.Ignore("Multi-valued indexes are a MySQL 8.0.17+ feature; MariaDB has no equivalent form.");
+        // ServerVersionNum() is major*100+minor, so it cannot separate 8.0.17 from 8.0.13 -- but it does
+        // separate both from a 5.7 that has neither, which is the distinction that matters here.
+        if (Platform == Platform.MariaDb || !ServerSupportsFunctionalIndex())
+            Assert.Ignore("Multi-valued indexes need MySQL 8.0.17+; MariaDB has no equivalent form and an "
+                          + "older MySQL cannot create one.");
 
         using var command = _connection.CreateCommand();
         command.CommandText = $"ALTER TABLE `{_testDb}`.`{_testTableName}` ADD COLUMN attrs JSON";
@@ -659,8 +662,11 @@ public abstract class TableQuench_IndexOnlySharedTests
         // when it stores EXPRESSION -- the same reformatting already stripped from CHECK_CLAUSE. Left
         // unstripped on the index side, the declared (introducer-free) and catalog (introducer-bearing)
         // forms would never match, and the index would be dropped + recreated on every single deploy.
-        if (Platform == Platform.MariaDb)
-            Assert.Ignore("Multi-valued indexes are a MySQL 8.0.17+ feature; MariaDB has no equivalent form.");
+        // ServerVersionNum() is major*100+minor, so it cannot separate 8.0.17 from 8.0.13 -- but it does
+        // separate both from a 5.7 that has neither, which is the distinction that matters here.
+        if (Platform == Platform.MariaDb || !ServerSupportsFunctionalIndex())
+            Assert.Ignore("Multi-valued indexes need MySQL 8.0.17+; MariaDB has no equivalent form and an "
+                          + "older MySQL cannot create one.");
 
         using var command = _connection.CreateCommand();
         command.CommandText = $"ALTER TABLE `{_testDb}`.`{_testTableName}` ADD COLUMN attrs JSON";
