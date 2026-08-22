@@ -412,6 +412,17 @@ public abstract class TableQuench_IndexOnlySharedTests
         Assert.That(subPart, Is.EqualTo(5), "The prefix length must survive re-deploy.");
     }
 
+    private int ServerVersionNum()
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT SchemaSmith_ServerVersionNum()";
+        return Convert.ToInt32(command.ExecuteScalar());
+    }
+
+    // MySQL 8.0.13 is where functional indexes arrive; below it the feature cannot be created at all, so
+    // these bodies have nothing to assert beyond the gate itself reporting 0.
+    private bool ServerSupportsFunctionalIndex() => Platform != Platform.MariaDb && ServerVersionNum() >= 800;
+
     [Test]
     public void IndexOnlyQuench_SupportsFunctionalIndex_GateMatchesPlatform()
     {
@@ -423,9 +434,12 @@ public abstract class TableQuench_IndexOnlySharedTests
         command.CommandText = "SELECT SchemaSmith_SupportsFunctionalIndex()";
         var supports = Convert.ToInt32(command.ExecuteScalar());
 
-        var expected = Platform == Platform.MariaDb ? 0 : 1;
+        // MySQL only gained functional indexes in 8.0.13, so the expectation follows the SERVER, not
+        // the platform: asserting 1 for "any MySQL" fails on a genuine 5.7 where 0 is the correct answer.
+        var expected = Platform == Platform.MariaDb || !ServerSupportsFunctionalIndex() ? 0 : 1;
         Assert.That(supports, Is.EqualTo(expected),
-            $"SchemaSmith_SupportsFunctionalIndex() must be {expected} on {Platform}");
+            $"SchemaSmith_SupportsFunctionalIndex() must be {expected} on {Platform} "
+            + $"(server version {ServerVersionNum()})");
     }
 
     [Test]
@@ -433,8 +447,9 @@ public abstract class TableQuench_IndexOnlySharedTests
     {
         // MariaDB has no equivalent for a functional/expression key part (see the gate test above) and
         // rejects the ((expr)) CREATE INDEX syntax outright, so the create path is exercised on MySQL only.
-        if (Platform == Platform.MariaDb)
-            Assert.Ignore("Functional/expression indexes are a MySQL 8.0.13+ feature; MariaDB has no equivalent form.");
+        if (Platform == Platform.MariaDb || !ServerSupportsFunctionalIndex())
+            Assert.Ignore("Functional/expression indexes need MySQL 8.0.13+; MariaDB has no equivalent form "
+                          + "and an older MySQL cannot create one.");
 
         // Arrange - a purely functional index: before this task, extraction built IndexColumns from
         // COLUMN_NAME alone (NULL for a key part like this one), so this shape extracted schema-invalid.
@@ -476,8 +491,9 @@ public abstract class TableQuench_IndexOnlySharedTests
     [Test]
     public void IndexOnlyQuench_ShouldAddCompositeIndex_MixingPlainColumnAndExpression()
     {
-        if (Platform == Platform.MariaDb)
-            Assert.Ignore("Functional/expression indexes are a MySQL 8.0.13+ feature; MariaDB has no equivalent form.");
+        if (Platform == Platform.MariaDb || !ServerSupportsFunctionalIndex())
+            Assert.Ignore("Functional/expression indexes need MySQL 8.0.13+; MariaDB has no equivalent form "
+                          + "and an older MySQL cannot create one.");
 
         // Arrange - a composite index mixing a plain column with an expression key part: the case that
         // regresses first if the declared-side normalizer ever mis-splits the two on their shared comma.
@@ -523,8 +539,9 @@ public abstract class TableQuench_IndexOnlySharedTests
         // Regression coverage for the exact hazard this task closes: if the declared-side normalizer and
         // the catalog-snapshot builds don't agree byte-for-byte on how a functional key part renders, the
         // compare never converges and the index is dropped + recreated on every deploy.
-        if (Platform == Platform.MariaDb)
-            Assert.Ignore("Functional/expression indexes are a MySQL 8.0.13+ feature; MariaDB has no equivalent form.");
+        if (Platform == Platform.MariaDb || !ServerSupportsFunctionalIndex())
+            Assert.Ignore("Functional/expression indexes need MySQL 8.0.13+; MariaDB has no equivalent form "
+                          + "and an older MySQL cannot create one.");
 
         using var command = _connection.CreateCommand();
         command.CommandText = $"CREATE INDEX `idx_func_stable` ON `{_testDb}`.`{_testTableName}` ((lower(`name`)))";

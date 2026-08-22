@@ -2,7 +2,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using Schema.Domain;
 
 namespace Schema.Validation;
 
@@ -38,6 +40,19 @@ public sealed class SchemaPackageValidator
                 new Finding(Severity.Error, "SS-LOAD-001", "Load", location, e.Message)
             });
         }
+
+        // Platform is what every downstream check keys off -- which JSON schema to validate against,
+        // which dialect to parse identifiers in. Without it GetBasePlatform throws, and because checks
+        // deliberately have no per-check try/catch (below) that surfaced as a raw stack trace instead of
+        // a finding. Report it as one: the package cannot be meaningfully validated at all.
+        if (pkg.Product == null || pkg.Product.Platform == Platform.Unknown)
+            return new ValidationResult(new[]
+            {
+                new Finding(Severity.Error, "SS-LOAD-003", "Load", Path.Join(packagePath, "Product.json"),
+                    "Product.json does not declare a Platform. Every check depends on the target engine "
+                    + "(which schema to validate against, how to read identifiers), so nothing further can "
+                    + "be checked. Add \"Platform\": \"SqlServer\" | \"PostgreSQL\" | \"MySQL\" | \"MariaDb\".")
+            });
 
         var ctx = new ValidationContext(pkg.Product, pkg.Templates, packagePath);
         // No per-check try/catch (YAGNI) — the real checks don't throw; a check exception is a

@@ -157,7 +157,10 @@ public class ColumnSridGatingTests
             "Extraction must not error on MariaDB -- SRS_ID does not exist on INFORMATION_SCHEMA.COLUMNS there.");
 
         var table = PlatformDeserializer.DeserializeTable(json, Platform.MariaDb) as MySqlTable;
-        var loc = (MySqlColumn)table!.Columns.Find(c => c.Name.Contains("loc"));
+        Assert.That(table, Is.Not.Null,
+            "Extraction must deserialize to a MariaDB table; a null here means the JSON itself is wrong,"
+            + " which is worth failing on explicitly rather than as a NullReferenceException below.");
+        var loc = (MySqlColumn)table.Columns.Find(c => c.Name.Contains("loc"));
         var name = table.Columns.Find(c => c.Name.Contains("name"));
 
         Assert.Multiple(() =>
@@ -185,7 +188,8 @@ public class ColumnSridGatingTests
         });
 
         var table = PlatformDeserializer.DeserializeTable(ExtractJson(), Platform.MariaDb) as MySqlTable;
-        var loc = (MySqlColumn)table!.Columns.Find(c => c.Name.Contains("loc"));
+        Assert.That(table, Is.Not.Null, "Extraction must deserialize to a MariaDB table.");
+        var loc = (MySqlColumn)table.Columns.Find(c => c.Name.Contains("loc"));
         Assert.That(loc!.Srid, Is.Null, "The SRID restriction never reached the engine, so extraction must round-trip none.");
     }
 

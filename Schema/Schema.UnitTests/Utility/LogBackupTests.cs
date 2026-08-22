@@ -52,6 +52,33 @@ public class LogBackupTests
         _mockDirectory.Received().CreateDirectory(Arg.Is<string>(s => s.Contains("TestApp.0001")));
     }
 
+    // Two runs sharing one install both pass the Exists check and land on the same directory --
+    // CreateDirectory is idempotent, so nothing stops them. The loser's Copy then hit an existing
+    // destination, threw, and the catch exited 4: a run that had just reported success was recorded as a
+    // failure. It must claim the next directory instead, and must NOT report the failure exit code.
+    [Test]
+    public void BackupLogsAndExit_AnotherRunAlreadyClaimedTheDirectory_TakesTheNextOneAndKeepsItsExitCode()
+    {
+        _mockDirectory.Exists(Arg.Any<string>()).Returns(false);
+        _mockDirectory.GetFiles(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SearchOption>())
+            .Returns(new[] { Path.Combine("logs", "TestApp - run.log") });
+        // The 0001 destination is already occupied by the run that won the race.
+        _mockFile.Exists(Arg.Is<string>(s => s.Contains("TestApp.0001"))).Returns(true);
+        _mockFile.Exists(Arg.Is<string>(s => s.Contains("TestApp.0002"))).Returns(false);
+
+        LogBackup.BackupLogsAndExit("TestApp");
+
+        Assert.Multiple(() =>
+        {
+            _mockFile.DidNotReceive().Copy(Arg.Any<string>(), Arg.Is<string>(s => s.Contains("TestApp.0001")),
+                Arg.Any<bool>());
+            _mockFile.Received().Copy(Arg.Any<string>(), Arg.Is<string>(s => s.Contains("TestApp.0002")),
+                Arg.Any<bool>());
+            _mockEnvironment.Received().Exit(0);
+            _mockEnvironment.DidNotReceive().Exit(4);
+        });
+    }
+
     [Test]
     public void BackupLogsAndExit_IncrementsDirectoryWhenExists()
     {
