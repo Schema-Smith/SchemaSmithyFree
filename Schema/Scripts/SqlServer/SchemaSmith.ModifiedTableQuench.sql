@@ -1375,7 +1375,7 @@ BEGIN TRY
   IF OBJECT_ID('tempdb..#ExistingCheckConstraints') IS NOT NULL DROP TABLE #ExistingCheckConstraints
   SELECT t.[Schema], [TableName] = t.[Name], [CheckName] = ck.[name], 
          [CheckColumn] = CASE WHEN ck.parent_column_id <> 0 THEN COL_NAME(ck.parent_object_id, ck.parent_column_id) ELSE NULL END,
-         [CheckDefinition] = SchemaSmith.fn_StripParenWrapping(ck.[definition])
+         [CheckDefinition] = SchemaSmith.fn_NormalizeCheckExpression(ck.[definition])
     INTO #ExistingCheckConstraints
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.check_constraints ck WITH (NOLOCK) ON ck.[parent_object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
@@ -1390,7 +1390,7 @@ BEGIN TRY
                                  AND ec.[CheckColumn] = SchemaSmith.fn_StripBracketWrapping(c.[ColumnName])
     WHERE ec.[CheckColumn] IS NOT NULL
       AND ISNULL(c.[CheckExpression], '') <> ''
-      AND ec.[CheckDefinition] <> ISNULL(c.[CheckExpression], '')
+      AND ec.[CheckDefinition] <> SchemaSmith.fn_NormalizeCheckExpression(ISNULL(c.[CheckExpression], ''))
       AND NOT EXISTS (SELECT *
                         FROM #CheckConstraints cc WITH (NOLOCK)
                         WHERE ec.[Schema] = cc.[Schema]
@@ -1404,7 +1404,7 @@ BEGIN TRY
       JOIN #CheckConstraints cc WITH (NOLOCK) ON ec.[Schema] = cc.[Schema]
                                              AND ec.[TableName] = cc.[TableName]
                                              AND ec.[CheckName] = SchemaSmith.fn_StripBracketWrapping(cc.[ConstraintName])
-      WHERE ec.[CheckDefinition] <> cc.[Expression]
+      WHERE ec.[CheckDefinition] <> SchemaSmith.fn_NormalizeCheckExpression(cc.[Expression])
   
   RAISERROR('Drop Modified Check Constraints', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Dropping check constraint ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[CheckName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +

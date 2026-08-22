@@ -248,6 +248,7 @@ public static class ForgeKindler
                 new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
                 new("Kindling_ChangeAudit_Table.sql", ReplaceTableDef: true),
                 new("SchemaSmith.fn_StripParenWrapping.sql"),
+                new("SchemaSmith.fn_NormalizeCheckExpression.sql"),
                 new("SchemaSmith.fn_ColumnTypeArguments.sql"),
                 new("SchemaSmith.fn_StripLeadingSelect.sql"),
                 new("SchemaSmith.fn_StripBracketWrapping.sql"),
