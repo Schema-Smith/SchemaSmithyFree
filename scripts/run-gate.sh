@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Paths below are repo-relative; this anchors the script so it runs from anywhere.
+cd "$(dirname "$0")/.." || exit 1
+# Full multi-engine green gate (CLAUDE.md Rule 25): unit + integration across all engines.
+set -u
+dotnet build SchemaSmith.sln -v q --nologo || exit 1
+for p in Schema/Schema.UnitTests SchemaQuench/SchemaQuench.UnitTests SchemaTongs/SchemaTongs.UnitTests \
+         DataTongs/DataTongs.UnitTests SchemaShears/SchemaShears.UnitTests \
+         Schema/Schema.IntegrationTests DataTongs/DataTongs.IntegrationTests \
+         SchemaTongs/SchemaTongs.IntegrationTests SchemaQuench/SchemaQuench.IntegrationTests; do
+  n="$(basename "$p")"
+  dotnet test "$p/$n.csproj" --no-build 2>&1 | grep -E "^(Passed!|Failed!)|^  Failed "
+done
