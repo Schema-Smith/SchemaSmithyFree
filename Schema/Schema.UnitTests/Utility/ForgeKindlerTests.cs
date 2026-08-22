@@ -190,7 +190,10 @@ public class ForgeKindlerTests
         // + SchemaSmith.fn_NormalizeTemporalRetentionPeriod (canonicalizes a declared HISTORY_RETENTION_PERIOD
         //   to the plural unit the DDL takes, since the catalog reports it singular -- normalized once at
         //   parse so extraction and the drift compare cannot disagree).
-        Assert.That(sqlServer.Length, Is.EqualTo(29));
+        // + SchemaSmith.fn_NormalizeCheckExpression (folds a check expression to the form SQL Server itself
+        //   stores -- spaces around operators removed, parens around a bare literal -- so a constraint
+        //   written in its natural form stops comparing unequal to the engine's rendering of itself).
+        Assert.That(sqlServer.Length, Is.EqualTo(30));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
@@ -243,7 +246,10 @@ public class ForgeKindlerTests
         // key part in an index's column list; gates the create/modify emit sites in
         // MissingIndexesAndConstraintsQuench / IndexOnlyQuench below SchemaSmith_SupportsFunctionalIndex()'s
         // floor, closing the emit-side gap that function's own read-only gating left open).
-        Assert.That(mysql.Length, Is.EqualTo(45));
+        // +1 = SchemaSmith_NumericDefaultsEqual (compares a decimal column's default BY VALUE: the engine
+        // stores it at the column's scale, so a declared 0 comes back 0.00 and re-ALTERed the column on
+        // every deploy; scoped to decimal/numeric so string defaults keep comparing as text).
+        Assert.That(mysql.Length, Is.EqualTo(46));
     }
 
     [Test]
