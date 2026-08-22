@@ -1015,7 +1015,7 @@ BEGIN
                   OR ic."Nullable" != iec."Nullable"
                   OR COALESCE("SchemaSmith"."StripTypeCast"(ic."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(iec."Default"), '')
                   OR COALESCE(ic."Collation", '') != COALESCE(iec."Collation", '')
-                  OR COALESCE(ic."Generated", 'NEVER') != COALESCE(iec."Generated", 'NEVER')
+                  OR COALESCE(REGEXP_REPLACE(ic."Generated", '\s*\(.*$', ''), 'NEVER') != COALESCE(REGEXP_REPLACE(iec."Generated", '\s*\(.*$', ''), 'NEVER')
                   OR COALESCE(ic."GenerationExpression", '') != COALESCE(iec."GenerationExpression", '')
                   OR (COALESCE(ic."Storage", '') != '' AND COALESCE(ic."Storage", '') != COALESCE(iec."Storage", ''))
                   OR (COALESCE(ic."Compression", '') != '' AND COALESCE(ic."Compression", '') != COALESCE(iec."Compression", '')))) || ')'';' || CHR(10) ||
@@ -1067,7 +1067,13 @@ BEGIN
           OR c."Nullable" != ec."Nullable"
           OR COALESCE("SchemaSmith"."StripTypeCast"(c."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(ec."Default"), '')
           OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
-          OR COALESCE(c."Generated", 'NEVER') != COALESCE(ec."Generated", 'NEVER')
+          -- Identity KIND only, both sides. The catalog records the kind and nothing else (see the live
+          -- rendering above), while a package may legitimately declare
+          -- GENERATED ALWAYS AS IDENTITY(START WITH 1 INCREMENT BY 1) -- and the create path still emits
+          -- those options. Comparing the declared string verbatim re-modified every identity column on
+          -- every deploy. SchemaSmith does not manage the sequence options declaratively, so they must not
+          -- take part in the comparison either.
+          OR COALESCE(REGEXP_REPLACE(c."Generated", '\s*\(.*$', ''), 'NEVER') != COALESCE(REGEXP_REPLACE(ec."Generated", '\s*\(.*$', ''), 'NEVER')
           OR COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
           OR (COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != COALESCE(ec."Storage", ''))
           OR (COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != COALESCE(ec."Compression", '')))
@@ -1110,7 +1116,7 @@ BEGIN
               OR c."Nullable" != ec."Nullable"
               OR COALESCE("SchemaSmith"."StripTypeCast"(c."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(ec."Default"), '')
               OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
-              OR COALESCE(c."Generated", 'NEVER') != COALESCE(ec."Generated", 'NEVER')
+              OR COALESCE(REGEXP_REPLACE(c."Generated", '\s*\(.*$', ''), 'NEVER') != COALESCE(REGEXP_REPLACE(ec."Generated", '\s*\(.*$', ''), 'NEVER')
               OR COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
               OR (COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != COALESCE(ec."Storage", ''))
               OR (COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != COALESCE(ec."Compression", '')))
