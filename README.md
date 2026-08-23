@@ -2,7 +2,7 @@
 
 *Terraform for SQL Server, Postgres, MySQL, and MariaDB databases*
 
-> **SchemaSmith v2.4.0 released.** MariaDB joins SQL Server, PostgreSQL, and MySQL as a first-class platform, and SchemaSmith now deploys to far older engines — down to SQL Server 2008, PostgreSQL 12, MySQL 5.7, and MariaDB 10.2 — by generating version-correct SQL for whatever it finds. [Read the v2.4.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/378) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.4.0) · [CHANGELOG](https://github.com/Schema-Smith/SchemaSmith/blob/main/CHANGELOG.md)
+> **SchemaSmith v2.5.0 released.** Five new object types across SQL Server, PostgreSQL and MariaDB, new column-level features on every engine, and 43 fixes — plus SQL Server 2016 deploys again. [Read the v2.5.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/396) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.5.0)
 
 ![Build](https://github.com/Schema-Smith/SchemaSmith/actions/workflows/continuous-integration.yml/badge.svg)
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
