@@ -47,9 +47,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        CASE WHEN st.temporal_type = 2 THEN CAST(1 AS BIT) END AS [IsTemporal],
        -- History table identity/retention (#depth-gap): emit only when they deviate from SchemaSmith's own
        -- apply-side default (same schema, "<Table>_Hist", INFINITE retention) so a default-named temporal
-       -- table's JSON stays exactly as minimal as it was before this change. history_table_id /
-       -- history_retention_period(_unit_desc) are 2016+ columns -- safe to reference statically at the
-       -- current 2017 floor, same reasoning as temporal_type above.
+       -- table's JSON stays exactly as minimal as it was before this change. history_table_id is 2016;
+       -- history_retention_period(_unit_desc) are 2017 (system-versioned tables are 2016, a retention
+       -- policy on them is 2017). Both are safe to reference STATICALLY here -- but because of the
+       -- ENCODING gate, not the server floor: CompatEncoding selects JSON only at major >= 14 (the JSON
+       -- path's STRING_AGG is 2017), so this proc never kindles on a binary lacking either. The XML twin
+       -- has no such shield and must gate the retention reads at >= 14 explicitly; see the note there.
        CASE WHEN st.temporal_type = 2 AND (hs.[name] <> TABLE_SCHEMA OR h.[name] <> TABLE_NAME + '_Hist')
             THEN '[' + hs.[name] + ']' END AS [HistoryTableSchema],
        CASE WHEN st.temporal_type = 2 AND (hs.[name] <> TABLE_SCHEMA OR h.[name] <> TABLE_NAME + '_Hist')
