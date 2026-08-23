@@ -406,6 +406,82 @@ VALUES ('{_productName}', '', '{TestSchema}', 'FOREIGN KEY', 'ModFKCascUpd.FK_Mo
         conn.Close();
     }
 
+    // The COLUMN-level twin of the test above, and a genuinely different code path. That one converts the
+    // whole table (CONVERT TO CHARACTER SET); this one changes one column's collation, which emits a
+    // per-column MODIFY COLUMN ... COLLATE. The engine refuses that too while a foreign key references the
+    // column ("Cannot change column ...: used in a foreign key constraint"), but the FK drop was collected
+    // only for tables whose TABLE collation differed — so a package that declares a column collation the
+    // target does not have failed to deploy. That is the ordinary case when a package moves between servers
+    // with different defaults. Note the table declares NO collation here, so the table-level conversion
+    // path cannot fire and this proves the column path on its own.
+    [Test]
+    public void TableQuench_ColumnCollationChange_DropsDependentForeignKeysAndRestoresThem()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        var parent = "colcoll_fk_parent";
+        var child = "colcoll_fk_child";
+        var json = $$"""
+        [
+            {
+                "Name": "{{parent}}",
+                "Columns": [ { "Name": "Code", "DataType": "VARCHAR(20)", "Nullable": false, "Collation": "utf8mb4_unicode_ci" } ],
+                "Indexes": [ { "Name": "PK_{{parent}}", "PrimaryKey": true, "Unique": true, "IndexColumns": "Code" } ]
+            },
+            {
+                "Name": "{{child}}",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "Code", "DataType": "VARCHAR(20)", "Nullable": false, "Collation": "utf8mb4_unicode_ci" }
+                ],
+                "Indexes": [ { "Name": "PK_{{child}}", "PrimaryKey": true, "Unique": true, "IndexColumns": "Id" } ],
+                "ForeignKeys": [ { "Name": "FK_{{child}}_{{parent}}", "Columns": "Code",
+                                    "RelatedTable": "{{parent}}", "RelatedColumns": "Code" } ]
+            }
+        ]
+        """;
+
+        try
+        {
+            // Live COLUMNS start on a different collation; the tables themselves are left alone, so only the
+            // per-column MODIFY COLUMN path can be responsible for what happens next.
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{child}`"; cmd.ExecuteNonQuery();
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{parent}`"; cmd.ExecuteNonQuery();
+            cmd.CommandText = $@"CREATE TABLE `{TestSchema}`.`{parent}` (Code VARCHAR(20) COLLATE utf8mb4_general_ci NOT NULL,
+                                  CONSTRAINT PK_{parent} PRIMARY KEY (Code))";
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = $@"CREATE TABLE `{TestSchema}`.`{child}` (Id INT NOT NULL, Code VARCHAR(20) COLLATE utf8mb4_general_ci NOT NULL,
+                                  CONSTRAINT PK_{child} PRIMARY KEY (Id),
+                                  CONSTRAINT FK_{child}_{parent} FOREIGN KEY (Code)
+                                    REFERENCES `{TestSchema}`.`{parent}`(Code))";
+            cmd.ExecuteNonQuery();
+
+            var product = $"ColCollFkProduct_{Guid.NewGuid():N}"[..24];
+            Assert.DoesNotThrow(() => RunFullQuench(cmd, json, product),
+                "a column-level collation change must drop the dependent foreign key rather than let the engine refuse");
+
+            cmd.CommandText = $@"SELECT COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                                  WHERE TABLE_SCHEMA = '{TestSchema}' AND TABLE_NAME = '{parent}' AND COLUMN_NAME = 'Code'";
+            Assert.That(Convert.ToString(cmd.ExecuteScalar()), Is.EqualTo("utf8mb4_unicode_ci"),
+                "the declared column collation must actually be applied");
+
+            cmd.CommandText = $@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                                  WHERE TABLE_SCHEMA = '{TestSchema}' AND TABLE_NAME = '{child}'
+                                    AND REFERENCED_TABLE_NAME = '{parent}'";
+            Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1),
+                "the foreign key must be put back by the foreign-key phase, not left dropped");
+        }
+        finally
+        {
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{child}`"; cmd.ExecuteNonQuery();
+            cmd.CommandText = $"DROP TABLE IF EXISTS `{TestSchema}`.`{parent}`"; cmd.ExecuteNonQuery();
+        }
+        conn.Close();
+    }
+
     private void RunFullQuench(System.Data.IDbCommand cmd, string json, string product)
     {
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ParseTableJson('{TestSchema}', '{json.Replace("'", "''")}')";
