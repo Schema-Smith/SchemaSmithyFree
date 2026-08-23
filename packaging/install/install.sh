@@ -226,11 +226,12 @@ print_success() {
   printf '  schemaquench --version\n'
   printf '  schematongs --version\n'
   printf '  datatongs --version\n'
+  printf '  schemashears --version\n'
   if ! target_on_path; then
     print_path_fix
   fi
-  printf '\nTo uninstall: rm -f %s/schemaquench %s/schematongs %s/datatongs %s/libicu*.so.*\n' \
-    "$TARGET" "$TARGET" "$TARGET" "$TARGET"
+  printf '\nTo uninstall: rm -f %s/schemaquench %s/schematongs %s/datatongs %s/schemashears %s/libicu*.so.*\n' \
+    "$TARGET" "$TARGET" "$TARGET" "$TARGET" "$TARGET"
 }
 
 main() {
