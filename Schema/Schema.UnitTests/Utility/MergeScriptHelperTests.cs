@@ -1974,18 +1974,21 @@ public class MergeScriptHelperTests
         string insertCols, string updateCols, string unsupportedComments = null)
     {
         var cmd = Substitute.For<IDbCommand>();
-        // B1: GetUnsupportedColumnComments / GetUpdateColumns / GetInsertColumns each self-detect the
-        // compatibility-level cliff with an extra ExecuteScalar first; 0 (not-below-cliff) selects the
-        // modern STRING_AGG path, matching this mock's assertions.
+        // Every STRING_AGG-based builder self-detects the cliff with an extra ExecuteScalar first;
+        // 0 (not-below-cliff) selects the modern STRING_AGG path, matching this mock's assertions.
+        // GetJsonSelectColumns and GetJsonColumnDefinitions probe too — they previously called
+        // STRING_AGG unconditionally, which is what broke data delivery on SQL Server 2016 (#393).
         var sequence = new List<object>
         {
             0,                    // cliff-check for GetUnsupportedColumnComments
             unsupportedComments,  // 1. GetUnsupportedColumnComments
+            0,                    // cliff-check for GetJsonSelectColumns
             jsonSelectCols,       // 2. GetJsonSelectColumns
             needsIdentity         // 3. NeedsIdentityInsert
         };
         if (needsIdentity)
             sequence.Add(true);   // 4. IdentityColumnInJsonKeysSqlServer (assume identity column is in jsonKeys for unit-test mocks)
+        sequence.Add(0);          // cliff-check for GetJsonColumnDefinitions
         sequence.Add(jsonColDefs);// GetJsonColumnDefinitions
         if (updateCols != null)
         {
@@ -2735,9 +2738,10 @@ public class MergeScriptHelperTests
         // the override.
         var cmd = Substitute.For<IDbCommand>();
 
-        // Sequence: cliff -> unsupported(null) -> jsonSelectCols -> needsIdentity -> jsonColDefs ->
-        // cliff -> insertCols. The 0 entries answer the compat-cliff self-detection (not-below-cliff).
-        var sequence = new Queue<object>(new object[] { 0, null, "[Id]", false, "           [Id] INT", 0, "        [Id]" });
+        // Sequence: cliff -> unsupported(null) -> cliff -> jsonSelectCols -> needsIdentity -> cliff ->
+        // jsonColDefs -> cliff -> insertCols. The 0 entries answer the cliff self-detection
+        // (not-below-cliff, so the modern STRING_AGG path is taken).
+        var sequence = new Queue<object>(new object[] { 0, null, 0, "[Id]", false, 0, "           [Id] INT", 0, "        [Id]" });
         cmd.ExecuteScalar().Returns(_ => sequence.Count > 0 ? sequence.Dequeue() : null);
         var bound = CaptureBoundParameters(cmd);
 
