@@ -27,6 +27,11 @@
 -- guarded DYNAMIC statement (the identifiers live only in a string, never in the compiled body). The static
 -- SELECT reads @v_IsTemporal and LEFT JOINs #ColMeta, both simply empty/0 on an older binary (which has no
 -- temporal/masking/Always-Encrypted objects anyway), so the emitted model degrades cleanly there.
+--
+-- Note the two DIFFERENT thresholds below, and do not merge them: the 2016 reads gate at >= 13, but the
+-- temporal RETENTION reads (sys.tables.history_retention_period / _unit / _unit_desc) are SQL Server 2017
+-- and gate at >= 14. Temporal tables are 2016; retention on them is 2017. Putting retention behind >= 13
+-- broke every deploy to a genuine 2016 binary.
 IF OBJECT_ID('SchemaSmith.GenerateTableXml', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.GenerateTableXml
 GO
 CREATE PROCEDURE SchemaSmith.GenerateTableXml
@@ -64,17 +69,35 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 13
       FROM sys.columns sc WITH (NOLOCK)
       LEFT JOIN sys.masked_columns mc WITH (NOLOCK) ON mc.[object_id] = sc.[object_id] AND mc.column_id = sc.column_id
       WHERE sc.[object_id] = @p_ObjId;
-    -- History table identity/retention -- see JSON twin (GenerateTableJson.sql) for the emit-only-when-
-    -- nonstandard rationale; @p_Schema/@p_Table compare raw (unwrapped) against sys.schemas/sys.tables
-    -- names, same as the JSON twin''s TABLE_SCHEMA/TABLE_NAME comparison. Reads
-    -- history_retention_period_unit_desc rather than the numeric unit code -- see the JSON twin for why
-    -- (measured live-server codes disagreed with documentation once already). The unreachable ELSE still
-    -- forces a loud Msg 245 rather than a silently-dropped-to-NULL retention if an unrecognized unit ever
-    -- appears; the outer CONVERT(NVARCHAR(10), ...) keeps the branch statically typed like its siblings.
+    -- History table identity -- see JSON twin (GenerateTableJson.sql) for the emit-only-when-nonstandard
+    -- rationale; @p_Schema/@p_Table compare raw (unwrapped) against sys.schemas/sys.tables names, same as
+    -- the JSON twin''s TABLE_SCHEMA/TABLE_NAME comparison. temporal_type and history_table_id are genuine
+    -- 2016 columns and belong in this >= 13 block. The RETENTION columns are NOT -- they are 2017 -- so
+    -- they are read in their own >= 14 block below rather than riding along here.
     SELECT @p_Out = CASE WHEN st.temporal_type = 2 THEN 1 ELSE 0 END,
            @p_HistSchema = CASE WHEN st.temporal_type = 2 AND (hs.[name] <> @p_Schema OR h.[name] <> @p_Table + ''_Hist'') THEN hs.[name] END,
-           @p_HistName = CASE WHEN st.temporal_type = 2 AND (hs.[name] <> @p_Schema OR h.[name] <> @p_Table + ''_Hist'') THEN h.[name] END,
-           @p_RetentionText = CASE WHEN st.temporal_type = 2 AND st.history_retention_period_unit_desc <> ''INFINITE''
+           @p_HistName = CASE WHEN st.temporal_type = 2 AND (hs.[name] <> @p_Schema OR h.[name] <> @p_Table + ''_Hist'') THEN h.[name] END
+      FROM sys.tables st WITH (NOLOCK)
+      LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
+      LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
+      WHERE st.[object_id] = @p_ObjId;',
+    N'@p_ObjId INT, @p_Schema SYSNAME, @p_Table SYSNAME, @p_Out BIT OUTPUT, @p_HistSchema SYSNAME OUTPUT, @p_HistName SYSNAME OUTPUT',
+    @p_ObjId = @v_ObjectId, @p_Schema = @p_Schema, @p_Table = @p_Table, @p_Out = @v_IsTemporal OUTPUT, @p_HistSchema = @v_HistTableSchema OUTPUT, @p_HistName = @v_HistTableName OUTPUT
+
+-- HISTORY_RETENTION_PERIOD is SQL Server 2017 (major 14), not 2016: system-versioned tables arrived in 2016
+-- but their retention policy -- and sys.tables.history_retention_period / _unit / _unit_desc -- arrived a
+-- version later. Reading them behind the >= 13 gate above made an ordinary deploy to a genuine SQL Server
+-- 2016 binary fail with "Invalid column name 'history_retention_period_unit_desc'", unconditionally and on
+-- any table, because the column binds for the whole statement whether or not one is system-versioned.
+-- Covered by Sql2016TemporalRetentionGateTests, which runs only on major 13 (the only version that can
+-- reproduce it: below 13 this block is skipped, at 14+ the columns exist).
+-- Reads history_retention_period_unit_desc rather than the numeric unit code -- see the JSON twin for why
+-- (measured live-server codes disagreed with documentation once already). The unreachable ELSE still forces
+-- a loud Msg 245 rather than a silently-dropped-to-NULL retention if an unrecognized unit ever appears; the
+-- outer CONVERT(NVARCHAR(10), ...) keeps the branch statically typed like its siblings.
+IF SchemaSmith.fn_ServerMajorVersion() >= 14
+  EXEC sp_executesql N'
+    SELECT @p_RetentionText = CASE WHEN st.temporal_type = 2 AND st.history_retention_period_unit_desc <> ''INFINITE''
                                     THEN CAST(st.history_retention_period AS NVARCHAR(10)) + '' '' +
                                          CASE st.history_retention_period_unit_desc
                                            WHEN ''DAY'' THEN ''DAYS'' WHEN ''WEEK'' THEN ''WEEKS'' WHEN ''MONTH'' THEN ''MONTHS'' WHEN ''YEAR'' THEN ''YEARS''
@@ -82,11 +105,9 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 13
                                          END
                                     END
       FROM sys.tables st WITH (NOLOCK)
-      LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
-      LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
       WHERE st.[object_id] = @p_ObjId;',
-    N'@p_ObjId INT, @p_Schema SYSNAME, @p_Table SYSNAME, @p_Out BIT OUTPUT, @p_HistSchema SYSNAME OUTPUT, @p_HistName SYSNAME OUTPUT, @p_RetentionText NVARCHAR(50) OUTPUT',
-    @p_ObjId = @v_ObjectId, @p_Schema = @p_Schema, @p_Table = @p_Table, @p_Out = @v_IsTemporal OUTPUT, @p_HistSchema = @v_HistTableSchema OUTPUT, @p_HistName = @v_HistTableName OUTPUT, @p_RetentionText = @v_HistRetentionText OUTPUT
+    N'@p_ObjId INT, @p_RetentionText NVARCHAR(50) OUTPUT',
+    @p_ObjId = @v_ObjectId, @p_RetentionText = @v_HistRetentionText OUTPUT
 
 -- sys.stats.is_temporary is a 2012 column, so a STATIC reference is a CREATE-time "invalid column" error on a
 -- pre-2012 binary. Stage the temporary-stat keys via a fn_ServerMajorVersion()>=11 guarded dynamic INSERT (empty

@@ -305,6 +305,80 @@ BEGIN
     -- deploy works. Nothing to do here.
 
     -- =======================
+    -- STEP 2.9: DROP FOREIGN KEYS THAT BLOCK A COLUMN-LEVEL COLLATION CHANGE
+    -- =======================
+    -- Twin of the drop that guards the table-level CONVERT TO CHARACTER SET further down, hoisted here
+    -- because it has to happen BEFORE Step 3 emits its per-column MODIFY COLUMN. The engine refuses to
+    -- change a column a foreign key depends on ("Cannot change column ...: used in a foreign key
+    -- constraint"), and a declared COLUMN collation that differs from the live one is exactly such a
+    -- change -- the ordinary case when a package moves between servers with different defaults. The
+    -- table-level block cannot cover it: it keys off ist.TABLE_COLLATION, which a column-only change
+    -- leaves untouched. Both directions are collected, same as the table-level twin: the FK declared ON
+    -- the column and the FK POINTING AT it, since MySQL requires the two sides' collations to match.
+    -- Restoration is the foreign-key phase's job, which runs after -- the same division of labour the
+    -- drop-column and table-collation paths already rely on. WhatIf only logs, mirroring that twin.
+    IF p_WhatIf = 0 THEN
+        BEGIN
+            DECLARE v_ColCollFkDone INT DEFAULT FALSE;
+            DECLARE v_ColCollFkSql TEXT;
+            DECLARE cur_ColCollFks CURSOR FOR
+                SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                              '`.`', TableName, '` DROP FOREIGN KEY `', ConstraintName, '`')
+                  FROM _SchemaSmith_ColumnCollationFKsToDrop;
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ColCollFkDone = TRUE;
+
+            DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ColumnCollationFKsToDrop;
+            CREATE TEMPORARY TABLE _SchemaSmith_ColumnCollationFKsToDrop (
+                TableName VARCHAR(128) NOT NULL,
+                ConstraintName VARCHAR(128) NOT NULL,
+                PRIMARY KEY (TableName, ConstraintName)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            -- FKs declared ON a column whose collation is changing.
+            INSERT IGNORE INTO _SchemaSmith_ColumnCollationFKsToDrop (TableName, ConstraintName)
+            SELECT DISTINCT CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                            CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+              FROM _SchemaSmith_Columns c
+              INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+                  ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                  AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                  AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+              INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                  ON CONVERT(kcu.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                  AND CONVERT(kcu.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.TableName) USING utf8mb4)
+                  AND CONVERT(kcu.COLUMN_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.ColumnName) USING utf8mb4)
+                  AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+             WHERE c.NewColumn = 0 AND c.Collation IS NOT NULL AND isc.COLLATION_NAME != c.Collation;
+
+            -- And FKs POINTING AT one. Separate INSERT for the same optimizer reason as the table-level twin.
+            INSERT IGNORE INTO _SchemaSmith_ColumnCollationFKsToDrop (TableName, ConstraintName)
+            SELECT DISTINCT CONVERT(kcu.TABLE_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                            CONVERT(kcu.CONSTRAINT_NAME USING utf8mb4) COLLATE utf8mb4_unicode_ci
+              FROM _SchemaSmith_Columns c
+              INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+                  ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                  AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                  AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+              INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                  ON CONVERT(kcu.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                  AND CONVERT(kcu.REFERENCED_TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.TableName) USING utf8mb4)
+                  AND CONVERT(kcu.REFERENCED_COLUMN_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(c.ColumnName) USING utf8mb4)
+             WHERE c.NewColumn = 0 AND c.Collation IS NOT NULL AND isc.COLLATION_NAME != c.Collation;
+
+            OPEN cur_ColCollFks;
+            column_collation_fk_loop: LOOP
+                FETCH cur_ColCollFks INTO v_ColCollFkSql;
+                IF v_ColCollFkDone THEN LEAVE column_collation_fk_loop; END IF;
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+                VALUES (CONNECTION_ID(), CONCAT('  Drop FK for column collation change: ', v_ColCollFkSql));
+                SET @exec_sql = v_ColCollFkSql;
+                PREPARE stmt FROM @exec_sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+            END LOOP;
+            CLOSE cur_ColCollFks;
+        END;
+    END IF;
+
+    -- =======================
     -- STEP 3: COLUMN MODIFICATIONS (excludes generated status changes)
     -- =======================
     -- Output column modifications

@@ -212,9 +212,14 @@ BEGIN TRY
   -- live state first -- re-issuing the same retention every quench would be indistinguishable from a real
   -- change in the ChangeAudit/log output, so an unchanged retention must stay a true no-op deploy-to-deploy
   -- (see TableQuench_TemporalHistoryAndRetentionTests.TableQuench_RetentionPeriodDeployIsIdempotent).
-  -- history_retention_period(_unit_desc) are 2016+ columns -- gate via a fn_ServerMajorVersion()>=13
-  -- dynamic read (same pattern as ModifiedTableQuench.sql's #RemovedTemporalHistory) so this proc still
-  -- CREATEs on a genuine pre-2016 binary. The live value is canonicalized to the SAME plural-unit form
+  -- history_retention_period(_unit_desc) are SQL Server 2017 columns, NOT 2016 -- system-versioned tables
+  -- are 2016 but a retention policy on them is 2017 -- so this gates at fn_ServerMajorVersion()>=14, not
+  -- >=13. At >=13 an ordinary deploy to a genuine 2016 binary failed with "Invalid column name
+  -- 'history_retention_period_unit_desc'" (unconditionally: the column binds for the whole statement even
+  -- when no table is system-versioned). Covered by Sql2016TemporalRetentionGateTests, which runs only on
+  -- major 13 -- the one version that reproduces it. The dynamic read (same pattern as ModifiedTableQuench's
+  -- #RemovedTemporalHistory) also keeps this proc CREATEable on a genuine pre-2016 binary.
+  -- The live value is canonicalized to the SAME plural-unit form
   -- fn_NormalizeTemporalRetentionPeriod produces at parse time. Reads history_retention_period_unit_desc
   -- ('DAY'/'WEEK'/'MONTH'/'YEAR'/'INFINITE') rather than the numeric history_retention_period_unit code --
   -- a first pass mapped the numeric codes from documentation (1/2/3/4) and got it wrong: measured live
@@ -228,7 +233,7 @@ BEGIN TRY
   IF OBJECT_ID('tempdb..#LiveTemporalRetention') IS NOT NULL DROP TABLE #LiveTemporalRetention
   CREATE TABLE #LiveTemporalRetention ([Schema] NVARCHAR(500) COLLATE DATABASE_DEFAULT NOT NULL, [Name] NVARCHAR(500) COLLATE DATABASE_DEFAULT NOT NULL,
                                         LiveRetentionText NVARCHAR(50) COLLATE DATABASE_DEFAULT NULL)
-  IF SchemaSmith.fn_ServerMajorVersion() >= 13
+  IF SchemaSmith.fn_ServerMajorVersion() >= 14
     EXEC sp_executesql N'
       INSERT INTO #LiveTemporalRetention ([Schema], [Name], LiveRetentionText)
       SELECT T.[Schema], T.[Name],

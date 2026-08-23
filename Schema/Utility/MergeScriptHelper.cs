@@ -131,15 +131,27 @@ public static class MergeScriptHelper
     }
 
     // B1: the SQL Server data-delivery metadata helpers below aggregate column lists with
-    // STRING_AGG … WITHIN GROUP, which requires database compatibility level 130+. On a compat-100
-    // target (the lowered floor), that parse-errors during the merge BUILD — so each helper detects the
-    // cliff once and falls back to reading the component rows and joining them in C# (works at every
-    // compat level), leaving the modern STRING_AGG path bit-for-bit unchanged. Self-contained (no
-    // signature threading) because GetKeyColumns is invoked outside BuildMergeScript.
-    private static bool IsBelowJsonCliffSqlServer(IDbCommand cmd)
+    // STRING_AGG … WITHIN GROUP. On a target that cannot run it, that parse-errors during the merge
+    // BUILD — so each helper detects the cliff once and falls back to reading the component rows and
+    // joining them in C# (works everywhere), leaving the modern STRING_AGG path bit-for-bit unchanged.
+    // Self-contained (no signature threading) because GetKeyColumns is invoked outside BuildMergeScript.
+    //
+    // TWO independent conditions, and both are required — this is not one cliff but two:
+    //   * compatibility level < 130 — WITHIN GROUP ordered aggregation needs 130+, and a modern binary
+    //     can host a low-compat database, so the compat level alone can disqualify a new server; and
+    //   * server major < 14 — STRING_AGG is a SQL Server 2017 FUNCTION. It does not exist on a 2016
+    //     binary at ANY compatibility level, so a compat-only probe said "modern path" on 2016 and the
+    //     merge build died with "'STRING_AGG' is not a recognized built-in function name".
+    // Same 2016/2017 band CompatEncoding.JsonServerMajorFloor documents for the ingest encoding; the two
+    // must agree. PARSENAME(...,4) takes the major from ProductVersion ('13.0.6404.1' -> '13') and works
+    // on every supported binary, unlike ProductMajorVersion which is itself 2016+ and NULLs below it.
+    private static bool IsBelowStringAggCliffSqlServer(IDbCommand cmd)
     {
         cmd.Parameters.Clear();
-        cmd.CommandText = "SELECT CASE WHEN (SELECT compatibility_level FROM sys.databases WHERE database_id = DB_ID()) < 130 THEN 1 ELSE 0 END";
+        cmd.CommandText =
+            "SELECT CASE WHEN (SELECT compatibility_level FROM sys.databases WHERE database_id = DB_ID()) < 130 " +
+            "        OR COALESCE(CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(50)), 4) AS INT), 0) < 14 " +
+            "       THEN 1 ELSE 0 END";
         // An unparseable result (e.g. a mocked unit-test command) is treated as at/above the cliff — the
         // modern STRING_AGG path, the safe default.
         return int.TryParse(cmd.ExecuteScalar()?.ToString(), out var v) && v == 1;
@@ -518,7 +530,7 @@ SELECT c.COLUMN_NAME, c.DATA_TYPE, c.COLUMN_TYPE,
         tableSchema = tableSchema.Trim().Trim('[', ']');
         tableName = tableName.Trim().Trim('[', ']');
 
-        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
+        var belowCliff = IsBelowStringAggCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@objname", $"{tableSchema}.{tableName}"));
         const string aggExpr = "CASE WHEN sc.is_nullable = 1 THEN '*' ELSE '' END + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']'";
         const string fromWhere = @"
@@ -719,7 +731,7 @@ WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
 
     private static string GetUnsupportedColumnCommentsSqlServer(IDbCommand cmd, string tableSchema, string tableName)
     {
-        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
+        var belowCliff = IsBelowStringAggCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         const string aggExpr = "'-- Column [' + c.COLUMN_NAME + '] skipped: ' + c.DATA_TYPE + ' is not supported for data delivery'";
         const string filters = @"
@@ -888,11 +900,12 @@ WHEN MATCHED AND ({updateCompare}) THEN
 
     private static string GetJsonSelectColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        var belowCliff = IsBelowStringAggCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
-        cmd.CommandText = $@"
-SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
+        const string aggExpr = @"CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
                        THEN CASE WHEN c.DATA_TYPE = 'GEOGRAPHY' THEN 'geography' ELSE 'geometry' END + '::STGeomFromText([' + c.COLUMN_NAME + '], [' + c.COLUMN_NAME + '.STSrid]) AS [' + c.COLUMN_NAME + ']'
-                       ELSE '[' + c.COLUMN_NAME + ']' END, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+                       ELSE '[' + c.COLUMN_NAME + ']' END";
+        var filters = $@"
   FROM INFORMATION_SCHEMA.COLUMNS c
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
   LEFT JOIN sys.computed_columns cc WITH (NOLOCK) ON cc.[name] = c.COLUMN_NAME
@@ -902,6 +915,13 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
     AND sc.is_rowguidcol = 0
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
 ";
+        if (belowCliff)
+        {
+            cmd.CommandText = $"SELECT {aggExpr}{filters}  ORDER BY c.COLUMN_NAME";
+            var rows = ReadStringColumn(cmd);
+            return rows.Count == 0 ? null : string.Join(",", rows);
+        }
+        cmd.CommandText = $"SELECT STRING_AGG({aggExpr}, ',') WITHIN GROUP (ORDER BY c.COLUMN_NAME){filters}";
         return cmd.ExecuteScalar()?.ToString();
     }
 
@@ -973,9 +993,9 @@ SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.identity_columns c WITH (NOLOCK)
     // read by the same OPENJSON/INSERT machinery, so the same "destination column governs" argument holds.
     private static string GetJsonColumnDefinitionsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
+        var belowCliff = IsBelowStringAggCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
-        cmd.CommandText = $@"
-SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
+        const string aggExpr = @"'           [' + c.COLUMN_NAME + '] ' +
                   REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(USER_TYPE), 'HIERARCHYID', 'NVARCHAR(4000)'), 'GEOGRAPHY', 'NVARCHAR(4000)'), 'GEOMETRY', 'NVARCHAR(4000)'), 'DATETIMEOFFSET', 'NVARCHAR(50)'), 'NTEXT', 'NVARCHAR(MAX)'), 'TEXT', 'VARCHAR(MAX)'), 'IMAGE', 'VARBINARY(MAX)') +
                       CASE WHEN USER_TYPE LIKE '%CHAR' OR USER_TYPE LIKE '%BINARY'
                            THEN '(' + CASE WHEN CHARACTER_MAXIMUM_LENGTH = -1 THEN 'MAX' ELSE CONVERT(NVARCHAR(20), CHARACTER_MAXIMUM_LENGTH) END + ')'
@@ -986,7 +1006,8 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
                                            WHEN USER_TYPE = 'XML' AND sc.xml_collection_id <> 0
                                            THEN '([' + SCHEMA_NAME(xc.[schema_id]) + '].[' + xc.[name] + '])'
                                            ELSE '' END +
-                      CASE WHEN USER_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN ', [' + c.COLUMN_NAME + '.STSrid] INT' ELSE '' END, ',' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY c.COLUMN_NAME)
+                      CASE WHEN USER_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN ', [' + c.COLUMN_NAME + '.STSrid] INT' ELSE '' END";
+        var filters = $@"
   FROM INFORMATION_SCHEMA.COLUMNS c
   JOIN sys.columns sc WITH (NOLOCK) ON sc.[object_id] = OBJECT_ID(C.TABLE_SCHEMA + '.' + C.TABLE_NAME) AND sc.[name] = C.COLUMN_NAME
   JOIN (SELECT CASE WHEN SCHEMA_NAME(st.[schema_id]) IN ('sys', 'dbo')
@@ -1001,12 +1022,19 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
     AND cc.[name] IS NULL
     {SqlServerUnsupportedTypeFilter}{BuildJsonKeyFilter(jsonKeys, "c.COLUMN_NAME")}
 ";
+        if (belowCliff)
+        {
+            cmd.CommandText = $"SELECT {aggExpr}{filters}  ORDER BY c.COLUMN_NAME";
+            var rows = ReadStringColumn(cmd);
+            return rows.Count == 0 ? null : string.Join(",\r\n", rows);
+        }
+        cmd.CommandText = $"SELECT STRING_AGG({aggExpr}, ',' + CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY c.COLUMN_NAME){filters}";
         return cmd.ExecuteScalar()?.ToString();
     }
 
     private static string GetInsertColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
-        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
+        var belowCliff = IsBelowStringAggCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         var aggExpr = "'        [' + c.COLUMN_NAME + ']'";
         var filters = $@"
@@ -1033,7 +1061,7 @@ SELECT STRING_AGG('           [' + c.COLUMN_NAME + '] ' +
 
     private static string GetUpdateColumnsSqlServer(IDbCommand cmd, string tableSchema, string tableName, HashSet<string> jsonKeys)
     {
-        var belowCliff = IsBelowJsonCliffSqlServer(cmd);
+        var belowCliff = IsBelowStringAggCliffSqlServer(cmd);
         BindIdentifierParameters(cmd, ("@schema", tableSchema), ("@table", tableName));
         const string aggExpr = @"CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY') THEN 'G'
                        WHEN c.DATA_TYPE = 'DATETIMEOFFSET' THEN 'D'
