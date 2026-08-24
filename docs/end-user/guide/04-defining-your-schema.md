@@ -294,7 +294,9 @@ When you toggle `IsTemporal` back to `false`, SchemaSmith emits `SET (SYSTEM_VER
 
 **Full-text search.** Natural-language search over text columns requires a full-text index -- a catalog-backed structure that SQL Server manages separately from its B-tree indexes. Declare it as a `FullTextIndex` object on the table, specifying the catalog, the unique key index, the columns to index, and the change-tracking mode. SQL Server allows one full-text index per table, but that one index can cover multiple text columns at once. For the full property set, variant rules, and conditional-application patterns, see the [Full-Text Index (SQL Server) reference](../reference/schema-packages.md#full-text-index-sql-server).
 
-**CDC -- brief note.** Set `"EnableCDC": true` on any table to enable Change Data Capture. SchemaSmith safely sequences the enable/disable around column changes so CDC and schema evolution don't conflict.
+**CDC -- brief note.** Set `"EnableCDC": true` on any table to enable Change Data Capture. When you later change that table's columns, SchemaSmith adds a *second* capture instance covering the new column set and leaves the original one in place, holding everything it has captured so far. That is SQL Server's own pattern for changing the shape of a tracked table without losing history.
+
+> **Action required:** The old capture instance is yours to retire, because only you know when your readers have finished with it. Once they have, drop it with `EXEC sys.sp_cdc_disable_table @source_schema = N'dbo', @source_name = N'YourTable', @capture_instance = N'<name>'` -- the deploy log names the instance for you. SQL Server allows only two capture instances per table, so until you drop it the next column change on that table will be refused, with a message telling you which tables are affected. The deploy stops before touching any column, so nothing is half-applied.
 
 ### PostgreSQL
 

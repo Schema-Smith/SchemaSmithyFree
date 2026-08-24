@@ -436,7 +436,7 @@ Each platform's table definition extends the shared properties with engine-speci
 | `Statistics` | array | `[]` | Custom statistics definitions. See [Statistics (SQL Server)](#statistics-sql-server). |
 | `FullTextIndex` | object or array | `null` | Full-text index on the table -- a single definition, or an array of conditional variants. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
 | `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. |
-| `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. |
+| `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. Changing a tracked table's columns rotates to a new capture instance rather than discarding history -- see [Change Data Capture (SQL Server)](#change-data-capture-sql-server). |
 | `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
 | `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
@@ -974,6 +974,24 @@ Custom statistics definitions in the `Statistics` array. SQL Server uses traditi
 | `Extensions` | object | Custom metadata. |
 
 **PostgreSQL extended statistics** include kinds like `ndistinct`, `dependencies`, and `mcv`. The PostgreSQL statistic object adds `Kinds` and `Schema` fields.
+
+---
+
+## Change Data Capture (SQL Server)
+
+Change Data Capture records inserts, updates, and deletes into a *change table* managed by SQL Server, so downstream readers can consume what happened rather than poll for differences. A table opts in with `"EnableCDC": true`. The tracked column set is fixed at the moment CDC is enabled, which is what makes schema change interesting: a capture instance created against three columns keeps capturing those three, whatever you do to the table afterwards.
+
+SQL Server's answer is to allow **two capture instances per table** so a new one can be stood up beside the old, and SchemaSmith uses exactly that. When a deploy changes the columns of a tracked table it:
+
+1. Leaves CDC running throughout -- the column work does not interrupt capture.
+2. Creates a second capture instance covering the new column set, named `<schema>_<table>_2` (or the base `<schema>_<table>` if the surviving instance already carries the `_2` suffix).
+3. Leaves the original instance and everything it has captured untouched, and names it in the deploy log along with the command to remove it.
+
+> **Action required:** Retiring the old instance is your call, not SchemaSmith's -- only you know when your readers have drained it. Drop it with `EXEC sys.sp_cdc_disable_table @source_schema = N'<schema>', @source_name = N'<table>', @capture_instance = N'<name>'`.
+
+> **Warning:** Because the old instance occupies one of the two slots, a **second** column change before you drop it has nowhere to rotate to. SchemaSmith refuses that deploy **before touching any column**, naming the tables at the limit and the command to clear them, so nothing is left half-applied. Drop the drained instance and re-run.
+
+Setting `EnableCDC` back to `false` disables capture on the table outright, which drops its capture instances and their history. That is a deliberate opt-out rather than a side effect of a schema change.
 
 ---
 
