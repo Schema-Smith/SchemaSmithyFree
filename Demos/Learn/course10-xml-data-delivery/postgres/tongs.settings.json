@@ -1,0 +1,19 @@
+{
+  "Source": {
+    "Platform": "PostgreSQL",
+    "Server": "localhost",
+    "Port": "15432",
+    "User": "postgres",
+    "Password": "Learn!Passw0rd",
+    "Database": "learn",
+    "ConnectionProperties": {}
+  },
+  "ContentPath": "./extracted",
+  "Tables": [
+    { "Name": "public.countrycode", "KeyColumns": "code" }
+  ],
+  "ShouldCast": {
+    "OutputContentFiles": true,
+    "OutputScripts": false
+  }
+}

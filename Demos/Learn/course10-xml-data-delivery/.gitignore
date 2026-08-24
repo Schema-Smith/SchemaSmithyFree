@@ -7,3 +7,6 @@ logs/
 checkpoints/
 artifacts/
 out/
+# Part 5 writes the DataTongs-extracted payload here. The learner generates it; the
+# hand-written twin under Templates/*/data/ is the tracked one they compare it against.
+extracted/

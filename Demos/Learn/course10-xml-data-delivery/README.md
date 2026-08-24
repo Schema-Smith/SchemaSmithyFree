@@ -240,6 +240,87 @@ compatibility level 130. If nothing in your fleet is that old, omit `ContentEnco
 — it is the default, it is what every engine reads most directly, and the payload is easier to read
 in a diff.
 
+## Part 5 — where that payload actually comes from
+
+Look back at Part 2. You were handed an XML content file and told what shape it takes: a `rows`
+root, one `row` per record, one `c` per column with an `n` attribute naming it, and a column
+whose `c` is **absent** meaning NULL. Five country codes — fine to type by hand.
+
+Now picture a real reference table. Two hundred rows, fifteen columns, three of them nullable.
+Nobody hand-types that, and a recipe that stops here has taught you a technique you can't
+actually use.
+
+**DataTongs writes the file.** It is the same tool that casts your reference data into a content
+file in the first place — it just needs telling which encoding you want:
+
+```
+cd ../sqlserver
+datatongs --ConfigFile:tongs.settings.json --DeliveryEncoding:Xml
+```
+
+```
+    Casting data for: dbo.CountryCode
+    Extracted 5 row(s) from dbo.CountryCode.
+    Writing contents to : ./extracted\dbo.CountryCode.tabledata
+```
+
+Open `extracted/dbo.CountryCode.tabledata`:
+
+```xml
+<rows><row><c n="Code">CA</c><c n="Continent">North America</c><c n="Name">Canada</c></row><row><c n="Code">DE</c><c n="Continent">Europe</c><c n="Name">Germany</c></row><row><c n="Code">GB</c><c n="Continent">Europe</c><c n="Name">United Kingdom</c></row><row><c n="Code">JP</c><c n="Name">Japan</c></row><row><c n="Code">US</c><c n="Continent">North America</c><c n="Name">United States</c></row></rows>
+```
+
+**Find the `JP` row.** It has a `Code` and a `Name` and no `Continent` element at all — exactly the
+convention Part 2 told you to follow. You didn't configure that. NULL-as-absent-element isn't a
+rule you have to remember when authoring by hand; it's what the extractor emits, because it's how
+the shred reads the file at the other end. The hand-written payload in Part 2 was written to match
+*this*, not the other way round.
+
+`--DeliveryEncoding` takes `Json` (the default) or `Xml`, and **both work on every source engine.**
+SQL Server builds the XML natively; PostgreSQL, MySQL and MariaDB extract their normal JSON and
+convert it to this identical dialect, so the file you get does not betray which engine it came
+from. Try it against the PostgreSQL tier you deployed in Part 4:
+
+```
+cd ../postgres
+datatongs --ConfigFile:tongs.settings.json --DeliveryEncoding:Xml
+```
+
+```xml
+<rows><row><c n="code">CA</c><c n="continent">North America</c><c n="name">Canada</c></row>…
+```
+
+Same shape, lowercase names because that's what PostgreSQL calls those columns.
+
+### Close the loop
+
+The file DataTongs just wrote is a drop-in for the one you were given. Copy it over the payload in
+`package/Templates/Main/data/`, redeploy to the compat-100 tier, and the rows land unchanged —
+`JP` still NULL:
+
+```
+cd ../sqlserver
+schemaquench --ConfigFile:quench.settings.legacy.json --LogPath:"$PWD/logs"
+```
+
+That's the round trip closed: **extract as XML → deploy as XML**, no hand-editing anywhere in it.
+
+### Two things to know before you rely on it
+
+**Column order in the file is not stable, and doesn't need to be.** SQL Server and PostgreSQL emit
+columns alphabetically; MySQL and MariaDB emit them in table order. Diff two extracts from
+different engines and the columns move around. It doesn't matter: every value is addressed by its
+`n` attribute, never by position, so the shred reads `n="Continent"` wherever it sits. Don't build
+anything that depends on the order.
+
+**One real gap — spatial columns from PostgreSQL and MySQL.** A `geometry`/`geography` column
+normally extracts as WKT plus a companion `<c n="Column.STSrid">` carrying its spatial reference
+system, and the SQL Server shred needs that companion to reconstruct the value exactly. PostgreSQL's
+and MySQL's JSON extraction doesn't currently capture the SRID, so an XML payload extracted from
+either carries the WKT alone. Extract spatial data from SQL Server, or set the SRID on the
+destination yourself. Every other column type — including binary, dates, booleans and NULLs — is
+fully portable.
+
 ## Cleanup
 
 ```
@@ -259,7 +340,8 @@ PGPASSWORD="Learn!Passw0rd" psql -h localhost -p 15432 -U postgres -d learn -c "
 | `sqlserver/json-attempt/` | The *same* product `RefData`, the problem — `dbo.CountryCode` with a default-JSON `DataDelivery`, which hits the compat-130 cliff on `learn_2008`. Not a second product; SchemaSmith's ownership guard would reject two products claiming the same table. |
 | `sqlserver/quench.settings.legacy.json` / `…modern.json` | The XML-encoded `RefData` deployed to `learn_2008` (compat 100) and `learn_2022` (compat 160). |
 | `sqlserver/quench.settings.json-attempt.json` / `…json-attempt-fail.json` | The JSON-encoded `RefData` attempt under the default `warn` policy and under `Target:UnsupportedFeaturePolicy=fail`. |
-| `postgres/package/` | An XML-delivery package on `Platform: PostgreSQL`, used only to demonstrate the rejection. |
+| `postgres/package/` | The same XML delivery on `Platform: PostgreSQL`, used in Part 4 to show the encoding is accepted there too — natively, via `xmltable()`. |
+| `sqlserver/tongs.settings.json` / `postgres/tongs.settings.json` | Part 5 — DataTongs extraction of `CountryCode`, run with `--DeliveryEncoding:Xml` to write the payload instead of hand-typing it. Output lands in `extracted/` and is not tracked. |
 
 Editor JSON-schema files (`.json-schemas/`) for all three packages are generated by the CLI's
 `--WriteSchemasOnly` switch and are not hand-authored.
