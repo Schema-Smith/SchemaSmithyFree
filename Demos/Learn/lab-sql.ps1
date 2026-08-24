@@ -36,6 +36,28 @@ function Get-LabClient {
     throw "LAB-SQL: '$shown' is required to reach your own $Engine server but is not on PATH. Install the engine's command-line client (see docs/end-user/guide/use-your-own-server.md), re-open your shell, and verify with '$($candidates[0]) --version'."
 }
 
+# The -S value for sqlcmd. A named instance ("localhost\SQLEXPRESS") carries its own routing and must
+# NOT have a port appended -- and Windows Authentication requires that form anyway, since there is no
+# SPN to resolve for a loopback address and port.
+function Get-LabSqlTarget {
+    $server = $env:LEARN_SERVER
+    $port   = $env:LEARN_PORT
+    if ($server -like '*\*' -or [string]::IsNullOrEmpty($port)) { return $server }
+    return "$server,$port"
+}
+
+# sqlcmd's auth arguments. Windows Authentication when use-my-server left no credential.
+#
+# The comma is load-bearing: PowerShell unwraps a single-element array on return, so `@('-E')` comes
+# back as the bare string '-E' and splatting it passes each CHARACTER as an argument -- sqlcmd then
+# reports "'': Unknown Option". `,'-E'` forces it to stay an array.
+function Get-LabSqlAuth {
+    if ([string]::IsNullOrEmpty($env:LEARN_USER) -and [string]::IsNullOrEmpty($env:LEARN_PASSWORD)) {
+        return ,'-E'
+    }
+    return @('-U', $env:LEARN_USER, '-P', $env:LEARN_PASSWORD)
+}
+
 function Get-LabContainer {
     param([Parameter(Mandatory)][string]$Engine)
     return @{ sqlserver = 'learn-sqlserver'; postgres = 'learn-postgres'; mysql = 'learn-mysql'; mariadb = 'learn-mariadb' }[$Engine]
@@ -86,7 +108,7 @@ function Invoke-LabSql {
         $server = $env:LEARN_SERVER; $port = $env:LEARN_PORT
         $user = $env:LEARN_USER; $password = $env:LEARN_PASSWORD
         switch ($Engine) {
-            'sqlserver' { $out = & sqlcmd -S "$server,$port" -U $user -P $password -C -b -d $Database -h -1 -W -Q "SET NOCOUNT ON; $Sql" 2>&1 }
+            'sqlserver' { $out = & sqlcmd -S (Get-LabSqlTarget) @(Get-LabSqlAuth) -C -b -d $Database -h -1 -W -Q "SET NOCOUNT ON; $Sql" 2>&1 }
             'postgres'  { $env:PGPASSWORD = $password
                           $out = & psql -h $server -p $port -U $user -d $Database -w -v ON_ERROR_STOP=1 --no-psqlrc -tAc $Sql 2>&1 }
             default     { $env:MYSQL_PWD = $password
@@ -126,7 +148,7 @@ function Invoke-LabSqlFile {
         $server = $env:LEARN_SERVER; $port = $env:LEARN_PORT
         $user = $env:LEARN_USER; $password = $env:LEARN_PASSWORD
         switch ($Engine) {
-            'sqlserver' { $out = & sqlcmd -S "$server,$port" -U $user -P $password -C -b -d $Database -i $Path 2>&1 }
+            'sqlserver' { $out = & sqlcmd -S (Get-LabSqlTarget) @(Get-LabSqlAuth) -C -b -d $Database -i $Path 2>&1 }
             'postgres'  { $env:PGPASSWORD = $password
                           $out = & psql -h $server -p $port -U $user -d $Database -w -v ON_ERROR_STOP=1 --no-psqlrc -f $Path 2>&1 }
             default     { $env:MYSQL_PWD = $password

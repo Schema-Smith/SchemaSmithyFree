@@ -2,6 +2,7 @@
 #
 # SOURCE it (note the leading dot) so the settings land in your shell:
 #   . .\use-my-server.ps1 -Engine sqlserver -Server myhost -Port 1433 -User sa -Password 'secret'
+#   . .\use-my-server.ps1 -Engine sqlserver -Server 'localhost\SQLEXPRESS'   # Windows Authentication
 #   . .\use-my-server.ps1 -Off       # back to the Docker sandbox
 #
 # Every lab's schemaquench command then targets your server unchanged: SchemaSmith layers
@@ -20,7 +21,8 @@ param(
 
 $labVars = 'LEARN_ENGINE', 'LEARN_SERVER', 'LEARN_PORT', 'LEARN_USER', 'LEARN_PASSWORD',
            'SmithySettings_Target__Server', 'SmithySettings_Target__Port',
-           'SmithySettings_Target__User', 'SmithySettings_Target__Password'
+           'SmithySettings_Target__User', 'SmithySettings_Target__Password',
+           'SmithySettings_Target__IntegratedSecurity'
 
 if ($Off) {
     foreach ($v in $labVars) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
@@ -40,24 +42,47 @@ if ($Server -like '*,*') {
     return
 }
 
-if (-not $Port) { $Port = @{ sqlserver = 1433; postgres = 5432; mysql = 3306; mariadb = 3306 }[$Engine] }
+# A named SQL Server instance ("host\INSTANCE") routes itself via the browser service and usually
+# listens on a dynamic port, so appending a default 1433 would point at the wrong endpoint entirely.
+# Leave the port unset for that form and let the instance name do the work.
+$IsNamedInstance = $Engine -eq 'sqlserver' -and $Server -like '*\*'
+if (-not $Port -and -not $IsNamedInstance) {
+    $Port = @{ sqlserver = 1433; postgres = 5432; mysql = 3306; mariadb = 3306 }[$Engine]
+}
 
-# TRAINING-RELEASE-PIN #370 - drop this requirement once a released CLI carries
-# Target:IntegratedSecurity (merged to main, unreleased as of 2.3.0). Then accept a missing
-# -User/-Password on SQL Server and set SmithySettings_Target__IntegratedSecurity=true.
-#
-# Windows Authentication isn't expressible here yet: on Windows an environment variable
-# cannot be set to empty (assigning '' deletes it), so a lab settings file's "User" can
-# never be overridden away, and SchemaSmith selects integrated security only when both
-# user and password are empty. Use a SQL login until that product fix ships.
-if ([string]::IsNullOrEmpty($User) -or [string]::IsNullOrEmpty($Password)) {
-    Write-Host @'
--User and -Password are required for every engine.
+# SQL Server can use Windows Authentication (2.5.0+): Target:IntegratedSecurity=true supersedes any
+# credential the lab settings file carries, which is what makes this expressible at all -- on Windows an
+# environment variable cannot be set to empty, so the file's "User" could never be overridden away.
+# Every other engine still needs a login.
+$UseWindowsAuth = $Engine -eq 'sqlserver' -and [string]::IsNullOrEmpty($User) -and [string]::IsNullOrEmpty($Password)
 
-Windows Authentication isn't supported by the labs yet: a settings-file credential can't be
-cleared by an override on Windows, so the lab's own user would still be used. Create a SQL
-login for the labs and pass it here. Windows Authentication follows in a later release.
+if (-not $UseWindowsAuth -and ([string]::IsNullOrEmpty($User) -or [string]::IsNullOrEmpty($Password))) {
+    if ($Engine -eq 'sqlserver') {
+        Write-Host @'
+Pass BOTH -User and -Password, or NEITHER.
+
+On SQL Server, omitting both uses Windows Authentication. Supplying only one is ambiguous, so
+nothing is assumed.
 '@ -ForegroundColor Red
+    } else {
+        Write-Host @"
+-User and -Password are required for $Engine.
+
+Only SQL Server supports Windows Authentication; every other engine needs a login.
+"@ -ForegroundColor Red
+    }
+    return
+}
+
+if ($UseWindowsAuth -and $Server -match '^(127\.0\.0\.1|::1|localhost)$' -and $Port) {
+    Write-Host @"
+Windows Authentication cannot be used with a loopback address and a port.
+
+There is no SPN to resolve for $Server on port $Port, so the connection fails with
+"Cannot generate SSPI context" before SchemaSmith is involved. Name the instance instead:
+  -Server 'localhost\SQLEXPRESS'   (no -Port)
+Or pass a SQL login with -User/-Password.
+"@ -ForegroundColor Red
     return
 }
 
@@ -68,11 +93,26 @@ $env:LEARN_USER     = $User
 $env:LEARN_PASSWORD = $Password
 
 $env:SmithySettings_Target__Server   = $Server
-$env:SmithySettings_Target__Port     = "$Port"
-$env:SmithySettings_Target__User     = $User
-$env:SmithySettings_Target__Password = $Password
+if ($Port) {
+    $env:SmithySettings_Target__Port = "$Port"
+} else {
+    Remove-Item Env:SmithySettings_Target__Port -ErrorAction SilentlyContinue
+}
+if ($UseWindowsAuth) {
+    # Do NOT set User/Password: on Windows, assigning '' deletes the variable, so the settings
+    # file's value would win. IntegratedSecurity is what supersedes it.
+    Remove-Item Env:SmithySettings_Target__User     -ErrorAction SilentlyContinue
+    Remove-Item Env:SmithySettings_Target__Password -ErrorAction SilentlyContinue
+    $env:SmithySettings_Target__IntegratedSecurity = 'true'
+} else {
+    Remove-Item Env:SmithySettings_Target__IntegratedSecurity -ErrorAction SilentlyContinue
+    $env:SmithySettings_Target__User     = $User
+    $env:SmithySettings_Target__Password = $Password
+}
 
-Write-Host "Learn labs now target $Engine at ${Server}:${Port} as '$User'." -ForegroundColor Green
+$who   = if ($UseWindowsAuth) { 'Windows Authentication' } else { "'$User'" }
+$where = if ($Port) { "${Server}:${Port}" } else { $Server }
+Write-Host "Learn labs now target $Engine at $where using $who." -ForegroundColor Green
 Write-Host '  This shell only -- open a new terminal and you will need to source this again.'
 Write-Host "  Run each course's setup script before its labs; it creates that course's databases on your server."
 switch ($Engine) {

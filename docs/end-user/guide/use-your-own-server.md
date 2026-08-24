@@ -125,9 +125,13 @@ The training labs have their own helper, because they provision many small datab
 
 Every lab command in every course then works exactly as written — no settings file is edited. Each course's setup script creates that course's databases on your server, and stamps them, so a database it didn't create is never dropped or deployed into. Full walkthrough: [`Demos/Learn/README.md`](https://github.com/Schema-Smith/SchemaSmith/blob/main/Demos/Learn/README.md).
 
-<!-- TRAINING-RELEASE-PIN #370 — Target:IntegratedSecurity is merged to main but not in a
-     released CLI (2.3.0). When it ships, delete this note and relax use-my-server. -->
-> **A SQL login, not Windows Authentication — for now.** The labs override connection settings through environment variables, and on Windows an override can't clear a credential a settings file already declares. Create a SQL login for the labs; Windows Authentication follows in a later release. The demo helper above is unaffected — it takes Windows Authentication today.
+> **Windows Authentication on SQL Server.** Omit *both* `-User` and `-Password` and the PowerShell helper connects as you — `Target:IntegratedSecurity` supersedes any credential the lab settings file declares, which is what makes this possible through an environment override at all:
+>
+> ```powershell
+> . .\use-my-server.ps1 -Engine sqlserver -Server 'localhost\SQLEXPRESS'
+> ```
+>
+> Name the instance instead of using a loopback address and port: Windows Authentication has no SPN to resolve for `127.0.0.1,1433` and fails with *"Cannot generate SSPI context"* before SchemaSmith is involved. Other engines still need a login, and so does the `.sh` helper — Windows Authentication needs a Windows logon session.
 
 ## Bring your own database instead
 

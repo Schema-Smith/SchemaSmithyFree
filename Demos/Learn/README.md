@@ -114,11 +114,15 @@ A few things are worth knowing:
   together, so the sandbox is the easier path for that one.)
 - **Per shell.** A new terminal needs the activation sourced again. `--off` / `-Off` returns you to
   the sandbox.
-<!-- TRAINING-RELEASE-PIN #370 — Target:IntegratedSecurity is merged to main but not in a
-     released CLI (2.3.0). When it ships, delete this bullet and relax use-my-server. -->
-- **A SQL login, not Windows Authentication — for now.** A credential declared in a settings file
-  can't currently be cleared by an environment override on Windows, so the lab's own user would win.
-  Create a SQL login for the labs. Windows Authentication follows in a later release.
+- **Windows Authentication works on SQL Server (2.5.0+).** Omit *both* `-User` and `-Password` and the
+  PowerShell helper connects as you:
+  ```powershell
+  . .\use-my-server.ps1 -Engine sqlserver -Server 'localhost\SQLEXPRESS'
+  ```
+  Name the instance rather than using a loopback address and port — Windows Authentication has no SPN to
+  resolve for `127.0.0.1,1433` and fails with *"Cannot generate SSPI context"* before SchemaSmith is
+  reached. The helper checks for that combination and tells you. Every other engine still needs a login,
+  and so does the `.sh` helper, since Windows Authentication needs a Windows logon session.
 - **Your databases are safe.** Setup scripts stamp what they create and will never drop or deploy
   into a same-named database they didn't create — they stop and tell you to rename or move it. The
   `--reset` switch each setup script carries honours the same rule.

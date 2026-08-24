@@ -42,19 +42,17 @@ else
   elif [ "${lab_server#*,}" != "$lab_server" ]; then
     echo "Pass the host on its own and the port separately: --server ${lab_server%%,*} --port ${lab_server#*,}" >&2
   elif [ -z "$lab_user" ] || [ -z "$lab_password" ]; then
-    # TRAINING-RELEASE-PIN #370 - drop this requirement once a released CLI carries
-    # Target:IntegratedSecurity (merged to main, unreleased as of 2.3.0). Then accept a missing
-    # --user/--password on SQL Server and export SmithySettings_Target__IntegratedSecurity=true.
-    #
-    # Windows Authentication isn't expressible here yet: on Windows an environment variable
-    # cannot be set to empty (assigning '' deletes it), so a lab settings file's "User" can
-    # never be overridden away, and SchemaSmith selects integrated security only when both
-    # user and password are empty. Use a SQL login until that product fix ships.
-    echo '--user and --password are required for every engine.' >&2
+    # A login is required here, and that is not a product limitation any more -- SchemaSmith 2.5.0
+    # supports Target:IntegratedSecurity. It is a platform one: Windows Authentication needs a Windows
+    # logon session, so the labs offer it from the PowerShell twin only. Do not "fix" this by mirroring
+    # use-my-server.ps1's Windows-auth branch here.
+    echo '--user and --password are required.' >&2
     echo >&2
-    echo "Windows Authentication isn't supported by the labs yet: a settings-file credential can't be" >&2
-    echo "cleared by an override on Windows, so the lab's own user would still be used. Create a SQL" >&2
-    echo 'login for the labs and pass it here. Windows Authentication follows in a later release.' >&2
+    echo 'Windows Authentication needs a Windows logon session, so it is available from the PowerShell' >&2
+    echo 'helper on Windows, not from this shell:' >&2
+    echo "    . .\\use-my-server.ps1 -Engine sqlserver -Server 'localhost\\SQLEXPRESS'" >&2
+    echo >&2
+    echo 'From here, pass a SQL login (or any other engine login) instead.' >&2
   else
     case "$lab_engine" in
       sqlserver) [ -n "$lab_port" ] || lab_port=1433 ;;
