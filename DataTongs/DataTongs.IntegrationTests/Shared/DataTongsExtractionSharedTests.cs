@@ -209,6 +209,11 @@ INSERT IGNORE INTO `{MainDb}`.`legacy_types` (`id`, `blob_data`, `longblob_data`
         var result = global::DataTongs.DataTongs.FormatColumnForJsonObject(column);
 
         Assert.That(result, Does.Contain("ST_AsText"));
+        // The WKT alone loses the reference system. SQL Server extraction has always paired it with a
+        // "<col>.STSrid" companion; MySQL must emit the same pair so a spatial value delivered into an
+        // untyped destination column keeps its CRS instead of silently becoming SRID 0.
+        Assert.That(result, Does.Contain("ST_SRID"));
+        Assert.That(result, Does.Contain("location.STSrid"));
         Assert.That(result, Does.Contain("location"));
     }
 
