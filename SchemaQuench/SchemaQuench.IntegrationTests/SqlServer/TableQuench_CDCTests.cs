@@ -290,4 +290,57 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCNoChan
         cmd.ExecuteNonQuery();
         conn.Close();
     }
+    [Test]
+    public void ShouldPreserveCapturedChangeHistoryAcrossColumnAdd()
+    {
+        // A column change on a CDC-tracked table disables CDC before the column work and
+        // re-enables it afterwards with no @capture_instance, so the capture instance --
+        // and the change table holding every not-yet-consumed row -- is dropped and a fresh
+        // empty one created. Asserting on captured ROWS would need the SQL Agent capture
+        // job, which the test container does not run, so this asserts on the identity of
+        // the change table instead: a different object_id means whatever it held is gone.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+CREATE TABLE dbo.CDCHistoryTest (Id INT IDENTITY(1,1) NOT NULL, Val NVARCHAR(100) NULL)
+INSERT dbo.CDCHistoryTest (Val) VALUES ('tracked')
+EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCHistoryTest', @role_name = NULL";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = @"SELECT ct.object_id FROM cdc.change_tables ct
+                            WHERE ct.source_object_id = OBJECT_ID('dbo.CDCHistoryTest')";
+        var changeTableBefore = cmd.ExecuteScalar();
+        Assert.That(changeTableBefore, Is.Not.Null, "CDC should be tracking before the deploy");
+
+        var json = """
+            {
+                "Schema": "[dbo]",
+                "Name": "[CDCHistoryTest]",
+                "EnableCDC": true,
+                "Columns": [
+                    {"Name": "[Id]", "DataType": "INT", "Nullable": false, "Identity": true},
+                    {"Name": "[Val]", "DataType": "NVARCHAR(100)", "Nullable": true},
+                    {"Name": "[Note]", "DataType": "NVARCHAR(50)", "Nullable": true}
+                ]
+            }
+            """;
+        RunTableQuenchProc(cmd, json);
+
+        cmd.CommandText = @"SELECT ct.object_id FROM cdc.change_tables ct
+                            WHERE ct.source_object_id = OBJECT_ID('dbo.CDCHistoryTest')";
+        var changeTableAfter = cmd.ExecuteScalar();
+
+        Assert.That(changeTableAfter, Is.EqualTo(changeTableBefore),
+            "Adding a column replaced the CDC capture instance, discarding every captured change "
+            + "a downstream reader had not yet consumed.");
+
+        cmd.CommandText = "EXEC sys.sp_cdc_disable_table @source_schema = N'dbo', @source_name = N'CDCHistoryTest', @capture_instance = N'all'";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "DROP TABLE dbo.CDCHistoryTest";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
 }
