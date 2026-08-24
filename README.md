@@ -132,7 +132,7 @@ Run SchemaQuench in a workflow with the **SchemaSmith Deploy** action — WhatIf
 ```yaml
 - name: WhatIf on PR
   if: github.event_name == 'pull_request'
-  uses: Schema-Smith/SchemaSmith@v2.4.0
+  uses: Schema-Smith/SchemaSmith@v2.5.0
   with:
     mode: whatif
     product-path: ./schema
@@ -142,7 +142,7 @@ Run SchemaQuench in a workflow with the **SchemaSmith Deploy** action — WhatIf
 
 - name: Deploy on merge
   if: github.ref == 'refs/heads/main'
-  uses: Schema-Smith/SchemaSmith@v2.4.0
+  uses: Schema-Smith/SchemaSmith@v2.5.0
   with:
     mode: deploy
     product-path: ./schema
