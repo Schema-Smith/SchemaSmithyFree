@@ -1,4 +1,5 @@
 {
+  "Schema": "public",
   "Name": "product",
   "Columns": [
     {
