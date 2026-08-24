@@ -28,10 +28,15 @@ It exits `2` and prints exactly three errors, one from each check engine:
 
 ```
 ERROR [SS-DUP-001] Template 'Main' / Table '[OrderItem]': Duplicate column name '[Quantity]' at Template 'Main' / Table '[OrderItem]' - 2 entries share this name and at least one is not gated by ShouldApplyExpression.
-ERROR [SS-FK-002] Template 'Main' / Table '[OrderItem]' / FK '[FK_OrderItem_Supplier]': RelatedTable '[Supplier]' does not resolve to any known table (resolved schema '[dbo]').
-ERROR [SS-TOK-001] .../dbo.Customer.json: references undefined token '{{IncludePiiColumns}}'.
+ERROR [SS-FK-002] Template 'Main' / Table '[OrderItem]' / FK '[FK_OrderItem_Supplier]': Template 'Main' / Table '[OrderItem]' / FK '[FK_OrderItem_Supplier]': RelatedTable '[Supplier]' does not resolve to any known table (resolved schema 'dbo').
+ERROR [SS-TOK-001] .../dbo.Customer.json: .../dbo.Customer.json: references undefined token '{{IncludePiiColumns}}'.
 3 error(s), 0 warning(s)
 ```
+
+> **Yes, two of those repeat themselves.** `SS-FK-002` and `SS-TOK-001` print their location twice — once as the
+> line's prefix and once at the front of the message. `SS-DUP-001` doesn't. That's a wart in the output, not
+> something you did wrong, and it's transcribed here exactly so your own output matches. Your `SS-TOK-001` will
+> show the real path where you cloned the repo, twice, in place of the `...` above.
 
 Three real errors, no database touched:
 
