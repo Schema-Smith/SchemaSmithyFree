@@ -24,8 +24,9 @@ level, including the oldest tier in the fleet.
 - **Run [`course10-setup`](../course10-setup/README.md) first** so the mixed fleet is standing:
   `learn_2022` (compat 160) and `learn_2008` (compat 100) on the shared SQL Server instance
   (`localhost,11433`), and current-tier PostgreSQL 16 (`localhost:15432`).
-- `schemaquench --version` answers **2.4.0** — this recipe pins the released CLI, no
-  from-source override.
+- `schemaquench --version` answers **2.5.0** — this recipe pins the released CLI, no
+  from-source override. Part 4 needs 2.5.0 specifically: earlier releases rejected
+  `ContentEncoding: "Xml"` on every engine except SQL Server.
 
 ## Part 1 — the problem: JSON delivery hits the compat-130 cliff
 
@@ -173,11 +174,24 @@ US    United States   North America
 Row-for-row identical to the `learn_2008` readback. One package, one `DataDelivery` block, both
 tiers — you don't maintain a JSON copy for modern targets and an XML copy for the old one.
 
-## Part 4 — parity: XML is SQL-Server-only
+## Part 4 — parity: XML is accepted everywhere, for different reasons
 
-PostgreSQL, MySQL, and MariaDB shred their delivery data at *every* supported version — they
-have no `OPENJSON`-style compat cliff, so they have no encoding choice to make. Declaring
-`ContentEncoding: "Xml"` on those platforms is rejected, not silently ignored.
+**Requires SchemaSmith 2.5.0 or newer.** Before that, `ContentEncoding: "Xml"` was rejected on
+every engine except SQL Server.
+
+The interesting part isn't that all four engines take the encoding — it's *why* you would ask for
+it, which is not the same question on each:
+
+| Engine | How the XML is shredded | What declaring `Xml` buys you |
+| --- | --- | --- |
+| SQL Server | Natively, `.nodes()`/`.value()` | **Version reach.** Below compatibility level 130 there is no `OPENJSON`, so XML is the only wire format the legacy tier can read at all. |
+| PostgreSQL | Natively, `xmltable()` | Nothing on its own — PostgreSQL shreds JSON at every supported version. |
+| MySQL / MariaDB | Converted to JSON once, up front, then through the unchanged JSON row source | Nothing on its own — neither engine has a cliff either. |
+
+So on three of the four engines the encoding buys **authoring uniformity, not version reach**: one
+`DataDelivery` block, one payload file, shared across a package that has to serve SQL Server's
+legacy tier as well. Without that, a shared package needed an XML declaration for SQL Server and a
+JSON one for its siblings — the exact divergence this course keeps warning about.
 
 `postgres/package` declares `public.countrycode` with the same `ContentEncoding: "Xml"` block,
 lowercase-named for PostgreSQL. Deploy it:
@@ -191,27 +205,40 @@ schemaquench --ConfigFile:quench.settings.json --LogPath:"$PWD/logs"
 [localhost].[learn]         Create new table public.countrycode
 [localhost].[learn]         Add missing Constraint public.countrycode.pk_countrycode
 [localhost].[learn]   Delivering table data
-[localhost].[learn]     Error delivering public.countrycode: XML data-delivery encoding is not yet supported on PostgreSQL; use JSON (its shred works at every supported version).
-[localhost].[learn] FAILED to quench:
-Data delivery failed for 1 table(s): public.countrycode
-[localhost].[learn] *** FAILED [Template:Main] ***
+[localhost].[learn]     Delivering public.countrycode
+[localhost].[learn] Successfully Quenched
 ```
 
-Exit code `2`. The table itself is plain DDL and deploys fine — it lands with `0` rows; it's the
-data-delivery step that rejects the `Xml` encoding, throwing an exception that names the platform
-and points you at JSON — which fails the run rather than silently falling back to a JSON shred of
-an XML payload:
+Exit code `0`. Read it back:
 
 ```
-XML data-delivery encoding is not yet supported on PostgreSQL; use JSON (its shred works at every supported version).
+PGPASSWORD="Learn!Passw0rd" psql -h localhost -p 15432 -U postgres -d learn -c "SELECT * FROM public.countrycode ORDER BY code;"
 ```
 
-That's not a parity gap to close later — it's an accurate reflection of where the cliff
-actually exists. SQL Server is the only engine whose oldest supported tier can't parse JSON at
-all, so it's the only one that needs a second encoding. PostgreSQL has had JSON functions since
-9.2; MySQL and MariaDB fall back to `JSON_EXTRACT` below their JSON-function floor — still
-JSON, every time. Use `Json` (the default — just omit `ContentEncoding`) for `DataDelivery` on
-PostgreSQL, MySQL, and MariaDB.
+```
+ code |      name      |   continent
+------+----------------+---------------
+ CA   | Canada         | North America
+ DE   | Germany        | Europe
+ GB   | United Kingdom | Europe
+ JP   | Japan          |
+ US   | United States  | North America
+```
+
+The same five rows the two SQL Server tiers hold, from the same payload file — including `JP`'s
+NULL continent, which survives the round trip through `xmltable()` rather than arriving as the
+string `"NULL"`.
+
+**MySQL and MariaDB take the same declaration.** They reject dynamic XPath outright, so SchemaSmith
+converts the payload to JSON once before shredding it through the ordinary JSON row source — the
+result is identical, and the difference is invisible in the package. There is no separate lab
+package for those two here; the declaration is the same block, with the schema dropped (on
+MySQL/MariaDB, schema *is* database).
+
+**When should you actually declare `Xml`?** Only when the package has to reach SQL Server below
+compatibility level 130. If nothing in your fleet is that old, omit `ContentEncoding` and ship JSON
+— it is the default, it is what every engine reads most directly, and the payload is easier to read
+in a diff.
 
 ## Cleanup
 
