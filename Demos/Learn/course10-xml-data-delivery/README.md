@@ -316,10 +316,16 @@ anything that depends on the order.
 **One real gap — spatial columns from PostgreSQL and MySQL.** A `geometry`/`geography` column
 normally extracts as WKT plus a companion `<c n="Column.STSrid">` carrying its spatial reference
 system, and the SQL Server shred needs that companion to reconstruct the value exactly. PostgreSQL's
-and MySQL's JSON extraction doesn't currently capture the SRID, so an XML payload extracted from
-either carries the WKT alone. Extract spatial data from SQL Server, or set the SRID on the
-destination yourself. Every other column type — including binary, dates, booleans and NULLs — is
-fully portable.
+and MySQL's extraction doesn't capture the SRID at all, so a payload from either carries the WKT
+alone. **This is not an XML thing** — a JSON payload from those engines loses it the same way; XML
+inherited the gap rather than caused it.
+
+It usually self-heals: a *typed* column (`geometry(Point,4326)`) coerces the incoming value to its
+declared SRID, so the round trip is lossless. Where it bites is an **untyped** spatial column holding
+a non-default SRID — that comes back as SRID 0, coordinates intact, no error. Right numbers, wrong
+reference system, silently. Extract spatial data from SQL Server, type the destination column, or set
+the SRID yourself. Every other column type — including binary, dates, booleans and NULLs — is fully
+portable.
 
 ## Cleanup
 
