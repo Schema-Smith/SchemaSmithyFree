@@ -92,7 +92,7 @@ public sealed class JsonSchemaCheck : ISchemaCheck
             if (!JToken.DeepEquals(merged, committed))
             {
                 findings.Add(new Finding(Severity.Error, StaleCode, StaleCategory, schemaPath,
-                    $"{schemaPath}: committed .json-schemas are stale — regenerate via --WriteSchemasOnly."));
+                    $"Committed .json-schemas are stale — regenerate via --WriteSchemasOnly."));
                 staleTypes.Add(typeName); // short-circuit: structural validation skips this type entirely
                 continue;
             }
@@ -117,7 +117,7 @@ public sealed class JsonSchemaCheck : ISchemaCheck
 
             foreach (var error in FlattenErrors(SafeValidate(schema, text)))
                 findings.Add(new Finding(Severity.Error, JsonCode, JsonCategory, jsonFile,
-                    $"{jsonFile}: {RenderMessage(error)}"));
+                    $"{RenderMessage(error)}"));
         }
 
         return findings;
@@ -137,7 +137,7 @@ public sealed class JsonSchemaCheck : ISchemaCheck
         catch
         {
             findings.Add(new Finding(Severity.Error, MalformedCommittedCode, StaleCategory, schemaPath,
-                $"{schemaPath}: committed .json-schemas file is malformed — validated against a freshly generated schema instead. Regenerate via --WriteSchemasOnly."));
+                $"Committed .json-schemas file is malformed — validated against a freshly generated schema instead. Regenerate via --WriteSchemasOnly."));
             return null;
         }
     }

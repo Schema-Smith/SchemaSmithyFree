@@ -139,7 +139,7 @@ public sealed class TokenCheck : ISchemaCheck
 
             if (HasUnmatchedOpenBrace(text))
                 findings.Add(new Finding(Severity.Error, MalformedCode, Category, scannedFile,
-                    $"{scannedFile}: contains an unmatched '{{{{' with no closing '}}}}'."));
+                    $"Contains an unmatched '{{{{' with no closing '}}}}'."));
 
             foreach (var token in TokenHelper.GetTokensFromString(text).Where(t => TokenIdentifierPattern.IsMatch(t)))
             {
@@ -147,7 +147,7 @@ public sealed class TokenCheck : ISchemaCheck
                 if (defined.Contains(token)) continue;
                 if (!flaggedUndefined.Add((scannedFile, token))) continue;
                 findings.Add(new Finding(Severity.Error, UndefinedCode, Category, scannedFile,
-                    $"{scannedFile}: references undefined token '{{{{{token}}}}}'."));
+                    $"References undefined token '{{{{{token}}}}}'."));
             }
         }
 

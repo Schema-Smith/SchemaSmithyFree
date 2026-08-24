@@ -63,20 +63,20 @@ public sealed class CoherenceCheck : ISchemaCheck
 
         foreach (var column in fkColumns.Where(column => !localColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, LocalColumnCode, Category, location,
-                $"{location}: local column '{column}' referenced in Columns does not exist on table '{table.Name}'.");
+                $"Local column '{column}' referenced in Columns does not exist on table '{table.Name}'.");
 
         // Cardinality is a pure string-count comparison — independent of whether the related
         // table resolves, so it always runs.
         if (fkColumns.Count != fkRelatedColumns.Count)
             yield return new Finding(Severity.Error, CardinalityCode, Category, location,
-                $"{location}: Columns has {fkColumns.Count} entries but RelatedColumns has {fkRelatedColumns.Count} — FK column lists must be the same length.");
+                $"Columns has {fkColumns.Count} entries but RelatedColumns has {fkRelatedColumns.Count} — FK column lists must be the same length.");
 
         var (schema, name) = ResolveRelatedTarget(table, fk);
 
         if (!tablesByKey.TryGetValue((schema, name), out var relatedTables))
         {
             yield return new Finding(Severity.Error, RelatedTableCode, Category, location,
-                $"{location}: RelatedTable '{fk.RelatedTable}' does not resolve to any known table (resolved schema '{schema}').");
+                $"RelatedTable '{fk.RelatedTable}' does not resolve to any known table (resolved schema '{schema}').");
             yield break;
         }
 
@@ -86,7 +86,7 @@ public sealed class CoherenceCheck : ISchemaCheck
 
         foreach (var column in fkRelatedColumns.Where(column => !relatedColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, RelatedColumnCode, Category, location,
-                $"{location}: related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
+                $"Related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
     }
 
     private static IEnumerable<Finding> CheckIndex(Table table, Index index, string tableLocation)
@@ -98,7 +98,7 @@ public sealed class CoherenceCheck : ISchemaCheck
                      .Where(column => !IsExpressionKeyPart(column))
                      .Where(column => !localColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, IndexColumnCode, Category, location,
-                $"{location}: index column '{column}' referenced in IndexColumns does not exist on table '{table.Name}'.");
+                $"Index column '{column}' referenced in IndexColumns does not exist on table '{table.Name}'.");
     }
 
     /// <summary>
