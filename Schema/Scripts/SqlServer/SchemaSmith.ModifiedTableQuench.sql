@@ -1052,23 +1052,36 @@ BEGIN TRY
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
-  RAISERROR('Temporarily Disable CDC For Tables With Column Changes', 10, 100) WITH NOWAIT
+  RAISERROR('Verify CDC Capture-Instance Headroom For Tables With Column Changes', 10, 100) WITH NOWAIT
+  -- CDC deliberately stays ON through the column work. Disabling it here used to drop the capture
+  -- instance outright, discarding every captured change a downstream reader had not yet consumed.
+  -- A second instance is created after the column work instead (rotation), and SQL Server permits
+  -- only two per table -- so refuse up front rather than failing partway through the column work.
+  CREATE TABLE #CdcRotate ([Schema] NVARCHAR(256), [TableName] NVARCHAR(256), OldCaptureInstance NVARCHAR(256))
   IF EXISTS (SELECT 1 FROM sys.databases WHERE database_id = DB_ID() AND is_cdc_enabled = 1)
   BEGIN
-    SET @v_SQL = ''
-    SELECT @v_SQL = @v_SQL +
-      'RAISERROR(''  Temporarily disabling CDC on ' + t.[Schema] + '.' + t.[Name] + ' for column modifications'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'EXEC sys.sp_cdc_disable_table @source_schema = N''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @source_name = N''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', @capture_instance = N''' + ct.capture_instance + ''';' + CHAR(13) + CHAR(10)
-      FROM #Tables t WITH (NOLOCK)
-      JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
-      JOIN cdc.change_tables ct WITH (NOLOCK) ON ct.source_object_id = st.[object_id]
-      WHERE st.is_tracked_by_cdc = 1
+    INSERT #CdcRotate ([Schema], [TableName], OldCaptureInstance)
+      SELECT t.[Schema], t.[Name], MAX(ct.capture_instance)
+        FROM #Tables t WITH (NOLOCK)
+        JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+        JOIN cdc.change_tables ct WITH (NOLOCK) ON ct.source_object_id = st.[object_id]
+        WHERE st.is_tracked_by_cdc = 1 AND t.EnableCDC = 1
         AND (EXISTS (SELECT 1 FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name])
           OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK) WHERE c.[Schema] = t.[Schema] AND c.[TableName] = t.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) = ''))
-    IF @v_SQL <> ''
-    BEGIN
-      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-    END
+        GROUP BY t.[Schema], t.[Name]
+        HAVING COUNT(*) = 1
+
+    DECLARE @v_CdcAtCeiling NVARCHAR(MAX) =
+      STUFF((SELECT ', ' + t.[Schema] + '.' + t.[Name]
+               FROM #Tables t WITH (NOLOCK)
+               JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+               WHERE st.is_tracked_by_cdc = 1
+                 AND (SELECT COUNT(*) FROM cdc.change_tables ct2 WITH (NOLOCK) WHERE ct2.source_object_id = st.[object_id]) >= 2
+        AND (EXISTS (SELECT 1 FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name])
+          OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK) WHERE c.[Schema] = t.[Schema] AND c.[TableName] = t.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) = ''))
+               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    IF @v_CdcAtCeiling IS NOT NULL
+      RAISERROR('CDC capture-instance limit reached on: %s. SQL Server permits two capture instances per table and both are already in use, so this column change cannot rotate without discarding change history. Drain the older instance on each listed table and drop it (EXEC sys.sp_cdc_disable_table @source_schema = N''<schema>'', @source_name = N''<table>'', @capture_instance = N''<name>''), then re-run.', 16, 1, @v_CdcAtCeiling)
   END
 
   RAISERROR('Swap Columns Requiring Data-Preserving Replacement', 10, 100) WITH NOWAIT
@@ -1568,6 +1581,24 @@ BEGIN TRY
       LEFT JOIN cdc.change_tables ct WITH (NOLOCK) ON ct.source_object_id = st.[object_id]
       WHERE (t.EnableCDC = 1 AND st.is_tracked_by_cdc = 0)
          OR (t.EnableCDC = 0 AND st.is_tracked_by_cdc = 1)
+    IF @v_SQL <> ''
+    BEGIN
+      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+    END
+  END
+
+  RAISERROR('Rotate CDC Capture Instances For Tables With Column Changes', 10, 100) WITH NOWAIT
+  -- The pre-existing instance keeps the history it already captured and is deliberately NOT dropped:
+  -- only the operator knows when downstream readers have drained it. It does occupy one of the two
+  -- slots, so the guard above will refuse the NEXT column change until it is dropped.
+  IF EXISTS (SELECT 1 FROM #CdcRotate)
+  BEGIN
+    SET @v_SQL = ''
+    SELECT @v_SQL = @v_SQL +
+      'RAISERROR(''  CDC ROTATED on ' + r.[Schema] + '.' + r.[TableName] + ': new capture instance ' + CASE WHEN r.OldCaptureInstance = b.BaseName THEN b.BaseName + '_2' ELSE b.BaseName END + ' now captures the new column set. The previous instance ' + r.OldCaptureInstance + ' STILL HOLDS ITS HISTORY and was NOT dropped -- drain it, then drop it with EXEC sys.sp_cdc_disable_table @capture_instance = N''''' + r.OldCaptureInstance + '''''. Until then the next column change on this table WILL FAIL: SQL Server allows only two capture instances.'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'EXEC sys.sp_cdc_enable_table @source_schema = N''' + SchemaSmith.fn_StripBracketWrapping(r.[Schema]) + ''', @source_name = N''' + SchemaSmith.fn_StripBracketWrapping(r.[TableName]) + ''', @capture_instance = N''' + CASE WHEN r.OldCaptureInstance = b.BaseName THEN b.BaseName + '_2' ELSE b.BaseName END + ''', @role_name = NULL;' + CHAR(13) + CHAR(10)
+      FROM #CdcRotate r WITH (NOLOCK)
+      CROSS APPLY (SELECT SchemaSmith.fn_StripBracketWrapping(r.[Schema]) + '_' + SchemaSmith.fn_StripBracketWrapping(r.[TableName]) AS BaseName) b
     IF @v_SQL <> ''
     BEGIN
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)

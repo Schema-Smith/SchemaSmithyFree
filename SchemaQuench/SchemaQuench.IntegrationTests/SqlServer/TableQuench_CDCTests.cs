@@ -128,7 +128,12 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCSwapTe
         Assert.That(cmd.ExecuteScalar(), Is.EqualTo(true), "CDC should be re-enabled after column swap");
 
         // Assert the capture instance has correct column count (fresh instance, not stale)
-        cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCSwapTest')";
+        // Rotation leaves BOTH instances in place, so scope this to the one this deploy created --
+        // an unscoped count sums the old and new column sets and means nothing.
+        cmd.CommandText = @"SELECT COUNT(*) FROM cdc.captured_columns cc
+                            WHERE cc.object_id = (SELECT TOP 1 ct.object_id FROM cdc.change_tables ct
+                                                   WHERE ct.source_object_id = OBJECT_ID('dbo.CDCSwapTest')
+                                                   ORDER BY ct.create_date DESC, ct.object_id DESC)";
         var columnsAfter = (int)cmd.ExecuteScalar();
         Assert.That(columnsAfter, Is.EqualTo(2), "Refreshed capture instance should track both columns");
 
@@ -182,7 +187,12 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCAddCol
         Assert.That(cmd.ExecuteScalar(), Is.EqualTo(true), "CDC should remain enabled");
 
         // Assert the capture instance now tracks 3 columns (including the new one)
-        cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCAddColTest')";
+        // Rotation leaves BOTH instances in place, so scope this to the one this deploy created --
+        // an unscoped count sums the old and new column sets and means nothing.
+        cmd.CommandText = @"SELECT COUNT(*) FROM cdc.captured_columns cc
+                            WHERE cc.object_id = (SELECT TOP 1 ct.object_id FROM cdc.change_tables ct
+                                                   WHERE ct.source_object_id = OBJECT_ID('dbo.CDCAddColTest')
+                                                   ORDER BY ct.create_date DESC, ct.object_id DESC)";
         Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(3), "Refreshed capture instance should track all 3 columns");
 
         // Cleanup
@@ -230,7 +240,12 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCDropCo
         Assert.That(cmd.ExecuteScalar(), Is.EqualTo(true), "CDC should remain enabled");
 
         // Assert the capture instance now tracks 2 columns (Extra is gone)
-        cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')";
+        // Rotation leaves BOTH instances in place, so scope this to the one this deploy created --
+        // an unscoped count sums the old and new column sets and means nothing.
+        cmd.CommandText = @"SELECT COUNT(*) FROM cdc.captured_columns cc
+                            WHERE cc.object_id = (SELECT TOP 1 ct.object_id FROM cdc.change_tables ct
+                                                   WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')
+                                                   ORDER BY ct.create_date DESC, ct.object_id DESC)";
         Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(2), "Refreshed capture instance should track only 2 columns");
 
         // Cleanup
@@ -329,13 +344,20 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCHistor
             """;
         RunTableQuenchProc(cmd, json);
 
-        cmd.CommandText = @"SELECT ct.object_id FROM cdc.change_tables ct
-                            WHERE ct.source_object_id = OBJECT_ID('dbo.CDCHistoryTest')";
-        var changeTableAfter = cmd.ExecuteScalar();
+        // Two instances now exist, so ask directly whether the ORIGINAL one survived rather than
+        // reading "the" object_id -- an unqualified scalar read would take whichever row came back
+        // first and could pass by accident.
+        cmd.CommandText = @"SELECT COUNT(*) FROM cdc.change_tables ct
+                            WHERE ct.source_object_id = OBJECT_ID('dbo.CDCHistoryTest')
+                              AND ct.object_id = " + changeTableBefore;
+        Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(1),
+            "The original CDC capture instance was dropped, discarding every captured change a "
+            + "downstream reader had not yet consumed.");
 
-        Assert.That(changeTableAfter, Is.EqualTo(changeTableBefore),
-            "Adding a column replaced the CDC capture instance, discarding every captured change "
-            + "a downstream reader had not yet consumed.");
+        cmd.CommandText = @"SELECT COUNT(*) FROM cdc.change_tables ct
+                            WHERE ct.source_object_id = OBJECT_ID('dbo.CDCHistoryTest')";
+        Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(2),
+            "Rotation should add a second capture instance covering the new column set.");
 
         cmd.CommandText = "EXEC sys.sp_cdc_disable_table @source_schema = N'dbo', @source_name = N'CDCHistoryTest', @capture_instance = N'all'";
         cmd.ExecuteNonQuery();
@@ -343,4 +365,67 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCHistor
         cmd.ExecuteNonQuery();
         conn.Close();
     }
+    [Test]
+    public void ShouldRefuseAColumnChangeWhenBothCaptureInstancesAreInUse()
+    {
+        // Rotation deliberately leaves the old instance in place -- only the operator knows when
+        // downstream readers have drained it. SQL Server allows two per table, so the second
+        // column change has nowhere to rotate to and must refuse up front rather than fail
+        // partway through the column work or silently discard history.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+CREATE TABLE dbo.CDCCeilingTest (Id INT IDENTITY(1,1) NOT NULL, Val NVARCHAR(100) NULL)
+EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCCeilingTest', @role_name = NULL";
+        cmd.ExecuteNonQuery();
+
+        RunTableQuenchProc(cmd, CeilingPackage(withExtra: false));
+
+        cmd.CommandText = "SELECT COUNT(*) FROM cdc.change_tables WHERE source_object_id = OBJECT_ID('dbo.CDCCeilingTest')";
+        Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(2), "First change should have rotated to a second instance");
+
+        var ex = Assert.Catch<System.Exception>(() => RunTableQuenchProc(cmd, CeilingPackage(withExtra: true)));
+        Assert.That(ex!.Message, Does.Contain("CDC capture-instance limit reached"));
+        Assert.That(ex.Message, Does.Contain("[dbo].[CDCCeilingTest]"), "the message must name the offending table");
+
+        cmd.CommandText = "SELECT COUNT(*) FROM cdc.change_tables WHERE source_object_id = OBJECT_ID('dbo.CDCCeilingTest')";
+        Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(2), "The refusal must not have disturbed either instance");
+
+        cmd.CommandText = "EXEC sys.sp_cdc_disable_table @source_schema = N'dbo', @source_name = N'CDCCeilingTest', @capture_instance = N'all'";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "DROP TABLE dbo.CDCCeilingTest";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    private static string CeilingPackage(bool withExtra) => withExtra
+        ? """
+          {
+              "Schema": "[dbo]",
+              "Name": "[CDCCeilingTest]",
+              "EnableCDC": true,
+              "Columns": [
+                  {"Name": "[Id]", "DataType": "INT", "Nullable": false, "Identity": true},
+                  {"Name": "[Val]", "DataType": "NVARCHAR(100)", "Nullable": true},
+                  {"Name": "[Note]", "DataType": "NVARCHAR(50)", "Nullable": true},
+                  {"Name": "[Extra]", "DataType": "INT", "Nullable": true}
+              ]
+          }
+          """
+        : """
+          {
+              "Schema": "[dbo]",
+              "Name": "[CDCCeilingTest]",
+              "EnableCDC": true,
+              "Columns": [
+                  {"Name": "[Id]", "DataType": "INT", "Nullable": false, "Identity": true},
+                  {"Name": "[Val]", "DataType": "NVARCHAR(100)", "Nullable": true},
+                  {"Name": "[Note]", "DataType": "NVARCHAR(50)", "Nullable": true}
+              ]
+          }
+          """;
 }
+
