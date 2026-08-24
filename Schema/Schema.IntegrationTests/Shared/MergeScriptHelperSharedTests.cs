@@ -386,8 +386,14 @@ CREATE TABLE `{_testDb}`.`{tableName}` (
             // JSON_TABLE should read geometry as TEXT (WKT string)
             if (UsesJsonTable) Assert.That(script, Does.Contain("`location` TEXT PATH '$.location'"));
 
-            // SELECT should convert WKT back to geometry
-            Assert.That(script, Does.Contain("ST_GeomFromText(`location`)"));
+            // JSON_TABLE must also read the "<col>.STSrid" companion the extractors emit beside the WKT
+            if (UsesJsonTable)
+                Assert.That(script, Does.Contain("`location.STSrid` INT PATH '$.\"location.STSrid\"'"),
+                    "the SRID companion must be shredded so the geometry keeps its reference system");
+
+            // SELECT should convert WKT back to geometry, in its own SRID rather than 0. COALESCE keeps
+            // packages extracted before the companion existed behaving exactly as they did.
+            Assert.That(script, Does.Contain("ST_GeomFromText(`location`, COALESCE(`location.STSrid`, 0))"));
 
             // INSERT INTO should have the plain column name
             Assert.That(script, Does.Contain($"INSERT INTO `{_testDb}`.`{tableName}` (`id`, `name`, `location`)"));

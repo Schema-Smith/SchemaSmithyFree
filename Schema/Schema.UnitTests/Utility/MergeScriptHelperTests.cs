@@ -859,9 +859,16 @@ public class MergeScriptHelperTests
 
         Assert.Multiple(() =>
         {
+            // The WKT alone has no reference system. The shred must also declare the "<col>.STSrid"
+            // companion extraction now emits, and pass it as ST_GeomFromText's second argument --
+            // defaulting to 0 so packages extracted before the companion existed behave as they did.
+            Assert.That(script, Does.Contain("\"Geom.STSrid\" text PATH"),
+                "the SRID companion must be declared as an xmltable column");
+            Assert.That(script, Does.Contain("COALESCE"),
+                "a package with no companion must fall back rather than fail");
             Assert.That(script, Does.Contain("\"Geom\" text PATH"),
                 "A geometry column must be shredded as text, not cast directly by xmltable's COLUMNS typing.");
-            Assert.That(script, Does.Contain("ST_GeomFromText(\"x\".\"Geom\")"),
+            Assert.That(script, Does.Contain("ST_GeomFromText(\"x\".\"Geom\","),
                 "Same function GetJsonColumnDefinitionsPostgreSql applies to the JSON row source.");
         });
     }
@@ -1254,7 +1261,7 @@ public class MergeScriptHelperTests
             mergeUpdate: false, mergeDelete: false, disableTriggers: false,
             tokenizeScripts: false, mergeFilter: null);
 
-        Assert.That(result, Does.Contain("ST_GeomFromText(`location`)"));
+        Assert.That(result, Does.Contain("ST_GeomFromText(`location`, COALESCE(`location.STSrid`, 0))"));
     }
 
     [Test]
@@ -2545,7 +2552,7 @@ public class MergeScriptHelperTests
         var result = MergeScriptHelper.GetJsonSelectColumns(Platform.MySQL, cmd, "testdb", "test_table");
 
         Assert.That(result, Does.Contain("`id`"));
-        Assert.That(result, Does.Contain("ST_GeomFromText(`location`)"));
+        Assert.That(result, Does.Contain("ST_GeomFromText(`location`, COALESCE(`location.STSrid`, 0))"));
         Assert.That(result, Does.Contain("FROM_BASE64(`data`)"));
     }
 

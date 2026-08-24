@@ -1441,7 +1441,7 @@ SELECT c.column_name || '=' || COALESCE(PG_GET_SERIAL_SEQUENCE(c.table_schema ||
 SELECT STRING_AGG(
     CASE WHEN c.udt_name IN ('geometry','geography','point','linestring','polygon',
                               'multipoint','multilinestring','multipolygon','geometrycollection')
-         THEN 'ST_GeomFromText(elem ->> ''' || c.column_name || ''')'
+         THEN 'ST_GeomFromText(elem ->> ''' || c.column_name || ''', COALESCE(NULLIF(elem ->> ''' || c.column_name || '.STSrid'', '''')::int, 0))'
          WHEN c.udt_name = 'bytea'
          THEN 'decode(elem ->> ''' || c.column_name || ''', ''base64'')'
          WHEN LEFT(c.udt_name, 1) = '_'
@@ -1483,11 +1483,21 @@ SELECT STRING_AGG(
     // bytea value or a '*,*'-delimited array cannot be cast to its target type directly by xmltable's
     // COLUMNS typing (silent data corruption for bytea, a parse error for arrays). Everything else is
     // typed directly here with the same JsonParseType the JSON row source casts to.
+    // A geometry column declares a second xmltable column for the "<col>.STSrid" companion the
+    // extractors emit, so BuildXmlColumnExpressionPostgreSql can pass it to ST_GeomFromText. A package
+    // written before the companion existed has no such element and shreds to NULL, which the caller
+    // defaults back to 0 -- exactly the behaviour those packages already had.
     private static string BuildXmlColumnsPostgreSql(List<MergeColumnInfo> columns) =>
-        string.Join(",\n         ", columns.Select(c =>
-            RequiresXmlColumnTransformPostgreSql(c)
-                ? $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'"
-                : $"\"{c.Name}\" {c.JsonParseType} PATH 'c[@n=\"{c.Name}\"]/text()'"));
+        string.Join(",\n         ", columns.SelectMany(c =>
+            !RequiresXmlColumnTransformPostgreSql(c)
+                ? new[] { $"\"{c.Name}\" {c.JsonParseType} PATH 'c[@n=\"{c.Name}\"]/text()'" }
+                : c.IsGeometry
+                    ? new[]
+                      {
+                          $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'",
+                          $"\"{c.Name}.STSrid\" text PATH 'c[@n=\"{c.Name}.STSrid\"]/text()'"
+                      }
+                    : new[] { $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'" }));
 
     // B1: same udt_name test GetJsonColumnDefinitionsPostgreSql uses for the array case
     // (LEFT(udt_name,1)='_' — PostgreSQL's own array-of-type naming convention), ported to C# rather than
@@ -1506,7 +1516,8 @@ SELECT STRING_AGG(
     internal static string BuildXmlColumnExpressionPostgreSql(MergeColumnInfo c, string sourceAlias)
     {
         var raw = $"\"{sourceAlias}\".\"{c.Name}\"";
-        if (c.IsGeometry) return $"ST_GeomFromText({raw})";
+        if (c.IsGeometry)
+            return $"ST_GeomFromText({raw}, COALESCE(NULLIF(\"{sourceAlias}\".\"{c.Name}.STSrid\", '')::int, 0))";
         if (c.IsBinary) return $"decode({raw}, 'base64')";
         if (c.DataType.StartsWith("_", StringComparison.Ordinal))
             return $"STRING_TO_ARRAY({raw}, '*,*', '*NULL_VALUE_REPRESENTATION*')::{c.JsonParseType}";
@@ -2126,6 +2137,10 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
                 ? $"$.\"{col.Name}\""
                 : $"$.{col.Name}";
             definitions.Add($"`{col.Name}` {mysqlType} PATH '{jsonPath}'");
+            // Geometry carries a "<col>.STSrid" companion beside its WKT; declare it so the SELECT can
+            // rebuild the value in its own reference system. Absent in pre-companion packages -> NULL.
+            if (IsGeometryTypeMySql(col.DataType))
+                definitions.Add($"`{col.Name}.STSrid` INT PATH '$.\"{col.Name}.STSrid\"'");
         }
         return string.Join(",\n    ", definitions);
     }
@@ -2204,7 +2219,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
     private static string BuildSingleSelectExpressionMySql(MySqlColumnInfo c)
     {
         return IsGeometryTypeMySql(c.DataType)
-            ? $"ST_GeomFromText(`{c.Name}`)"
+            ? $"ST_GeomFromText(`{c.Name}`, COALESCE(`{c.Name}.STSrid`, 0))"
             : IsBinaryTypeMySql(c.DataType)
                 ? $"FROM_BASE64(`{c.Name}`)"
                 : $"`{c.Name}`";
