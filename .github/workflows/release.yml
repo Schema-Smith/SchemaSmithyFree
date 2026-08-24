@@ -173,35 +173,86 @@ jobs:
             SchemaShears/bin/Release/net10.0/${{ matrix.rid }}/publish/
           retention-days: 1
 
+  # Windows-only second publish WITHOUT PublishSingleFile, for the winget channel only.
+  # Rationale + the experiment it serves live in the Community roadmap; in short, winget's
+  # Defender validation rejects the self-contained single-file bundles while every Microsoft
+  # scanner we can reach calls them clean. The unbundled layout replaces four novel 85 MB
+  # blobs with thin apphosts beside Microsoft-signed, high-prevalence runtime DLLs.
+  # Every other channel keeps the single-file shape.
+  build-windows-unbundled:
+    runs-on: ubuntu-latest
+    needs: read-version
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish tools (unbundled)
+        run: |
+          for tool in SchemaQuench SchemaTongs DataTongs SchemaShears; do
+            dotnet publish $tool/$tool.csproj -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=false
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-${{ matrix.rid }}-unbundled
+          path: |
+            SchemaQuench/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            SchemaTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            DataTongs/bin/Release/net10.0/${{ matrix.rid }}/publish/
+            SchemaShears/bin/Release/net10.0/${{ matrix.rid }}/publish/
+          retention-days: 1
+
   sign-windows:
     runs-on: windows-latest
-    needs: build-release
+    needs: [build-release, build-windows-unbundled]
     environment: release
     permissions:
       contents: read
     strategy:
       matrix:
         rid: [win-x64, win-arm64]
+        shape: [single, unbundled]
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: release-${{ matrix.rid }}
+          name: release-${{ matrix.rid }}${{ matrix.shape == 'unbundled' && '-unbundled' || '' }}
           path: bins
 
       - name: Collect binaries to sign
         shell: pwsh
         run: |
-          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe", "SchemaShears.exe")
-          $files = Get-ChildItem -Path bins -Recurse -File |
-            Where-Object { $ours -contains $_.Name }
-          $staging = New-Item -ItemType Directory -Force -Path sign-staging
-          foreach ($f in $files) {
-            $dest = "$staging\$($f.Name)"
-            if (!(Test-Path $dest)) { Copy-Item $f.FullName $dest }
+          $ourExes = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe", "SchemaShears.exe")
+          # Unbundled publishes leave our managed assemblies loose beside the apphost, where the
+          # single-file shape had them sealed inside an exe we already sign. They are the only
+          # novel, low-prevalence content in that layout, so they get signed too — leaving them
+          # bare would undercut the very thing the unbundled shape is meant to test. Runtime and
+          # third-party DLLs are already Microsoft/vendor-signed and are deliberately untouched.
+          $ourDlls = @("SchemaQuench.dll", "SchemaTongs.dll", "DataTongs.dll", "SchemaShears.dll", "Schema.dll")
+          $exeStaging = New-Item -ItemType Directory -Force -Path sign-staging
+          $dllStaging = New-Item -ItemType Directory -Force -Path sign-staging-dll
+          foreach ($f in Get-ChildItem -Path bins -Recurse -File) {
+            $dest = $null
+            if ($ourExes -contains $f.Name) { $dest = "$exeStaging\$($f.Name)" }
+            elseif ($ourDlls -contains $f.Name) { $dest = "$dllStaging\$($f.Name)" }
+            if ($dest -and !(Test-Path $dest)) { Copy-Item $f.FullName $dest }
           }
-          Write-Host "Files to sign:"
-          Get-ChildItem $staging | ForEach-Object { Write-Host "  $($_.Name)" }
+          Write-Host "Files to sign (exe):"
+          Get-ChildItem $exeStaging | ForEach-Object { Write-Host "  $($_.Name)" }
+          Write-Host "Files to sign (dll):"
+          $dlls = Get-ChildItem $dllStaging
+          if ($dlls) { $dlls | ForEach-Object { Write-Host "  $($_.Name)" } } else { Write-Host "  (none — single-file shape)" }
+          "has_dlls=$([bool]$dlls)".ToLower() >> $env:GITHUB_OUTPUT
+        id: collect
 
       - name: Sign binaries
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
@@ -218,59 +269,89 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
+      - name: Sign our managed assemblies (unbundled shape only)
+        if: steps.collect.outputs.has_dlls == 'true'
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          files-folder: sign-staging-dll
+          files-folder-filter: dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Copy signed binaries back
         shell: pwsh
         run: |
-          $ours = @("SchemaQuench.exe", "SchemaTongs.exe", "DataTongs.exe", "SchemaShears.exe")
-          $signed = Get-ChildItem -Path sign-staging -File
-          $targets = Get-ChildItem -Path bins -Recurse -File |
-            Where-Object { $ours -contains $_.Name }
-          foreach ($s in $signed) {
-            $targets | Where-Object { $_.Name -eq $s.Name } | ForEach-Object {
-              Copy-Item $s.FullName $_.FullName -Force
-              Write-Host "Signed: $($_.FullName)"
+          $signed = @(Get-ChildItem -Path sign-staging -File) + @(Get-ChildItem -Path sign-staging-dll -File -ErrorAction SilentlyContinue)
+          $byName = @{}
+          foreach ($s in $signed) { $byName[$s.Name] = $s.FullName }
+          foreach ($t in Get-ChildItem -Path bins -Recurse -File) {
+            if ($byName.ContainsKey($t.Name)) {
+              Copy-Item $byName[$t.Name] $t.FullName -Force
+              Write-Host "Signed: $($t.FullName)"
             }
           }
 
       - name: Re-upload signed artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: release-${{ matrix.rid }}-signed
+          name: release-${{ matrix.rid }}${{ matrix.shape == 'unbundled' && '-unbundled' || '' }}-signed
           path: bins/
           retention-days: 1
 
   package-zip-windows:
     runs-on: ubuntu-latest
-    needs: [build-release, sign-windows, read-version]
+    needs: [build-release, build-windows-unbundled, sign-windows, read-version]
     strategy:
       matrix:
         rid: [win-x64, win-arm64]
+        shape: [single, unbundled]
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: release-${{ matrix.rid }}-signed
+          name: release-${{ matrix.rid }}${{ matrix.shape == 'unbundled' && '-unbundled' || '' }}-signed
           path: bins
 
       - name: Assemble ZIP
+        env:
+          SUFFIX: ${{ matrix.shape == 'unbundled' && '-unbundled' || '' }}
         run: |
           VERSION="${{ needs.read-version.outputs.version }}"
           mkdir -p zip-staging
           for tool in SchemaQuench SchemaTongs DataTongs SchemaShears; do
             src="bins/$tool/bin/Release/net10.0/${{ matrix.rid }}/publish"
             if [ -d "$src" ]; then
-              cp "$src"/* zip-staging/ 2>/dev/null || true
+              cp -n "$src"/* zip-staging/ 2>/dev/null || true
             fi
           done
           rm -f zip-staging/*.pdb
           echo "ZIP contents:"
           ls -la zip-staging/
-          cd zip-staging && zip -r "../SchemaSmith-${VERSION}-${{ matrix.rid }}.zip" .
+          # Guard the shape actually produced: the single-file layout is a handful of large exes,
+          # the unbundled one is hundreds of files. A silent flag regression would otherwise ship
+          # an apphost with no runtime beside it, which fails only at the user's first run.
+          count=$(find zip-staging -type f | wc -l)
+          if [ -n "$SUFFIX" ] && [ "$count" -lt 100 ]; then
+            echo "::error::Unbundled ZIP has only $count files — PublishSingleFile likely still on."
+            exit 1
+          fi
+          if [ -z "$SUFFIX" ] && [ "$count" -gt 50 ]; then
+            echo "::error::Single-file ZIP has $count files — expected a handful of bundled exes."
+            exit 1
+          fi
+          cd zip-staging && zip -r "../SchemaSmith-${VERSION}-${{ matrix.rid }}${SUFFIX}.zip" .
 
       - name: Upload ZIP
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: zip-${{ matrix.rid }}
+          name: zip-${{ matrix.rid }}-${{ matrix.shape }}
           path: "SchemaSmith-*.zip"
           retention-days: 5
 

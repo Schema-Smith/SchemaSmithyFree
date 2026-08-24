@@ -6,6 +6,10 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ## [Unreleased]
 
+### Added
+
+- **Windows releases now also ship an unbundled zip.** `SchemaSmith-<version>-win-x64-unbundled.zip` and its `win-arm64` counterpart carry the same four tools published without .NET single-file bundling — each `.exe` is a small host sitting beside the shared runtime assemblies rather than a self-contained ~85 MB binary. Because the four tools then share one copy of the runtime instead of embedding it four times over, the archive is roughly a third the size of the existing one (38 MB against 139 MB on x64). The original single-file zips are unchanged and remain the download for every other channel; `winget` installs from the unbundled archive. Both layouts are Authenticode-signed and behave identically.
+
 ## [v2.5.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.5.0) — 2026-08-23
 
 ### Added
