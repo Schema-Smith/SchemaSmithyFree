@@ -148,6 +148,12 @@ jobs:
             sleep 2
           done
 
+      - name: Provision the semantic language statistics database
+        # STATISTICAL_SEMANTICS full-text columns cannot be created without it, so the tests covering
+        # them would silently skip on a runner that lacks it -- and a test that only ever skips proves
+        # nothing. mssql-server-fts ships the database as a backup, so this needs no download.
+        run: ./scripts/provision-semantic-db.sh mssql sa "$TEST_PASSWORD"
+
       - name: Rename sa login to TestUser
         run: |
           docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "
