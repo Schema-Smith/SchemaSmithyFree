@@ -1,4 +1,4 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
 using System.Collections.Generic;
@@ -430,6 +430,45 @@ VALUES ('TABLE', '{_integrationDb}', 'ProtectedExtractTable', 'TestProduct', '',
         }
 
         return tableJson;
+    }
+
+    [Test]
+    public void ShouldOrderColumnsPhysicallyWhenTheSessionAsksForIt()
+    {
+        // The Physical branch is opt-in, so nothing else in the suite exercises it -- an untested branch
+        // is an unimplemented one. MySQL and MariaDB carry the choice in a session variable because their
+        // stored procedures take no default parameter values, so this also pins that mechanism.
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+CREATE TABLE `{_integrationDb}`.`TestPhysicalOrder` (
+    `Zebra` INT NOT NULL,
+    `Apple` INT NULL,
+    `Mango` INT NULL
+) ENGINE=InnoDB;
+";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = "SET @SchemaSmith_ObjectOrder = 'Physical'";
+        cmd.ExecuteNonQuery();
+        var physical = GenerateTable(cmd, _integrationDb, "TestPhysicalOrder");
+
+        cmd.CommandText = "SET @SchemaSmith_ObjectOrder = 'Name'";
+        cmd.ExecuteNonQuery();
+        var byName = GenerateTable(cmd, _integrationDb, "TestPhysicalOrder");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(physical.Columns.Select(c => c.Name.Trim('`')),
+                Is.EqualTo(new[] { "Zebra", "Apple", "Mango" }),
+                "Physical must give the table's own column order");
+            Assert.That(byName.Columns.Select(c => c.Name.Trim('`')),
+                Is.EqualTo(new[] { "Apple", "Mango", "Zebra" }),
+                "Name must sort alphabetically, and must not be affected by the previous session value");
+        });
+
+        conn.Close();
     }
 
     private MySqlTable GenerateTable(IDbCommand cmd, string schema, string table)

@@ -6,7 +6,8 @@ IF OBJECT_ID('SchemaSmith.GenerateTableJSON', 'P') IS NOT NULL DROP PROCEDURE Sc
 GO
 CREATE PROCEDURE SchemaSmith.GenerateTableJSON 
   @p_Schema SYSNAME = 'dbo',
-  @p_Table SYSNAME
+  @p_Table SYSNAME,
+  @p_ObjectOrder SYSNAME = 'Name' -- 'Name' (default) or 'Physical' (the table's own column order)
 AS
 SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
@@ -127,7 +128,14 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     -- regenerates ValidFrom/ValidTo from IsTemporal by convention on apply, so emitting them
                     -- as user columns would double-declare them on re-deploy (#369).
                     AND sc.generated_always_type = 0) x
-          ORDER BY [Name]
+          -- Column sequence: 'Name' (default) or 'Physical', the table's own order. The ordinal is looked up
+          -- rather than projected: this is SELECT * over the derived table, so adding ORDINAL_POSITION to it
+          -- would write the ordinal into the package file. The lookup only runs when Physical is asked for.
+          ORDER BY CASE WHEN @p_ObjectOrder = 'Physical'
+                        THEN (SELECT c2.ORDINAL_POSITION FROM INFORMATION_SCHEMA.COLUMNS c2
+                               WHERE c2.TABLE_SCHEMA = @p_Schema AND c2.TABLE_NAME = @p_Table
+                                 AND '[' + c2.COLUMN_NAME + ']' = x.[Name]) END,
+                   CASE WHEN @p_ObjectOrder = 'Physical' THEN NULL ELSE x.[Name] END
           FOR JSON AUTO) AS [Columns],
        (SELECT '[' + [Name] + ']' AS [Name],
                -- Same per-partition aggregation as the table-level [CompressionType] above.

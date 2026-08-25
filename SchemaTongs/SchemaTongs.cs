@@ -2210,7 +2210,7 @@ SELECT t.schemaname, t.tablename, c.relkind, c.relispartition
             _progressLog.Info($"  Cast Json for {schema}.{table}");
             try
             {
-                command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{EscapeSql(schema)}', '{EscapeSql(table)}')";
+                command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{EscapeSql(schema)}', '{EscapeSql(table)}', '{_objectOrder}')";
                 var tableJson = command.ExecuteScalar()?.ToString() ?? "";
                 if (string.IsNullOrWhiteSpace(tableJson) || tableJson.Trim().Equals("{}"))
                 {
@@ -2945,6 +2945,13 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             _progressLog.Info($"Casting Table Structures ({filteredCount} of {totalTables} tables)");
 
             var currentTable = 0;
+            // MySQL stored procedures take no default parameter values, so the ordering choice travels
+            // as a session variable rather than an argument -- see the proc for why. Set once for the
+            // connection, not per table: it is session state, and a SET per table would add a round
+            // trip to every table in the schema for a value that never changes.
+            commandJson.CommandText = $"SET @SchemaSmith_ObjectOrder = '{_objectOrder}'";
+            commandJson.ExecuteNonQuery();
+
             foreach (var (schema, table) in tables)
             {
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(table.ToLower()) && !_objectsToCast.Contains($"{schema}.{table}".ToLower())) continue;
@@ -3105,7 +3112,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 {
                     var json = _ingestEncoding == IngestEncoding.Xml
                         ? ExtractTableModelXml(commandJson, tableSchema, tableName)
-                        : ExtractTableModelJson(commandJson, tableSchema, tableName);
+                        : ExtractTableModelJson(commandJson, tableSchema, tableName, _objectOrder);
                     if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
                     {
                         _progressLog.Error($"    No json returned for {tableSchema}.{tableName}");
@@ -3184,9 +3191,9 @@ SELECT cc.name AS [Name],
 
     // Modern encoding: GenerateTableJSON emits the JSON model directly, split across rows once it exceeds
     // the row size — concatenate every row.
-    private static string ExtractTableModelJson(IDbCommand command, string tableSchema, string tableName)
+    private static string ExtractTableModelJson(IDbCommand command, string tableSchema, string tableName, ObjectOrder objectOrder)
     {
-        command.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
+        command.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}', @p_ObjectOrder = '{objectOrder}'";
         using var reader = command.ExecuteReader();
         var json = new StringBuilder();
         while (reader.Read())
