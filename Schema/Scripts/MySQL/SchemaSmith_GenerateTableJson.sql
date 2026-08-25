@@ -122,7 +122,11 @@ BEGIN
             END,
             'Comment', CASE WHEN c.COLUMN_COMMENT = '' THEN NULL ELSE c.COLUMN_COMMENT END
         )
-        ORDER BY c.ORDINAL_POSITION
+        -- Alphabetical, matching SQL Server and PostgreSQL. Ordinal order made the same table extract
+        -- differently depending on which engine it came from, so a package re-extracted elsewhere showed
+        -- a whole-file diff that was pure noise. Name order is also stable against a source table whose
+        -- ordinal order changes, which is the determinism the sort exists for.
+        ORDER BY c.COLUMN_NAME
         SEPARATOR ','
     ), ']') INTO v_columns
     FROM INFORMATION_SCHEMA.COLUMNS c
