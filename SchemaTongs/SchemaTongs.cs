@@ -2265,7 +2265,7 @@ SELECT con.conname AS ""Name"",
                 _progressLog.Info($"    Casting {tableFile}");
                 if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
                 {
-                    var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
+                    var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile);
                     ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
                 }
                 ScrubSchemaForTemplate(tableObj, tableFile);
@@ -2983,7 +2983,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     if (FileWrapper.GetFromFactory().Exists(filename) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
                     {
                         var originalPath = FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile;
-                        var original = JsonHelper.TableLoad(originalPath, _platform);
+                        var original = LoadOriginalForPreservation(originalPath);
                         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
                     }
 
@@ -3134,7 +3134,7 @@ SELECT cc.name AS [Name],
                     var oldTableFile = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableObj.OldName.Trim('"'), ".json"));
                     if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                     {
-                        var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile, _platform);
+                        var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile);
                         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
                     }
                     // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema
@@ -3286,6 +3286,30 @@ SELECT cc.name AS [Name],
             case "Materialized Views": _stats.MaterializedViews++; break;
             case "Collations": _stats.Collations++; break;
             case "Publications": _stats.Publications++; break;
+        }
+    }
+
+    /// <summary>
+    /// Loads the table file being overwritten so its authored settings can be carried forward. A file
+    /// that will not parse is a WARNING, not a failure: extraction is about to replace it with a good
+    /// one, so aborting the whole cast over a file we are discarding anyway is the worst of both --
+    /// the operator keeps the broken file AND gets no extract. What is genuinely lost is that file's
+    /// authored settings, which is exactly what the warning has to say out loud.
+    /// </summary>
+    private Table LoadOriginalForPreservation(string path)
+    {
+        try
+        {
+            return JsonHelper.TableLoad(path, _platform);
+        }
+        catch (Exception ex)
+        {
+            _progressLog.Warn(
+                $"    Could not read existing {Path.GetFileName(path)} to carry its settings forward "
+                + $"({ex.Message}). Extraction continues and the file will be replaced, but anything it "
+                + "declared that cannot be read back from the database -- data delivery, ShouldApplyExpression, "
+                + "drop overrides -- is NOT preserved. Check the replacement before committing it.");
+            return null;
         }
     }
 

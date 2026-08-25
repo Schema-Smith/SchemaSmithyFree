@@ -28,6 +28,11 @@ public static class ImportTableHelper
     /// </param>
     public static void PreserveDataDeliveryAndCustomProperties(Table tableObj, Table original, Func<string, bool> isVariantActive)
     {
+        // A null original means the file could not be read (the caller has already warned). There is
+        // nothing to carry forward, and the extracted object is already complete -- return rather than
+        // dereference, so a corrupt file degrades to "settings lost" instead of "extraction crashed".
+        if (original == null) return;
+
         // Data delivery is authored config; extraction cannot reconstruct gated/variant deliveries, so
         // the original list is the truth. Multi-entry variant sets survive wholesale; a gated single
         // delivery survives even when absent on this target (absence is the gate's doing, not a drop);

@@ -103,6 +103,18 @@ public class AuthoredOnlyPropertyTests
             + "on the next re-extract");
     }
 
+    [Test]
+    public void AnUnreadableOriginalDoesNotCrashPreservation()
+    {
+        // SchemaTongs warns and passes null when the file it is replacing will not parse. Preservation has
+        // nothing to carry forward at that point, but it must not take the extraction down with it — the
+        // extracted table is already complete and is about to overwrite the broken file.
+        var extracted = new Table { Name = "[T]" };
+        Assert.DoesNotThrow(() =>
+            ImportTableHelper.PreserveDataDeliveryAndCustomProperties(extracted, null, _ => true));
+        Assert.That(extracted.Name, Is.EqualTo("[T]"), "the extracted table must be left intact");
+    }
+
     private static object SampleValueFor(Type t)
     {
         t = Nullable.GetUnderlyingType(t) ?? t;
