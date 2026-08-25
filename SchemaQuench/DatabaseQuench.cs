@@ -1557,6 +1557,10 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedChecks = _dropRemovedCheckConstraints == "1" ? 1 : 0;
+                // On MySQL/MariaDB the index REMOVAL happens inside MissingIndexesAndConstraintsQuench,
+                // not ModifiedTableQuench as on SQL Server and PostgreSQL. The name reads as add-only; it
+                // is not. Concluding from ModifiedTableQuench's signature that MySQL cannot remove indexes
+                // is the specific mistake this comment prevents -- made six times in one audit.
                 var dropRemovedIndexes = _dropRemovedIndexes == "1" ? 1 : 0;
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $"CALL SchemaSmith_IndexOnlyQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedIndexes})"

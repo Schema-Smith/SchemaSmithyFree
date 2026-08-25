@@ -4,6 +4,10 @@
 
 DELIMITER //
 
+-- NAME UNDERSELLS THIS PROCEDURE: it also performs INDEX REMOVAL on MySQL/MariaDB
+-- (DropIndexesRemovedFromProduct), which SQL Server and PostgreSQL do in ModifiedTableQuench instead.
+-- Reading ModifiedTableQuench's signature and concluding MySQL cannot remove indexes is the specific
+-- mistake this comment exists to prevent -- it was made six times in one audit, in both directions.
 DROP PROCEDURE IF EXISTS SchemaSmith_MissingIndexesAndConstraintsQuench//
 
 CREATE PROCEDURE SchemaSmith_MissingIndexesAndConstraintsQuench(

@@ -2,6 +2,10 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
+-- INDEX REMOVAL LIVES HERE on SQL Server (@DropIndexesRemovedFromProduct). Placement differs by engine:
+-- PostgreSQL also removes here, but MySQL/MariaDB remove in MissingIndexesAndConstraintsQuench instead,
+-- whose name reads as add-only. Do not infer an engine's capability from one procedure's signature --
+-- that inference produced six wrong conclusions in a single audit. All three engines honour the flag.
 IF OBJECT_ID('SchemaSmith.ModifiedTableQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.ModifiedTableQuench
 GO
 CREATE PROCEDURE SchemaSmith.ModifiedTableQuench

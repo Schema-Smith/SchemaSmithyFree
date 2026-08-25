@@ -2,6 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
+-- INDEX REMOVAL LIVES HERE on PostgreSQL (p_DropIndexesRemovedFromProduct, ANDed with the table's own
+-- value). Placement differs by engine: SQL Server also removes here; MySQL/MariaDB remove in
+-- MissingIndexesAndConstraintsQuench instead. Do not infer capability from a missing parameter.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
   (p_WhatIf BOOLEAN = FALSE,
    p_DropUnknownIndexes BOOLEAN = FALSE,

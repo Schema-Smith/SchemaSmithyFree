@@ -4,6 +4,9 @@
 
 DELIMITER //
 
+-- INDEX REMOVAL IS *NOT* HERE on MySQL/MariaDB. It lives in MissingIndexesAndConstraintsQuench, whose
+-- name reads as add-only but which performs both. The absence of a DropIndexesRemovedFromProduct
+-- parameter on this procedure is placement, NOT a missing capability -- the flag is honoured.
 DROP PROCEDURE IF EXISTS SchemaSmith_ModifiedTableQuench//
 
 CREATE PROCEDURE SchemaSmith_ModifiedTableQuench(
