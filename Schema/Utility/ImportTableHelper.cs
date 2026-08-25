@@ -147,6 +147,69 @@ public static class ImportTableHelper
     }
 
     /// <summary>
+    /// Re-sequences the freshly extracted lists to match the file being replaced, for entries that still
+    /// exist. Entries the file did not have are appended in <paramref name="fallbackOrder"/>; entries that
+    /// disappeared simply drop out. Nothing is added or removed here -- only order changes.
+    /// <para>
+    /// The point is that a re-extract should diff to what actually changed. Sorting the whole file every
+    /// time buries a one-column change under a whole-file reshuffle, and it silently destroys the ordering
+    /// of a hand-authored package, where the sequence usually carries meaning.
+    /// </para>
+    /// </summary>
+    internal static void PreserveListOrder(Table extracted, Table original, ObjectOrder fallbackOrder)
+    {
+        if (extracted == null || original == null) return;
+
+        Reorder(extracted.Columns, original.Columns, fallbackOrder);
+        Reorder(extracted.Indexes, original.Indexes, fallbackOrder);
+        Reorder(extracted.ForeignKeys, original.ForeignKeys, fallbackOrder);
+        Reorder(extracted.CheckConstraints, original.CheckConstraints, fallbackOrder);
+
+        if (original is SqlServerTable ssOrig && extracted is SqlServerTable ssNew)
+        {
+            Reorder(ssNew.Statistics, ssOrig.Statistics, fallbackOrder);
+            Reorder(ssNew.XmlIndexes, ssOrig.XmlIndexes, fallbackOrder);
+        }
+    }
+
+    // Names are compared with the same trim the rest of the importer uses -- an authored "[Col]" and an
+    // extracted "[Col]" must match, and a package that quotes inconsistently must not silently be treated
+    // as all-new (which would append everything and reorder the whole file, the exact churn this prevents).
+    private static void Reorder<T>(List<T> extracted, List<T> original, ObjectOrder fallbackOrder)
+    {
+        if (extracted is not { Count: > 1 } || original is not { Count: > 0 }) return;
+
+        var position = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < original.Count; i++)
+        {
+            var key = NameKey(original[i]);
+            if (key != null) position.TryAdd(key, i);
+        }
+        if (position.Count == 0) return;
+
+        var known = new List<T>();
+        var fresh = new List<T>();
+        foreach (var item in extracted)
+        {
+            var key = NameKey(item);
+            if (key != null && position.ContainsKey(key)) known.Add(item); else fresh.Add(item);
+        }
+
+        known.Sort((a, b) => position[NameKey(a)!].CompareTo(position[NameKey(b)!]));
+        // New entries append in the configured default. Physical means "as extraction produced it", which
+        // is already the list's current sequence, so only Name needs an explicit sort.
+        if (fallbackOrder == ObjectOrder.Name)
+            fresh.Sort((a, b) => string.Compare(NameKey(a), NameKey(b), StringComparison.OrdinalIgnoreCase));
+
+        extracted.Clear();
+        extracted.AddRange(known);
+        extracted.AddRange(fresh);
+    }
+
+    private static string NameKey(object item) =>
+        (item?.GetType().GetProperty("Name")?.GetValue(item) as string)?.Trim('"', '[', ']', '`');
+
+    /// <summary>
     /// Copies every property marked <c>[SchemaProperty(AuthoredOnly = true)]</c> from the file being
     /// overwritten onto the freshly extracted object. These are deploy-behaviour switches the catalog
     /// cannot report, so extraction leaves them at their defaults and a re-extract would otherwise revert
