@@ -14,6 +14,7 @@ For full release details and download links, see [GitHub Releases](https://githu
 
 ### Fixed
 
+- **A blocked rename during bootstrap now tells you which objects clashed.** When a database holds both a column (or table) and its declared `OldName`, SchemaSmith refuses to guess which one holds your data and stops — correct, but on SQL Server and MySQL/MariaDB the error named neither object, leaving "rename manually" with nothing to act on. PostgreSQL always named them; the other two now match. SQL Server interpolates the schema, table and both column names into the error. MySQL and MariaDB cap error text at 128 characters, so the short summary is unchanged and the full detail is written to the status log the run already prints. Reachable with mixed CLI versions across environments: a newer CLI renames the column, an older one re-adds the old name.
 - **`--Validate` printed the location twice on many findings.** The reporter renders every finding as `SEVERITY [Code] Location: Message`, but ten checks also opened their message with the same location, so the table, column, or file path appeared twice in a row on one line. Foreign-key, index-column, token and `.json-schemas` findings were all affected; the output is now the single prefix it was always meant to be. Message wording is otherwise unchanged, so anything grepping for a phrase still matches.
 
 ## [v2.5.0](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.5.0) — 2026-08-23
