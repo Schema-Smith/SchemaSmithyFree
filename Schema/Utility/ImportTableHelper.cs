@@ -156,7 +156,29 @@ public static class ImportTableHelper
     /// of a hand-authored package, where the sequence usually carries meaning.
     /// </para>
     /// </summary>
-    internal static void PreserveListOrder(Table extracted, Table original, ObjectOrder fallbackOrder)
+    /// <summary>
+    /// Applies the configured default ordering to a freshly extracted table. Only <see cref="ObjectOrder.Name"/>
+    /// does anything: <see cref="ObjectOrder.Physical"/> means "as the table has them", which is the order
+    /// extraction already produced, so there is nothing to re-sort.
+    /// </summary>
+    public static void ApplyObjectOrder(Table extracted, ObjectOrder order)
+    {
+        if (extracted == null || order != ObjectOrder.Name) return;
+        SortByName(extracted.Columns);
+        SortByName(extracted.Indexes);
+        SortByName(extracted.ForeignKeys);
+        SortByName(extracted.CheckConstraints);
+        if (extracted is SqlServerTable ss)
+        {
+            SortByName(ss.Statistics);
+            SortByName(ss.XmlIndexes);
+        }
+    }
+
+    private static void SortByName<T>(List<T> items) =>
+        items?.Sort((a, b) => string.Compare(NameKey(a), NameKey(b), StringComparison.OrdinalIgnoreCase));
+
+    public static void PreserveListOrder(Table extracted, Table original, ObjectOrder fallbackOrder)
     {
         if (extracted == null || original == null) return;
 
