@@ -1,4 +1,4 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
 using System.Collections.Generic;
@@ -194,7 +194,7 @@ public class SchemaTongsTests
 
             var emptyReader = Substitute.For<IDataReader>();
             emptyReader.Read().Returns(false);
-            _command.ExecuteReader().Returns(emptyReader);
+            _command.StubReaders(emptyReader);
 
             // Second connection for table JSON extraction
             var connection2 = Substitute.For<IDbConnection>();
@@ -202,7 +202,7 @@ public class SchemaTongsTests
             connection2.CreateCommand().Returns(command2);
             var emptyReader2 = Substitute.For<IDataReader>();
             emptyReader2.Read().Returns(false);
-            command2.ExecuteReader().Returns(emptyReader2);
+            command2.StubReaders(emptyReader2);
 
             var connectionCallCount = 0;
             _connectionFactory.GetDbConnection(Arg.Any<string>()).Returns(_ =>
@@ -256,7 +256,7 @@ public class SchemaTongsTests
             var extReader = Substitute.For<IDataReader>();
             extReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(listReader, extReader);
+            _command.StubReaders(listReader, extReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -310,7 +310,7 @@ public class SchemaTongsTests
             var extReader = Substitute.For<IDataReader>();
             extReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(listReader, defReader, extReader);
+            _command.StubReaders(listReader, defReader, extReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -364,7 +364,7 @@ public class SchemaTongsTests
             var extReader = Substitute.For<IDataReader>();
             extReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(listReader, defReader, extReader);
+            _command.StubReaders(listReader, defReader, extReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -418,7 +418,7 @@ public class SchemaTongsTests
             var extReader = Substitute.For<IDataReader>();
             extReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(listReader, defReader, extReader);
+            _command.StubReaders(listReader, defReader, extReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -473,7 +473,7 @@ public class SchemaTongsTests
             var extReader = Substitute.For<IDataReader>();
             extReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(listReader, defReader, extReader);
+            _command.StubReaders(listReader, defReader, extReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -514,7 +514,7 @@ public class SchemaTongsTests
             listReader.Read().Returns(_ => listCount++ < 1, _ => false);
             listReader.GetString(0).Returns("MyCatalog");
 
-            _command.ExecuteReader().Returns(listReader);
+            _command.StubReaders(listReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -563,7 +563,7 @@ public class SchemaTongsTests
             wordsReader.GetString(0).Returns("the");
             wordsReader.GetString(1).Returns("English");
 
-            _command.ExecuteReader().Returns(listReader, wordsReader);
+            _command.StubReaders(listReader, wordsReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -616,7 +616,7 @@ public class SchemaTongsTests
             var extReader = Substitute.For<IDataReader>();
             extReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(listReader, defReader, extReader);
+            _command.StubReaders(listReader, defReader, extReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -665,7 +665,7 @@ public class SchemaTongsTests
             var extReader = Substitute.For<IDataReader>();
             extReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(listReader, extReader);
+            _command.StubReaders(listReader, extReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -716,7 +716,7 @@ public class SchemaTongsTests
             var tableTypeReader = Substitute.For<IDataReader>();
             tableTypeReader.Read().Returns(false);
 
-            _command.ExecuteReader().Returns(aliasReader, tableTypeReader);
+            _command.StubReaders(aliasReader, tableTypeReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -765,7 +765,7 @@ public class SchemaTongsTests
             reader.GetValue(5).Returns((object)"1");
             reader.GetValue(6).Returns((object)"9223372036854775807");
             reader.GetBoolean(7).Returns(false);
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -809,7 +809,7 @@ public class SchemaTongsTests
             reader.GetString(0).Returns("dbo");
             reader.GetString(1).Returns("MySynonym");
             reader.GetString(2).Returns("[OtherDb].[dbo].[OtherTable]");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -874,7 +874,7 @@ public class SchemaTongsTests
 
             var emptyReader = Substitute.For<IDataReader>();
             emptyReader.Read().Returns(false);
-            _command.ExecuteReader().Returns(emptyReader);
+            _command.StubReaders(emptyReader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -917,7 +917,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Schemas");
             reader["FullName"].Returns("myschema");
             reader["Code"].Returns("CREATE SCHEMA IF NOT EXISTS myschema;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -960,7 +960,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Domain Types");
             reader["FullName"].Returns("public.posint");
             reader["Code"].Returns("DO $$ BEGIN CREATE DOMAIN public.posint AS INTEGER; END $$;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1003,7 +1003,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Enum Types");
             reader["FullName"].Returns("public.mood");
             reader["Code"].Returns("DO $$ BEGIN CREATE TYPE public.mood AS ENUM ('happy','sad'); END $$;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1046,7 +1046,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Composite Types");
             reader["FullName"].Returns("public.address");
             reader["Code"].Returns("DO $$ BEGIN CREATE TYPE public.address AS (street text, city text); END $$;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1089,7 +1089,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Functions");
             reader["FullName"].Returns("public.my_func");
             reader["Code"].Returns("CREATE OR REPLACE FUNCTION public.my_func() RETURNS INT AS $$ BEGIN RETURN 1; END $$ LANGUAGE plpgsql;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1132,7 +1132,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Aggregates");
             reader["FullName"].Returns("public.my_agg");
             reader["Code"].Returns("CREATE AGGREGATE public.my_agg(integer) (SFUNC = int4pl, STYPE = int4);");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1175,7 +1175,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Procedures");
             reader["FullName"].Returns("public.my_proc");
             reader["Code"].Returns("CREATE OR REPLACE PROCEDURE public.my_proc() LANGUAGE plpgsql AS $$ BEGIN END $$;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1218,7 +1218,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Sequences");
             reader["FullName"].Returns("public.my_seq");
             reader["Code"].Returns("CREATE SEQUENCE IF NOT EXISTS public.my_seq;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1261,7 +1261,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Rules");
             reader["FullName"].Returns("public.my_rule");
             reader["Code"].Returns("CREATE OR REPLACE RULE my_rule AS ON INSERT TO public.my_table DO NOTHING;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1304,7 +1304,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Triggers");
             reader["FullName"].Returns("public.my_trigger");
             reader["Code"].Returns("CREATE TRIGGER my_trigger AFTER INSERT ON public.my_table FOR EACH ROW EXECUTE FUNCTION my_func();");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1347,7 +1347,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Views");
             reader["FullName"].Returns("public.my_view");
             reader["Code"].Returns("CREATE OR REPLACE VIEW public.my_view AS SELECT 1;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1424,7 +1424,7 @@ public class SchemaTongsTests
             reader.Read().Returns(_ => callCount++ < 1, _ => false);
             reader["schemaname"].Returns("public");
             reader["matviewname"].Returns("my_matview");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             // Discriminate by CommandText: pg_catalog.pg_class is the kindle-gate existence check
             // (must return 0L so ReadStamp returns null and KindleTheForge runs DDL via ExecuteNonQuery).
@@ -1457,7 +1457,7 @@ public class SchemaTongsTests
 
             var emptyReader = Substitute.For<IDataReader>();
             emptyReader.Read().Returns(false);
-            _command.ExecuteReader().Returns(emptyReader);
+            _command.StubReaders(emptyReader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1502,7 +1502,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Collations");
             reader["FullName"].Returns("public.my_collation");
             reader["Code"].Returns("CREATE COLLATION IF NOT EXISTS public.my_collation (LC_COLLATE = 'en_US.utf8', LC_CTYPE = 'en_US.utf8');");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1547,7 +1547,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Publications");
             reader["FullName"].Returns("my_pub");
             reader["Code"].Returns("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'my_pub') THEN CREATE PUBLICATION my_pub FOR ALL TABLES WITH (publish = 'insert,update,delete,truncate'); END IF; END $$;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1618,7 +1618,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Functions");
             reader["FullName"].Returns("my_func");
             reader["Code"].Returns("CREATE FUNCTION my_func() RETURNS INT RETURN 1;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1655,7 +1655,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Views");
             reader["FullName"].Returns("my_view");
             reader["Code"].Returns("CREATE VIEW my_view AS SELECT 1;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1692,7 +1692,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Procedures");
             reader["FullName"].Returns("my_proc");
             reader["Code"].Returns("CREATE PROCEDURE my_proc() BEGIN END;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1729,7 +1729,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Triggers");
             reader["FullName"].Returns("my_trigger");
             reader["Code"].Returns("CREATE TRIGGER my_trigger BEFORE INSERT ON t FOR EACH ROW BEGIN END;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1766,7 +1766,7 @@ public class SchemaTongsTests
             reader["Folder"].Returns("Events");
             reader["FullName"].Returns("my_event");
             reader["Code"].Returns("CREATE EVENT my_event ON SCHEDULE EVERY 1 HOUR DO SELECT 1;");
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1824,8 +1824,8 @@ public class SchemaTongsTests
                 return connectionCallCount <= 1 ? _connection : connection2;
             });
 
-            _command.ExecuteReader().Returns(tableListReader);
-            command2.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            command2.StubReaders(jsonReader);
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1876,8 +1876,8 @@ public class SchemaTongsTests
                 return connectionCallCount <= 1 ? _connection : connection2;
             });
 
-            _command.ExecuteReader().Returns(tableListReader);
-            command2.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            command2.StubReaders(jsonReader);
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1953,7 +1953,7 @@ public class SchemaTongsTests
             showCreateReader.GetString(1).Returns(
                 "CREATE SEQUENCE `testdb`.`my_seq` start with 1 minvalue 1 maxvalue 9223372036854775806 increment by 1 cache 1000 nocycle ENGINE=InnoDB");
 
-            _command.ExecuteReader().Returns(listReader, showCreateReader);
+            _command.StubReaders(listReader, showCreateReader);
 
             var tongs = new SchemaTongs(Platform.MariaDb);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -2021,7 +2021,7 @@ public class SchemaTongsTests
             reader.GetString(0).Returns("ProductName", "MS_Description");
             reader.GetString(1).Returns("TestProduct", "A test description");
 
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new global::SchemaTongs.SchemaTongs(Platform.SqlServer);
             var result = tongs.GetExtendedProperties(_command, "SCHEMA", "dbo");
@@ -2056,7 +2056,7 @@ public class SchemaTongsTests
             reader.GetString(0).Returns("ProductName");
             reader.GetString(1).Returns("TestProduct");
 
-            _command.ExecuteReader().Returns(reader);
+            _command.StubReaders(reader);
 
             var tongs = new global::SchemaTongs.SchemaTongs(Platform.SqlServer);
             var result = tongs.GetExtendedProperties(_command, "SCHEMA", "dbo");

@@ -1,4 +1,4 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
 using System.Collections.Generic;
@@ -601,7 +601,7 @@ public class LoadValidationSettingsTests
 
             var emptyReader = Substitute.For<IDataReader>();
             emptyReader.Read().Returns(false);
-            _command.ExecuteReader().Returns(emptyReader);
+            _command.StubReaders(emptyReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             tongs.CastTemplate();
