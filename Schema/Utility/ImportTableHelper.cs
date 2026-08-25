@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Schema.Domain;
 using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
@@ -140,11 +141,39 @@ public static class ImportTableHelper
         }
     }
 
+    /// <summary>
+    /// Copies every property marked <c>[SchemaProperty(AuthoredOnly = true)]</c> from the file being
+    /// overwritten onto the freshly extracted object. These are deploy-behaviour switches the catalog
+    /// cannot report, so extraction leaves them at their defaults and a re-extract would otherwise revert
+    /// whatever was authored -- silently, since the resulting package is still perfectly valid.
+    /// </summary>
+    internal static void CopyAuthoredOnlyProperties(object original, object current)
+    {
+        if (original == null || current == null) return;
+        // The extracted object is the more-derived-or-equal type in practice, but take the intersection
+        // rather than assume it: a mismatch should copy nothing, not throw mid-extract.
+        foreach (var prop in current.GetType().GetProperties())
+        {
+            if (prop.GetCustomAttribute<SchemaPropertyAttribute>() is not { AuthoredOnly: true }) continue;
+            if (!prop.CanWrite) continue;
+            var source = original.GetType().GetProperty(prop.Name);
+            if (source == null || !source.CanRead || source.PropertyType != prop.PropertyType) continue;
+            prop.SetValue(current, source.GetValue(original));
+        }
+    }
+
     private static void CopyDynamicProperties(DynamicBase original, DynamicBase current, bool copyOldName = false)
     {
         if (current == null) return;
         if (original.Extensions != null)
             current.Extensions = original.Extensions.DeepClone();
+
+        // Authored-only properties are copied by reflection, not enumerated. Enumerating is what let
+        // UpdateFillFactor, SampleSize and the whole Drop*RemovedFromProduct family go missing: each was a
+        // line somebody had to remember to add, and nothing failed when they did not. Marking the property
+        // is now the whole job -- AuthoredOnlyPropertyTests fails the build for an unmarked, unextractable
+        // one, so the next property cannot repeat it.
+        CopyAuthoredOnlyProperties(original, current);
 
         ((dynamic)current).ShouldApplyExpression = ((dynamic)original).ShouldApplyExpression ?? "";
         ((dynamic)current).VariantName = ((dynamic)original).VariantName ?? "";
