@@ -27,6 +27,7 @@ namespace Schema.UnitTests.Capabilities
             "expression statistics (PG14)",
             "per-column compression (PG14)",
             "table access method (PG15)",
+            "VIRTUAL generated column (PG18)",
             "INDEX (invisible, MySQL 8.0 / MariaDB 10.6)",
             "INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)",
             "CHECK constraint (MySQL 8.0.16)",
