@@ -26,10 +26,11 @@ public abstract class TableQuench_DropCompositeFkIndexSharedTests : BaseTableQue
     // SchemaSmith_TableQuench pipeline, so the index becomes product-owned and the FK is created
     // against it (STEP 8/ForeignKeyQuench ordering: indexes/constraints are created before FKs).
     // Phase 2 reconciles CompFkParent with uq_parent_ab removed from its definition, calling
-    // ParseTableJson + MissingIndexesAndConstraintsQuench directly (NOT the full TableQuench) so
-    // ForeignKeyQuench does not also run in the same call and interfere with STEP 8's own
-    // FK-drop-before-index-drop logic. Before the fix, phase 2 throws (1091) and OneTimeSetUp
-    // fails the fixture; after the fix, it succeeds and the assertions below hold.
+    // ParseTableJson + ModifiedTableQuench directly (NOT the full TableQuench) — index removal,
+    // STEP 8 included, lives in ModifiedTableQuench — so ForeignKeyQuench does not also run in the
+    // same call and interfere with STEP 8's own FK-drop-before-index-drop logic. Before the fix,
+    // phase 2 throws (1091) and OneTimeSetUp fails the fixture; after the fix, it succeeds and the
+    // assertions below hold.
     [Test]
     public void TableQuench_ShouldDropCompositeForeignKeyOnceBeforeDroppingBackingUniqueIndex()
     {
@@ -91,12 +92,13 @@ public abstract class TableQuench_DropCompositeFkIndexSharedTests : BaseTableQue
         RunTableQuenchProc(cmd, withIndex, productName: CompositeFkProduct);
 
         // Phase 2 — reconcile CompFkParent with uq_parent_ab removed from its definition. Run
-        // MissingIndexesAndConstraintsQuench directly (STEP 8, DropUnknownIndexes=1) so the
-        // FK-drop-before-index-drop path fires WITHOUT also running ForeignKeyQuench in the same
-        // call (the full TableQuench would try to reconcile/recreate the FK afterward, which is
-        // not what this regression targets). CompFkChild need not be listed: STEP 8's FK-before-
-        // index join reads live INFORMATION_SCHEMA.KEY_COLUMN_USAGE / TABLE_CONSTRAINTS, not the
-        // current quench's table list.
+        // ModifiedTableQuench directly — it owns STEP 8, the index-removal step — with
+        // DropUnknownIndexes=1 so the FK-drop-before-index-drop path fires WITHOUT also running
+        // ForeignKeyQuench in the same call (the full TableQuench would try to reconcile/recreate
+        // the FK afterward, which is not what this regression targets). CompFkChild need not be
+        // listed: STEP 8's FK-before-index join reads live INFORMATION_SCHEMA.KEY_COLUMN_USAGE /
+        // TABLE_CONSTRAINTS, not the current quench's table list — and DropTablesRemovedFromProduct
+        // is 0 below, so leaving it out cannot drop it.
         var withoutIndex = """
             [
             {
@@ -113,9 +115,15 @@ public abstract class TableQuench_DropCompositeFkIndexSharedTests : BaseTableQue
             ]
             """;
         cmd.CommandTimeout = 300;
+        // Args: product, db, WhatIf=0, DropTablesRemovedFromProduct=0 (CompFkChild is deliberately
+        // absent from the phase-2 definition and must NOT be dropped), DropColumnsRemovedFromProduct=0,
+        // DropCheck/Exclude/Statistics=1, CaptureWouldDrop=0, then DropUnknownIndexes=1 and
+        // DropIndexesRemovedFromProduct=1 — the flags that make STEP 8 drop uq_parent_ab.
+        // MissingIndexesAndConstraintsQuench is not called: phase 2 declares only the PK (already
+        // present) and no check constraints, so its create/constraint half has nothing to do.
         cmd.CommandText =
             $"CALL SchemaSmith_ParseTableJson('{_mainDb}', '{withoutIndex.Replace("'", "''")}'); " +
-            $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{CompositeFkProduct}', '{_mainDb}', 0, 1, 1, 1);";
+            $"CALL SchemaSmith_ModifiedTableQuench('{CompositeFkProduct}', '{_mainDb}', 0, 0, 0, 1, 1, 1, 0, 1, 1);";
         cmd.ExecuteNonQuery();
 
         conn.Close();

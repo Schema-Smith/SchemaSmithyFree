@@ -100,7 +100,9 @@ VALUES ('{_productName}', '', '{TestSchema}', 'INDEX', 'ModifyVisibilityTQ.IDX_V
 ";
         cmd.ExecuteNonQuery();
 
-        // Table quench path: make IDX_VisibilityTQ invisible via MissingIndexesAndConstraintsQuench
+        // Table quench path: make IDX_VisibilityTQ invisible. The modified-index detection (and the
+        // drop half of a drop-and-recreate) lives in ModifiedTableQuench; MissingIndexesAndConstraintsQuench
+        // does the create half. Both calls below are required for this path.
         var jsonTQ = """
         [
             {
@@ -122,10 +124,10 @@ VALUES ('{_productName}', '', '{TestSchema}', 'INDEX', 'ModifyVisibilityTQ.IDX_V
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0, 0, 1)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 1)";
         cmd.ExecuteNonQuery();
 
         // Index Only path: make IDX_VisibilityIO invisible via IndexOnlyQuench

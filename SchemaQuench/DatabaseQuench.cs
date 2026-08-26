@@ -1502,6 +1502,14 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
             {
                 if (!MySqlTempTablesExist(tableCommand))
                     ParseMySqlTableJson(tableCommand);
+                // The #270 index no-drop-protection capture moved into ModifiedTableQuench with STEP 8,
+                // and it gates on the @ss_capture_would_drop SESSION variable rather than a parameter
+                // (it was written for a proc that had none). This branch never set it, so after the move
+                // it would read whatever the pooled connection happened to carry -- NULL on a fresh one,
+                // or a stale value from a previous template. Set it here as QuenchIndexesAndConstraints
+                // and QuenchForeignKeys already do. Must precede the CommandText assignment below,
+                // because SetMySqlCaptureFlag reuses the same command.
+                SetMySqlCaptureFlag(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropRemoved = _dropRemovedTables == "1" ? 1 : 0;
                 var dropRemovedCols = _dropRemovedColumns == "1" ? 1 : 0;
@@ -1509,7 +1517,9 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
                 var dropRemovedExcludes = _dropRemovedExcludeConstraints == "1" ? 1 : 0;
                 var dropRemovedStats = _dropRemovedStatistics == "1" ? 1 : 0;
                 var captureWouldDrop = CaptureWouldDrop ? 1 : 0;
-                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemoved}, {dropRemovedCols}, {dropRemovedChecks}, {dropRemovedExcludes}, {dropRemovedStats}, {captureWouldDrop})";
+                var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
+                var dropRemovedIndexes = _dropRemovedIndexes == "1" ? 1 : 0;
+                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemoved}, {dropRemovedCols}, {dropRemovedChecks}, {dropRemovedExcludes}, {dropRemovedStats}, {captureWouldDrop}, {dropUnknown}, {dropRemovedIndexes})";
                 break;
             }
         }
@@ -1557,14 +1567,14 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedChecks = _dropRemovedCheckConstraints == "1" ? 1 : 0;
-                // On MySQL/MariaDB the index REMOVAL happens inside MissingIndexesAndConstraintsQuench,
-                // not ModifiedTableQuench as on SQL Server and PostgreSQL. The name reads as add-only; it
-                // is not. Concluding from ModifiedTableQuench's signature that MySQL cannot remove indexes
-                // is the specific mistake this comment prevents -- made six times in one audit.
+                // On MySQL/MariaDB the index REMOVAL happens inside ModifiedTableQuench, matching SQL
+                // Server and PostgreSQL; MissingIndexesAndConstraintsQuench is add-only for indexes and
+                // no longer takes the two index-drop flags. IndexOnlyQuench still owns both of them --
+                // do not infer from a signature that an engine cannot do the thing.
                 var dropRemovedIndexes = _dropRemovedIndexes == "1" ? 1 : 0;
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $"CALL SchemaSmith_IndexOnlyQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedIndexes})"
-                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedChecks}, {dropRemovedIndexes})";
+                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemovedChecks})";
                 break;
             }
         }
@@ -1629,7 +1639,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private static readonly ConcurrentDictionary<string, object> MaterializedViewPhaseLocks = new();
 
     private object MaterializedViewPhaseLock() =>
-        MaterializedViewPhaseLocks.GetOrAdd($"{_server} {_databaseName}", _ => new object());
+        MaterializedViewPhaseLocks.GetOrAdd($"{_server}\0{_databaseName}", _ => new object());
 
     internal void QuenchMaterializedViews(IDbCommand tableCommand)
     {

@@ -12,9 +12,13 @@ namespace SchemaQuench.IntegrationTests.Shared;
 /// must detect and drop genuinely out-of-band (unowned, not-in-definition) indexes when
 /// DropUnknownIndexes is on — matching SQL Server / PostgreSQL on both axes.
 ///
-/// MissingIndexesAndConstraintsQuench signature:
-/// (p_ProductName, p_DatabaseName, p_WhatIf, p_DropUnknownIndexes,
-///  p_DropCheckConstraintsRemovedFromProduct, p_DropIndexesRemovedFromProduct)
+/// Index removal is performed by ModifiedTableQuench, NOT MissingIndexesAndConstraintsQuench — the
+/// two index-drop flags are its last two parameters:
+/// (p_ProductName, p_DatabaseName, p_WhatIf, p_DropTablesRemovedFromProduct,
+///  p_DropColumnsRemovedFromProduct, p_DropCheckConstraintsRemovedFromProduct,
+///  p_DropExcludeConstraintsRemovedFromProduct, p_DropStatisticsRemovedFromProduct,
+///  p_CaptureWouldDrop, p_DropUnknownIndexes, p_DropIndexesRemovedFromProduct)
+/// IndexOnlyQuench keeps its own flags and is unchanged.
 /// </summary>
 [Category("Integration")]
 public abstract class TableQuench_IndexParitySharedTests : BaseTableQuenchTests
@@ -41,7 +45,7 @@ public abstract class TableQuench_IndexParitySharedTests : BaseTableQuenchTests
 
             // Phase 2: reconcile with the index removed, DropUnknownIndexes=0. The removed-from-product
             // drop must still fire (gated only by DropIndexesRemovedFromProduct, default on).
-            RunMissingIndexesQuench(cmd, product, WithoutIndexJson(table, dropFlag: null),
+            RunIndexReconcileQuench(cmd, product, WithoutIndexJson(table, dropFlag: null),
                 dropUnknownIndexes: 0, dropIndexesRemovedFromProduct: 1);
 
             Assert.That(IndexExists(cmd, table, index), Is.False,
@@ -73,7 +77,7 @@ public abstract class TableQuench_IndexParitySharedTests : BaseTableQuenchTests
             RunTableQuenchProc(cmd, WithIndexJson(table, index), productName: product);
 
             // Table opts out via DropIndexesRemovedFromProduct:false — index must survive.
-            RunMissingIndexesQuench(cmd, product, WithoutIndexJson(table, dropFlag: false),
+            RunIndexReconcileQuench(cmd, product, WithoutIndexJson(table, dropFlag: false),
                 dropUnknownIndexes: 0, dropIndexesRemovedFromProduct: 1);
 
             Assert.That(IndexExists(cmd, table, index), Is.True,
@@ -111,13 +115,13 @@ public abstract class TableQuench_IndexParitySharedTests : BaseTableQuenchTests
             Assert.That(IndexExists(cmd, table, oobIndex), Is.True, "Out-of-band index must exist before reconcile.");
 
             // DropUnknownIndexes=0: the unowned index must be LEFT ALONE.
-            RunMissingIndexesQuench(cmd, product, WithoutIndexJson(table, dropFlag: null),
+            RunIndexReconcileQuench(cmd, product, WithoutIndexJson(table, dropFlag: null),
                 dropUnknownIndexes: 0, dropIndexesRemovedFromProduct: 1);
             Assert.That(IndexExists(cmd, table, oobIndex), Is.True,
                 "Out-of-band index must NOT be dropped with DropUnknownIndexes=0.");
 
             // DropUnknownIndexes=1: the unowned index must be DROPPED.
-            RunMissingIndexesQuench(cmd, product, WithoutIndexJson(table, dropFlag: null),
+            RunIndexReconcileQuench(cmd, product, WithoutIndexJson(table, dropFlag: null),
                 dropUnknownIndexes: 1, dropIndexesRemovedFromProduct: 1);
             Assert.That(IndexExists(cmd, table, oobIndex), Is.False,
                 "Out-of-band index must be dropped with DropUnknownIndexes=1.");
@@ -227,12 +231,18 @@ public abstract class TableQuench_IndexParitySharedTests : BaseTableQuenchTests
             """;
     }
 
-    private void RunMissingIndexesQuench(System.Data.IDbCommand cmd, string product, string json,
+    // Index removal lives in ModifiedTableQuench, so the two flags under test are its LAST two
+    // arguments. The eight before them are fixed at values that keep the reconcile index-only:
+    // WhatIf=0, DropTablesRemovedFromProduct=0 and DropColumnsRemovedFromProduct=0 (the table and
+    // both its columns must survive every reconcile these tests run), DropCheck/Exclude/Statistics=1,
+    // CaptureWouldDrop=0. MissingIndexesAndConstraintsQuench is not called: every reconcile here
+    // declares an empty index list and no check constraints, so its create half has nothing to do.
+    private void RunIndexReconcileQuench(System.Data.IDbCommand cmd, string product, string json,
         int dropUnknownIndexes, int dropIndexesRemovedFromProduct)
     {
         cmd.CommandText =
             $"CALL SchemaSmith_ParseTableJson('{_mainDb}', '{json.Replace("'", "''")}'); " +
-            $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{product}', '{_mainDb}', 0, {dropUnknownIndexes}, 1, {dropIndexesRemovedFromProduct});";
+            $"CALL SchemaSmith_ModifiedTableQuench('{product}', '{_mainDb}', 0, 0, 0, 1, 1, 1, 0, {dropUnknownIndexes}, {dropIndexesRemovedFromProduct});";
         cmd.ExecuteNonQuery();
     }
 

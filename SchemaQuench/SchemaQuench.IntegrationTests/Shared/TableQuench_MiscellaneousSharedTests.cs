@@ -139,7 +139,9 @@ public abstract class TableQuench_MiscellaneousSharedTests : BaseTableQuenchTest
 
         var ex = Assert.Throws<MySqlException>(() =>
         {
-            cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
+            // Index-drop flags (trailing 0, 0) are irrelevant here: the call must fail at the
+            // ownership check long before any index work.
+            cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0, 0, 0)";
             cmd.ExecuteNonQuery();
         });
         Assert.That(ex!.Message, Does.Contain("already owned by another product").IgnoreCase);
@@ -225,7 +227,9 @@ VALUES ('{uniqueProductName}', '', '{TestSchema}', 'TABLE', 'TableToBeDropped');
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{uniqueProductName}', '{TestSchema}', 0, 1, 1, 1, 1, 1, 0)"; // DropTables=1
+        // DropTables=1; index-drop flags (trailing 0, 0) off — this test is about table removal, and
+        // nothing here recreates an index.
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{uniqueProductName}', '{TestSchema}', 0, 1, 1, 1, 1, 1, 0, 0, 0)";
         cmd.ExecuteNonQuery();
 
         // Table should be dropped
@@ -363,10 +367,14 @@ VALUES ('OtherProduct', '', '{TestSchema}', 'TABLE', 'TableOwnedByOtherProduct')
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
+        // Trailing 1, 1 are DropUnknownIndexes and DropIndexesRemovedFromProduct — the flags
+        // MissingIndexesAndConstraintsQuench used to carry. Index removal happens HERE, so this is the
+        // call that drops IDX_DropMe (owned, removed from the definition) and IDX_Custom (out-of-band)
+        // for ShouldDropIndexNoLongerPartOfProduct, and that renames IDX_WrongName / UQ_OldName.
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0, 1, 1)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 1, 1, 1)"; // DropUnknown=1
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 1)";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ForeignKeyQuench('{_productName}', '{TestSchema}', 0, 1, 1)"; // DropUnknown=1

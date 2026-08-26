@@ -14,10 +14,10 @@ public abstract class TableQuench_DropIndexesSharedTests : BaseTableQuenchTests
 
     // Two-phase: an index must be product-OWNED (recorded in ProductOwnership) to take the
     // removed-from-product path. Phase 1 quenches the index into existence; phase 2 reconciles with
-    // the index removed. On MySQL the removed-from-product drop (STEP 8) is gated by DropUnknownIndexes
-    // (its full decoupling is Index-B), so phase 2 runs MissingIndexesAndConstraintsQuench with
-    // DropUnknownIndexes=1; the new per-table DropIndexesRemovedFromProduct:false then suppresses
-    // IdxDropSuppressed while IdxDropControl (no flag) drops.
+    // the index removed. Index removal (STEP 8) lives in SchemaSmith_ModifiedTableQuench, so phase 2
+    // runs THAT procedure with DropUnknownIndexes=1 / DropIndexesRemovedFromProduct=1; the per-table
+    // DropIndexesRemovedFromProduct:false then suppresses IdxDropSuppressed while IdxDropControl
+    // (no flag) drops.
     [Test]
     public void TableQuench_ShouldSuppressIndexDropWhenTableFlagIsFalse()
     {
@@ -61,8 +61,9 @@ public abstract class TableQuench_DropIndexesSharedTests : BaseTableQuenchTests
         RunTableQuenchProc(cmd, withIndex, productName: IndexProduct);
 
         // Phase 2 — reconcile with the secondary index removed from both. IdxDropSuppressed protects
-        // its own via the per-table flag. Run MissingIndexesAndConstraintsQuench directly with
-        // DropUnknownIndexes=1 so STEP 8 (removed-from-product) fires; the flag gates suppression.
+        // its own via the per-table flag. Run ModifiedTableQuench directly — that is the procedure
+        // that performs index removal — with DropUnknownIndexes=1 and DropIndexesRemovedFromProduct=1
+        // so STEP 8 fires; the per-table flag gates suppression.
         var withoutIndex = """
             [
             {
@@ -79,9 +80,15 @@ public abstract class TableQuench_DropIndexesSharedTests : BaseTableQuenchTests
             ]
             """;
         cmd.CommandTimeout = 300;
+        // Args: product, db, WhatIf=0, DropTablesRemovedFromProduct=0, DropColumnsRemovedFromProduct=0
+        // (both tables and both columns are still declared, and this test must not start dropping
+        // either), DropCheck/Exclude/Statistics=1, CaptureWouldDrop=0, then the two index-drop flags
+        // this phase actually exercises: DropUnknownIndexes=1, DropIndexesRemovedFromProduct=1.
+        // MissingIndexesAndConstraintsQuench is not called: the phase-2 definition declares no indexes
+        // and no check constraints, so its create/constraint half has nothing to do here.
         cmd.CommandText =
             $"CALL SchemaSmith_ParseTableJson('{_mainDb}', '{withoutIndex.Replace("'", "''")}'); " +
-            $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{IndexProduct}', '{_mainDb}', 0, 1, 1, 1);";
+            $"CALL SchemaSmith_ModifiedTableQuench('{IndexProduct}', '{_mainDb}', 0, 0, 0, 1, 1, 1, 0, 1, 1);";
         cmd.ExecuteNonQuery();
 
         conn.Close();

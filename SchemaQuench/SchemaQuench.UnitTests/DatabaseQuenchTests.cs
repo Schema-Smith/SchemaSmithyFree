@@ -2629,9 +2629,18 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 1, 1, 1, 1, 0)
-        // (prod, db, whatIf=0, dropTables=0, dropCols=1, dropChecks=1) — dropCols is the 5th arg.
-        Assert.That(mockCmd.CommandText, Does.Contain(", 0, 0, 1,"));
+        // DropColumnsRemovedFromProduct is the FIFTH positional argument of the MySQL CALL:
+        // (product, database, WhatIf, DropTablesRemovedFromProduct, DropColumnsRemovedFromProduct, ...).
+        // Assert that position rather than a floating substring: ", 0, 0, 1," does not say WHICH
+        // arguments it matched, so it would keep passing if the flag moved, and it breaks for
+        // unrelated reasons when a parameter is inserted ahead of it.
+        Assert.That(mockCmd.CommandText, Does.StartWith("CALL SchemaSmith_ModifiedTableQuench("),
+            "Expected a positional MySQL CALL to SchemaSmith_ModifiedTableQuench.");
+        var args = MySqlCallArguments(mockCmd.CommandText);
+        Assert.That(args.Length, Is.GreaterThanOrEqualTo(5),
+            $"MySQL ModifiedTableQuench CALL has too few arguments: {mockCmd.CommandText}");
+        Assert.That(args[4], Is.EqualTo("1"),
+            $"DropColumnsRemovedFromProduct must be threaded as the 5th positional argument: {mockCmd.CommandText}");
     }
 
     #endregion
@@ -2686,8 +2695,17 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchForeignKeys(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ForeignKeyQuench('Prod', 'db', 0, 0, 1)
-        Assert.That(mockCmd.CommandText, Does.EndWith(", 0, 1)"));
+        // DropForeignKeysRemovedFromProduct is the FIFTH positional argument of the MySQL CALL:
+        // (product, database, WhatIf, DropUnknownForeignKeys, DropForeignKeysRemovedFromProduct).
+        // Assert that position rather than the tail of the argument list — a tail assertion breaks
+        // the next time this procedure gains a parameter, for a reason unrelated to foreign keys.
+        Assert.That(mockCmd.CommandText, Does.StartWith("CALL SchemaSmith_ForeignKeyQuench("),
+            "Expected a positional MySQL CALL to SchemaSmith_ForeignKeyQuench.");
+        var args = MySqlCallArguments(mockCmd.CommandText);
+        Assert.That(args.Length, Is.GreaterThanOrEqualTo(5),
+            $"MySQL ForeignKeyQuench CALL has too few arguments: {mockCmd.CommandText}");
+        Assert.That(args[4], Is.EqualTo("1"),
+            $"DropForeignKeysRemovedFromProduct must be threaded as the 5th positional argument: {mockCmd.CommandText}");
     }
 
     #endregion
@@ -2742,14 +2760,35 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 0, 1, 1, 1, 0)
-        // — dropChecks (1) followed by excludes (1), stats (1), captureWouldDrop (0).
-        Assert.That(mockCmd.CommandText, Does.EndWith(", 1, 1, 1, 0)"));
+        // DropCheckConstraintsRemovedFromProduct is the SIXTH positional argument of the MySQL CALL:
+        // (product, database, WhatIf, DropTablesRemovedFromProduct, DropColumnsRemovedFromProduct,
+        //  DropCheckConstraintsRemovedFromProduct, ...). Assert that position rather than the tail of
+        // the argument list: the tail moves every time a parameter is appended (index removal moving
+        // into this procedure appended DropUnknownIndexes and DropIndexesRemovedFromProduct), so a
+        // tail assertion fails — or silently passes — for reasons that have nothing to do with check
+        // constraints, which is the only thing this test is named for.
+        Assert.That(mockCmd.CommandText, Does.StartWith("CALL SchemaSmith_ModifiedTableQuench("),
+            "Expected a positional MySQL CALL to SchemaSmith_ModifiedTableQuench.");
+        var args = MySqlCallArguments(mockCmd.CommandText);
+        Assert.That(args.Length, Is.GreaterThanOrEqualTo(6),
+            $"MySQL ModifiedTableQuench CALL has too few arguments: {mockCmd.CommandText}");
+        Assert.That(args[5], Is.EqualTo("1"),
+            $"DropCheckConstraintsRemovedFromProduct must be threaded as the 6th positional argument: {mockCmd.CommandText}");
     }
 
     #endregion
 
     #region Helper Methods
+
+    // Positional arguments of a MySQL "CALL proc(a, b, c)" statement, trimmed. Lets a test assert the
+    // one argument it is named for by POSITION, instead of matching the head or tail of the whole
+    // list — which breaks whenever an unrelated parameter is added.
+    private static string[] MySqlCallArguments(string commandText)
+    {
+        var open = commandText.IndexOf('(');
+        var close = commandText.LastIndexOf(')');
+        return commandText.Substring(open + 1, close - open - 1).Split(',').Select(a => a.Trim()).ToArray();
+    }
 
     private static IDbCommand CreateMockCommand()
     {
