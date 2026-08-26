@@ -6,8 +6,10 @@ DELIMITER //
 
 -- NAME UNDERSELLS THIS PROCEDURE: it also performs INDEX REMOVAL on MySQL/MariaDB
 -- (DropIndexesRemovedFromProduct), which SQL Server and PostgreSQL do in ModifiedTableQuench instead.
--- Reading ModifiedTableQuench's signature and concluding MySQL cannot remove indexes is the specific
--- mistake this comment exists to prevent -- it was made six times in one audit, in both directions.
+-- Index rename detection and modified-index handling have moved to ModifiedTableQuench; only index
+-- REMOVAL remains here, pending its own move. Reading ModifiedTableQuench's signature and concluding
+-- MySQL cannot remove indexes is the specific mistake this comment exists to prevent -- it was made
+-- six times in one audit, in both directions.
 DROP PROCEDURE IF EXISTS SchemaSmith_MissingIndexesAndConstraintsQuench//
 
 CREATE PROCEDURE SchemaSmith_MissingIndexesAndConstraintsQuench(
@@ -20,7 +22,8 @@ CREATE PROCEDURE SchemaSmith_MissingIndexesAndConstraintsQuench(
 )
 SQL SECURITY DEFINER
 BEGIN
-    -- This procedure creates, modifies, renames, and drops indexes and check constraints.
+    -- This procedure CREATES missing indexes and check constraints, and drops those removed from the
+    -- product. Index rename detection and modified-index handling live in ModifiedTableQuench.
     -- It reads from the _SchemaSmith_Indexes and _SchemaSmith_CheckConstraints
     -- temp tables populated by ParseTableJson.
     -- Foreign keys are handled separately by SchemaSmith_ForeignKeyQuench.
@@ -35,11 +38,8 @@ BEGIN
     -- the same shape ForeignKeyQuench eliminated. Each detection pass instead snapshots the catalog it
     -- needs into a temp table with ONE scan, then joins it. The snapshots are placed to preserve the
     -- exact point-in-time state each pass must see relative to THIS proc's own earlier mutations:
-    --   * _SchemaSmith_IdxDetectSnap + _SchemaSmith_ExistingIndexVisibility -- pre-mutation, for STEP 1
-    --     (rename) and STEP 2 (modified index); STEP 1 renames only where columns already match and STEP 2
-    --     excludes just-renamed indexes, so the pre-mutation snapshot equals the live reads it replaces.
-    --   * _SchemaSmith_IdxExistPostDrop -- taken after STEP 2's drops so STEP 3 sees a dropped modified
-    --     index as MISSING and recreates it.
+    --   * _SchemaSmith_IdxExistPostDrop -- taken after ModifiedTableQuench's index-rename and modified-index
+    --     drops so STEP 3 sees a dropped modified index as MISSING and recreates it.
     --   * _SchemaSmith_ChkExist -- built after the STEP 3.5 / by-absence check drops for the STEP 4/4.5
     --     create passes, then REBUILT post-create for STEP 7 ownership.
     --   * _SchemaSmith_IdxExistFinal + the STEP 7 _SchemaSmith_ChkExist rebuild -- post-create, so STEP 7
@@ -51,6 +51,27 @@ BEGIN
     SET SESSION group_concat_max_len = 1000000;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'BEGIN MissingIndexesAndConstraintsQuench');
+
+    -- _SchemaSmith_IndexRenames is now populated by ModifiedTableQuench (rename detection moved there to
+    -- match SQL Server) but is still read seven times below -- three in STEP 3, four in STEP 8 -- as the
+    -- "not a renamed index" exclusion. Those are two SEPARATELY CHECKPOINTED steps in DatabaseQuench
+    -- ("ModifiedTables" and "IndexesAndConstraints"), so a resume that finds ModifiedTables already
+    -- complete skips ModifiedTableQuench entirely and this session never creates the table -- every
+    -- reference below would then fail with ER_NO_SUCH_TABLE (1146). Temp tables are session-scoped, so a
+    -- resumed run starts with none of them; ParseTableJson rebuilds the parse-level tables but has no
+    -- reason to know about this one.
+    --
+    -- An empty table is the CORRECT state in that case, not merely a safe one: if ModifiedTableQuench was
+    -- skipped, its renames were executed and committed by the earlier run, so there are no pending renames
+    -- to exclude. On the normal path ModifiedTableQuench has already created and populated it and
+    -- IF NOT EXISTS makes this a no-op. Mirrors the MySqlTempTablesExist / ParseMySqlTableJson re-parse
+    -- defense DatabaseQuench.cs already applies to the parse-level tables.
+    CREATE TEMPORARY TABLE IF NOT EXISTS _SchemaSmith_IndexRenames (
+        TableName VARCHAR(128) NOT NULL,
+        OldIndexName VARCHAR(128) NOT NULL,
+        NewIndexName VARCHAR(128) NOT NULL,
+        PRIMARY KEY (TableName, OldIndexName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     -- =========================================================================
     -- STEP 0: Add missing generated columns (deferred from MissingTableAndColumnQuench
@@ -114,385 +135,12 @@ BEGIN
     END IF;
 
     -- =========================================================================
-    -- STEP 0.5: Degrade descending index key parts below MySQL 8.0 / MariaDB 10.8
-    -- =========================================================================
-    -- These engines parse-and-ignore a DESC key part (silently storing it ascending). There is no
-    -- equivalent, so a declared DESC index is stored + compared as ascending (SchemaSmith_NormalizeIndexColumns
-    -- drops the DESC suffix below the floor, so the create/compare steps below see an ascending index and stay
-    -- idempotent). Record one 'downgraded' manifest row + a run-log line per affected index so the downgrade is
-    -- visible, mirroring the CHECK-constraint degrade. At/above the floor this is a no-op.
-    IF SchemaSmith_SupportsDescendingIndex() = 0 THEN
-        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('  Descending index key part stored ascending (requires MySQL 8.0 / MariaDB 10.8 - downgraded): ',
-               SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
-        FROM _SchemaSmith_Indexes i
-        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
-        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-        SELECT CONNECTION_ID(), 'INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)',
-               CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
-        FROM _SchemaSmith_Indexes i
-        WHERE UPPER(CONVERT(i.IndexColumns USING utf8mb4)) LIKE '% DESC%';
-    END IF;
-
-    -- =========================================================================
-    -- STEP 0.6: Degrade invisible indexes below MySQL 8.0 / MariaDB 10.6
-    -- =========================================================================
-    -- The INVISIBLE (MySQL) / IGNORED (MariaDB) keyword is a hard syntax error below these versions (unlike a
-    -- DESC key part, which parses-and-ignores). A declared invisible index degrades: the visibility clause is
-    -- suppressed (see the create pass) and the modified-index compare ignores the visibility difference so the
-    -- deploy stays idempotent. 'fail' aborts naming the offending index(es); 'warn' (default) records one
-    -- 'downgraded' manifest row + a run-log line per declared invisible index. At/above the floor this is a no-op.
-    IF SchemaSmith_SupportsInvisibleIndex() = 0
-       AND EXISTS (SELECT 1 FROM _SchemaSmith_Indexes WHERE IsVisible = 0) THEN
-        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-            SELECT CONNECTION_ID(), CONCAT('  Invisible index requires MySQL 8.0 / MariaDB 10.6 (UnsupportedFeaturePolicy=fail): ',
-                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
-            FROM _SchemaSmith_Indexes i WHERE i.IsVisible = 0;
-            SET @ss_msg = 'Invisible index requires MySQL 8.0 / MariaDB 10.6 (UnsupportedFeaturePolicy=fail). See the run log for the full list.';
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
-        ELSE
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-            SELECT CONNECTION_ID(), CONCAT('  Invisible index stored visible (requires MySQL 8.0 / MariaDB 10.6 - downgraded): ',
-                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
-            FROM _SchemaSmith_Indexes i WHERE i.IsVisible = 0;
-            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-            SELECT CONNECTION_ID(), 'INDEX (invisible, MySQL 8.0 / MariaDB 10.6)',
-                   CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
-            FROM _SchemaSmith_Indexes i WHERE i.IsVisible = 0;
-        END IF;
-    END IF;
-
-    -- =========================================================================
-    -- STEP 0.7: Degrade functional/expression indexes below MySQL 8.0.13 (MariaDB: always)
-    -- =========================================================================
-    -- Unlike a DESC key part (parsed-and-ignored) or INVISIBLE (a suppressible clause), a functional/
-    -- expression key part is a hard syntax error below the floor -- there is no reduced form to fall
-    -- back to, so the whole index is skipped rather than degraded in place (same shape as
-    -- SchemaSmith_SupportsDefaultExpression's column skip). MariaDB has no equivalent in this form at
-    -- ANY version (SchemaSmith_SupportsFunctionalIndex() is unconditionally 0 there), so this block
-    -- fires on MariaDB every time a functional index is declared, not just below some threshold -- the
-    -- mirror image of SchemaSmith_SupportsDefaultExpression, which is unconditionally 1 on MariaDB. A
-    -- multi-valued index (CAST(... AS ... ARRAY)) is a functional key part too and rides this same gate;
-    -- see SchemaSmith_SupportsFunctionalIndex for why it needs no gate of its own. 'fail' aborts naming
-    -- the offending index(es); 'warn' (default) records one 'downgraded' manifest row + a run-log line
-    -- per declared functional index -- STEP 2 (modified-detect) and STEP 3 (create) below exclude it via
-    -- the identical predicate, leaving any live index of the same name untouched.
-    -- =========================================================================
-    IF SchemaSmith_SupportsFunctionalIndex() = 0
-       AND EXISTS (SELECT 1 FROM _SchemaSmith_Indexes i
-                   WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1) THEN
-        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-            SELECT CONNECTION_ID(), CONCAT('  Functional/expression index requires MySQL 8.0.13 (MariaDB unsupported) (UnsupportedFeaturePolicy=fail): ',
-                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
-            FROM _SchemaSmith_Indexes i
-            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
-            SET @ss_msg = 'Functional/expression index requires MySQL 8.0.13; MariaDB unsupported (policy=fail). See the run log.';
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
-        ELSE
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-            SELECT CONNECTION_ID(), CONCAT('  Skipping index (functional/expression key part requires MySQL 8.0.13, MariaDB unsupported - downgraded): ',
-                   SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName))
-            FROM _SchemaSmith_Indexes i
-            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
-            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
-            SELECT CONNECTION_ID(), 'INDEX (functional/expression, MySQL 8.0.13)',
-                   CONCAT(SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName)), 'downgraded'
-            FROM _SchemaSmith_Indexes i
-            WHERE i.IsPrimaryKey = 0 AND SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1;
-        END IF;
-    END IF;
-
-    -- =========================================================================
-    -- Detection snapshot: the live index picture read ONCE here into a temp table so STEP 1 (rename)
-    -- and STEP 2 (modified) join it instead of re-reading INFORMATION_SCHEMA.STATISTICS per declared
-    -- index. INFORMATION_SCHEMA is not a stored table on MySQL/MariaDB -- each access re-materialises
-    -- server-wide metadata -- so the original per-row reads (a STATISTICS join plus a correlated
-    -- GROUP_CONCAT column-list subquery, per declared index) cost (declared indexes x whole-server
-    -- scans). This snapshot reflects the catalog BEFORE STEP 1's renames and STEP 2's drops, which is
-    -- exactly the state both passes read: STEP 1 renames only where the column list already matches
-    -- (so it never changes what STEP 2 compares), and STEP 2 excludes just-renamed indexes via
-    -- _SchemaSmith_IndexRenames -- so the pre-mutation snapshot is equivalent to the live reads it
-    -- replaces. STEP 3 (create-missing) needs the POST-drop state and takes its own later snapshot.
-    -- One row per index; NormColumns is built by the same GROUP_CONCAT expression the correlated
-    -- subqueries used, so composite index column lists compare byte-for-byte as before.
-    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDetectSnap;
-    CREATE TEMPORARY TABLE _SchemaSmith_IdxDetectSnap (
-        TableName VARCHAR(128) NOT NULL,
-        IndexName VARCHAR(128) NOT NULL,
-        NonUnique TINYINT DEFAULT 0,
-        IndexType VARCHAR(32),
-        NormColumns TEXT,
-        -- MySQL's index comment ceiling is 1024 characters; MAX() alongside the other per-index
-        -- aggregates below since INDEX_COMMENT is constant across a composite index's key parts.
-        IndexComment VARCHAR(1024),
-        PRIMARY KEY (TableName, IndexName)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    -- A functional/expression key part (MySQL 8.0.13+) has NULL COLUMN_NAME and reports its text via
-    -- EXPRESSION instead; that column does not exist below the floor or on MariaDB, so the branch that
-    -- reads it is gated behind SchemaSmith_SupportsFunctionalIndex() as two whole statements -- column
-    -- resolution is deferred to the execution of whichever statement actually runs (see
-    -- SchemaSmith_IndexIsVisible / SchemaSmith_SnapshotIndexVisibility for the same IS_VISIBLE-below-8.0
-    -- shape), so the unreached branch's EXPRESSION reference is never bound on an engine that lacks it.
-    -- Must produce the exact same per-key-part form as SchemaSmith_NormalizeIndexColumns and
-    -- GenerateTableJson (one extra paren pair around the expression, charset-introducer noise AND
-    -- the backslash-escaped quotes EXPRESSION carries around a literal's quotes both stripped the
-    -- same two-pass way via REGEXP_REPLACE -- safe here despite the 5.7 floor because this branch
-    -- only executes at 8.0.13+ and never on 5.7/MariaDB; see GenerateTableJson.sql for the full
-    -- explanation) or the compare below never converges.
-    IF SchemaSmith_SupportsFunctionalIndex() = 1 THEN
-        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns, IndexComment)
-        SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
-               CONVERT(s.INDEX_NAME USING utf8mb4),
-               MAX(s.NON_UNIQUE),
-               CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
-               GROUP_CONCAT(
-                   CASE WHEN s.COLUMN_NAME IS NOT NULL THEN
-                       CONCAT('`', s.COLUMN_NAME, '`',
-                              -- SPATIAL's SUB_PART is a phantom internal value (always 32), not a declared prefix; exclude it or spatial indexes never converge
-                              IF(s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL', CONCAT('(', s.SUB_PART, ')'), ''),
-                              CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-                   ELSE
-                       CONCAT('(', REGEXP_REPLACE(
-                           REPLACE(s.EXPRESSION, CONCAT(CHAR(92), CHAR(39)), CHAR(39)),
-                           '_[A-Za-z0-9]+''', ''''), ')',
-                              CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-                   END
-                   ORDER BY s.SEQ_IN_INDEX
-                   SEPARATOR ','
-               ),
-               CONVERT(MAX(s.INDEX_COMMENT) USING utf8mb4)
-          FROM INFORMATION_SCHEMA.STATISTICS s
-         WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-         GROUP BY s.TABLE_NAME, s.INDEX_NAME;
-    ELSE
-        INSERT INTO _SchemaSmith_IdxDetectSnap (TableName, IndexName, NonUnique, IndexType, NormColumns, IndexComment)
-        SELECT CONVERT(s.TABLE_NAME USING utf8mb4),
-               CONVERT(s.INDEX_NAME USING utf8mb4),
-               MAX(s.NON_UNIQUE),
-               CONVERT(MAX(s.INDEX_TYPE) USING utf8mb4),
-               GROUP_CONCAT(
-                   CONCAT('`', s.COLUMN_NAME, '`',
-                          IF(s.SUB_PART IS NOT NULL AND s.INDEX_TYPE != 'SPATIAL', CONCAT('(', s.SUB_PART, ')'), ''),
-                          CASE WHEN BINARY s.COLLATION = BINARY 'D' THEN ' DESC' ELSE '' END)
-                   ORDER BY s.SEQ_IN_INDEX
-                   SEPARATOR ','
-               ),
-               CONVERT(MAX(s.INDEX_COMMENT) USING utf8mb4)
-          FROM INFORMATION_SCHEMA.STATISTICS s
-         WHERE BINARY s.TABLE_SCHEMA = BINARY p_DatabaseName
-         GROUP BY s.TABLE_NAME, s.INDEX_NAME;
-    END IF;
-
-    -- A names-only copy of the same snapshot. STEP 1 references the snapshot twice in one statement
-    -- (the main join AND the "new index name doesn't exist" NOT EXISTS); MySQL/MariaDB forbid opening a
-    -- TEMPORARY table twice in a single query (ER_CANT_REOPEN_TABLE 1137) -- the original could because
-    -- it read INFORMATION_SCHEMA (not a temp) on both sides. The second reference reads this copy.
-    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxDetectNames;
-    CREATE TEMPORARY TABLE _SchemaSmith_IdxDetectNames (
-        TableName VARCHAR(128) NOT NULL,
-        IndexName VARCHAR(128) NOT NULL,
-        PRIMARY KEY (TableName, IndexName)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    INSERT INTO _SchemaSmith_IdxDetectNames (TableName, IndexName)
-    SELECT TableName, IndexName FROM _SchemaSmith_IdxDetectSnap;
-
-    -- Per-engine index-visibility snapshot (MySQL IS_VISIBLE / MariaDb IGNORED), one scan, for STEP 2's
-    -- modified-index visibility comparison -- replaces the per-candidate SchemaSmith_IndexIsVisible() call.
-    CALL SchemaSmith_SnapshotIndexVisibility(p_DatabaseName);
-
-    -- =========================================================================
-    -- STEP 1: Detect index renames (same columns, different name)
-    -- =========================================================================
-    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IndexRenames;
-    CREATE TEMPORARY TABLE _SchemaSmith_IndexRenames (
-        TableName VARCHAR(128) NOT NULL,
-        OldIndexName VARCHAR(128) NOT NULL,
-        NewIndexName VARCHAR(128) NOT NULL,
-        PRIMARY KEY (TableName, OldIndexName)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    -- Find indexes where the definition matches but the name is different
-    -- An index is considered a rename candidate if:
-    -- 1. The new index name doesn't exist
-    -- 2. The old index exists and is owned by the product
-    -- 3. The column list matches exactly
-    INSERT INTO _SchemaSmith_IndexRenames (TableName, OldIndexName, NewIndexName)
-    SELECT
-        SchemaSmith_StripBacktickWrapping(i.TableName) AS TableName,
-        snap.IndexName COLLATE utf8mb4_unicode_ci AS OldIndexName,
-        SchemaSmith_StripBacktickWrapping(i.IndexName) AS NewIndexName
-    FROM _SchemaSmith_Indexes i
-    JOIN _SchemaSmith_IdxDetectSnap snap
-        ON BINARY snap.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-    JOIN SchemaSmith_ProductOwnership po
-        ON BINARY po.ProductName = BINARY p_ProductName
-        AND BINARY po.ObjectSchema = BINARY p_DatabaseName
-        AND po.ObjectType = 'INDEX'
-        AND BINARY po.ObjectName = BINARY CONCAT(snap.TableName, '.', snap.IndexName)
-    WHERE i.IsPrimaryKey = 0
-      -- New index name doesn't exist
-      AND NOT EXISTS (
-          SELECT 1 FROM _SchemaSmith_IdxDetectNames s2
-          WHERE BINARY s2.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-            AND BINARY s2.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-      )
-      -- Old index exists with same columns (compare normalized column list)
-      AND BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) = BINARY snap.NormColumns
-      -- Same uniqueness
-      AND i.IsUnique = (snap.NonUnique = 0);
-
-    -- Handle renames
-    IF p_WhatIf = 1 THEN
-        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
-        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
-                      SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName))
-        FROM _SchemaSmith_IndexRenames;
-    ELSE
-        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Handle index renames');
-
-        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RenameStmts;
-        CREATE TEMPORARY TABLE _SchemaSmith_RenameStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
-            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        INSERT INTO _SchemaSmith_RenameStmts (LogMsg, Stmt)
-        SELECT
-            CONCAT('  Rename index: ', TableName, '.', OldIndexName, ' -> ', NewIndexName),
-            CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '` ',
-                   SchemaSmith_BuildIndexRenameClause(p_DatabaseName, TableName, OldIndexName, NewIndexName))
-        FROM _SchemaSmith_IndexRenames;
-
-        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_RenameStmts);
-        WHILE @ss_id IS NOT NULL DO
-            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_RenameStmts WHERE RowId = @ss_id;
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
-            PREPARE stmt FROM @exec_sql;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
-            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_RenameStmts WHERE RowId > @ss_id);
-        END WHILE;
-        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RenameStmts;
-
-        -- Update ProductOwnership with the new names. Done set-based after the renames: the
-        -- STEP 1 "new name doesn't exist" filter rules out rename chains (a->b where b is itself
-        -- a live index), so no old name equals another rename's new name and one pass suffices.
-        UPDATE SchemaSmith_ProductOwnership po
-        INNER JOIN _SchemaSmith_IndexRenames r
-            ON BINARY po.ObjectName = BINARY CONCAT(r.TableName, '.', r.OldIndexName)
-        SET po.ObjectName = CONCAT(r.TableName, '.', r.NewIndexName)
-        WHERE BINARY po.ProductName = BINARY p_ProductName
-          AND BINARY po.ObjectSchema = BINARY p_DatabaseName
-          AND po.ObjectType = 'INDEX';
-    END IF;
-
-    -- STEP 1 executed its renames in the live branch, so each renamed index's OLD name is now gone from
-    -- the catalog. Drop those old names from the detection snapshots before STEP 2 -- otherwise a declared
-    -- index whose name equals a renamed-away old name (e.g. two indexes on one column, where one is renamed
-    -- and the other declared under the freed-up old name) would match a stale snapshot row and be wrongly
-    -- flagged as modified, generating a DROP for an index that no longer exists under that name. The
-    -- original read live INFORMATION_SCHEMA here, which already reflected the rename. WhatIf executes no
-    -- rename, so it must keep the old names to match that live-read behaviour -- hence the p_WhatIf guard.
-    IF p_WhatIf = 0 THEN
-        DELETE snap FROM _SchemaSmith_IdxDetectSnap snap
-            JOIN _SchemaSmith_IndexRenames r
-              ON BINARY r.TableName = BINARY snap.TableName AND BINARY r.OldIndexName = BINARY snap.IndexName;
-        DELETE nm FROM _SchemaSmith_IdxDetectNames nm
-            JOIN _SchemaSmith_IndexRenames r
-              ON BINARY r.TableName = BINARY nm.TableName AND BINARY r.OldIndexName = BINARY nm.IndexName;
-    END IF;
-
-    -- =========================================================================
-    -- STEP 2: Detect modified indexes (same name, different definition)
-    -- =========================================================================
-    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ModifiedIndexes;
-    CREATE TEMPORARY TABLE _SchemaSmith_ModifiedIndexes (
-        TableName VARCHAR(128) NOT NULL,
-        IndexName VARCHAR(128) NOT NULL,
-        PRIMARY KEY (TableName, IndexName)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-    -- Find indexes where the name matches but the definition is different
-    INSERT INTO _SchemaSmith_ModifiedIndexes (TableName, IndexName)
-    SELECT
-        SchemaSmith_StripBacktickWrapping(i.TableName) AS TableName,
-        SchemaSmith_StripBacktickWrapping(i.IndexName) AS IndexName
-    FROM _SchemaSmith_Indexes i
-    JOIN _SchemaSmith_IdxDetectSnap snap
-        ON BINARY snap.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-        AND BINARY snap.IndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-    LEFT JOIN _SchemaSmith_ExistingIndexVisibility viz
-        ON BINARY viz.TableName = BINARY snap.TableName
-        AND BINARY viz.IndexName = BINARY snap.IndexName
-    WHERE i.IsPrimaryKey = 0
-      -- Skip indexes that were just renamed
-      AND NOT EXISTS (
-          SELECT 1 FROM _SchemaSmith_IndexRenames r
-          WHERE BINARY r.TableName = BINARY SchemaSmith_StripBacktickWrapping(i.TableName)
-            AND BINARY r.NewIndexName = BINARY SchemaSmith_StripBacktickWrapping(i.IndexName)
-      )
-      -- A declared functional/expression index this target cannot legally CREATE (below the floor / see
-      -- the degrade guard above) is left untouched rather than flagged modified-and-dropped: STEP 3 below
-      -- excludes it from recreation via the identical predicate, so dropping it here would lose it for good.
-      AND NOT (SchemaSmith_IndexHasFunctionalKeyPart(i.IndexColumns) = 1 AND SchemaSmith_SupportsFunctionalIndex() = 0)
-      -- Check if definition differs
-      AND (
-          -- Columns differ
-          BINARY SchemaSmith_NormalizeIndexColumns(i.IndexColumns) != BINARY snap.NormColumns
-          -- Or uniqueness differs
-          OR i.IsUnique != (snap.NonUnique = 0)
-          -- Or visibility differs (FULLTEXT indexes don't support INVISIBLE, skip them). Below the
-          -- invisible-index floor (MySQL 8.0 / MariaDB 10.6) the keyword can't be emitted, so a declared
-          -- invisible index is stored visible; ignore the visibility difference there or it churns every run.
-          -- viz.IsVisible is the once-snapshotted per-engine visibility (IS_VISIBLE / IGNORED), replacing
-          -- the per-candidate SchemaSmith_IndexIsVisible() read; it is populated only at/above the floor,
-          -- which is exactly when SchemaSmith_SupportsInvisibleIndex() = 1 gates this term.
-          OR (BINARY UPPER(snap.IndexType) != BINARY 'FULLTEXT'
-              AND SchemaSmith_SupportsInvisibleIndex() = 1
-              AND i.IsVisible != viz.IsVisible)
-          -- Or comment differs (symmetric: covers added, changed, and cleared, matching the column
-          -- comment predicate in ModifiedTableQuench). FULLTEXT indexes never reach this file (parsed
-          -- separately into _SchemaSmith_FullTextIndexes), so no FULLTEXT exclusion is needed here.
-          OR (BINARY COALESCE(snap.IndexComment, '') != BINARY COALESCE(i.Comment, ''))
-      );
-
-    -- Drop modified indexes (they'll be recreated later)
-    IF p_WhatIf = 1 THEN
-        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop and recreate modified indexes');
-        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-        SELECT CONNECTION_ID(), CONCAT('DROP INDEX `', IndexName, '` ON `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
-        FROM _SchemaSmith_ModifiedIndexes;
-    ELSE
-        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop and recreate modified indexes');
-
-        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropModIdxStmts;
-        CREATE TEMPORARY TABLE _SchemaSmith_DropModIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT)
-            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        INSERT INTO _SchemaSmith_DropModIdxStmts (LogMsg, Stmt)
-        SELECT
-            CONCAT('  Drop and recreate index: ', TableName, '.', IndexName),
-            CONCAT('DROP INDEX `', IndexName, '` ON `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.`', TableName, '`')
-        FROM _SchemaSmith_ModifiedIndexes;
-
-        SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropModIdxStmts);
-        WHILE @ss_id IS NOT NULL DO
-            SELECT LogMsg, Stmt INTO @ss_log, @exec_sql FROM _SchemaSmith_DropModIdxStmts WHERE RowId = @ss_id;
-            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), @ss_log);
-            PREPARE stmt FROM @exec_sql;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
-            SET @ss_id := (SELECT MIN(RowId) FROM _SchemaSmith_DropModIdxStmts WHERE RowId > @ss_id);
-        END WHILE;
-        DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_DropModIdxStmts;
-    END IF;
-
-    -- =========================================================================
     -- STEP 3: Create missing indexes (non-primary)
     -- =========================================================================
-    -- Post-mutation existence snapshot: taken HERE, after STEP 1's renames and STEP 2's drops, so it
+    -- Post-mutation existence snapshot: taken HERE, after ModifiedTableQuench's renames and modified-index drops, so it
     -- reflects the current catalog -- exactly what the original per-index live NOT EXISTS reads saw at
     -- this point. This is the crux the "snapshot once at top" approach would get wrong: a just-dropped
-    -- modified index (STEP 2) must be seen as MISSING here and recreated, so this snapshot must be
+    -- modified index (dropped by ModifiedTableQuench) must be seen as MISSING here and recreated, so this snapshot must be
     -- taken after the drops, not reused from the pre-STEP-1 detection snapshot. One row per index.
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_IdxExistPostDrop;
     CREATE TEMPORARY TABLE _SchemaSmith_IdxExistPostDrop (
@@ -562,8 +210,8 @@ BEGIN
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CreateIdxStmts;
         CREATE TEMPORARY TABLE _SchemaSmith_CreateIdxStmts (RowId INT AUTO_INCREMENT PRIMARY KEY, LogMsg TEXT, Stmt TEXT, AuditName TEXT)
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        -- Detection reads the post-drop snapshot _SchemaSmith_IdxExistPostDrop (taken after STEP 2's
-        -- drops) so a just-dropped modified index (STEP 2) is correctly seen as missing here and recreated.
+        -- Detection reads the post-drop snapshot _SchemaSmith_IdxExistPostDrop (taken after ModifiedTableQuench's
+        -- modified-index drops) so a just-dropped modified index is correctly seen as missing here and recreated.
         INSERT INTO _SchemaSmith_CreateIdxStmts (LogMsg, Stmt, AuditName)
         SELECT
             CONCAT('  Create index: ', SchemaSmith_StripBacktickWrapping(i.TableName), '.', SchemaSmith_StripBacktickWrapping(i.IndexName),
@@ -1123,7 +771,7 @@ WHERE col.CheckExpression IS NOT NULL
     -- (keeps the per-table COALESCE(t.DropIndexesRemovedFromProduct,1) opt-out, PRIMARY/rename/
     -- owned-by-product exclusions) UNION AXIS 2 unknown/out-of-band — then a discrete audit insert.
     -- Modified/for-change indexes are NOT captured: they remain in _SchemaSmith_Indexes so both axes'
-    -- "not in current definition" predicate excludes them (STEP 2 drops-then-recreates them, a
+    -- "not in current definition" predicate excludes them (ModifiedTableQuench drops-then-recreates them, a
     -- transient change, never a protection-withheld drop). Audit rows only, so it runs regardless of
     -- p_WhatIf. The capture signal is the session user-variable @ss_capture_would_drop set by the
     -- caller on the connection (this proc takes no new parameter). ObjectName/ObjectType mirror STEP
