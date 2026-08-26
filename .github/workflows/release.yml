@@ -49,6 +49,7 @@ jobs:
             "Integration Tests (MariaDB 11.4)"
             "Integration Tests (MariaDB 10.6)"
             "Integration Tests (MariaDB 10.2)"
+            "Genuine Sweep Record"
             "Coverage Gate"
             "check-headers"
           )

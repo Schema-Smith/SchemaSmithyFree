@@ -511,3 +511,21 @@ jobs:
 
       - name: Check coverage thresholds
         run: python3 scripts/check-coverage-thresholds.py coverage-merged/Cobertura.xml
+
+  # The genuine-binary sweep CANNOT run here -- no pre-2017 SQL Server Linux image exists, which is why
+  # it is local-only in the first place. So the only thing CI can enforce is that somebody ran it against
+  # a commit whose engine behaviour is still current. Human forgetting is the failure mode: two
+  # 2017-vs-2016 defects reached the v2.5.0 cut because the sweep was skipped, not because it lacked
+  # coverage. Seconds to run, and it needs full history to walk the record's commits.
+  sweep-record:
+    name: Genuine Sweep Record
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Sweep record still covers this tree
+        run: bash scripts/check-sweep-record.sh
