@@ -240,8 +240,16 @@ public abstract class TableQuench_AlterColumnSharedTests : BaseTableQuenchTests
         conn.Open();
         using var cmd = conn.CreateCommand();
 
-        // Create test schema (database in MySQL)
-        cmd.CommandText = $"CREATE DATABASE IF NOT EXISTS `{TestSchema}`";
+        // Create test schema (database in MySQL). DROPPED FIRST, deliberately: TestSchema is a fixed
+        // name shared by every run, the CREATE TABLEs below are IF NOT EXISTS but the CREATE INDEXes
+        // are not, so a run whose TearDown did not execute (interrupted, killed, crashed) leaves the
+        // tables behind and the NEXT run dies in OneTimeSetUp with "Duplicate key name
+        // 'IDX_NoDependency'" -- surfacing as 18 failed tests that look like product defects and are
+        // not. Dropping makes setup self-healing regardless of how the previous run ended.
+        cmd.CommandText = $"DROP DATABASE IF EXISTS `{TestSchema}`";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"CREATE DATABASE `{TestSchema}`";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = $"USE `{TestSchema}`";
