@@ -1005,7 +1005,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 | `KeyIndex` | string | Name of the unique index used as the full-text key. |
 | `ChangeTracking` | string | `"OFF"`, `"MANUAL"`, or `"AUTO"`. |
 | `StopList` | string | Name of a full-text stop list. |
-| `Columns` | string | Comma-separated column specification, e.g. `"[Title],[Body] TYPE COLUMN [BodyType] LANGUAGE 1033"`. Each entry is a bracketed column name, optionally followed by `TYPE COLUMN [col]` (the column holding the document's file extension for a binary column) and `LANGUAGE <lcid>` (the word breaker to tokenize with). |
+| `Columns` | string | Comma-separated column specification, e.g. `"[Title],[Body] TYPE COLUMN [BodyType] LANGUAGE 1033 STATISTICAL_SEMANTICS"`. Each entry is a bracketed column name, optionally followed by `TYPE COLUMN [col]` (the column holding the document's file extension for a binary column), `LANGUAGE <lcid>` (the word breaker to tokenize with), and `STATISTICAL_SEMANTICS` (semantic key phrase and document similarity indexing). Order matters -- SQL Server expects exactly that sequence. |
 | `ShouldApplyExpression` | string | Boolean SQL expression evaluated on the target; the index (or variant) applies only when it is true. |
 | `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
@@ -1016,6 +1016,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 - **No match means none.** When no variant matches a target, the table behaves as if no full-text index were declared there -- any existing full-text index is removed.
 - **No-op when unchanged.** When the deployed index already matches the selected variant, re-deployment performs no full-text work: no drop, no repopulation.
 - **`LANGUAGE` extracts only when it differs from the column default.** SchemaTongs omits `LANGUAGE` for a column already indexed in the language its collation implies, so extracted packages stay uncluttered. A column with no collation (a binary document column indexed through `TYPE COLUMN`) always extracts its `LANGUAGE`, because it has no implied default to fall back on.
+- **`STATISTICAL_SEMANTICS` needs the semantic database.** The clause requires SQL Server 2012 or later with the Semantic Language Statistics Database installed and registered on the instance; without it the server rejects the index with "semantic functionality is not available." SchemaSmith deploys and compares the clause on every supported SQL Server encoding, so declaring it does not force a rebuild on each deploy.
 
 > **Note:** When no variant matches a target, an existing full-text index on that table is dropped -- the absence of a match is treated as "no full-text index here," not "leave it alone."
 
