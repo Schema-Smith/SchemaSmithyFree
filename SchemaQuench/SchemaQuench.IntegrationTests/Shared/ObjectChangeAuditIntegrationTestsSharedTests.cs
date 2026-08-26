@@ -129,6 +129,90 @@ public abstract class ObjectChangeAuditIntegrationTestsSharedTests : BaseTableQu
         conn.Close();
     }
 
+    // A declared index rename must stay a RENAME. The end state of a rename and of a drop-then-recreate
+    // is identical -- new name present, old name absent -- so TableQuench_ShouldRenameIndex passes over
+    // the difference, and the difference is the whole point: a rename is metadata, a recreate is a full
+    // index build plus a window with no index. The audit trail is where a user actually sees which one
+    // happened, so that is what this asserts.
+    //
+    // Guards the index-drop placement move specifically. Index removal currently runs AFTER rename
+    // detection inside MissingIndexesAndConstraintsQuench; moving it to ModifiedTableQuench puts it
+    // BEFORE, where _SchemaSmith_IndexRenames does not exist yet and ProductOwnership still carries the
+    // OLD index name -- so the removal-by-absence axis would happily drop an index that was only
+    // being renamed.
+    [Test]
+    public void TableQuench_RenamingAnIndex_DoesNotReportItAsDropped()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        DropIfExists(cmd, "AuditRename");
+        ClearAudit(cmd);
+
+        // Deploy the index under its first name so SchemaSmith owns it -- ownership is what makes the
+        // removal-by-absence axis consider it at all, so without this the test could not fail.
+        RunTableQuenchProc(cmd, RenameBeforeJson, productName: Product);
+        Assert.That(ReadAudit(cmd).Any(r => r is { Type: "index", Action: "created" } && r.Name.Contains("IX_AuditRename_Before")),
+            "setup: the index must have been created and owned before the rename is exercised");
+
+        ClearAudit(cmd);
+
+        // Same columns, new name -- the shape rename detection exists for.
+        RunTableQuenchProc(cmd, RenameAfterJson, productName: Product);
+        var after = ReadAudit(cmd);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(after.Any(r => r is { Type: "index", Action: "dropped" } && r.Name.Contains("IX_AuditRename_Before")), Is.False,
+                "a renamed index must not be reported as dropped -- that means it was dropped and rebuilt, "
+                + "paying a full index build instead of a metadata rename");
+            Assert.That(after.Any(r => r is { Type: "index", Action: "created" } && r.Name.Contains("IX_AuditRename_After")), Is.False,
+                "nor recreated under the new name -- a rename creates nothing");
+        });
+
+        cmd.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE()"
+                        + " AND TABLE_NAME = 'AuditRename' AND INDEX_NAME = 'IX_AuditRename_After'";
+        Assert.That(System.Convert.ToInt32(cmd.ExecuteScalar()), Is.GreaterThan(0),
+            "and the rename must actually have happened");
+
+        DropIfExists(cmd, "AuditRename");
+        conn.Close();
+    }
+
+    private const string RenameBeforeJson = """
+        [
+        {
+            "Name": "`AuditRename`",
+            "Columns": [
+                { "Name": "`Id`", "DataType": "INT", "Nullable": false },
+                { "Name": "`Label`", "DataType": "VARCHAR(50)", "Nullable": true }
+            ],
+            "Indexes": [
+                { "Name": "`PK_AuditRename`", "PrimaryKey": true, "IndexColumns": "`Id`" },
+                { "Name": "`IX_AuditRename_Before`", "IndexColumns": "`Label`", "Unique": false, "PrimaryKey": false }
+            ]
+        }
+        ]
+        """;
+
+    private const string RenameAfterJson = """
+        [
+        {
+            "Name": "`AuditRename`",
+            "Columns": [
+                { "Name": "`Id`", "DataType": "INT", "Nullable": false },
+                { "Name": "`Label`", "DataType": "VARCHAR(50)", "Nullable": true }
+            ],
+            "Indexes": [
+                { "Name": "`PK_AuditRename`", "PrimaryKey": true, "IndexColumns": "`Id`" },
+                { "Name": "`IX_AuditRename_After`", "IndexColumns": "`Label`", "Unique": false, "PrimaryKey": false }
+            ]
+        }
+        ]
+        """;
+
     private const string CreateJson = """
         [
         {
