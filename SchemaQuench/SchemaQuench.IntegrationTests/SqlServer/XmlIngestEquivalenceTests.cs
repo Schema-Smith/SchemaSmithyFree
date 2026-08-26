@@ -47,7 +47,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
     {""Name"":""ST_Note"",""Columns"":""Note"",""SampleSize"":50}
   ],
   ""FullTextIndex"":[
-    {""Columns"":""Note"",""FullTextCatalog"":""ftCat"",""KeyIndex"":""PK_XmlEquivTable"",""ChangeTracking"":""AUTO"",""StopList"":""SYSTEM""}
+    {""Columns"":""Note LANGUAGE 1033 STATISTICAL_SEMANTICS, Body STATISTICAL_SEMANTICS"",""FullTextCatalog"":""ftCat"",""KeyIndex"":""PK_XmlEquivTable"",""ChangeTracking"":""AUTO"",""StopList"":""SYSTEM""}
   ]
 }]";
 

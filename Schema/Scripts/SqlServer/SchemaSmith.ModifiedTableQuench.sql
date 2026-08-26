@@ -543,6 +543,15 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing FullText Indexes', 10, 100) WITH NOWAIT
+  -- sys.fulltext_index_columns.statistical_semantics is a 2012 column. This proc is NOT swapped on the
+  -- legacy tier (see ForgeKindler's SqlServerXmlSwaps) so it is kindled on the 2008 floor too, where a
+  -- static reference is a CREATE-time 'invalid column' error -- the whole proc fails to deploy, not just
+  -- the semantics clause. Stage through a guarded dynamic INSERT (empty below 2012, where semantic
+  -- indexing does not exist) and join to it below.
+  IF OBJECT_ID('tempdb..#SemanticCols') IS NOT NULL DROP TABLE #SemanticCols
+  CREATE TABLE #SemanticCols ([object_id] INT NOT NULL, column_id INT NOT NULL)
+  IF SchemaSmith.fn_ServerMajorVersion() >= 11
+    EXEC(N'INSERT INTO #SemanticCols ([object_id], column_id) SELECT [object_id], column_id FROM sys.fulltext_index_columns WITH (NOLOCK) WHERE statistical_semantics = 1')
   IF OBJECT_ID('tempdb..#ExistingFullTextIndexes') IS NOT NULL DROP TABLE #ExistingFullTextIndexes
   SELECT t.[Schema], [TableName] = t.[Name],
          STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
@@ -563,7 +572,8 @@ BEGIN TRY
                                  ELSE '' END +
                             -- Mirrors the extractor's render exactly -- drift compares these as strings,
                             -- so a clause on one side only would drop and repopulate the index every deploy.
-                            CASE WHEN fc.statistical_semantics = 1
+                            CASE WHEN EXISTS (SELECT 1 FROM #SemanticCols sc
+                                                WHERE sc.[object_id] = fc.[object_id] AND sc.column_id = fc.column_id)
                                  THEN ' STATISTICAL_SEMANTICS' ELSE '' END
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
             JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id

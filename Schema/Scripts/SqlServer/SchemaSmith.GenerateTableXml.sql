@@ -117,6 +117,13 @@ CREATE TABLE #TempStats ([object_id] INT NOT NULL, stats_id INT NOT NULL)
 IF SchemaSmith.fn_ServerMajorVersion() >= 11
   EXEC sp_executesql N'INSERT INTO #TempStats ([object_id], stats_id) SELECT [object_id], stats_id FROM sys.stats WITH (NOLOCK) WHERE is_temporary = 1 AND [object_id] = @p_ObjId',
     N'@p_ObjId INT', @p_ObjId = @v_ObjectId
+
+-- sys.fulltext_index_columns.statistical_semantics is a 2012 column, so the same CREATE-time hazard as
+-- #TempStats above applies -- staged the same way. Empty below 2012, where semantic indexing does not exist.
+CREATE TABLE #SemanticCols ([object_id] INT NOT NULL, column_id INT NOT NULL)
+IF SchemaSmith.fn_ServerMajorVersion() >= 11
+  EXEC sp_executesql N'INSERT INTO #SemanticCols ([object_id], column_id) SELECT [object_id], column_id FROM sys.fulltext_index_columns WITH (NOLOCK) WHERE statistical_semantics = 1 AND [object_id] = @p_ObjId',
+    N'@p_ObjId INT', @p_ObjId = @v_ObjectId
 ;WITH XMLNAMESPACES ('http://james.newtonking.com/projects/json' AS json)
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
@@ -334,6 +341,9 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                                        CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
                                             THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                             ELSE '' END
+                                       + CASE WHEN EXISTS (SELECT 1 FROM #SemanticCols sc
+                                                             WHERE sc.[object_id] = fc.[object_id] AND sc.column_id = fc.column_id)
+                                              THEN ' STATISTICAL_SEMANTICS' ELSE '' END
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
                   JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
                   WHERE fi.[object_id] = fc.[object_id]

@@ -324,6 +324,12 @@
          [Columns] = STUFF((SELECT ',' + CASE WHEN RTRIM([value]) LIKE '% LANGUAGE [0-9]%'
                                               THEN SchemaSmith.fn_SafeBracketWrap(LEFT(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) - 1)) +
                                                    ' LANGUAGE ' + SUBSTRING(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) + 10, 4000)
+                                              -- A column may carry STATISTICAL_SEMANTICS with no LANGUAGE. Without this
+                                              -- branch the token is bracket-wrapped into the column name and never matches
+                                              -- the live side, churning the index on every deploy. (JSON twin: same shape.)
+                                              WHEN RTRIM([value]) LIKE '% STATISTICAL[_]SEMANTICS'
+                                                   THEN SchemaSmith.fn_SafeBracketWrap(LEFT(RTRIM([value]), CHARINDEX(' STATISTICAL_SEMANTICS', RTRIM([value])) - 1)) +
+                                                        ' STATISTICAL_SEMANTICS'
                                               ELSE SchemaSmith.fn_SafeBracketWrap([value])
                                               END
                       FROM SchemaSmith.fn_SplitList(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '' ORDER BY [Ordinal] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
