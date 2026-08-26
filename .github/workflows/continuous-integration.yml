@@ -16,6 +16,12 @@ on:
       - 'Demos/**/*.ps1'
       - 'Demos/**/*.sh'
       - 'Demos/**/*.sql'
+      # install.sh is not built, not covered by any test, and nothing in CI exercises it, so a change
+      # to it cannot alter a test outcome -- yet it spun the whole three-engine matrix. NOTE: this is
+      # coupled to release.yml's is_non_product list. Once CI skips these commits they have no
+      # check-runs at all, and a release cut straight after one fails the gate with 'check not found'
+      # unless the gate can walk back to a product-identical ancestor. The two lists move together.
+      - 'packaging/install/**'
   pull_request:
     branches: [main]
     paths-ignore:
@@ -31,6 +37,19 @@ on:
       - 'Demos/**/*.ps1'
       - 'Demos/**/*.sh'
       - 'Demos/**/*.sql'
+      # install.sh is not built, not covered by any test, and nothing in CI exercises it, so a change
+      # to it cannot alter a test outcome -- yet it spun the whole three-engine matrix. NOTE: this is
+      # coupled to release.yml's is_non_product list. Once CI skips these commits they have no
+      # check-runs at all, and a release cut straight after one fails the gate with 'check not found'
+      # unless the gate can walk back to a product-identical ancestor. The two lists move together.
+      - 'packaging/install/**'
+
+# Two pushes in quick succession used to run both matrices to completion, and closing a PR did not
+# stop its run -- a closed PR burned the full matrix until it was cancelled by hand. Cancellation is
+# gated on pull_request so a push to main is never silently superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   DOTNET_VERSION: '10.0.x'
