@@ -81,6 +81,13 @@ namespace Schema.Domain
         [JsonProperty(Order = 91)]
         public bool PreventDrop { get; set; }
 
+        // AuthoredOnly for the same reason the Drop*RemovedFromProduct family is: no catalog records the
+        // intent behind an alter-vs-rebuild choice, so extraction has nothing to read it back from and a
+        // re-extract would silently revert whatever was authored.
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template-, product- and environment-level RebuildPolicy for this table only. Null inherits from the nearest level that declares one. The winning policy applies whole — a policy declared here does NOT pick up fields it omits from a higher level.")]
+        [JsonProperty(Order = 92)]
+        public RebuildPolicy RebuildPolicy { get; set; }
+
         [JsonProperty(Order = 90)]
         public string OldName { get; set; }
 

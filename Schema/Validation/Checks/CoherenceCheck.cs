@@ -25,6 +25,7 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string CardinalityCode = "SS-FK-005";
     private const string IndexColumnCode = "SS-IDX-001";
     private const string BackfillWithoutDefaultCode = "SS-COL-001";
+    private const string RebuildThresholdCode = "SS-TBL-001";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -49,6 +50,7 @@ public sealed class CoherenceCheck : ISchemaCheck
                 findings.AddRange(CheckIndex(table, index, location));
 
             findings.AddRange(CheckBackfill(table, location));
+            findings.AddRange(CheckRebuildPolicy(table, location));
         }
 
         return findings;
@@ -106,6 +108,29 @@ public sealed class CoherenceCheck : ISchemaCheck
             yield return new Finding(Severity.Warning, BackfillWithoutDefaultCode, Category, tableLocation,
                 $"Column '{column.Name}' sets BackfillExistingRows but has no Default, so there is no value to " +
                 "apply to existing rows and the setting has no effect.");
+    }
+
+    /// <summary>
+    /// Error, not Warning — the distinction from SS-COL-001 is the point. A BackfillExistingRows with no
+    /// Default is INERT: the deploy runs, the setting simply does nothing, and a warning is proportionate.
+    /// A THRESHOLD mode with no threshold is UNEVALUABLE: there is no number to compare pending changes
+    /// against, so a deploy would have to invent a behaviour — alter in place, or rebuild — and either
+    /// choice is a guess about what the author meant.
+    /// <para>Only the table's OWN declared policy is examined. The deploy-time cascade (environment,
+    /// product, template) is not visible from a package-authoring check, and a table that declares
+    /// nothing here is not the level that would be at fault.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckRebuildPolicy(Table table, string tableLocation)
+    {
+        var policy = table.RebuildPolicy;
+        if (policy == null) yield break;
+        if (!string.Equals(policy.Mode, "THRESHOLD", StringComparison.OrdinalIgnoreCase)) yield break;
+        if (policy.Threshold is >= 1) yield break;
+
+        yield return new Finding(Severity.Error, RebuildThresholdCode, Category, tableLocation,
+            $"Table '{table.Name}' sets RebuildPolicy.Mode 'THRESHOLD' but no Threshold of 1 or more. " +
+            "THRESHOLD needs a threshold to compare against, so the policy cannot be evaluated — set a " +
+            "Threshold, or choose Mode 'ALWAYS' or 'NEVER'.");
     }
 
     private static IEnumerable<Finding> CheckIndex(Table table, Index index, string tableLocation)

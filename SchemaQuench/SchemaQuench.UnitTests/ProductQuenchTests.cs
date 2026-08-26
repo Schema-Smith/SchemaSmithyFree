@@ -2693,4 +2693,132 @@ public class ProductQuenchTests
     [Test] public void ProtectedMode_Off_WhenUnparseable() => Assert.That(ProductQuench.ProtectedModeEnabled(Cfg(("PreventDrop","banana"))), Is.False);
 
     #endregion
+
+    #region ResolveCascadedPolicy (most-specific-wins, WHOLE object) + env-tier composition
+
+    // Deliberately NOT the semantics of ResolveCascadedFlag above: no veto, no combining. The nearest
+    // non-null level is returned entire and the levels below it are never consulted.
+    private static RebuildPolicy Rebuild(string mode, int? threshold = null, bool onOrderMismatch = false) =>
+        new() { Mode = mode, Threshold = threshold, OnOrderMismatch = onOrderMismatch };
+
+    [Test]
+    public void RebuildPolicy_TableWinsOverEveryHigherLevel()
+    {
+        var table = Rebuild("ALWAYS");
+        Assert.That(ProductQuench.ResolveCascadedPolicy(Rebuild("NEVER"), Rebuild("THRESHOLD", 5), Rebuild("NEVER"), table),
+            Is.SameAs(table));
+    }
+
+    [Test]
+    public void RebuildPolicy_TemplateWinsWhenTableIsNull()
+    {
+        var template = Rebuild("THRESHOLD", 2);
+        Assert.That(ProductQuench.ResolveCascadedPolicy(Rebuild("NEVER"), Rebuild("ALWAYS"), template, null),
+            Is.SameAs(template));
+    }
+
+    [Test]
+    public void RebuildPolicy_ProductWinsWhenTableAndTemplateAreNull()
+    {
+        var product = Rebuild("ALWAYS");
+        Assert.That(ProductQuench.ResolveCascadedPolicy(Rebuild("NEVER"), product, null, null), Is.SameAs(product));
+    }
+
+    [Test]
+    public void RebuildPolicy_EnvIsTheLastResortBeforeTheDefault()
+    {
+        var env = Rebuild("THRESHOLD", 9);
+        Assert.That(ProductQuench.ResolveCascadedPolicy(env, null, null, null), Is.SameAs(env));
+    }
+
+    [Test]
+    public void RebuildPolicy_AllLevelsNull_YieldsNever()
+    {
+        var resolved = ProductQuench.ResolveCascadedPolicy(null, null, null, null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(resolved, Is.Not.Null, "callers must never have to null-check the resolved policy");
+            Assert.That(resolved.Mode, Is.EqualTo("NEVER"));
+            Assert.That(resolved.Threshold, Is.Null);
+            Assert.That(resolved.OnOrderMismatch, Is.False);
+        });
+    }
+
+    [Test]
+    public void RebuildPolicy_TableDoesNotInheritAHigherLevelsThreshold()
+    {
+        // THE case this resolver exists to get right. The product asks for THRESHOLD 5; the table
+        // overrides with ALWAYS and nothing else. If the levels blended field-by-field the table would
+        // silently acquire Threshold 5 -- a trigger its author never wrote. It takes its policy WHOLE.
+        var resolved = ProductQuench.ResolveCascadedPolicy(
+            env: null, product: Rebuild("THRESHOLD", 5), template: null, table: Rebuild("ALWAYS"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(resolved.Mode, Is.EqualTo("ALWAYS"));
+            Assert.That(resolved.Threshold, Is.Null,
+                "the product's Threshold must NOT leak into a table that declared its own policy");
+        });
+    }
+
+    [Test]
+    public void RebuildPolicy_TableDoesNotInheritAHigherLevelsOnOrderMismatch()
+    {
+        var resolved = ProductQuench.ResolveCascadedPolicy(
+            env: null, product: Rebuild("NEVER", onOrderMismatch: true), template: null, table: Rebuild("ALWAYS"));
+
+        Assert.That(resolved.OnOrderMismatch, Is.False,
+            "composition is WITHIN a level -- an order-mismatch trigger does not cross the cascade");
+    }
+
+    [Test]
+    public void EnvRebuildPolicy_AbsentWhenNoKeyIsSet()
+    {
+        // An all-defaults object here would shadow a product or template policy that the operator never
+        // meant to override, so "nothing configured" has to stay null rather than become NEVER.
+        Assert.That(ProductQuench.ReadEnvRebuildPolicy(Cfg()), Is.Null);
+    }
+
+    [Test]
+    public void EnvRebuildPolicy_ComposesTheThreeKeysIntoOnePolicy()
+    {
+        var policy = ProductQuench.ReadEnvRebuildPolicy(Cfg(
+            ("RebuildPolicyMode", "threshold"),
+            ("RebuildPolicyThreshold", "4"),
+            ("RebuildPolicyOnOrderMismatch", "true")));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(policy.Mode, Is.EqualTo("THRESHOLD"), "the mode is upper-cased to the authored form");
+            Assert.That(policy.Threshold, Is.EqualTo(4));
+            Assert.That(policy.OnOrderMismatch, Is.True);
+        });
+    }
+
+    [Test]
+    public void EnvRebuildPolicy_OnOrderMismatchAloneStillProducesAPolicy()
+    {
+        var policy = ProductQuench.ReadEnvRebuildPolicy(Cfg(("RebuildPolicyOnOrderMismatch", "true")));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(policy, Is.Not.Null);
+            Assert.That(policy.Mode, Is.EqualTo("NEVER"), "an unset mode stays at the default");
+            Assert.That(policy.OnOrderMismatch, Is.True);
+        });
+    }
+
+    [Test]
+    public void EnvRebuildPolicy_UnparseableThresholdLeavesItUnset()
+    {
+        // Left null so SS-TBL-001's shape ("THRESHOLD with no threshold") is what surfaces, rather than
+        // a silently invented number.
+        var policy = ProductQuench.ReadEnvRebuildPolicy(Cfg(
+            ("RebuildPolicyMode", "THRESHOLD"), ("RebuildPolicyThreshold", "banana")));
+
+        Assert.That(policy.Threshold, Is.Null);
+    }
+
+    #endregion
 }

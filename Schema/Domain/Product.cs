@@ -88,6 +88,14 @@ namespace Schema.Domain
         [JsonProperty(Order = 21)]
         public bool? DropIndexesRemovedFromProduct { get; set; }
 
+        /// <summary>
+        /// Product tier of the rebuild-policy cascade. Null inherits from the environment. Unlike the
+        /// <c>Drop*RemovedFromProduct</c> flags above it, the levels do not combine — the nearest
+        /// declared policy wins whole (<c>ProductQuench.ResolveCascadedPolicy</c>).
+        /// </summary>
+        [JsonProperty(Order = 22)]
+        public RebuildPolicy RebuildPolicy { get; set; }
+
         [JsonIgnore]
         public List<ProductFolder> BeforeFolders => ScriptFolders?.FindAll(f => f.QuenchSlot == ProductQuenchSlot.Before) ?? [];
 

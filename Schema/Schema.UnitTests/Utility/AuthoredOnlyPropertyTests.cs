@@ -56,7 +56,18 @@ public class AuthoredOnlyPropertyTests
             if (original == null || extracted == null) continue;
 
             foreach (var p in marked)
-                p.SetValue(original, SampleValueFor(p.PropertyType));
+            {
+                var sample = SampleValueFor(p.PropertyType);
+                // A null sample cannot distinguish "copied" from "never set" -- both sides read null and
+                // the comparison below passes without testing anything. Fail here instead, so a future
+                // AuthoredOnly property of an un-constructible type is a red build rather than a silent
+                // hole in this guard.
+                Assert.That(sample, Is.Not.Null,
+                    $"{type.Name}.{p.Name} is AuthoredOnly but SampleValueFor cannot produce a value for "
+                    + $"{p.PropertyType.Name}, which would make this check vacuous for it. Teach "
+                    + "SampleValueFor about the type.");
+                p.SetValue(original, sample);
+            }
 
             // Drive the PUBLIC entry point SchemaTongs actually calls, not the copier directly.
             // Calling the copier straight would still pass with the call site removed -- which is
@@ -115,6 +126,18 @@ public class AuthoredOnlyPropertyTests
         Assert.That(extracted.Name, Is.EqualTo("[T]"), "the extracted table must be left intact");
     }
 
+    /// <summary>
+    /// Produces a value distinguishable from the extracted object's default, so that "did this survive
+    /// the copy?" is a question with a real answer.
+    /// <para>
+    /// This used to return null for any reference type other than string, which made the whole check
+    /// VACUOUS for such a property: the sample was null, the extracted value was null, and
+    /// <c>Equals(null, null)</c> passed while proving nothing. <c>Table.RebuildPolicy</c> is the first
+    /// reference-typed member of the AuthoredOnly family, so it was the first property the guard did
+    /// not actually guard. Anything not constructible here now returns null on purpose and the caller
+    /// fails on it, rather than passing quietly.
+    /// </para>
+    /// </summary>
     private static object SampleValueFor(Type t)
     {
         t = Nullable.GetUnderlyingType(t) ?? t;
@@ -122,6 +145,7 @@ public class AuthoredOnlyPropertyTests
         if (t == typeof(byte)) return (byte)42;
         if (t == typeof(int)) return 42;
         if (t == typeof(string)) return "authored";
-        return t.IsValueType ? Activator.CreateInstance(t) : null;
+        if (t.IsValueType) return Activator.CreateInstance(t);
+        return t.GetConstructor(Type.EmptyTypes) != null ? Activator.CreateInstance(t) : null;
     }
 }

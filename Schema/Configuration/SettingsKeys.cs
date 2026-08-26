@@ -180,6 +180,12 @@ public static class SettingsKeys
     public const string DropExcludeConstraintsRemovedFromProduct = "DropExcludeConstraintsRemovedFromProduct";
     public const string DropStatisticsRemovedFromProduct = "DropStatisticsRemovedFromProduct";
     public const string DropIndexesRemovedFromProduct = "DropIndexesRemovedFromProduct";
+    // Flat keys, not a bound RebuildPolicy section: every other setting here is a flat string key and
+    // there is no section-binding facility to reuse. The three compose ONE policy object at the env
+    // tier, which then competes with the product/template/table levels as a whole.
+    public const string RebuildPolicyMode = "RebuildPolicyMode";
+    public const string RebuildPolicyThreshold = "RebuildPolicyThreshold";
+    public const string RebuildPolicyOnOrderMismatch = "RebuildPolicyOnOrderMismatch";
     public const string PreventDrop = "PreventDrop";
     public const string UpdateTables = "UpdateTables";
     public const string KindleTheForge = "KindleTheForge";
