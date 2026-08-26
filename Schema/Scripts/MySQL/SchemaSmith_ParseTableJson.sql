@@ -132,7 +132,11 @@ BEGIN
     INSERT INTO _SchemaSmith_ExistingTables (TableName)
     SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
     WHERE BINARY TABLE_SCHEMA = BINARY p_DatabaseName
-    AND TABLE_TYPE = 'BASE TABLE';
+    -- MariaDB reports a system-versioned table as 'SYSTEM VERSIONED', not 'BASE TABLE'. This list is
+    -- what sets NewTable = 1, so filtering on 'BASE TABLE' alone made such a table look new and the
+    -- deploy issued a CREATE for a table that already exists. Managing the versioning attribute is a
+    -- separate feature; being able to see the table at all is not.
+    AND TABLE_TYPE IN ('BASE TABLE', 'SYSTEM VERSIONED');
 
     -- Now set NewTable = 1 for tables not found in snapshot
     UPDATE _SchemaSmith_Tables t
