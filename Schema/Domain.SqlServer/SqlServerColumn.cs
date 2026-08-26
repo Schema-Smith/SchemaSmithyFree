@@ -39,5 +39,22 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 108)]
         public string EncryptionAlgorithm { get; set; }
 
+        // ALTER TABLE ... ADD col type NULL DEFAULT x WITH VALUES. Without it SQL Server leaves existing
+        // rows NULL when a NULLABLE column with a default is added -- PostgreSQL, MySQL and MariaDB all
+        // backfill instead, so this is a genuine SQL Server difference rather than a missing knob elsewhere.
+        // A NOT NULL column already backfills, so the clause only changes anything for the nullable case.
+        //
+        // AuthoredOnly because the catalog does not record whether the clause was used -- there is nothing
+        // to extract, and without the marker a re-extract would silently drop it.
+        //
+        // Opt-in on purpose: defaulting it on would rewrite every existing row of a table on any nullable
+        // column add, which is a data change nobody asked for.
+        [SchemaProperty(AuthoredOnly = true,
+            Description = "SQL Server only. When adding this column to an existing table, apply its Default to " +
+                          "rows that are already there. Without it a nullable column's existing rows stay NULL. " +
+                          "Requires Default; ignored when the column is created with the table.")]
+        [JsonProperty(Order = 110)]
+        public bool BackfillExistingRows { get; set; }
+
     }
 }

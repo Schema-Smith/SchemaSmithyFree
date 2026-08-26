@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
+using Schema.Domain.SqlServer;
 using Index = Schema.Domain.Index;
 
 namespace Schema.Validation.Checks;
@@ -23,6 +24,7 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string RelatedColumnCode = "SS-FK-004";
     private const string CardinalityCode = "SS-FK-005";
     private const string IndexColumnCode = "SS-IDX-001";
+    private const string BackfillWithoutDefaultCode = "SS-COL-001";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -45,6 +47,8 @@ public sealed class CoherenceCheck : ISchemaCheck
 
             foreach (var index in table.Indexes)
                 findings.AddRange(CheckIndex(table, index, location));
+
+            findings.AddRange(CheckBackfill(table, location));
         }
 
         return findings;
@@ -87,6 +91,21 @@ public sealed class CoherenceCheck : ISchemaCheck
         foreach (var column in fkRelatedColumns.Where(column => !relatedColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, RelatedColumnCode, Category, location,
                 $"Related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
+    }
+
+    /// <summary>
+    /// BackfillExistingRows renders as ALTER TABLE ... WITH VALUES, which SQL Server rejects as a SYNTAX
+    /// error when the column has no DEFAULT — so the deploy path only emits it alongside one. That guard
+    /// keeps the batch runnable but makes the setting a silent no-op, which is the shape worth catching
+    /// here: the author asked for existing rows to be populated and nothing would populate them.
+    /// </summary>
+    private static IEnumerable<Finding> CheckBackfill(Table table, string tableLocation)
+    {
+        foreach (var column in table.Columns.OfType<SqlServerColumn>()
+                     .Where(c => c.BackfillExistingRows && string.IsNullOrWhiteSpace(c.Default)))
+            yield return new Finding(Severity.Warning, BackfillWithoutDefaultCode, Category, tableLocation,
+                $"Column '{column.Name}' sets BackfillExistingRows but has no Default, so there is no value to " +
+                "apply to existing rows and the setting has no effect.");
     }
 
     private static IEnumerable<Finding> CheckIndex(Table table, Index index, string tableLocation)

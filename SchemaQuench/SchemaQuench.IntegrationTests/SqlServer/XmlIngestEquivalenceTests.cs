@@ -28,6 +28,7 @@ namespace SchemaQuench.IntegrationTests.SqlServer
     {""Name"":""Id"",""DataType"":""INT"",""Nullable"":false},
     {""Name"":""Amount"",""DataType"":""DECIMAL(10,2)"",""Nullable"":true,""Default"":""0""},
     {""Name"":""Note"",""DataType"":""NVARCHAR(200)"",""Nullable"":true,""Collation"":""SQL_Latin1_General_CP1_CI_AS""},
+    {""Name"":""Backfilled"",""DataType"":""INT"",""Nullable"":true,""Default"":""3"",""BackfillExistingRows"":true},
     {""Name"":""Computed"",""DataType"":""INT"",""ComputedExpression"":""Id + 1"",""Persisted"":true,""Nullable"":false}
   ],
   ""Indexes"":[

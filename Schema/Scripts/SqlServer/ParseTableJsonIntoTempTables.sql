@@ -115,7 +115,7 @@
                             ELSE REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP') END,
          [Nullable] = ISNULL(c.[Nullable], 0),
          c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
-         [Sparse] = ISNULL(c.[Sparse], 0), [IsColumnSet] = ISNULL(c.[IsColumnSet], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
+         [Sparse] = ISNULL(c.[Sparse], 0), [IsColumnSet] = ISNULL(c.[IsColumnSet], 0), [BackfillExistingRows] = ISNULL(c.[BackfillExistingRows], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
          [EncryptionType] = ISNULL(c.[EncryptionType], 'NONE'), [EncryptionKey] = RTRIM(ISNULL(c.[EncryptionKey], '')), [EncryptionAlgorithm] = RTRIM(ISNULL(c.[EncryptionAlgorithm], '')),
          [OldName] = SchemaSmith.fn_SafeBracketWrap(c.[OldName]),
          CONVERT(BIT, CASE WHEN (RTRIM(ISNULL([ComputedExpression], '')) <> '' OR NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1))
@@ -165,6 +165,7 @@
       [Persisted] BIT '$.Persisted',
       [Sparse] BIT '$.Sparse',
       [IsColumnSet] BIT '$.IsColumnSet',
+      [BackfillExistingRows] BIT '$.BackfillExistingRows',
       [Collation] NVARCHAR(500) '$.Collation',
       [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction',
       [EncryptionType] NVARCHAR(100) '$.EncryptionType',
@@ -361,7 +362,13 @@
   DROP TABLE IF EXISTS #FullTextIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
-         f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
+         -- Guarded like StopList beside it. Unguarded, this concatenates into the CREATE FULLTEXT INDEX
+         -- statement, and T-SQL concatenation with NULL yields NULL -- the whole statement becomes NULL and
+         -- NO index is created, with no error and no log line. Reachable from an ordinary package: the C#
+         -- default is AUTO, but an explicit "ChangeTracking": null in a table file overwrites it. 'AUTO'
+         -- here matches that C# default, so an omitted and an explicitly-null value behave the same.
+         [ChangeTracking] = COALESCE(NULLIF(RTRIM(f.[ChangeTracking]), ''), 'AUTO'),
+         [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
          -- Full-text LANGUAGE churn: a per-column "LANGUAGE nnnn" suffix must round-trip byte-identical
          -- against the live-side build in ModifiedTableQuench.sql (drift compares these as strings). Peel
          -- it off before bracket-wrapping the column (+ optional TYPE COLUMN) part -- same shape as the

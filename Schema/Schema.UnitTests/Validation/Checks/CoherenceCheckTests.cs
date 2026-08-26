@@ -45,6 +45,56 @@ public class CoherenceCheckTests
         Columns = { new SqlServerColumn { Name = "Id", DataType = "int" } }
     };
 
+    private static Finding[] RunOn(SqlServerTable table) =>
+        new CoherenceCheck().Run(Context(TemplateWithTables("T", table))).ToArray();
+
+    [Test]
+    public void BackfillWithoutDefault_IsWarning()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Note", DataType = "int", BackfillExistingRows = true } }
+        };
+
+        var finding = RunOn(table).Single(f => f.Code == "SS-COL-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning),
+                "the deploy still succeeds -- the setting simply does nothing");
+            Assert.That(finding.Message, Does.Contain("Note"));
+        });
+    }
+
+    [Test]
+    public void BackfillWithADefault_IsClean()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Note", DataType = "int", Default = "7", BackfillExistingRows = true } }
+        };
+
+        Assert.That(RunOn(table).Any(f => f.Code == "SS-COL-001"), Is.False);
+    }
+
+    [Test]
+    public void DefaultWithoutBackfill_IsClean()
+    {
+        // The ordinary case by far. Flagging it would make the rule noise on nearly every package.
+        var table = new SqlServerTable
+        {
+            Name = "Order",
+            Schema = "dbo",
+            Columns = { new SqlServerColumn { Name = "Note", DataType = "int", Default = "7" } }
+        };
+
+        Assert.That(RunOn(table).Any(f => f.Code == "SS-COL-001"), Is.False);
+    }
+
     [Test]
     public void FkLocalColumnMissing_IsError()
     {
