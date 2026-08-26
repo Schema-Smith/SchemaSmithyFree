@@ -78,6 +78,8 @@ The JSON schema can enforce shape, but it can't confirm that a foreign key actua
 | `SS-FK-004` | Error | A foreign key's `RelatedColumns` entry names a column that doesn't exist on the related table. |
 | `SS-FK-005` | Error | `Columns` and `RelatedColumns` have different entry counts -- the column lists must be the same length. |
 | `SS-IDX-001` | Error | An index's `IndexColumns` entry names a column that doesn't exist on the table. |
+| `SS-COL-001` | Warning | A column sets `BackfillExistingRows` but has no `Default`, so there is no value to apply to rows that already exist and the setting does nothing. |
+| `SS-TBL-001` | Error | A table's `RebuildPolicy` uses `Mode: "THRESHOLD"` without a `Threshold` of 1 or more, so the policy cannot be evaluated. |
 
 Related-table resolution honors the same schema defaulting a real deployment uses -- an explicit `RelatedTableSchema`, a `schema.table` prefix on `RelatedTable`, or (falling back) the owning table's own schema. Because every foreign key target resolves to a concrete schema one way or another, there's no such thing as an "ambiguous target" here -- a `RelatedTable` either resolves to a real table or it doesn't.
 
