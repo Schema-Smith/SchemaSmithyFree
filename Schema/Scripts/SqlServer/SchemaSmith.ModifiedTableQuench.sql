@@ -1,4 +1,4 @@
--- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
@@ -560,7 +560,11 @@ BEGIN TRY
                             -- default to compare against, so LANGUAGE is always emitted for it.
                             CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
                                  THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
-                                 ELSE '' END
+                                 ELSE '' END +
+                            -- Mirrors the extractor's render exactly -- drift compares these as strings,
+                            -- so a clause on one side only would drop and repopulate the index every deploy.
+                            CASE WHEN fc.statistical_semantics = 1
+                                 THEN ' STATISTICAL_SEMANTICS' ELSE '' END
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
             JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
             WHERE fi.[object_id] = fc.[object_id]

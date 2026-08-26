@@ -252,7 +252,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                                        -- make such a column's language permanently unrepresentable.
                                        CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
                                             THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
-                                            ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
+                                            ELSE '' END +
+                                       -- STATISTICAL_SEMANTICS is the last of the per-column trio and
+                                       -- follows LANGUAGE, matching SQL Server's own DDL order.
+                                       CASE WHEN fc.statistical_semantics = 1
+                                            THEN ' STATISTICAL_SEMANTICS' ELSE '' END
+                                             AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
                   JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
                   WHERE fi.[object_id] = fc.[object_id]) AS [Columns]
