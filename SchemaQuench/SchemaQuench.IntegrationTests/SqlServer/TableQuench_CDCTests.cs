@@ -1,7 +1,11 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System;
+using System.Data;
+using System.Threading;
 using Schema.DataAccess;
 using Schema.Domain;
+using Schema.Utility;
 
 namespace SchemaQuench.IntegrationTests.SqlServer;
 
@@ -9,6 +13,36 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 [NonParallelizable]
 public class TableQuench_CDCTests : BaseTableQuenchTests
 {
+    // sp_cdc_enable_table writes replication metadata (sp_MSverboselogging -> SetReplicated), which is
+    // database-wide -- so it deadlocks against any sibling fixture doing DDL in the same database. This
+    // fixture being NonParallelizable does not prevent that: NUnit still runs parallelizable fixtures
+    // alongside the non-parallel queue. Observed once as a 1205 wrapped inside error 22832, which is why
+    // matching on the deadlock text matters -- the outer error number is not 1205.
+    //
+    // Retrying beats serializing the whole suite, and beats narrowing the run to a mode that happens to
+    // pass. The re-check exists because a failed enable can leave the table already enabled.
+    private void ExecuteWithDeadlockRetry(IDbCommand cmd)
+    {
+        var sql = cmd.CommandText;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                cmd.ExecuteNonQuery();
+                return;
+            }
+            catch (Exception e) when (e.Message.ContainsIgnoringCase("deadlock victim"))
+            {
+                Thread.Sleep(1000);
+                cmd.CommandText = sql;
+            }
+        }
+
+        // Out of retries -- run it once more unguarded so the real error surfaces rather than a
+        // synthesized one that hides which command failed.
+        cmd.ExecuteNonQuery();
+    }
+
     [Test]
     public void ShouldEnableCDCOnTable()
     {
@@ -60,7 +94,7 @@ public class TableQuench_CDCTests : BaseTableQuenchTests
 CREATE TABLE dbo.DisableCDCTest (Id INT NOT NULL, Val NVARCHAR(100) NULL)
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'DisableCDCTest', @role_name = NULL
 ";
-        cmd.ExecuteNonQuery();
+        ExecuteWithDeadlockRetry(cmd);
 
         // Verify CDC is enabled before quench
         cmd.CommandText = "SELECT is_tracked_by_cdc FROM sys.tables WHERE object_id = OBJECT_ID('dbo.DisableCDCTest')";
@@ -102,7 +136,7 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'DisableCD
 CREATE TABLE dbo.CDCSwapTest (Id INT IDENTITY(1,1) NOT NULL, Val NVARCHAR(100) NULL)
 INSERT dbo.CDCSwapTest (Val) VALUES ('before swap')
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCSwapTest', @role_name = NULL";
-        cmd.ExecuteNonQuery();
+        ExecuteWithDeadlockRetry(cmd);
 
         // Verify CDC is tracking and capture the original column count
         cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCSwapTest')";
@@ -161,7 +195,7 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCSwapTe
         cmd.CommandText = @"
 CREATE TABLE dbo.CDCAddColTest (Id INT NOT NULL, Val NVARCHAR(100) NULL)
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCAddColTest', @role_name = NULL";
-        cmd.ExecuteNonQuery();
+        ExecuteWithDeadlockRetry(cmd);
 
         // Verify initial captured column count
         cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCAddColTest')";
@@ -215,7 +249,7 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCAddCol
         cmd.CommandText = @"
 CREATE TABLE dbo.CDCDropColTest (Id INT NOT NULL, Val NVARCHAR(100) NULL, Extra INT NULL)
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCDropColTest', @role_name = NULL";
-        cmd.ExecuteNonQuery();
+        ExecuteWithDeadlockRetry(cmd);
 
         // Verify initial captured column count
         cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')";
@@ -268,7 +302,7 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCDropCo
         cmd.CommandText = @"
 CREATE TABLE dbo.CDCNoChangeTest (Id INT NOT NULL, Val NVARCHAR(100) NULL)
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCNoChangeTest', @role_name = NULL";
-        cmd.ExecuteNonQuery();
+        ExecuteWithDeadlockRetry(cmd);
 
         cmd.CommandText = "SELECT create_date FROM cdc.change_tables WHERE source_object_id = OBJECT_ID('dbo.CDCNoChangeTest')";
         var createDateBefore = (System.DateTime)cmd.ExecuteScalar();
@@ -323,7 +357,7 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCNoChan
 CREATE TABLE dbo.CDCHistoryTest (Id INT IDENTITY(1,1) NOT NULL, Val NVARCHAR(100) NULL)
 INSERT dbo.CDCHistoryTest (Val) VALUES ('tracked')
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCHistoryTest', @role_name = NULL";
-        cmd.ExecuteNonQuery();
+        ExecuteWithDeadlockRetry(cmd);
 
         cmd.CommandText = @"SELECT ct.object_id FROM cdc.change_tables ct
                             WHERE ct.source_object_id = OBJECT_ID('dbo.CDCHistoryTest')";
@@ -380,7 +414,7 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCHistor
         cmd.CommandText = @"
 CREATE TABLE dbo.CDCCeilingTest (Id INT IDENTITY(1,1) NOT NULL, Val NVARCHAR(100) NULL)
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCCeilingTest', @role_name = NULL";
-        cmd.ExecuteNonQuery();
+        ExecuteWithDeadlockRetry(cmd);
 
         RunTableQuenchProc(cmd, CeilingPackage(withExtra: false));
 
