@@ -87,6 +87,39 @@ SELECT COUNT(*) FROM sys.fulltext_index_columns fc WITH (NOLOCK)
         conn.Close();
     }
 
+    // ChangeTracking concatenates into the CREATE FULLTEXT INDEX statement, and T-SQL concatenation with
+    // NULL yields NULL -- so a null value made the whole statement NULL and NO index was created, silently:
+    // no error, no log line, and the next deploy would try again and fail the same way. The C# default is
+    // "AUTO", but an explicit null in a table file overwrites a property initializer, so this was reachable
+    // from an ordinary package rather than only by calling the proc by hand.
+    [Test]
+    public void FullText_NullChangeTracking_StillCreatesTheIndex()
+    {
+        const string tableName = "FtNullTracking";
+        using var conn = (DbConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        CreateTestTable(cmd, tableName);
+
+        RunIndexOnlyQuench(cmd, tableName,
+            $$"""{ "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_{{tableName}}]", "Columns": "[Title]", "ChangeTracking": null }""");
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.fulltext_indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.{tableName}')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1),
+            "a null ChangeTracking must fall back to the default, not silently skip the whole index");
+
+        cmd.CommandText = $@"
+SELECT fi.change_tracking_state_desc FROM sys.fulltext_indexes fi WITH (NOLOCK)
+  WHERE fi.[object_id] = OBJECT_ID('dbo.{tableName}')";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("AUTO"),
+            "the fallback must match the C# default so omitted and explicitly-null behave the same");
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
     private static string DeployedCatalog(DbCommand cmd, string tableName)
     {
         cmd.CommandText = $@"

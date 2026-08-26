@@ -160,7 +160,13 @@ BEGIN TRY
   IF OBJECT_ID('tempdb..#FullTextIndexes') IS NOT NULL DROP TABLE #FullTextIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
-         f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
+         -- Guarded like StopList beside it. Unguarded, this concatenates into the CREATE FULLTEXT INDEX
+         -- statement, and T-SQL concatenation with NULL yields NULL -- the whole statement becomes NULL and
+         -- NO index is created, with no error and no log line. Reachable from an ordinary package: the C#
+         -- default is AUTO, but an explicit "ChangeTracking": null in a table file overwrites it. 'AUTO'
+         -- here matches that C# default, so an omitted and an explicitly-null value behave the same.
+         [ChangeTracking] = COALESCE(NULLIF(RTRIM(f.[ChangeTracking]), ''), 'AUTO'),
+         [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
          -- Full-text LANGUAGE churn: same round-trip contract as the JSON twin -- peel off a trailing
          -- "LANGUAGE nnnn" suffix before bracket-wrapping the column (+ optional TYPE COLUMN) part, then
          -- reattach it, so this matches the live-side build below byte-for-byte.
