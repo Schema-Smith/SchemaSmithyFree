@@ -137,6 +137,11 @@ jobs:
           - 1440:1433
         options: --name mssql
     steps:
+      # MUST be first: "Provision the semantic language statistics database" below runs a script
+      # from ./scripts/, which does not exist until the repo is checked out. It previously sat after
+      # that step and failed with exit 127, skipping the entire SQL Server integration leg.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Install Full-Text Search on SQL Server
         run: |
           retry() {
@@ -178,8 +183,6 @@ jobs:
           docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "
             ALTER LOGIN [sa] WITH NAME = [$TEST_USER];
           "
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
