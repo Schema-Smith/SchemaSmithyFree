@@ -619,7 +619,7 @@ Two situations make a rebuild the better move:
 | `Mode` | Behaviour |
 |---|---|
 | `NEVER` | **Default.** Always alter in place. |
-| `ALWAYS` | Rebuild whenever any change is detected for the table. |
+| `ALWAYS` | Rebuild whenever a column modification or removal is detected for the table. |
 | `THRESHOLD` | Rebuild when the number of pending **column modifications** reaches `Threshold`. |
 
 `OnOrderMismatch` is a separate switch that composes with any `Mode`, so `{ "Mode": "THRESHOLD",
@@ -665,6 +665,13 @@ scripts for these.
 
 The refusal fires in `--WhatIf` too, so a preview shows the impossibility rather than leaving it to the
 real run.
+
+A rebuild is also **skipped** — quietly, and the table is altered in place instead — when this run has
+promised not to remove anything by absence: `PreventDrop` is on for the environment, or the table has a
+column the package no longer declares whose drop `DropColumnsRemovedFromProduct` is suppressing. A
+rebuild builds the replacement from the declared definition alone, so it would remove that column
+anyway; declining the rebuild costs an in-place alter, taking it costs the data the protection existed
+to keep.
 
 `--Validate` reports `SS-TBL-001` when a policy sets `Mode: "THRESHOLD"` without a `Threshold` — that
 policy cannot be evaluated, so it is an error rather than a setting that quietly does nothing.

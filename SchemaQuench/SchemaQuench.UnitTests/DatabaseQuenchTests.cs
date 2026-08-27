@@ -2778,6 +2778,103 @@ public class DatabaseQuenchTests
 
     #endregion
 
+    #region RebuildPolicy threading
+
+    // The resolved upper-tier policy is the only thing that lets a table WITHOUT its own RebuildPolicy be
+    // rebuilt, so how it is rendered into each engine's call is load-bearing: an unquoted mode, or a
+    // Threshold rendered as 0 instead of NULL, would silently change which tables get elected. These pin
+    // the rendering, not the plumbing.
+
+    [Test]
+    public void QuenchModifiedTables_SqlServer_WithNoPolicy_SendsNeverAndANullThreshold()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyMode = 'NEVER'"),
+            "A DatabaseQuench with no resolved policy must send the domain object's own NEVER default.");
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyThreshold = NULL"),
+            "An absent Threshold must be the SQL literal NULL. Rendering it as a number would make a "
+            + "THRESHOLD policy with no Threshold rebuild at some invented count.");
+    }
+
+    [Test]
+    public void QuenchModifiedTables_SqlServer_SendsTheResolvedPolicy()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null)
+        {
+            CascadedRebuildPolicy = new RebuildPolicy { Mode = "threshold", Threshold = 4 }
+        };
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyMode = 'THRESHOLD'"),
+            "The mode is upper-cased on the way out so the procs compare against one spelling.");
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyThreshold = 4"),
+            "The resolved Threshold must reach the procedure, or THRESHOLD can never fire.");
+    }
+
+    [Test]
+    public void QuenchModifiedTables_PostgreSQL_SendsTheResolvedPolicy()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "true", "true", "true", "true", "true", "true", "false", false, false, null)
+        {
+            CascadedRebuildPolicy = new RebuildPolicy { Mode = "ALWAYS" }
+        };
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("p_RebuildPolicyMode := 'ALWAYS'"));
+        Assert.That(mockCmd.CommandText, Does.Contain("p_RebuildPolicyThreshold := NULL"),
+            "ALWAYS carries no Threshold, and NULL is what the procedure's THRESHOLD arm tests for.");
+    }
+
+    [Test]
+    public void QuenchModifiedTables_MySQL_SetsTheRebuildPolicySessionVariables()
+    {
+        // MySQL takes the policy in session variables rather than parameters (no default parameter values,
+        // ~30 direct call sites), so the SET is the whole transport. It must be issued on EVERY call: a
+        // pooled connection carrying a previous template's ALWAYS would rebuild tables that never asked.
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Schema.Domain.Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null)
+        {
+            CascadedRebuildPolicy = new RebuildPolicy { Mode = "THRESHOLD", Threshold = 7 }
+        };
+
+        var mockCmd = CreateMockCommand();
+        var issued = new List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => issued.Add(mockCmd.CommandText));
+
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(issued.Any(s => s.Contains("@ss_rebuild_policy_mode = 'THRESHOLD'")
+                                    && s.Contains("@ss_rebuild_policy_threshold = 7")),
+            "The rebuild policy must be pushed into the session before the CALL. Statements issued: "
+            + string.Join(" | ", issued));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     // Positional arguments of a MySQL "CALL proc(a, b, c)" statement, trimmed. Lets a test assert the

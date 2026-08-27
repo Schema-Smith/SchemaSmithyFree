@@ -313,6 +313,193 @@ BEGIN
     -- deploy works. Nothing to do here.
 
     -- =======================
+    -- STEP 2.95: THE REBUILD DECISION POINT
+    -- =======================
+    -- WHY HERE. This is the last point before anything is dismantled: STEP 2.9 immediately below carries
+    -- the FIRST DDL this procedure executes, and what it executes is a dependent-object drop (the foreign
+    -- keys that block a column-level collation change). Everything above it is bookkeeping that leaves
+    -- every table's shape alone -- version-degrade manifest rows and the ownership reconcile for tables
+    -- MissingTableAndColumnQuench already renamed. That the renames landed earlier matters:
+    -- SchemaSmith_RebuildTable refuses outright while a table or column rename is pending, because the
+    -- copy matches columns by their CURRENT name. Everything from STEP 2.9 on is taking apart objects a
+    -- rebuild drops wholesale, and a rebuild inheriting a half-dismantled table would have RebuildTable's
+    -- pre-rebuild refusals reasoning about a live state that no longer matches the declared file. Column
+    -- detection is complete here because this engine has no live-column snapshot at all -- every column
+    -- pass reads INFORMATION_SCHEMA.COLUMNS at the moment it runs -- so the two facts the decision needs
+    -- are computed here, immediately below, from that same live source.
+    --
+    -- OPT-IN BY CONSTRUCTION. _SchemaSmith_RebuildElection is filled by a WHERE that only an explicit
+    -- ALWAYS/THRESHOLD can satisfy. A package with no RebuildPolicy anywhere resolves to the domain
+    -- object's NEVER default at every level, elects nothing, and the drain loop never runs: no rebuild,
+    -- no statement, nothing added to the run. A rebuild moves user data, so a table that did not ask for
+    -- one must never get one, and that has to be structurally true rather than true because the
+    -- conditions happen not to match.
+    --
+    -- WHOLE-OBJECT RESOLUTION. RebuildPolicySpecified picks WHICH policy applies -- the table's own, or
+    -- the resolved upper-tier one -- and then every field comes from that ONE policy. Never a per-field
+    -- COALESCE: a table declaring only { "Mode": "ALWAYS" } must not inherit a product's Threshold.
+    -- Mirrors ProductQuench.ResolveCascadedPolicy.
+    --
+    -- THE UPPER TIER ARRIVES IN SESSION VARIABLES, not parameters, following the same decision (and the
+    -- same reasoning) as @ss_capture_would_drop in STEP 8: MySQL has no default parameter values, so a
+    -- new parameter is a breaking change for every one of this procedure's ~30 direct call sites. An
+    -- unset variable reads NULL and COALESCEs to NEVER, which is the safe direction -- a caller that
+    -- forgets to set them elects no rebuild rather than an unintended one. DatabaseQuench sets all three
+    -- immediately before each call so a pooled connection can never carry a stale policy from a previous
+    -- template (see SetMySqlRebuildPolicy).
+    --
+    -- NO EXPLICIT BYPASS IS NEEDED ON THIS ENGINE, and that is a property of how the passes are written
+    -- rather than luck: every column pass below (STEP 3 modify, STEP 3.5 generated-status recreate,
+    -- STEP 4 drop) re-reads INFORMATION_SCHEMA.COLUMNS at the moment it runs. A rebuilt table's live
+    -- columns already ARE the declared definition, so each of those predicates finds nothing for it.
+    -- (SQL Server and PostgreSQL compare against a snapshot taken before this point, so there the
+    -- snapshot has to be pruned; here there is no snapshot to go stale.) The one visible difference is
+    -- in WhatIf: nothing is actually rebuilt in a preview, so a previewed rebuild is listed alongside
+    -- the in-place statements it would have replaced. The preview is honest about the rebuild -- the
+    -- 'wouldRebuild' audit row and the full printed sequence are both there -- and no statement runs.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildFacts;
+    CREATE TEMPORARY TABLE _SchemaSmith_RebuildFacts (
+        TableName VARCHAR(128) NOT NULL PRIMARY KEY,
+        ModificationPasses INT NOT NULL DEFAULT 0,
+        HasColumnDrop TINYINT NOT NULL DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    -- THE THRESHOLD COUNT: column-MODIFICATION passes only, which is what a rebuild actually eliminates.
+    -- The predicate is the union of the two passes that modify an existing column in place -- STEP 3's
+    -- MODIFY COLUMN comparison and STEP 3.5's generated-status DROP+ADD -- expressed as one OR because
+    -- STEP 3 carves the generated-status columns OUT and STEP 3.5 takes exactly those. MUST stay in
+    -- lockstep with both. Columns that exist only in the package (adds, already applied by
+    -- MissingTableAndColumnQuench before this procedure starts) and columns that exist only live
+    -- (by-absence drops, metadata-only here) are NOT counted, and neither is index / constraint churn:
+    -- counting work a rebuild does not save would fire rebuilds that cost data movement and buy nothing.
+    INSERT INTO _SchemaSmith_RebuildFacts (TableName, ModificationPasses)
+    SELECT c.TableName, COUNT(*)
+    FROM _SchemaSmith_Columns c
+    INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+    INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+        ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+        AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+        AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+    WHERE t.NewTable = 0
+      AND c.NewColumn = 0
+      AND (
+          -- STEP 3.5's set: the column's generated status is changing (either direction).
+          ((isc.GENERATION_EXPRESSION IS NOT NULL AND isc.GENERATION_EXPRESSION != '')
+           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = ''))
+          OR
+          ((isc.GENERATION_EXPRESSION IS NULL OR isc.GENERATION_EXPRESSION = '')
+           AND (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''))
+          -- STEP 3's set: any declared attribute differs from the live one.
+          OR CASE WHEN UPPER(c.DataType) LIKE 'ENUM%' OR UPPER(c.DataType) LIKE 'SET%'
+                    OR UPPER(isc.COLUMN_TYPE) LIKE 'ENUM%' OR UPPER(isc.COLUMN_TYPE) LIKE 'SET%'
+                  THEN BINARY SchemaSmith_UpperDataType(isc.COLUMN_TYPE) != BINARY SchemaSmith_UpperDataType(c.DataType)
+                  ELSE SchemaSmith_StripIntDisplayWidth(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(isc.COLUMN_TYPE), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC'))
+                    != SchemaSmith_StripIntDisplayWidth(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c.DataType), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')) END
+          OR (isc.IS_NULLABLE = 'YES' AND c.IsNullable = 0)
+          OR (isc.IS_NULLABLE = 'NO' AND c.IsNullable = 1)
+          OR (c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) != '' AND c.IsAutoIncrement = 0
+              AND (SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NULL OR BINARY SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) != BINARY
+                  CASE WHEN c.DefaultValue LIKE '''%'''
+                       THEN REPLACE(SUBSTRING(c.DefaultValue, 2, CHAR_LENGTH(c.DefaultValue) - 2), '''''', '''')
+                       ELSE c.DefaultValue END)
+              AND SchemaSmith_NumericDefaultsEqual(SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT),
+                                                  c.DefaultValue, isc.DATA_TYPE) = 0)
+          OR ((c.DefaultValue IS NULL OR TRIM(c.DefaultValue) = '') AND SchemaSmith_NormalizeColumnDefault(isc.COLUMN_DEFAULT) IS NOT NULL)
+          OR (c.Collation IS NOT NULL AND TRIM(c.Collation) != '' AND BINARY isc.COLLATION_NAME != BINARY c.Collation)
+          OR (c.GeneratedExpression IS NOT NULL AND TRIM(c.GeneratedExpression) != ''
+              AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
+          OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
+          OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+          OR (SchemaSmith_SupportsColumnSrid() = 1
+              AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
+          OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
+          OR (BINARY COALESCE(SchemaSmith_ColumnOnUpdateClause(isc.EXTRA), '') != BINARY COALESCE(c.OnUpdateCurrentTimestamp, ''))
+      )
+    GROUP BY c.TableName;
+
+    -- ALWAYS fires on ANY detected column change, which includes a column present live but absent from
+    -- the package: a rebuild delivers that removal as part of building the replacement from the declared
+    -- definition. Recorded separately from the count because it must NOT move the threshold -- a rebuild
+    -- saves nothing on a metadata-only DROP COLUMN.
+    INSERT INTO _SchemaSmith_RebuildFacts (TableName, HasColumnDrop)
+    SELECT DISTINCT t.TableName, 1
+    FROM _SchemaSmith_Tables t
+    INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+        ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+        AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+    WHERE t.NewTable = 0
+      AND NOT EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                        WHERE c.TableName = t.TableName
+                          AND BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName) = BINARY isc.COLUMN_NAME)
+    ON DUPLICATE KEY UPDATE HasColumnDrop = 1;
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildElection;
+    CREATE TEMPORARY TABLE _SchemaSmith_RebuildElection (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        TableName VARCHAR(128) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    -- The policy is resolved once in a derived table so the collation-normalising CONVERT/COLLATE around
+    -- the session variable (its charset is the CONNECTION's, the column's is utf8mb4_unicode_ci, and
+    -- mixing them inside IF() is an "Illegal mix of collations" error) is written once rather than five
+    -- times. SLICE 5 HOOK: @ss_rebuild_policy_on_order_mismatch and t.RebuildPolicyOnOrderMismatch are
+    -- carried through the parse and the session, but nothing compares column ORDER yet. The flag composes
+    -- with Mode rather than replacing it, so when the comparison lands it becomes one more OR arm on the
+    -- WHERE below -- not a fourth Mode value.
+    INSERT INTO _SchemaSmith_RebuildElection (TableName)
+    SELECT p.TableName
+    FROM (
+        SELECT SchemaSmith_StripBacktickWrapping(t.TableName) AS TableName,
+               UPPER(TRIM(COALESCE(IF(COALESCE(t.RebuildPolicySpecified, 0) = 1,
+                                      t.RebuildPolicyMode,
+                                      CONVERT(@ss_rebuild_policy_mode USING utf8mb4) COLLATE utf8mb4_unicode_ci),
+                                   _utf8mb4'NEVER' COLLATE utf8mb4_unicode_ci))) AS PolicyMode,
+               IF(COALESCE(t.RebuildPolicySpecified, 0) = 1,
+                  t.RebuildPolicyThreshold,
+                  CAST(@ss_rebuild_policy_threshold AS SIGNED)) AS PolicyThreshold,
+               COALESCE(f.ModificationPasses, 0) AS ModificationPasses,
+               COALESCE(f.HasColumnDrop, 0) AS HasColumnDrop,
+               COALESCE(t.DropColumnsRemovedFromProduct, 1) AS TableDropColumns
+        FROM _SchemaSmith_Tables t
+        LEFT JOIN _SchemaSmith_RebuildFacts f ON f.TableName = t.TableName
+        WHERE t.NewTable = 0
+    ) p
+    -- A rebuild is a by-absence destroyer: the old table goes whole and only the DECLARED definition
+    -- comes back, so anything this run deliberately declined to drop by absence would go anyway.
+    -- p_CaptureWouldDrop is set exactly when the environment is in protected mode (ProductQuench sets
+    -- CaptureWouldDrop = _protectedMode), which promises to destroy nothing by absence at all. The second
+    -- arm is the same promise scoped to one table's columns: a live column the package no longer declares,
+    -- whose drop THIS run is suppressing. Either one outranks the policy -- declining to rebuild costs an
+    -- in-place ALTER, rebuilding anyway costs the user the data that protection existed to keep.
+    WHERE p_CaptureWouldDrop = 0
+      AND NOT (p.HasColumnDrop = 1
+               AND NOT (p_DropColumnsRemovedFromProduct = 1 AND p.TableDropColumns = 1))
+      AND (
+          (p.PolicyMode = _utf8mb4'ALWAYS' COLLATE utf8mb4_unicode_ci
+           AND (p.ModificationPasses > 0 OR p.HasColumnDrop = 1))
+          OR
+          (p.PolicyMode = _utf8mb4'THRESHOLD' COLLATE utf8mb4_unicode_ci
+           AND p.PolicyThreshold IS NOT NULL
+           AND p.ModificationPasses >= p.PolicyThreshold)
+      );
+
+    -- p_WhatIf goes straight through: SchemaSmith_RebuildTable prints its whole sequence and records
+    -- 'wouldRebuild' without executing anything, and it applies its refusals in BOTH modes. So a policy
+    -- that elects a rebuild on a BLOCKED table surfaces RebuildTable's refusal as a SIGNAL and the quench
+    -- fails -- deliberately. It does NOT quietly fall back to altering in place: that would let a package
+    -- ask for a rebuild and silently get something else, and the states that block a rebuild are exactly
+    -- the ones where that difference matters.
+    SET @v_rebuild_id := (SELECT MIN(RowId) FROM _SchemaSmith_RebuildElection);
+    WHILE @v_rebuild_id IS NOT NULL DO
+        SELECT TableName INTO @v_rebuild_table FROM _SchemaSmith_RebuildElection WHERE RowId = @v_rebuild_id;
+        CALL SchemaSmith_RebuildTable(p_DatabaseName, @v_rebuild_table, p_WhatIf);
+        SET @v_rebuild_id := (SELECT MIN(RowId) FROM _SchemaSmith_RebuildElection WHERE RowId > @v_rebuild_id);
+    END WHILE;
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildElection;
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildFacts;
+
+    -- =======================
     -- STEP 2.9: DROP FOREIGN KEYS THAT BLOCK A COLUMN-LEVEL COLLATION CHANGE
     -- =======================
     -- Twin of the drop that guards the table-level CONVERT TO CHARACTER SET further down, hoisted here

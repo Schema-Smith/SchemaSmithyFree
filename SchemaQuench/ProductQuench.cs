@@ -1897,6 +1897,12 @@ public class ProductQuench
             dropRemovedIndexes = FormatBooleanFlag(false);
             dropUnknownIndexes = false;
         }
+        // The three UPPER tiers, collapsed here to one whole policy. The table tier is deliberately not
+        // resolved here: it lives in the parsed working set inside the database, alongside the sentinel
+        // that says whether the table declared a policy at all, so the proc picks between this policy and
+        // the table's own — whole, never field by field.
+        var rebuildPolicy = ResolveCascadedPolicy(
+            ReadEnvRebuildPolicy(_config), _product.RebuildPolicy, template.RebuildPolicy, table: null);
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
             suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
             dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropRemovedIndexes, dropUnknownIndexes,
@@ -1912,7 +1918,8 @@ public class ProductQuench
             MigrationScripts = _migrationScripts,
             WhatIf = _whatIf,
             ChangeAudit = _changeAudit,
-            CaptureWouldDrop = _protectedMode
+            CaptureWouldDrop = _protectedMode,
+            CascadedRebuildPolicy = rebuildPolicy
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();

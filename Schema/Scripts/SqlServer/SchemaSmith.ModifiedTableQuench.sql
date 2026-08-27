@@ -19,7 +19,15 @@ CREATE PROCEDURE SchemaSmith.ModifiedTableQuench
   @DropExcludeConstraintsRemovedFromProduct BIT = 1,
   @DropStatisticsRemovedFromProduct BIT = 1,
   @DropIndexesRemovedFromProduct BIT = 1,
-  @CaptureWouldDrop BIT = 0
+  @CaptureWouldDrop BIT = 0,
+  -- The RESOLVED upper-tier RebuildPolicy (environment -> product -> template), already collapsed to a
+  -- single whole policy by ProductQuench.ResolveCascadedPolicy. It applies to a table ONLY when that table
+  -- declared no policy of its own; a table that declared one takes ITS policy entire (see the decision
+  -- point below). Defaults are the NEVER default of the domain object, so a caller that passes nothing --
+  -- every pre-existing caller, and every package with no RebuildPolicy anywhere -- can never elect a rebuild.
+  @RebuildPolicyMode NVARCHAR(20) = 'NEVER',
+  @RebuildPolicyThreshold INT = NULL,
+  @RebuildPolicyOnOrderMismatch BIT = 0
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',
@@ -480,6 +488,126 @@ BEGIN TRY
     JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = cc.[Schema] AND t.[Name] = cc.[TableName]
     WHERE cc.DropOnly = 1
       AND (@DropColumnsRemovedFromProduct = 0 OR ISNULL(t.[DropColumnsRemovedFromProduct], 1) = 0)
+
+  ----------------------------------------------------------------------------------------------------
+  -- THE REBUILD DECISION POINT.
+  --
+  -- WHY HERE. Column-change detection finished one statement above: #ColumnChanges holds every
+  -- modification and every by-absence drop, and #SuppressedColumnDrops names the drops this run will NOT
+  -- perform. And nothing has yet touched a table that is STILL DECLARED: everything executed above this
+  -- line either turns off temporal tracking for a table no longer declared temporal or drops a table that
+  -- left the product entirely. The very next EXEC -- the foreign-key capture and drop immediately below --
+  -- is where this procedure starts dismantling the dependent objects OF a declared table, and a rebuild
+  -- drops all of those wholesale anyway. A rebuild inheriting a half-dismantled table would have
+  -- RebuildTable's pre-rebuild refusals reasoning about a live state that no longer matches the declared
+  -- file, so "before the ALTER phases" is the wrong boundary and this one is the right one. Renames land
+  -- earlier still, in MissingTableAndColumnQuench, which matters: RebuildTable refuses outright while a
+  -- table or column rename is pending, because the copy matches columns by their CURRENT name.
+  --
+  -- OPT-IN BY CONSTRUCTION. #RebuildElection is built by a WHERE that only an explicit ALWAYS/THRESHOLD
+  -- can satisfy. A package with no RebuildPolicy anywhere resolves to the domain object's NEVER default
+  -- at every level, elects nothing, and this whole block is a no-op: no rebuild, no statement, nothing
+  -- added to the run. A rebuild moves user data, so a table that did not ask for one must never get one,
+  -- and that has to be structurally true rather than true because the conditions happen not to match.
+  --
+  -- WHOLE-OBJECT RESOLUTION. [RebuildPolicySpecified] picks WHICH policy applies -- the table's own, or
+  -- the resolved upper-tier one passed in -- and then every field comes from that ONE policy. Never a
+  -- per-field COALESCE: a table declaring only { "Mode": "ALWAYS" } must not inherit a product's
+  -- Threshold. Mirrors ProductQuench.ResolveCascadedPolicy, which collapses the three upper tiers the
+  -- same way before this procedure is called.
+  ----------------------------------------------------------------------------------------------------
+  RAISERROR('Elect tables for rebuild', 10, 100) WITH NOWAIT
+  IF OBJECT_ID('tempdb..#RebuildElection') IS NOT NULL DROP TABLE #RebuildElection
+  SELECT p.[Schema], p.[TableName]
+    INTO #RebuildElection
+    FROM (SELECT t.[Schema], [TableName] = t.[Name],
+                 -- The winning policy, taken WHOLE from one level.
+                 [Mode] = UPPER(LTRIM(RTRIM(ISNULL(CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyMode] ELSE @RebuildPolicyMode END, 'NEVER')))),
+                 [Threshold] = CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyThreshold] ELSE @RebuildPolicyThreshold END,
+                 -- SLICE 5 HOOK. OnOrderMismatch is carried and resolved here, but nothing compares column
+                 -- ORDER yet. It composes with Mode rather than replacing it, so when the comparison lands
+                 -- it becomes one more OR arm on the WHERE below -- not a fourth Mode value.
+                 [OnOrderMismatch] = CONVERT(BIT, ISNULL(CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyOnOrderMismatch] ELSE @RebuildPolicyOnOrderMismatch END, 0)),
+                 -- THE THRESHOLD COUNT: column-MODIFICATION passes only, which is what a rebuild actually
+                 -- eliminates -- each #ColumnChanges row that is not a pure drop becomes its own ALTER.
+                 -- DropOnly rows are excluded (a column drop is metadata-only here, so a rebuild saves
+                 -- nothing by absorbing it); column ADDs never reach #ColumnChanges at all, having already
+                 -- been applied by MissingTableAndColumnQuench before this procedure starts; index /
+                 -- constraint / statistics churn is excluded for the same reason. Counting work a rebuild
+                 -- does not save would fire rebuilds that cost data movement and buy nothing.
+                 [ModificationPasses] = (SELECT COUNT(*) FROM #ColumnChanges cc WITH (NOLOCK)
+                                           WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name] AND cc.DropOnly = 0),
+                 [AnyColumnChange] = CONVERT(BIT, CASE WHEN EXISTS (SELECT 1 FROM #ColumnChanges cc WITH (NOLOCK)
+                                                                      WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name])
+                                                       THEN 1 ELSE 0 END)
+            FROM #Tables t WITH (NOLOCK)
+            WHERE t.NewTable = 0
+              AND OBJECT_ID(t.[Schema] + '.' + t.[Name], 'U') IS NOT NULL
+              -- A rebuild is a by-absence destroyer: the old table goes whole and only the DECLARED
+              -- definition comes back, so anything this run deliberately declined to drop by absence would
+              -- go anyway. #SuppressedColumnDrops is the data-losing case (a column retained by PreventDrop
+              -- or by the per-table DropColumnsRemovedFromProduct opt-out), and @CaptureWouldDrop is set
+              -- exactly when the environment is in protected mode (ProductQuench sets
+              -- CaptureWouldDrop = _protectedMode), which promises to destroy nothing by absence at all.
+              -- Either one outranks the policy: declining to rebuild costs an in-place ALTER, rebuilding
+              -- anyway costs the user the data that protection existed to keep.
+              AND @CaptureWouldDrop = 0
+              AND NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)
+                                WHERE s.[Schema] = t.[Schema] AND s.[TableName] = t.[Name])) p
+    WHERE (p.[Mode] = 'ALWAYS' AND p.[AnyColumnChange] = 1)
+       OR (p.[Mode] = 'THRESHOLD' AND p.[Threshold] IS NOT NULL AND p.[ModificationPasses] >= p.[Threshold])
+
+  IF EXISTS (SELECT 1 FROM #RebuildElection)
+  BEGIN
+    DECLARE @v_RebuildSchema NVARCHAR(500), @v_RebuildTable NVARCHAR(500)
+    DECLARE rebuild_cursor CURSOR LOCAL FAST_FORWARD FOR
+      SELECT [Schema], [TableName] FROM #RebuildElection
+    OPEN rebuild_cursor
+    FETCH NEXT FROM rebuild_cursor INTO @v_RebuildSchema, @v_RebuildTable
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+      -- @WhatIf goes straight through: RebuildTable prints its whole sequence and records 'wouldRebuild'
+      -- without executing anything, and it applies its refusals in BOTH modes. So a policy that elects a
+      -- rebuild on a BLOCKED table (temporal, CDC, replicated, Change Tracking) surfaces RebuildTable's
+      -- refusal as an error and the quench fails -- deliberately. It does NOT quietly fall back to
+      -- altering in place: that would let a package ask for a rebuild and silently get something else,
+      -- and the states that block a rebuild are exactly the ones where that difference matters.
+      EXEC SchemaSmith.RebuildTable @p_Schema = @v_RebuildSchema, @p_Table = @v_RebuildTable, @p_WhatIf = @WhatIf
+      FETCH NEXT FROM rebuild_cursor INTO @v_RebuildSchema, @v_RebuildTable
+    END
+    CLOSE rebuild_cursor
+    DEALLOCATE rebuild_cursor
+
+    -- BYPASS THE IN-PLACE COLUMN PHASES. Every column pass below -- the data-preserving swaps, the
+    -- computed-column drop-and-recreate, the by-absence column drops -- and every dependent cleanup that
+    -- clears the way for one (index, statistics, fulltext, default, check) drives off #ColumnChanges.
+    -- Emptying it for a rebuilt table is therefore the WHOLE bypass, in one place, instead of a
+    -- "was it rebuilt?" test threaded through a dozen queries where one missed site leaves the table both
+    -- rebuilt AND altered. It is also simply true: the replacement was built to the declared definition,
+    -- so it has no pending column change left to apply.
+    DELETE cc
+      FROM #ColumnChanges cc
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = cc.[Schema] AND r.[TableName] = cc.[TableName]
+
+    -- The rebuild drops the old table whole and its extended properties go with it. The ownership stamp
+    -- further down re-adds ProductName only for tables MISSING from #TableProperties -- a snapshot taken
+    -- before the rebuild -- so a rebuilt table would come back unowned and the next deploy would not
+    -- recognise it as this product's. Drop its snapshot row so the stamp sees it as missing and re-applies.
+    DELETE tp
+      FROM #TableProperties tp
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = tp.[Schema]
+                                           AND SchemaSmith.fn_StripBracketWrapping(r.[TableName]) = tp.TableName
+
+    -- Same staleness on the index side: these rows describe indexes the rebuild took with the table.
+    -- MissingIndexesAndConstraintsQuench re-collects index properties from the live catalog and re-stamps,
+    -- so all these rows can still do here is describe objects that no longer exist.
+    DELETE ip
+      FROM #IndexProperties ip
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = ip.[Schema] AND r.[TableName] = ip.TableName
+    DELETE ir
+      FROM #IndexesRemovedFromProduct ir
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = ir.[Schema] AND r.[TableName] = ir.TableName
+  END
 
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropForeignKeysRemovedFromProduct to 0 so the drop block below never runs. Record the foreign

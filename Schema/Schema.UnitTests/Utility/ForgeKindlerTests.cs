@@ -809,7 +809,7 @@ public class ForgeKindlerTests
     }
 
     [Test]
-    public void DropSupersededPostgreSqlOverloads_DropsTheFiveAuditedSignatures()
+    public void DropSupersededPostgreSqlOverloads_DropsTheAuditedSignatures()
     {
         var mockCmd = Substitute.For<IDbCommand>();
         var executed = new System.Collections.Generic.List<string>();
@@ -817,13 +817,19 @@ public class ForgeKindlerTests
 
         ForgeKindler.DropSupersededPostgreSqlOverloads(mockCmd);
 
-        Assert.That(executed, Has.Count.EqualTo(5));
+        Assert.That(executed, Has.Count.EqualTo(7));
         Assert.That(executed, Has.All.StartsWith("DROP PROCEDURE IF EXISTS"));
         Assert.That(executed.Any(s => s.Contains("\"ValidateTableOwnership\"(varchar, boolean)")));
         Assert.That(executed.Any(s => s.Contains("\"FixupTableOwnership\"(varchar)")));
         Assert.That(executed.Any(s => s.Contains("\"ValidateMaterializedViewOwnership\"(varchar, boolean)")));
         Assert.That(executed.Any(s => s.Contains("\"FixupMaterializedViewOwnership\"(varchar)")));
         Assert.That(executed.Any(s => s.Contains("\"FixupIndexOwnership\"(varchar)")));
+        // The pre-RebuildPolicy arities. Without these two an already-kindled database keeps the old
+        // signature as a second overload and every existing named-argument call resolves as ambiguous.
+        Assert.That(executed.Any(s => s.Contains("\"ModifiedTableQuench\"(boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean)")),
+            "The 10-boolean ModifiedTableQuench must be dropped, or the 13-argument replacement is ambiguous with it.");
+        Assert.That(executed.Any(s => s.Contains("\"TableQuench\"(varchar, text, boolean, boolean, boolean, boolean)")),
+            "The 6-argument TableQuench must be dropped, or the 9-argument replacement is ambiguous with it.");
     }
 
     [Test]

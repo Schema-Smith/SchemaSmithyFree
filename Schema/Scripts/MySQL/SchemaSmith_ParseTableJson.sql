@@ -81,6 +81,14 @@ BEGIN
         DropForeignKeysRemovedFromProduct TINYINT DEFAULT NULL,
         DropCheckConstraintsRemovedFromProduct TINYINT DEFAULT NULL,
         DropIndexesRemovedFromProduct TINYINT DEFAULT NULL,
+        -- RebuildPolicy resolves MOST-SPECIFIC-WINS on the WHOLE object (ProductQuench.ResolveCascadedPolicy),
+        -- so the apply side needs the SENTINEL -- did this table declare a policy at all? -- and not just
+        -- the field values. A table declaring only { "Mode": "ALWAYS" } must not inherit a product-level
+        -- Threshold, which a per-field COALESCE against the passed-in tier would graft on.
+        RebuildPolicyMode VARCHAR(20) DEFAULT NULL,
+        RebuildPolicyThreshold INT DEFAULT NULL,
+        RebuildPolicyOnOrderMismatch TINYINT DEFAULT NULL,
+        RebuildPolicySpecified TINYINT DEFAULT 0,
         PreventDrop TINYINT DEFAULT 0,
         KEY ix_tables_name (TableName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -93,7 +101,7 @@ BEGIN
     SET v_TblIdx = 0;
     WHILE v_TblIdx < v_TblCnt DO
         IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name'))) IS NOT NULL THEN
-            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, PreventDrop)
+            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
             SELECT
                 SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name')))) AS TableName,
                 COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Engine')))), ''), 'InnoDB') AS Engine,
@@ -113,6 +121,15 @@ BEGIN
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropForeignKeysRemovedFromProduct'))) AS DropForeignKeysRemovedFromProduct,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropCheckConstraintsRemovedFromProduct'))) AS DropCheckConstraintsRemovedFromProduct,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropIndexesRemovedFromProduct'))) AS DropIndexesRemovedFromProduct,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RebuildPolicy.Mode')))), '') AS RebuildPolicyMode,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RebuildPolicy.Threshold'))) AS RebuildPolicyThreshold,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RebuildPolicy.OnOrderMismatch'))) AS RebuildPolicyOnOrderMismatch,
+                -- The sentinel tests the value's TYPE, not mere path presence. JSON_CONTAINS_PATH would
+                -- answer 1 for '"RebuildPolicy": null' -- which is exactly what an UNDECLARED policy
+                -- serializes to -- and that would stop the product- or environment-level policy from
+                -- applying. JSON_TYPE returns 'NULL' there and SQL NULL when the path is absent entirely,
+                -- so both fall out as 0.
+                COALESCE(JSON_TYPE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RebuildPolicy'))) = 'OBJECT', 0) AS RebuildPolicySpecified,
                 COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PreventDrop'))), 0) AS PreventDrop;
         END IF;
         SET v_TblIdx = v_TblIdx + 1;

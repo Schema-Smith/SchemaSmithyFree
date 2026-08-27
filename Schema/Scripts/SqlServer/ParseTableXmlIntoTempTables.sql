@@ -54,6 +54,15 @@
          [DropExcludeConstraintsRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropExcludeConstraintsRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
          [DropStatisticsRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropStatisticsRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
          [DropIndexesRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropIndexesRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
+         -- RebuildPolicy -- see the JSON twin for why the SENTINEL (did this table declare a policy AT ALL?)
+         -- matters and why a per-field COALESCE against the passed-in tier is wrong. The presence test is
+         -- "any child of <RebuildPolicy> carries a text node" rather than "the <RebuildPolicy> element
+         -- exists": an undeclared policy serializes as a JSON null, which DeserializeXNode renders as an
+         -- EMPTY <RebuildPolicy/> element, so element existence alone would read a null policy as declared.
+         [RebuildPolicyMode] = t.value('(RebuildPolicy/Mode/text())[1]', 'NVARCHAR(20)'),
+         [RebuildPolicyThreshold] = t.value('(RebuildPolicy/Threshold/text())[1]', 'INT'),
+         [RebuildPolicyOnOrderMismatch] = CONVERT(BIT, CASE LOWER(t.value('(RebuildPolicy/OnOrderMismatch/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
+         [RebuildPolicySpecified] = CONVERT(BIT, t.exist('RebuildPolicy/*/text()')),
          [PreventDrop] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(PreventDrop/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0)
     INTO #TableDefinitions
     FROM @v_TableXml.nodes('/Tables/Table') AS X(t);
@@ -69,6 +78,7 @@
   SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
+         [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch], [RebuildPolicySpecified],
          ISNULL([PreventDrop], 0) AS [PreventDrop]
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK);

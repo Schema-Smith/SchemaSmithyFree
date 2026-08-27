@@ -30,6 +30,14 @@ BEGIN
     CALL SchemaSmith_MissingTableAndColumnQuench(p_DatabaseName, p_WhatIf);
 
     -- Step 3: Modify existing tables (column changes, drops if configured)
+    -- The upper-tier RebuildPolicy reaches ModifiedTableQuench in session variables (MySQL has no default
+    -- parameter values, so a parameter would break every direct caller — same reasoning as
+    -- @ss_capture_would_drop). This wrapper declares NO upper-tier policy: it clears them explicitly
+    -- rather than leaving whatever a pooled connection happened to carry, so only a table that declares
+    -- its own RebuildPolicy can be rebuilt through here.
+    SET @ss_rebuild_policy_mode = 'NEVER';
+    SET @ss_rebuild_policy_threshold = NULL;
+    SET @ss_rebuild_policy_on_order_mismatch = 0;
     CALL SchemaSmith_ModifiedTableQuench(p_ProductName, p_DatabaseName, p_WhatIf, p_DropTablesRemovedFromProduct, 1, 1, 1, 1, 0, p_DropUnknownIndexes, 1);
 
     -- Step 4: Create missing indexes and check constraints (no FKs)

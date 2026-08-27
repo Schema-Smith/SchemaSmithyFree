@@ -20,7 +20,9 @@ namespace SchemaQuench.IntegrationTests.SqlServer;
 /// ForgeKindler bakes into TableQuench) in its own batch and then calls the procedure from that batch.
 /// That is the procedure's actual contract; faking the temp tables would test a different procedure.
 ///
-/// Nothing here elects a rebuild -- the decision point does not exist yet. These call it directly.
+/// Nothing here elects a rebuild -- these call the procedure directly, which keeps the engine's own
+/// behaviour (refusals, identity, row preservation) separable from the policy that points it at a table.
+/// The decision that elects one lives in ModifiedTableQuench and is covered by RebuildDecisionTests.
 /// </summary>
 [Category("SqlServer")]
 [NonParallelizable]

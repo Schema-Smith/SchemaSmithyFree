@@ -10,7 +10,13 @@ CREATE PROCEDURE SchemaSmith.TableQuench
     @WhatIf BIT = 0,
     @DropUnknownIndexes BIT = 0,
     @DropTablesRemovedFromProduct BIT = 1,
-    @UpdateFillFactor BIT = 1
+    @UpdateFillFactor BIT = 1,
+    -- The resolved upper-tier RebuildPolicy, forwarded to ModifiedTableQuench (which owns the decision).
+    -- Defaults are the domain object's NEVER default, so an existing caller that passes nothing behaves
+    -- exactly as before and can never elect a rebuild.
+    @RebuildPolicyMode NVARCHAR(20) = 'NEVER',
+    @RebuildPolicyThreshold INT = NULL,
+    @RebuildPolicyOnOrderMismatch BIT = 0
 AS
 BEGIN TRY
     SET NOCOUNT ON
@@ -22,7 +28,8 @@ BEGIN TRY
   EXEC SchemaSmith.DegradeUnsupportedFeatures
 
   EXEC SchemaSmith.MissingTableAndColumnQuench @WhatIf
-  EXEC SchemaSmith.ModifiedTableQuench @ProductName, @WhatIf, @DropUnknownIndexes, @DropTablesRemovedFromProduct
+  EXEC SchemaSmith.ModifiedTableQuench @ProductName = @ProductName, @WhatIf = @WhatIf, @DropUnknownIndexes = @DropUnknownIndexes, @DropTablesRemovedFromProduct = @DropTablesRemovedFromProduct,
+                                       @RebuildPolicyMode = @RebuildPolicyMode, @RebuildPolicyThreshold = @RebuildPolicyThreshold, @RebuildPolicyOnOrderMismatch = @RebuildPolicyOnOrderMismatch
   EXEC SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName, @WhatIf
   EXEC SchemaSmith.ForeignKeyQuench @ProductName, @WhatIf
   SET NOCOUNT OFF

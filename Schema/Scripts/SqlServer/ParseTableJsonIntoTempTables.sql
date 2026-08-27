@@ -50,6 +50,15 @@
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [VariantName], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
+         -- RebuildPolicy resolves MOST-SPECIFIC-WINS on the WHOLE object (ProductQuench.ResolveCascadedPolicy),
+         -- so the apply side needs to know whether this table declared one AT ALL -- not just what its fields
+         -- say. [RebuildPolicySpecified] is that sentinel, read from the presence of the OBJECT rather than
+         -- from any field: a table declaring only { "Mode": "ALWAYS" } must NOT inherit a product-level
+         -- Threshold, and a per-field COALESCE against the passed-in tier would graft one on. A JSON null
+         -- ('"RebuildPolicy": null', which is what an undeclared policy serializes to) yields NULL for
+         -- '$.RebuildPolicy' AS JSON in lax mode, so absent and null both read as not-specified.
+         [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch],
+         [RebuildPolicySpecified] = CONVERT(BIT, CASE WHEN [RebuildPolicyJson] IS NOT NULL THEN 1 ELSE 0 END),
          [PreventDrop] = ISNULL([PreventDrop], 0)
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
@@ -79,6 +88,11 @@
       [DropExcludeConstraintsRemovedFromProduct] BIT '$.DropExcludeConstraintsRemovedFromProduct',
       [DropStatisticsRemovedFromProduct] BIT '$.DropStatisticsRemovedFromProduct',
       [DropIndexesRemovedFromProduct] BIT '$.DropIndexesRemovedFromProduct',
+      [RebuildPolicyMode] NVARCHAR(20) '$.RebuildPolicy.Mode',
+      [RebuildPolicyThreshold] INT '$.RebuildPolicy.Threshold',
+      [RebuildPolicyOnOrderMismatch] BIT '$.RebuildPolicy.OnOrderMismatch',
+      -- The OBJECT, read only to answer "did this table declare a policy at all?" -- see the sentinel above.
+      [RebuildPolicyJson] NVARCHAR(MAX) '$.RebuildPolicy' AS JSON,
       [PreventDrop] BIT '$.PreventDrop'
       ) t;
   
@@ -94,6 +108,7 @@
   SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
+         [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch], [RebuildPolicySpecified],
          ISNULL([PreventDrop], 0) AS [PreventDrop]
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK);

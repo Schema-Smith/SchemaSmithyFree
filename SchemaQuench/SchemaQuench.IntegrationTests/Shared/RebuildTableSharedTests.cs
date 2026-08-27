@@ -25,7 +25,10 @@ namespace SchemaQuench.IntegrationTests.Shared;
 /// not mention. RebuildTable never re-creates secondary indexes -- that is an invariant of all three
 /// engines -- so the marker surviving means no rebuild happened and the row assertions were vacuous.
 ///
-/// Nothing here elects a rebuild -- the decision point does not exist yet. These call it directly.
+/// Nothing here elects a rebuild -- these call the procedure directly, which keeps the engine's own
+/// behaviour (refusals, auto-increment, row preservation) separable from the policy that points it at a
+/// table. The decision that elects one lives in ModifiedTableQuench and is covered by
+/// RebuildDecisionSharedTests.
 /// </summary>
 [Category("Integration")]
 public abstract class RebuildTableSharedTests : BaseTableQuenchTests

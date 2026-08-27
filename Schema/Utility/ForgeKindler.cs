@@ -569,6 +569,12 @@ public static class ForgeKindler
             "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"ValidateMaterializedViewOwnership\"(varchar, boolean)",
             "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"FixupMaterializedViewOwnership\"(varchar)",
             "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"FixupIndexOwnership\"(varchar)",
+            // The pre-RebuildPolicy arities. PostgreSQL keys a procedure by its argument TYPES, so
+            // CREATE OR REPLACE with three extra defaulted parameters leaves the old signature in place
+            // as a second overload — and every existing call site passes named arguments that BOTH
+            // overloads can satisfy, which resolves as "procedure is not unique" rather than picking one.
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"ModifiedTableQuench\"(boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean)",
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"TableQuench\"(varchar, text, boolean, boolean, boolean, boolean)",
         ];
         foreach (var sql in drops)
         {

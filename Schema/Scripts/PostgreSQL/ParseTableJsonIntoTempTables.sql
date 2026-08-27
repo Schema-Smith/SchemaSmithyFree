@@ -28,7 +28,18 @@
            (elem ->> 'DropCheckConstraintsRemovedFromProduct')::BOOLEAN AS "DropCheckConstraintsRemovedFromProduct",
            (elem ->> 'DropExcludeConstraintsRemovedFromProduct')::BOOLEAN AS "DropExcludeConstraintsRemovedFromProduct",
            (elem ->> 'DropStatisticsRemovedFromProduct')::BOOLEAN AS "DropStatisticsRemovedFromProduct",
-           (elem ->> 'DropIndexesRemovedFromProduct')::BOOLEAN AS "DropIndexesRemovedFromProduct"
+           (elem ->> 'DropIndexesRemovedFromProduct')::BOOLEAN AS "DropIndexesRemovedFromProduct",
+           -- RebuildPolicy resolves MOST-SPECIFIC-WINS on the WHOLE object (ProductQuench.ResolveCascadedPolicy),
+           -- so the apply side needs to know whether this table declared one AT ALL -- not just what its
+           -- fields say. "RebuildPolicySpecified" is that sentinel. It tests the value's TYPE rather than
+           -- mere key presence: an undeclared policy serializes as '"RebuildPolicy": null', and a key-
+           -- containment test (jsonb ?) would read that null as a declaration and stop the product- or
+           -- environment-level policy from applying. JSON_TYPEOF returns 'null' there and NULL when the key
+           -- is absent entirely, so both fall out as FALSE.
+           elem #>> '{RebuildPolicy,Mode}' AS "RebuildPolicyMode",
+           (elem #>> '{RebuildPolicy,Threshold}')::INT AS "RebuildPolicyThreshold",
+           (elem #>> '{RebuildPolicy,OnOrderMismatch}')::BOOLEAN AS "RebuildPolicyOnOrderMismatch",
+           COALESCE(JSON_TYPEOF(elem -> 'RebuildPolicy') = 'object', FALSE) AS "RebuildPolicySpecified"
     FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
     -- ShouldApply scoped by "_RowId" so each generated DELETE targets exactly the source row.
