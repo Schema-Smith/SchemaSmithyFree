@@ -193,7 +193,11 @@ public class ForgeKindlerTests
         // + SchemaSmith.fn_NormalizeCheckExpression (folds a check expression to the form SQL Server itself
         //   stores -- spaces around operators removed, parens around a bare literal -- so a constraint
         //   written in its natural form stops comparing unequal to the engine's rendering of itself).
-        Assert.That(sqlServer.Length, Is.EqualTo(30));
+        // + SchemaSmith.fn_RebuildBlockedReason (names the live state that makes a table unsafe to rebuild --
+        //   temporal, CDC, replication, Change Tracking -- so a rebuild can refuse and say which one. Its
+        //   CREATE is assembled at kindle time because temporal_type_desc is 2016+ and a function body binds
+        //   at CREATE).
+        Assert.That(sqlServer.Length, Is.EqualTo(31));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
@@ -201,7 +205,10 @@ public class ForgeKindlerTests
         // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade
         // + SchemaSmith.ColumnTypeArguments (the PostgreSQL twin of the SQL Server helper above — replaces the
         //   hand-copied CASE that dropped timestamptz(n)/time(n)/timetz(n) precision).
-        Assert.That(postgres.Length, Is.EqualTo(35));
+        // + SchemaSmith.RebuildBlockedReason (the PostgreSQL twin of the SQL Server helper above -- publication
+        //   membership, inheritance edges and declarative partitioning are the states a shadow-copy-and-swap
+        //   would silently sever).
+        Assert.That(postgres.Length, Is.EqualTo(36));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor
@@ -249,7 +256,11 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_NumericDefaultsEqual (compares a decimal column's default BY VALUE: the engine
         // stores it at the column's scale, so a declared 0 comes back 0.00 and re-ALTERed the column on
         // every deploy; scoped to decimal/numeric so string defaults keep comparing as text).
-        Assert.That(mysql.Length, Is.EqualTo(46));
+        // +1 = SchemaSmith_RebuildBlockedReason (names the live state that makes a table unsafe to rebuild.
+        // The MySQL body is deliberately always-NULL -- MySQL has none of these concepts -- and the MariaDb
+        // override detects system versioning and application-time periods, the two states a
+        // shadow-copy-and-swap would silently destroy there).
+        Assert.That(mysql.Length, Is.EqualTo(47));
     }
 
     [Test]
