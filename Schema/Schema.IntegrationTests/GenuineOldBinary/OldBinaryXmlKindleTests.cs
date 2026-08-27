@@ -83,6 +83,13 @@ public class OldBinaryXmlKindleTests
             // The kindle-baked helper functions (E1.0 — no SESSION_CONTEXT, which is 2016+).
             Assert.That(ObjectExists(cmd, "SchemaSmith.fn_ServerMajorVersion", "FN"), Is.True, "fn_ServerMajorVersion (E1.0)");
             Assert.That(ObjectExists(cmd, "SchemaSmith.UnsupportedFeaturePolicy", "FN"), Is.True, "UnsupportedFeaturePolicy (E1.0)");
+            // The rebuild guard's pre-2016 body omits sys.tables.temporal_type_desc entirely (2016+, and a
+            // function body binds at CREATE). Existence alone would pass if the gate produced an empty body,
+            // so it is also CALLED: a table that blocks nothing must come back NULL, not an error.
+            Assert.That(ObjectExists(cmd, "SchemaSmith.fn_RebuildBlockedReason", "FN"), Is.True, "fn_RebuildBlockedReason (pre-2016 body)");
+            Assert.That(FnRebuildBlockedReason(cmd, "SchemaSmith", "ChangeAudit"), Is.Null,
+                "The rebuild guard must EXECUTE below 2016, not merely CREATE -- a table with none of the "
+                + "blocking states must be reported rebuildable rather than failing on a 2016-only catalog read.");
             // The rest of the shared apply set + the metadata tables.
             Assert.That(ObjectExists(cmd, "SchemaSmith.TableQuench", "P"), Is.True, "TableQuench");
             Assert.That(ObjectExists(cmd, "SchemaSmith.MissingTableAndColumnQuench", "P"), Is.True, "MissingTableAndColumnQuench");
@@ -107,6 +114,13 @@ public class OldBinaryXmlKindleTests
     {
         cmd.CommandText = "SELECT SchemaSmith.fn_ServerMajorVersion()";
         return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    private static string FnRebuildBlockedReason(IDbCommand cmd, string schema, string table)
+    {
+        cmd.CommandText = $"SELECT SchemaSmith.fn_RebuildBlockedReason('{schema}', '{table}')";
+        var result = cmd.ExecuteScalar();
+        return result == null || result == DBNull.Value ? null : result.ToString();
     }
 
     private string CreateDatabase(string prefix, bool setCompat100)
