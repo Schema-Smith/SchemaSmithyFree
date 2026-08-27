@@ -13,6 +13,24 @@ cd "$(dirname "$0")/.." || exit 1
 #   a worse one.
 #   This script is the PRE-RELEASE breadth pass instead: run once per release, where hours are affordable.
 #
+# NOT YET USABLE -- the containers below are under-provisioned. Its first real run (2026-08-27,
+# after the Git Bash path bug below was fixed) reached all three bands and then failed 464/464
+# SchemaQuench tests on every one of them, in 3 seconds, with:
+#     Full-Text Search is not installed, or a full-text component cannot be loaded.  (error 7609)
+# That is not a product finding. A stock mcr.microsoft.com/mssql/server image ships no full-text
+# component, and the SchemaQuench SqlServer [SetUpFixture] requires one. Everywhere SQL Server
+# tests actually pass, something installs it first:
+#   * CI  -- an explicit "Install Full-Text Search on SQL Server" step (mssql-server-fts), then a
+#            restart, then scripts/provision-semantic-db.sh for the STATISTICAL_SEMANTICS tests.
+#   * local -- Demos/SqlServer/demoserver/demoserver.Dockerfile does the same at build time and
+#            takes a BASE_IMAGE arg, which is exactly the per-band knob this script needs.
+# The fix is to stop hand-rolling a container here and drive that demo image per band
+# (MSSQL_IMAGE + MSSQL_PORT), which also deletes the bespoke sqlcmd probing below. One open
+# question blocks a straight swap: that Dockerfile maps Ubuntu 20.04/22.04/24.04 -> 2019/2022/2025
+# and hard-fails otherwise, so the 2017 band (Ubuntu 16.04, long EOL) needs either a 16.04 case
+# that can still reach packages.microsoft.com, or an explicit decision to drop 2017 from the bands.
+# Until that lands this script FAILS rather than reporting a pass -- see the exit guard at the end.
+#
 # Each band gets its own container and port so a leftover container from another band cannot silently
 # answer for it -- the same failure shape as an all-skip reading as a pass.
 set -u
@@ -96,7 +114,28 @@ for band in $BANDS; do
   dotnet test SchemaSmith.sln --filter "Category=SqlServer" 2>&1 \
     | tee "/tmp/ss-band-$port.log" | grep -E "^(Passed!|Failed!|No test)|^  Failed "
 
-  summary="$(grep -E "^(Passed!|Failed!)" "/tmp/ss-band-$port.log" | head -1 | sed "s/ - Duration.*//")"
+  # Every assembly, not just the first. `head -1` recorded whichever finished first, so a passing
+  # Schema.IntegrationTests masked 464 failed SchemaQuench tests in the very same band -- and the row
+  # then read "Passed!", which also starved the Failed! exit guard of anything to catch.
+  # awk rather than bc: bc is not present in Git Bash, where this runs.
+  band_totals="$(grep -E "^(Passed!|Failed!)" "/tmp/ss-band-$port.log" | awk '
+    { for (i = 1; i <= NF; i++) {
+        if ($i == "Failed:") f += $(i + 1);
+        if ($i == "Passed:") p += $(i + 1);
+      }
+      n++ }
+    END { printf "%d %d %d", f + 0, p + 0, n + 0 }')"
+  band_failed="${band_totals%% *}"
+  band_assemblies="${band_totals##* }"
+  band_passed="$(printf "%s" "$band_totals" | cut -d" " -f2)"
+
+  if [ -z "$band_totals" ] || [ "$band_assemblies" -eq 0 ]; then
+    summary="NO RESULT"
+  elif [ "$band_failed" -gt 0 ]; then
+    summary="Failed! - $band_failed failed, $band_passed passed across $band_assemblies assemblies"
+  else
+    summary="Passed! - 0 failed, $band_passed passed across $band_assemblies assemblies"
+  fi
   SWEEP_ROWS="${SWEEP_ROWS}| $image ($version) @ $port | ${summary:-NO RESULT} | full SqlServer category, 0 failed |
 "
   docker rm -f "$name" >/dev/null 2>&1
@@ -120,7 +159,7 @@ echo "Recorded in $RECORD for commit $SWEEP_SHA -- commit it alongside the relea
 # sweep must not report success for it. Exiting 0 on an all-NEVER-READY run is how a broken probe
 # looked exactly like a clean pass -- the record said so plainly while the exit code said otherwise,
 # and the exit code is what a caller (or a hook) actually reads.
-if printf "%s" "$SWEEP_ROWS" | grep -qE "NEVER READY|CONTAINER FAILED TO START|NO RESULT"; then
+if printf "%s" "$SWEEP_ROWS" | grep -qE "NEVER READY|CONTAINER FAILED TO START|NO RESULT|Failed!"; then
   echo "FAIL: at least one band did not run. The rows above are not a certification."
   exit 1
 fi
