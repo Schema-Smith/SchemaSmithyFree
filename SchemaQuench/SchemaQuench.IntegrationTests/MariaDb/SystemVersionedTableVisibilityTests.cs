@@ -47,6 +47,13 @@ public class SystemVersionedTableVisibilityTests : BaseTableQuenchTests
         using var conn = DbConnectionFactory.ForPlatform(Platform.MariaDb).GetDbConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
+        // MariaDB gained system versioning in 10.3; on the 10.2 floor the CREATE below is a hard
+        // syntax error, so the state under test cannot exist here at all.
+        cmd.CommandText = "SELECT VERSION()";
+        var serverVersion = cmd.ExecuteScalar()?.ToString() ?? "";
+        if (!FixtureSetup.SupportsSystemVersioning(serverVersion))
+            Assert.Ignore($"MariaDB {serverVersion} predates system-versioned tables (10.3), so this state cannot be created on the supported floor.");
+
 
         cmd.CommandText = $"DROP TABLE IF EXISTS `{TableName}`";
         cmd.ExecuteNonQuery();
