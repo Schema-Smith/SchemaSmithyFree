@@ -56,6 +56,12 @@ for band in $BANDS; do
   # gets run: MSYS rewrites a bare /opt/... argv entry into a Windows path before docker sees it, so the
   # test fails on 2022 and the script silently picks the 2017 tooling. Wrapping it in sh -c keeps the
   # path inside a string argument, which MSYS leaves alone. Verified both ways on both image generations.
+  #
+  # THE SAME REWRITE APPLIES TO EVERY container-side path below, not just this probe. It was
+  # originally fixed here only, so $SQLCMD was still passed as a bare argv entry to the readiness
+  # and version queries -- docker received "C:/Program Files/Git/opt/mssql-tools18/bin/sqlcmd",
+  # every band reported NEVER READY, and the sweep exited 0 having run no tests at all. Keep every
+  # container-side path inside an sh -c string.
   if docker exec "$name" sh -c 'test -x /opt/mssql-tools18/bin/sqlcmd' 2>/dev/null; then
     SQLCMD="/opt/mssql-tools18/bin/sqlcmd"; TLS="-C"
   else
@@ -66,9 +72,10 @@ for band in $BANDS; do
   # of the three (Demos/README.md), so any single sleep is either too short for it or wasted on the others.
   ready=0
   for _ in $(seq 1 60); do
-    # shellcheck disable=SC2086  # TLS must word-split: empty on 2017, "-C" on 2022+.
-    if docker exec "$name" "$SQLCMD" -S localhost -U sa -P "$PASSWORD" $TLS \
-         -Q "SELECT 1" >/dev/null 2>&1; then ready=1; break; fi
+    if docker exec "$name" sh -c \
+         "$SQLCMD -S localhost -U sa -P '$PASSWORD' $TLS -Q 'SELECT 1'" >/dev/null 2>&1; then
+      ready=1; break
+    fi
     sleep 5
   done
   if [ "$ready" -ne 1 ]; then
@@ -79,9 +86,9 @@ for band in $BANDS; do
     continue
   fi
 
-  # shellcheck disable=SC2086  # see the TLS note above
-  version="$(docker exec "$name" "$SQLCMD" -S localhost -U sa -P "$PASSWORD" $TLS \
-      -h -1 -W -Q "SET NOCOUNT ON; SELECT CONVERT(varchar(20), SERVERPROPERTY('ProductVersion'))" 2>/dev/null | tr -d '\r' | head -1)"
+  version="$(docker exec "$name" sh -c \
+      "$SQLCMD -S localhost -U sa -P '$PASSWORD' $TLS -h -1 -W -Q \"SET NOCOUNT ON; SELECT CONVERT(varchar(20), SERVERPROPERTY('ProductVersion'))\"" \
+      2>/dev/null | tr -d '\r' | head -1)"
   echo "  ready: $version"
 
   SmithySettings_SqlServer__Server=127.0.0.1 SmithySettings_SqlServer__Port=$port \
@@ -108,3 +115,17 @@ mkdir -p "$(dirname "$RECORD")"
 } >> "$RECORD"
 echo
 echo "Recorded in $RECORD for commit $SWEEP_SHA -- commit it alongside the release it certifies."
+
+# A band that never became ready, failed to start, or produced no result has NOT been swept, and the
+# sweep must not report success for it. Exiting 0 on an all-NEVER-READY run is how a broken probe
+# looked exactly like a clean pass -- the record said so plainly while the exit code said otherwise,
+# and the exit code is what a caller (or a hook) actually reads.
+if printf "%s" "$SWEEP_ROWS" | grep -qE "NEVER READY|CONTAINER FAILED TO START|NO RESULT"; then
+  echo "FAIL: at least one band did not run. The rows above are not a certification."
+  exit 1
+fi
+if [ -z "$SWEEP_ROWS" ]; then
+  echo "FAIL: no bands were attempted at all."
+  exit 1
+fi
+echo "All bands ran."
