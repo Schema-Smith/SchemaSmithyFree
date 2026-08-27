@@ -183,6 +183,47 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_TableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexVisibility.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexExistence.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_RebuildBlockedReason.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_RebuildTable.sql"));
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_MySQL_RebuildTableFollowsItsGuardAndPrecedesTheQuench()
+    {
+        // MySQL twin of the SQL Server and PostgreSQL ordering guards. SchemaSmith_RebuildTable calls
+        // SchemaSmith_RebuildBlockedReason to refuse a table whose live state a shadow copy would destroy
+        // -- a stored FUNCTION, and unlike a CALLed procedure a function reference binds when the calling
+        // procedure is created, so the guard has to exist before this CREATE runs. It also calls the
+        // backtick helpers, kindled earlier still. And the quench procedures are what will elect a
+        // rebuild, so the engine has to be there before they are created.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildBlockedReason.sql");
+        var wrapIdx = Array.IndexOf(scripts, "SchemaSmith_SafeBacktickWrap.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildTable.sql");
+        var modifiedQuenchIdx = Array.IndexOf(scripts, "SchemaSmith_ModifiedTableQuench.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith_RebuildTable.sql must be kindled.");
+        Assert.That(guardIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "SchemaSmith_RebuildBlockedReason must be created before RebuildTable, which calls it.");
+        Assert.That(wrapIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "SchemaSmith_SafeBacktickWrap must be created before RebuildTable, which quotes every identifier with it.");
+        Assert.That(rebuildIdx, Is.LessThan(modifiedQuenchIdx),
+            "RebuildTable must be created before the quench procedures that will elect a rebuild.");
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_MariaDb_RebuildTableIsKindledAndOrdered()
+    {
+        // MariaDb inherits the MySQL list by base-platform routing, and it is the engine where the guard
+        // actually has something to say (system versioning, application-time periods) -- so assert the
+        // pair is present and ordered here too rather than trusting the list-equality test alone.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.MariaDb);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildBlockedReason.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildTable.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith_RebuildTable.sql must be kindled on MariaDb.");
+        Assert.That(guardIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "The MariaDb RebuildBlockedReason variant must be created before RebuildTable, which calls it.");
     }
 
     [Test]
@@ -312,7 +353,13 @@ public class ForgeKindlerTests
         // The MySQL body is deliberately always-NULL -- MySQL has none of these concepts -- and the MariaDb
         // override detects system versioning and application-time periods, the two states a
         // shadow-copy-and-swap would silently destroy there).
-        Assert.That(mysql.Length, Is.EqualTo(47));
+        // +1 = SchemaSmith_RebuildTable (the MySQL/MariaDB shadow-copy-and-swap engine: refuse-if-blocked,
+        // capture the AUTO_INCREMENT counter, create the shadow in declared order, copy, reseed, swap with
+        // a single atomic RENAME TABLE, then drop the inbound foreign keys and the old table. Kindled after
+        // SchemaSmith_RebuildBlockedReason, which it calls to refuse, and before the quench procedures.
+        // Unlike its two siblings it gets no transaction -- MySQL DDL is not transactional -- so the
+        // reversible work runs first and the destructive step follows the atomic swap).
+        Assert.That(mysql.Length, Is.EqualTo(48));
     }
 
     [Test]

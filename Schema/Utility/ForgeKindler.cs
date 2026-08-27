@@ -366,6 +366,9 @@ public static class ForgeKindler
                 new("SchemaSmith_DropCheckClause.sql"),
                 new("SchemaSmith_IndexInvisibleClause.sql"),
                 new("SchemaSmith_RebuildBlockedReason.sql"),
+                // Must follow SchemaSmith_RebuildBlockedReason (it calls it to refuse) and the identifier
+                // helpers above, and precede the quench procedures that will elect a rebuild.
+                new("SchemaSmith_RebuildTable.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),
                 new("SchemaSmith_MissingTableAndColumnQuench.sql"),
