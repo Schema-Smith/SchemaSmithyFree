@@ -167,10 +167,21 @@ jobs:
 
       - name: Wait for SQL Server to be ready
         run: |
+          # The tools path moved between image generations (CU27 shipped mssql-tools, CU32 ships
+          # mssql-tools18, which also needs -C). Detect it, exactly as provision-semantic-db.sh does.
+          SQLCMD="$(docker exec mssql sh -c 'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -1')"
+          if [ -z "$SQLCMD" ]; then echo "No sqlcmd in the mssql container" >&2; exit 1; fi
+          case "$SQLCMD" in *tools18*) TLS=-C ;; *) TLS= ;; esac
+          # Must FAIL when the server never answers. This loop previously swallowed every error and
+          # fell through with exit 0, so on an image where the hardcoded sqlcmd path did not exist it
+          # verified nothing at all and simply slept.
           for _ in $(seq 1 30); do
-            docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "SELECT 1" > /dev/null 2>&1 && break
+            if docker exec mssql "$SQLCMD" -S localhost -U sa -P "$TEST_PASSWORD" $TLS \
+                 -Q "SELECT 1" > /dev/null 2>&1; then exit 0; fi
             sleep 2
           done
+          echo "SQL Server never became ready" >&2
+          exit 1
 
       - name: Provision the semantic language statistics database
         # STATISTICAL_SEMANTICS full-text columns cannot be created without it, so the tests covering
@@ -180,9 +191,11 @@ jobs:
 
       - name: Rename sa login to TestUser
         run: |
-          docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "
-            ALTER LOGIN [sa] WITH NAME = [$TEST_USER];
-          "
+          # Path differs by image generation; tools18 also requires -C to trust the self-signed cert.
+          SQLCMD="$(docker exec mssql sh -c 'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -1')"
+          case "$SQLCMD" in *tools18*) TLS=-C ;; *) TLS= ;; esac
+          docker exec mssql "$SQLCMD" -S localhost -U sa -P "$TEST_PASSWORD" $TLS \
+            -Q "ALTER LOGIN [sa] WITH NAME = [$TEST_USER];"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
