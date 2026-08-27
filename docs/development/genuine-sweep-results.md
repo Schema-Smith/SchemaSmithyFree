@@ -11,3 +11,12 @@ Server Linux image exists -- so this file is the standing evidence that it ran, 
 | SQL Server @ 14331 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 25 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
 | SQL Server @ 14332 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 26 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
 | SQL Server @ 14333 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 7 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
+
+## 2026-08-27T20:29:55Z - commit 50605d09
+
+| Target | Result | Expected |
+|---|---|---|
+| SQL Server @ 14330 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 19 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
+| SQL Server @ 14331 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 29 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
+| SQL Server @ 14332 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 27 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
+| SQL Server @ 14333 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 8 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
