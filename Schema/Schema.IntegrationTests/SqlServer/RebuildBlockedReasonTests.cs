@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using System.Threading;
 using NUnit.Framework;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -73,8 +74,14 @@ public class RebuildBlockedReasonTests
             try
             {
                 _connection.ChangeDatabase("master");
-                Exec($"ALTER DATABASE [{_db}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE");
-                Exec($"DROP DATABASE IF EXISTS [{_db}]");
+                // Retried on deadlock. This fixture enables CDC and Change Tracking, both of which write
+                // server-wide replication metadata, so tearing its database down collides with any sibling
+                // fixture doing DDL at the same moment. Seen once in a full concurrent gate: every assembly
+                // reported 0 failures and the RUN still exited non-zero, because an NUnit TearDown failure
+                // fails the run without ever being counted as a failed test -- which is exactly why this is
+                // worth retrying rather than leaving as a rare confusing red.
+                ExecWithDeadlockRetry($"ALTER DATABASE [{_db}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE");
+                ExecWithDeadlockRetry($"DROP DATABASE IF EXISTS [{_db}]");
             }
             finally
             {
@@ -91,6 +98,30 @@ public class RebuildBlockedReasonTests
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = sql;
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Teardown-only. Matches on the deadlock TEXT rather than an error number: SQL Server wraps 1205
+    /// inside other errors on some paths (a CDC enable reports it under 22832), so a number check can
+    /// miss it. After the retries it runs once unguarded, so a genuine failure surfaces with its real
+    /// error rather than a synthesized one.
+    /// </summary>
+    private void ExecWithDeadlockRetry(string sql)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                Exec(sql);
+                return;
+            }
+            catch (Exception e) when (e.Message.ContainsIgnoringCase("deadlock victim"))
+            {
+                Thread.Sleep(1000);
+            }
+        }
+
+        Exec(sql);
     }
 
     private string BlockedReason(string table, string schema = "dbo")
