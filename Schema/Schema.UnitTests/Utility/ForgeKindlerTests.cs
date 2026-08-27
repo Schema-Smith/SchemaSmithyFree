@@ -26,6 +26,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_SafeBracketWrap.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_ServerMajorVersion.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.PrintWithNoWait.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.RebuildTable.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingTableAndColumnQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ModifiedTableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"));
@@ -58,6 +59,25 @@ public class ForgeKindlerTests
             "BootstrapTableQuench must be created before the kindling table that uses it.");
         Assert.That(kindlingTableIdx, Is.LessThan(tableQuenchIdx),
             "Kindling table must be created via Bootstrap before TableQuench is created.");
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_SqlServer_RebuildTableFollowsItsGuardAndPrecedesTheQuench()
+    {
+        // RebuildTable calls SchemaSmith.fn_RebuildBlockedReason to refuse a table whose live state a
+        // shadow copy would destroy -- a scalar function, which unlike an EXEC'd procedure is not covered
+        // by deferred name resolution, so the guard has to exist before this CREATE runs. And the quench
+        // procedures are what will elect a rebuild, so the engine has to be there before they are created.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.SqlServer);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith.fn_RebuildBlockedReason.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith.RebuildTable.sql");
+        var modifiedQuenchIdx = Array.IndexOf(scripts, "SchemaSmith.ModifiedTableQuench.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith.RebuildTable.sql must be kindled.");
+        Assert.That(guardIdx, Is.LessThan(rebuildIdx),
+            "fn_RebuildBlockedReason must be created before RebuildTable, which calls it.");
+        Assert.That(rebuildIdx, Is.LessThan(modifiedQuenchIdx),
+            "RebuildTable must be created before the quench procedures that will elect a rebuild.");
     }
 
     [Test]
@@ -197,7 +217,10 @@ public class ForgeKindlerTests
         //   temporal, CDC, replication, Change Tracking -- so a rebuild can refuse and say which one. Its
         //   CREATE is assembled at kindle time because temporal_type_desc is 2016+ and a function body binds
         //   at CREATE).
-        Assert.That(sqlServer.Length, Is.EqualTo(31));
+        // + SchemaSmith.RebuildTable (the shadow-copy-and-swap engine: refuse-if-blocked, capture the identity
+        //   counter, drop inbound foreign keys, create the shadow in declared order, copy, reseed, swap, drop.
+        //   Kindled after fn_RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
+        Assert.That(sqlServer.Length, Is.EqualTo(32));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
