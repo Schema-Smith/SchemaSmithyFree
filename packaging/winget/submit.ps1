@@ -30,10 +30,8 @@ function Get-Sha([string]$name) {
     }
     throw "SHA256 for $name not found in SHA256SUMS"
 }
-# winget consumes the UNBUNDLED zips (no PublishSingleFile); every other channel takes the
-# single-file ones. See the Community roadmap for the Defender false-positive this tests.
-$shaX64   = Get-Sha "SchemaSmith-$Version-win-x64-unbundled.zip"
-$shaArm64 = Get-Sha "SchemaSmith-$Version-win-arm64-unbundled.zip"
+$shaX64   = Get-Sha "SchemaSmith-$Version-win-x64.zip"
+$shaArm64 = Get-Sha "SchemaSmith-$Version-win-arm64.zip"
 
 # Render manifest templates (UTF-8, no BOM — winget-pkgs convention).
 $here = Split-Path -Parent $PSCommandPath
