@@ -361,7 +361,8 @@ BEGIN
     CREATE TEMPORARY TABLE _SchemaSmith_RebuildFacts (
         TableName VARCHAR(128) NOT NULL PRIMARY KEY,
         ModificationPasses INT NOT NULL DEFAULT 0,
-        HasColumnDrop TINYINT NOT NULL DEFAULT 0
+        HasColumnDrop TINYINT NOT NULL DEFAULT 0,
+        HasOrderMismatch TINYINT NOT NULL DEFAULT 0
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
     -- THE THRESHOLD COUNT: column-MODIFICATION passes only, which is what a rebuild actually eliminates.
@@ -433,6 +434,85 @@ BEGIN
                           AND BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName) = BINARY isc.COLUMN_NAME)
     ON DUPLICATE KEY UPDATE HasColumnDrop = 1;
 
+    -- ================================================================================================
+    -- COLUMN-ORDER DRIFT, the input to the OnOrderMismatch trigger.
+    --
+    -- Reordering existing columns is impossible in place on every engine SchemaSmith supports, so a
+    -- rebuild is the only mechanism that can converge a table whose columns are in the wrong order.
+    --
+    -- DECLARED ORDER IS (OrdinalPosition, RowId) -- exactly what SchemaSmith_RebuildTable orders the
+    -- shadow's CREATE by. Detection and repair MUST read the declared order off the same key: if this
+    -- pass elected on one definition of "declared order" and the rebuild produced another, the table
+    -- would be re-elected on every subsequent deploy and rebuilt forever -- which on this feature means
+    -- copying every row of the table, every deploy.
+    --
+    -- THE COMPARISON IS RELATIVE, NEVER ABSOLUTE. The two tables below pair each column's declared
+    -- position with its live ORDINAL_POSITION, and the test is for an INVERSION -- two columns whose
+    -- declared order disagrees with their live order. Comparing the positions for EQUALITY would be
+    -- wrong the moment a column is dropped and one side's numbering shifts relative to the other's,
+    -- which would rebuild a correctly-ordered table on every deploy -- the infinite-rebuild trap. An
+    -- inversion test never reads a position's value, only two positions' order, so any uniform shift is
+    -- invisible to it and only genuine drift is detected.
+    --
+    -- THE COMPARED SET IS THE INTERSECTION, which the join to INFORMATION_SCHEMA produces by
+    -- construction. A column that is live but NOT declared has no declared position to compare and is
+    -- excluded: it is dropped by absence in this same run (a table RETAINING one cannot reach the
+    -- election at all -- the HasColumnDrop guard in the election's WHERE excludes it), so it must not
+    -- drag a correctly-ordered table into a rebuild. A column declared but NOT live cannot occur here:
+    -- SchemaSmith_MissingTableAndColumnQuench added it earlier in this run. That ADD appends to the end
+    -- of the table (no AFTER/FIRST clause is ever emitted), so a new column declared mid-file IS a
+    -- genuine mismatch -- correctly, since only a rebuild can move it into place.
+    --
+    -- TWO IDENTICAL TABLES, deliberately. MySQL cannot open the same TEMPORARY table twice in one
+    -- statement ("Can't reopen table"), so the inversion self-join needs a second physical copy. The
+    -- alternative -- ROW_NUMBER() to rank each side -- is not available: the supported floor is MySQL
+    -- 5.7, which has no window functions.
+    -- ================================================================================================
+    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+    VALUES (CONNECTION_ID(), 'ModifiedTableQuench: Detect declared-vs-deployed column order drift');
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildColumnOrder;
+    CREATE TEMPORARY TABLE _SchemaSmith_RebuildColumnOrder (
+        TableName VARCHAR(128) NOT NULL,
+        DeclaredPos INT NOT NULL,
+        DeclaredSeq INT NOT NULL,
+        LivePos INT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    INSERT INTO _SchemaSmith_RebuildColumnOrder (TableName, DeclaredPos, DeclaredSeq, LivePos)
+    SELECT c.TableName, c.OrdinalPosition, c.RowId, isc.ORDINAL_POSITION
+    FROM _SchemaSmith_Columns c
+    INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+        ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+        AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+        AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName);
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildColumnOrderPeer;
+    CREATE TEMPORARY TABLE _SchemaSmith_RebuildColumnOrderPeer (
+        TableName VARCHAR(128) NOT NULL,
+        DeclaredPos INT NOT NULL,
+        DeclaredSeq INT NOT NULL,
+        LivePos INT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    INSERT INTO _SchemaSmith_RebuildColumnOrderPeer (TableName, DeclaredPos, DeclaredSeq, LivePos)
+    SELECT TableName, DeclaredPos, DeclaredSeq, LivePos FROM _SchemaSmith_RebuildColumnOrder;
+
+    INSERT INTO _SchemaSmith_RebuildFacts (TableName, HasOrderMismatch)
+    SELECT DISTINCT a.TableName, 1
+    FROM _SchemaSmith_RebuildColumnOrder a
+    INNER JOIN _SchemaSmith_RebuildColumnOrderPeer b ON b.TableName = a.TableName
+    -- The declared key is the PAIR, compared lexicographically, so this stays exactly in step with
+    -- RebuildTable's "ORDER BY c.OrdinalPosition, c.RowId" even if two rows ever share an
+    -- OrdinalPosition (the same table declared twice under mutually exclusive ShouldApply).
+    WHERE (a.DeclaredPos < b.DeclaredPos
+           OR (a.DeclaredPos = b.DeclaredPos AND a.DeclaredSeq < b.DeclaredSeq))
+      AND a.LivePos > b.LivePos
+    ON DUPLICATE KEY UPDATE HasOrderMismatch = 1;
+
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildColumnOrder;
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildColumnOrderPeer;
+
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildElection;
     CREATE TEMPORARY TABLE _SchemaSmith_RebuildElection (
         RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
@@ -442,10 +522,11 @@ BEGIN
     -- The policy is resolved once in a derived table so the collation-normalising CONVERT/COLLATE around
     -- the session variable (its charset is the CONNECTION's, the column's is utf8mb4_unicode_ci, and
     -- mixing them inside IF() is an "Illegal mix of collations" error) is written once rather than five
-    -- times. SLICE 5 HOOK: @ss_rebuild_policy_on_order_mismatch and t.RebuildPolicyOnOrderMismatch are
-    -- carried through the parse and the session, but nothing compares column ORDER yet. The flag composes
-    -- with Mode rather than replacing it, so when the comparison lands it becomes one more OR arm on the
-    -- WHERE below -- not a fourth Mode value.
+    -- times. OnOrderMismatch COMPOSES with Mode rather than replacing it -- it is one more OR arm on the
+    -- WHERE below, not a fourth Mode value. { "Mode": "THRESHOLD", "Threshold": 3, "OnOrderMismatch":
+    -- true } therefore reads "rebuild once three modifications pile up OR once the column order has
+    -- drifted", and pairing it with the NEVER default asks for a rebuild on order drift and nothing else
+    -- -- the case the trigger mainly exists for.
     INSERT INTO _SchemaSmith_RebuildElection (TableName)
     SELECT p.TableName
     FROM (
@@ -457,8 +538,12 @@ BEGIN
                IF(COALESCE(t.RebuildPolicySpecified, 0) = 1,
                   t.RebuildPolicyThreshold,
                   CAST(@ss_rebuild_policy_threshold AS SIGNED)) AS PolicyThreshold,
+               COALESCE(IF(COALESCE(t.RebuildPolicySpecified, 0) = 1,
+                           t.RebuildPolicyOnOrderMismatch,
+                           CAST(@ss_rebuild_policy_on_order_mismatch AS SIGNED)), 0) AS PolicyOnOrderMismatch,
                COALESCE(f.ModificationPasses, 0) AS ModificationPasses,
                COALESCE(f.HasColumnDrop, 0) AS HasColumnDrop,
+               COALESCE(f.HasOrderMismatch, 0) AS HasOrderMismatch,
                COALESCE(t.DropColumnsRemovedFromProduct, 1) AS TableDropColumns
         FROM _SchemaSmith_Tables t
         LEFT JOIN _SchemaSmith_RebuildFacts f ON f.TableName = t.TableName
@@ -481,6 +566,12 @@ BEGIN
           (p.PolicyMode = _utf8mb4'THRESHOLD' COLLATE utf8mb4_unicode_ci
            AND p.PolicyThreshold IS NOT NULL
            AND p.ModificationPasses >= p.PolicyThreshold)
+          OR
+          -- Deliberately NOT conjoined with any Mode or with a detected column change: drifted column
+          -- order is a standing reason to rebuild on its own, and on a table whose columns are merely in
+          -- the wrong order there is no column CHANGE to detect -- requiring one would make the trigger
+          -- unreachable in exactly the case it was added for.
+          (p.PolicyOnOrderMismatch = 1 AND p.HasOrderMismatch = 1)
       );
 
     -- p_WhatIf goes straight through: SchemaSmith_RebuildTable prints its whole sequence and records

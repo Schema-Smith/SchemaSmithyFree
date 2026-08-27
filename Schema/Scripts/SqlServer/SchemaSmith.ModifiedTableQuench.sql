@@ -504,8 +504,9 @@ BEGIN TRY
   -- earlier still, in MissingTableAndColumnQuench, which matters: RebuildTable refuses outright while a
   -- table or column rename is pending, because the copy matches columns by their CURRENT name.
   --
-  -- OPT-IN BY CONSTRUCTION. #RebuildElection is built by a WHERE that only an explicit ALWAYS/THRESHOLD
-  -- can satisfy. A package with no RebuildPolicy anywhere resolves to the domain object's NEVER default
+  -- OPT-IN BY CONSTRUCTION. #RebuildElection is built by a WHERE that only an explicit ALWAYS/THRESHOLD,
+  -- or an explicit OnOrderMismatch, can satisfy. A package with no RebuildPolicy anywhere resolves to the
+  -- domain object's NEVER default with OnOrderMismatch false
   -- at every level, elects nothing, and this whole block is a no-op: no rebuild, no statement, nothing
   -- added to the run. A rebuild moves user data, so a table that did not ask for one must never get one,
   -- and that has to be structurally true rather than true because the conditions happen not to match.
@@ -516,6 +517,65 @@ BEGIN TRY
   -- Threshold. Mirrors ProductQuench.ResolveCascadedPolicy, which collapses the three upper tiers the
   -- same way before this procedure is called.
   ----------------------------------------------------------------------------------------------------
+
+  ----------------------------------------------------------------------------------------------------
+  -- COLUMN-ORDER DRIFT, the input to the OnOrderMismatch trigger.
+  --
+  -- Reordering existing columns is impossible in place on every engine SchemaSmith supports, so a rebuild
+  -- is the only mechanism that can converge a table whose columns are in the wrong order. This pass names
+  -- the tables where that is true.
+  --
+  -- DECLARED ORDER IS [_RowId], because that is what RebuildTable orders the shadow's CREATE by. Detection
+  -- and repair MUST read the declared order off the same column: if this pass elected on one definition of
+  -- "declared order" and the rebuild produced another, the table would be re-elected on every subsequent
+  -- deploy and rebuilt forever -- which on this feature means copying every row of the table, every deploy.
+  --
+  -- THE COMPARISON IS RELATIVE, NEVER ABSOLUTE. #DeclaredColumnOrder pairs each column’s declared position
+  -- with its live ORDINAL_POSITION, and the mismatch test below looks only for an INVERSION -- two columns
+  -- whose declared order disagrees with their live order. Comparing the two positions for EQUALITY would be
+  -- wrong, and the reason is engine-specific rather than universal (measured 2026-08-27):
+  --   * PostgreSQL’s information_schema.ordinal_position is attnum and KEEPS the gap left by every column
+  --     ever dropped. A correctly-ordered table that has ever lost a column would show declared 2 against
+  --     live 3 and be rebuilt on every single deploy -- the infinite-rebuild trap, and on this feature that
+  --     means moving every row of the table every time.
+  --   * SQL Server’s INFORMATION_SCHEMA.ORDINAL_POSITION RENUMBERS, so the gap is invisible here. It is
+  --     sys.columns.column_id that retains it -- which this query deliberately does not read.
+  --   * MySQL renumbers contiguously and never exposes a gap either.
+  -- An inversion test never reads a position’s value, only two positions’ order, so a uniform shift by any
+  -- number of gaps is invisible to it on every engine and only genuine drift is detected. Writing it this
+  -- way means the three engines need no per-engine branch.
+  --
+  -- THE COMPARED SET IS THE INTERSECTION, which the join produces by construction.
+  --   * Declared AND live -- compared. This is the real question.
+  --   * Live but NOT declared -- excluded, because it has no declared position to compare. These are the
+  --     columns this run drops by absence (a table RETAINING one cannot reach the election at all: the
+  --     #SuppressedColumnDrops guard below excludes it), so they will not exist after the run and must not
+  --     drag a correctly-ordered table into a rebuild. Including them would re-elect any table with a
+  --     retained column forever -- the same infinite loop from the other direction.
+  --   * Declared but NOT live -- cannot occur here: MissingTableAndColumnQuench added it earlier in the
+  --     same run, so by this line it is live and the join finds it. It needs no special case, and the
+  --     comparison is simply over the live set. Note this makes a NEW column in a mid-file position a
+  --     genuine mismatch, correctly: the ADD appended it to the end, and only a rebuild can move it.
+  ----------------------------------------------------------------------------------------------------
+  RAISERROR('Detect declared-vs-deployed column order drift', 10, 100) WITH NOWAIT
+  IF OBJECT_ID('tempdb..#DeclaredColumnOrder') IS NOT NULL DROP TABLE #DeclaredColumnOrder
+  SELECT c.[Schema], c.[TableName], [DeclaredPos] = c.[_RowId], [LivePos] = ic.ORDINAL_POSITION
+    INTO #DeclaredColumnOrder
+    FROM #Columns c WITH (NOLOCK)
+    JOIN INFORMATION_SCHEMA.COLUMNS ic WITH (NOLOCK)
+      ON ic.TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(c.[Schema])
+     AND ic.TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(c.[TableName])
+     AND ic.COLUMN_NAME = SchemaSmith.fn_StripBracketWrapping(c.[ColumnName])
+
+  IF OBJECT_ID('tempdb..#RebuildOrderMismatch') IS NOT NULL DROP TABLE #RebuildOrderMismatch
+  SELECT DISTINCT a.[Schema], a.[TableName]
+    INTO #RebuildOrderMismatch
+    FROM #DeclaredColumnOrder a WITH (NOLOCK)
+    JOIN #DeclaredColumnOrder b WITH (NOLOCK) ON b.[Schema] = a.[Schema]
+                                             AND b.[TableName] = a.[TableName]
+    WHERE a.[DeclaredPos] < b.[DeclaredPos]
+      AND a.[LivePos] > b.[LivePos]
+
   RAISERROR('Elect tables for rebuild', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#RebuildElection') IS NOT NULL DROP TABLE #RebuildElection
   SELECT p.[Schema], p.[TableName]
@@ -524,10 +584,15 @@ BEGIN TRY
                  -- The winning policy, taken WHOLE from one level.
                  [Mode] = UPPER(LTRIM(RTRIM(ISNULL(CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyMode] ELSE @RebuildPolicyMode END, 'NEVER')))),
                  [Threshold] = CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyThreshold] ELSE @RebuildPolicyThreshold END,
-                 -- SLICE 5 HOOK. OnOrderMismatch is carried and resolved here, but nothing compares column
-                 -- ORDER yet. It composes with Mode rather than replacing it, so when the comparison lands
-                 -- it becomes one more OR arm on the WHERE below -- not a fourth Mode value.
+                 -- OnOrderMismatch COMPOSES with Mode rather than replacing it -- it is one more OR arm on
+                 -- the WHERE below, not a fourth Mode value. { "Mode": "THRESHOLD", "Threshold": 3,
+                 -- "OnOrderMismatch": true } therefore reads "rebuild once three modifications pile up OR
+                 -- once the column order has drifted", and pairing it with the NEVER default asks for a
+                 -- rebuild on order drift and nothing else -- the case the trigger mainly exists for.
                  [OnOrderMismatch] = CONVERT(BIT, ISNULL(CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyOnOrderMismatch] ELSE @RebuildPolicyOnOrderMismatch END, 0)),
+                 [OrderMismatch] = CONVERT(BIT, CASE WHEN EXISTS (SELECT 1 FROM #RebuildOrderMismatch m WITH (NOLOCK)
+                                                                    WHERE m.[Schema] = t.[Schema] AND m.[TableName] = t.[Name])
+                                                     THEN 1 ELSE 0 END),
                  -- THE THRESHOLD COUNT: column-MODIFICATION passes only, which is what a rebuild actually
                  -- eliminates -- each #ColumnChanges row that is not a pure drop becomes its own ALTER.
                  -- DropOnly rows are excluded (a column drop is metadata-only here, so a rebuild saves
@@ -556,6 +621,11 @@ BEGIN TRY
                                 WHERE s.[Schema] = t.[Schema] AND s.[TableName] = t.[Name])) p
     WHERE (p.[Mode] = 'ALWAYS' AND p.[AnyColumnChange] = 1)
        OR (p.[Mode] = 'THRESHOLD' AND p.[Threshold] IS NOT NULL AND p.[ModificationPasses] >= p.[Threshold])
+       -- Deliberately NOT conjoined with any Mode or with [AnyColumnChange]: drifted column order is a
+       -- standing reason to rebuild on its own, and on a table whose columns are merely in the wrong order
+       -- there is no column CHANGE to detect -- requiring one would make the trigger unreachable in exactly
+       -- the case it was added for.
+       OR (p.[OnOrderMismatch] = 1 AND p.[OrderMismatch] = 1)
 
   IF EXISTS (SELECT 1 FROM #RebuildElection)
   BEGIN

@@ -624,7 +624,19 @@ Two situations make a rebuild the better move:
 
 `OnOrderMismatch` is a separate switch that composes with any `Mode`, so `{ "Mode": "THRESHOLD",
 "Threshold": 3, "OnOrderMismatch": true }` means *rebuild if three modifications pile up **or** if the
-deployed column order has drifted from the package*.
+deployed column order has drifted from the package*. Pairing it with the default `NEVER` —
+`{ "OnOrderMismatch": true }` — asks for a rebuild on order drift and nothing else.
+
+The comparison is of **relative** order across the columns the package and the table have in common, not
+of absolute positions. Two consequences are worth knowing:
+
+- **A dropped column does not cause a rebuild.** Removing a column from the middle of a table leaves a
+  permanent gap in the engine's own column numbering. As long as the remaining columns are still in the
+  declared sequence relative to one another, nothing is elected — otherwise a table that had ever lost a
+  column would be rebuilt on every deploy.
+- **A column added in the middle of the file does.** Every supported engine can only append a new column
+  to the end of a table, so a package that declares one between two existing columns is genuinely out of
+  order until the table is rebuilt.
 
 **Only column modifications count toward `Threshold`** — the passes a rebuild actually eliminates.
 Column additions, column drops, and index or constraint changes do not, because a rebuild does not save

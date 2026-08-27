@@ -2,6 +2,7 @@
 
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Data;
 using Schema.DataAccess;
 
@@ -115,6 +116,12 @@ public abstract class RebuildDecisionSharedTests : BaseTableQuenchTests
                     + $"WHERE ObjectSchema = {Lit(_mainDb)} AND ObjectName = {Lit(table)} "
                     + $"AND ObjectType = 'TABLE' AND ProductName = {Lit(_productName)}");
 
+    /// <summary>The live column order as one comma-joined string, so an assertion reads as the shape a
+    /// package author would recognise rather than as a set of index comparisons.</summary>
+    private string? DeployedOrder(IDbCommand cmd, string table)
+        => Str(cmd, "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION SEPARATOR ',') "
+                    + $"FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = {Lit(_mainDb)} AND TABLE_NAME = {Lit(table)}");
+
     // ---- package shapes -----------------------------------------------------
 
     /// <summary>
@@ -123,20 +130,33 @@ public abstract class RebuildDecisionSharedTests : BaseTableQuenchTests
     /// deployed 10. Marker never varies -- it must stay out of the change count so the index on it is never
     /// dropped as a dependent of a changing column.
     /// </summary>
+    /// <param name="swapBC">Declares C before B. Nothing about either column changes -- only their order --
+    /// so a deploy of this shape produces ZERO column modifications and the ONLY thing that can elect it is
+    /// the order comparison.</param>
+    /// <param name="includeD">Declares a fourth VARCHAR between A and B. Dropping it on a later deploy
+    /// leaves the gap in the middle of the engine's ordinal numbering that the gap test needs.</param>
     private static string Package(string table, int aWidth = 10, int bWidth = 10, int cWidth = 10,
-        string? rebuildPolicy = null)
+        string? rebuildPolicy = null, bool swapBC = false, bool includeD = false)
     {
         var policy = rebuildPolicy == null ? "" : $"\"RebuildPolicy\": {rebuildPolicy},";
+        var columns = new List<string>
+        {
+            """{"Name": "Id", "DataType": "INT", "Nullable": false}""",
+            """{"Name": "Marker", "DataType": "INT", "Nullable": true}""",
+            $$"""{"Name": "A", "DataType": "VARCHAR({{aWidth}})", "Nullable": true}"""
+        };
+        if (includeD) columns.Add("""{"Name": "D", "DataType": "VARCHAR(10)", "Nullable": true}""");
+        var b = $$"""{"Name": "B", "DataType": "VARCHAR({{bWidth}})", "Nullable": true}""";
+        var c = $$"""{"Name": "C", "DataType": "VARCHAR({{cWidth}})", "Nullable": true}""";
+        columns.Add(swapBC ? c : b);
+        columns.Add(swapBC ? b : c);
+
         return $$"""
             [{
                 "Name": "{{table}}",
                 {{policy}}
                 "Columns": [
-                    {"Name": "Id", "DataType": "INT", "Nullable": false},
-                    {"Name": "Marker", "DataType": "INT", "Nullable": true},
-                    {"Name": "A", "DataType": "VARCHAR({{aWidth}})", "Nullable": true},
-                    {"Name": "B", "DataType": "VARCHAR({{bWidth}})", "Nullable": true},
-                    {"Name": "C", "DataType": "VARCHAR({{cWidth}})", "Nullable": true}
+                    {{string.Join(",\n        ", columns)}}
                 ]
             }]
             """;
@@ -147,12 +167,14 @@ public abstract class RebuildDecisionSharedTests : BaseTableQuenchTests
     /// live-only marker index, and asserts that starting state. Every test begins here so a later "nothing
     /// changed" assertion is measured against a state that was verified, not assumed.
     /// </summary>
-    private string Arrange(IDbCommand cmd)
+    private string Arrange(IDbCommand cmd, bool includeD = false)
     {
         var table = "RbDecision_" + Uid();
         Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
-        Quench(cmd, Package(table));
-        Exec(cmd, $"INSERT INTO `{table}` (Id, Marker, A, B, C) VALUES (1, 10, 'a1', 'b1', 'c1'), (2, 20, 'a2', 'b2', 'c2')");
+        Quench(cmd, Package(table, includeD: includeD));
+        Exec(cmd, includeD
+            ? $"INSERT INTO `{table}` (Id, Marker, A, D, B, C) VALUES (1, 10, 'a1', 'd1', 'b1', 'c1'), (2, 20, 'a2', 'd2', 'b2', 'c2')"
+            : $"INSERT INTO `{table}` (Id, Marker, A, B, C) VALUES (1, 10, 'a1', 'b1', 'c1'), (2, 20, 'a2', 'b2', 'c2')");
         Exec(cmd, $"CREATE INDEX `{MarkerIndex}` ON `{table}` (Marker)");
 
         Assert.That(MarkerCount(cmd, table), Is.EqualTo(1),
@@ -411,6 +433,208 @@ public abstract class RebuildDecisionSharedTests : BaseTableQuenchTests
             "WhatIf must not widen the column either -- the elected rebuild must not have been quietly "
             + "replaced by an in-place alter.");
         Assert.That(RowCount(cmd, table), Is.EqualTo(2), "WhatIf touches no rows.");
+
+        Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
+        conn.Close();
+    }
+
+    // ---- OnOrderMismatch ----------------------------------------------------
+
+    [Test]
+    public void OnOrderMismatch_WithDriftedColumnOrder_Rebuilds_AndRestoresTheDeclaredOrder()
+    {
+        // Reordering existing columns is impossible in place on this engine, so a rebuild is the only thing
+        // that can deliver it. The package swaps B and C and changes NOTHING else, so there is not a single
+        // column modification to detect -- if this rebuilds, the order comparison is what elected it.
+        using var conn = OpenMainDb();
+        using var cmd = conn.CreateCommand();
+
+        var table = Arrange(cmd);
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,B,C"),
+            "Setup precondition: the baseline must be deployed in the declared order, or the swap below is "
+            + "not the thing under test.");
+
+        Quench(cmd, Package(table, rebuildPolicy: """{"OnOrderMismatch": true}""", swapBC: true));
+
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.EqualTo(1),
+            "Drifted column order with OnOrderMismatch set must elect a rebuild and the run manifest must "
+            + "say so.");
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,C,B"),
+            "The rebuild has to actually FIX the order. A 'rebuilt' audit row over a table still in the old "
+            + "order would mean the trigger fires forever without ever converging.");
+        Assert.That(MarkerCount(cmd, table), Is.Zero,
+            "The live-only marker index went with the old table -- the only proof on this engine that the "
+            + "table was genuinely replaced rather than merely audited.");
+        Assert.That(RowCount(cmd, table), Is.EqualTo(2),
+            "Carrying the rows across is the whole point; a rebuild that loses them is data destruction with "
+            + "a successful exit code.");
+        Assert.That(Str(cmd, $"SELECT B FROM `{table}` WHERE Id = 2"), Is.EqualTo("b2"),
+            "Values must land in the right columns. A copy that reordered the SELECT but not the INSERT "
+            + "would still produce two rows in the right order with the data transposed.");
+
+        Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
+        conn.Close();
+    }
+
+    [Test]
+    public void OnOrderMismatch_AfterTheRebuild_ASecondIdenticalDeployDoesNotRebuildAgain()
+    {
+        // THE acceptance test for this trigger. A trigger that cannot converge is worse than no trigger:
+        // every deploy would copy every row of the table forever. Deploy the drift, confirm the rebuild,
+        // then deploy the IDENTICAL package again and require that nothing happens the second time.
+        using var conn = OpenMainDb();
+        using var cmd = conn.CreateCommand();
+
+        var table = Arrange(cmd);
+        var package = Package(table, rebuildPolicy: """{"OnOrderMismatch": true}""", swapBC: true);
+
+        Quench(cmd, package);
+
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.EqualTo(1),
+            "Setup precondition: the first deploy must have rebuilt, or the second deploy proves nothing.");
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,C,B"),
+            "Setup precondition: the order must actually have been fixed before convergence can be tested.");
+
+        // The rebuild took the marker index with the old table, so re-create it: without a live-only object
+        // in place there is nothing for the second deploy's "was this table replaced?" check to read.
+        Exec(cmd, $"CREATE INDEX `{MarkerIndex}` ON `{table}` (Marker)");
+        Assert.That(MarkerCount(cmd, table), Is.EqualTo(1),
+            "Setup precondition: the fresh marker index must exist before the second deploy.");
+
+        Quench(cmd, package);
+
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.EqualTo(1),
+            "STILL one. A second 'rebuilt' row means the order comparison re-elected a table it had just "
+            + "fixed -- an infinite rebuild loop that moves every row of the table on every deploy.");
+        Assert.That(MarkerCount(cmd, table), Is.EqualTo(1),
+            "The marker index must survive the second deploy. Its absence would prove the table was replaced "
+            + "again even if the audit row somehow were not written.");
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,C,B"),
+            "The order must still match the declaration -- the state the second deploy found and correctly "
+            + "left alone.");
+        Assert.That(RowCount(cmd, table), Is.EqualTo(2), "Rows are untouched by a deploy that did nothing.");
+
+        Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
+        conn.Close();
+    }
+
+    [Test]
+    public void OrderDrift_WithoutOnOrderMismatch_DoesNotRebuild()
+    {
+        // The trigger is opt-in like everything else in RebuildPolicy. The same drift that rebuilds above
+        // must be ignored entirely when the package did not ask for it -- a rebuild moves user data, so it
+        // must never be something a package gets without saying so.
+        using var conn = OpenMainDb();
+        using var cmd = conn.CreateCommand();
+
+        var table = Arrange(cmd);
+
+        Quench(cmd, Package(table, swapBC: true));
+
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.Zero,
+            "No policy asked for a rebuild on order drift, so drifted order must not produce one.");
+        Assert.That(AuditCount(cmd, table, "wouldRebuild"), Is.Zero,
+            "Nor a 'wouldRebuild' one -- the decision must not even have considered this table elected.");
+        Assert.That(MarkerCount(cmd, table), Is.EqualTo(1),
+            "The live-only marker index must survive, which is what proves the table was not replaced.");
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,B,C"),
+            "The deployed order must be left exactly as it was. This is also the anti-vacuity check: the "
+            + "package really did declare a different order, so the assertions above are about a table that "
+            + "genuinely had drift and was correctly left alone.");
+
+        Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
+        conn.Close();
+    }
+
+    [Test]
+    public void OnOrderMismatch_WithTheOrderAlreadyCorrect_DoesNotRebuild()
+    {
+        // The flag is a trigger, not a switch. Set on a table whose order already matches, it must find
+        // nothing to do -- otherwise turning it on rebuilds every table in the package on every deploy.
+        using var conn = OpenMainDb();
+        using var cmd = conn.CreateCommand();
+
+        var table = Arrange(cmd);
+
+        Quench(cmd, Package(table, rebuildPolicy: """{"OnOrderMismatch": true}"""));
+
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.Zero,
+            "The declared order already matches the deployed order, so there is no drift to fix.");
+        Assert.That(MarkerCount(cmd, table), Is.EqualTo(1), "The marker index must survive an unchanged deploy.");
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,B,C"), "The order is untouched.");
+        Assert.That(RowCount(cmd, table), Is.EqualTo(2), "Rows are untouched.");
+
+        Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
+        conn.Close();
+    }
+
+    [Test]
+    public void OnOrderMismatch_AfterAMiddleColumnIsDropped_DoesNotRebuild()
+    {
+        // THE INFINITE-LOOP GUARD. The comparison must be of RELATIVE sequence, never of absolute ordinal
+        // positions. A column dropped from the middle of a table leaves the declared numbering (1..n,
+        // contiguous) and the live numbering permanently offset from each other on the engines that keep the
+        // gap -- so an equality comparison would report drift on a perfectly ordered table and rebuild it on
+        // every single deploy, forever.
+        //
+        // On MySQL/MariaDB ORDINAL_POSITION is renumbered contiguously after a drop, so this engine does not
+        // expose the gap itself; the test is kept here as the regression guard for the shared definition and
+        // its SQL Server / PostgreSQL twins are where the gap is genuinely present and asserted.
+        using var conn = OpenMainDb();
+        using var cmd = conn.CreateCommand();
+
+        var table = Arrange(cmd, includeD: true);
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,D,B,C"),
+            "Setup precondition: D must be deployed in the MIDDLE. Dropping a trailing column would leave no "
+            + "offset behind it and the test would pass without exercising the trap.");
+
+        // Deploy 1: D leaves the package and is dropped by absence. The remaining columns are still in
+        // declared order relative to one another, so this must not rebuild either.
+        Quench(cmd, Package(table, rebuildPolicy: """{"OnOrderMismatch": true}"""));
+
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,B,C"),
+            "Setup precondition: D must actually have been dropped, or the deploy below is not the "
+            + "post-drop state this test is about.");
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.Zero,
+            "A column leaving the package is a metadata-only drop. The columns that remain are in declared "
+            + "order, so there was no drift to elect on.");
+
+        // Deploy 2: the identical package against the post-drop table. This is the deploy that an
+        // absolute-position comparison would rebuild.
+        Quench(cmd, Package(table, rebuildPolicy: """{"OnOrderMismatch": true}"""));
+
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.Zero,
+            "The table's columns are in exactly the declared order. Electing it here would mean the trigger "
+            + "rebuilds every table that has ever lost a column, on every deploy, forever.");
+        Assert.That(MarkerCount(cmd, table), Is.EqualTo(1),
+            "The live-only marker index must have survived both deploys -- the proof the table was never "
+            + "replaced.");
+        Assert.That(RowCount(cmd, table), Is.EqualTo(2), "Rows are untouched throughout.");
+
+        Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
+        conn.Close();
+    }
+
+    [Test]
+    public void OnOrderMismatch_ComposesWithModeNever_AndStillRebuildsOnDrift()
+    {
+        // OnOrderMismatch is an INDEPENDENT trigger, not a fourth Mode. Declared alongside an explicit NEVER
+        // it must still fire: NEVER answers "rebuild instead of altering in place?", and order drift is not
+        // an alter-in-place question at all -- there is no in-place answer to it.
+        using var conn = OpenMainDb();
+        using var cmd = conn.CreateCommand();
+
+        var table = Arrange(cmd);
+
+        Quench(cmd, Package(table, rebuildPolicy: """{"Mode": "NEVER", "OnOrderMismatch": true}""", swapBC: true));
+
+        Assert.That(AuditCount(cmd, table, "rebuilt"), Is.EqualTo(1),
+            "Mode NEVER must not suppress the order trigger. If it does, the headline use of this feature -- "
+            + "'rebuild only when the column order drifts' -- cannot be expressed at all.");
+        Assert.That(DeployedOrder(cmd, table), Is.EqualTo("Id,Marker,A,C,B"),
+            "And the rebuild must have delivered the declared order.");
+        Assert.That(MarkerCount(cmd, table), Is.Zero, "A rebuilt table does not carry the live-only marker index.");
+        Assert.That(RowCount(cmd, table), Is.EqualTo(2), "Rows survive the rebuild.");
 
         Exec(cmd, $"DROP TABLE IF EXISTS `{table}`");
         conn.Close();
