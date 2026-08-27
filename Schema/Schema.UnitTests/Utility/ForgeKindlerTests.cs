@@ -94,6 +94,8 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.StripTypeCast.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ServerVersionNum.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.StripLeadingSelect.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.RebuildBlockedReason.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.RebuildTable.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ValidateTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupIndexOwnership.sql"));
@@ -113,6 +115,29 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupMaterializedViewOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingMaterializedViewIndexesQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MaterializedViewQuench.sql"));
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_PostgreSQL_RebuildTableFollowsItsGuardAndPrecedesTheQuench()
+    {
+        // PostgreSQL twin of the SQL Server ordering guard. RebuildTable calls
+        // "SchemaSmith"."RebuildBlockedReason" to refuse a table whose live state a shadow copy would
+        // destroy, and "SchemaSmith"."ExecuteOrDebug" to run or preview every statement it builds, so both
+        // have to be kindled ahead of it. And the quench procedures are what will elect a rebuild, so the
+        // engine has to be there before they are created.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith.RebuildBlockedReason.sql");
+        var executeOrDebugIdx = Array.IndexOf(scripts, "SchemaSmith.ExecuteOrDebug.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith.RebuildTable.sql");
+        var modifiedQuenchIdx = Array.IndexOf(scripts, "SchemaSmith.ModifiedTableQuench.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith.RebuildTable.sql must be kindled.");
+        Assert.That(guardIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "RebuildBlockedReason must be created before RebuildTable, which calls it.");
+        Assert.That(executeOrDebugIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "ExecuteOrDebug must be created before RebuildTable, which routes every statement through it.");
+        Assert.That(rebuildIdx, Is.LessThan(modifiedQuenchIdx),
+            "RebuildTable must be created before the quench procedures that will elect a rebuild.");
     }
 
     [Test]
@@ -231,7 +256,11 @@ public class ForgeKindlerTests
         // + SchemaSmith.RebuildBlockedReason (the PostgreSQL twin of the SQL Server helper above -- publication
         //   membership, inheritance edges and declarative partitioning are the states a shadow-copy-and-swap
         //   would silently sever).
-        Assert.That(postgres.Length, Is.EqualTo(36));
+        // + SchemaSmith.RebuildTable (the PostgreSQL shadow-copy-and-swap engine: refuse-if-blocked, capture
+        //   the sequence position AND its name, drop inbound foreign keys, create the shadow in declared
+        //   order, copy, restore the sequence, swap, drop, put the sequence name back. Kindled after
+        //   RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
+        Assert.That(postgres.Length, Is.EqualTo(37));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor

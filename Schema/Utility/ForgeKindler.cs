@@ -302,6 +302,9 @@ public static class ForgeKindler
                 new("SchemaSmith.StatisticsExpressionColumns.sql"),
                 new("SchemaSmith.StripLeadingSelect.sql"),
                 new("SchemaSmith.RebuildBlockedReason.sql"),
+                // Must follow RebuildBlockedReason (it calls it to refuse) and ExecuteOrDebug (its
+                // execute/preview path), and precede the quench procedures that will elect a rebuild.
+                new("SchemaSmith.RebuildTable.sql"),
                 new("SchemaSmith.ValidateTableOwnership.sql"),
                 new("SchemaSmith.FixupTableOwnership.sql"),
                 new("SchemaSmith.FixupIndexOwnership.sql"),
