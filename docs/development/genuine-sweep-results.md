@@ -65,3 +65,11 @@ Server Linux image exists -- so this file is the standing evidence that it ran, 
 > SQL Server fixtures require. CI installs `mssql-server-fts` explicitly; the local demo server
 > builds it in. **The modern bands remain UNCERTIFIED for this commit** -- see the header of
 > `scripts/run-modern-band-sweep.sh` for what has to change before they mean anything.
+## 2026-08-27T22:11:47Z - commit 019ff5ae
+
+| Target | Result | Expected |
+|---|---|---|
+| SQL Server @ 14330 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 19 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
+| SQL Server @ 14331 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 36 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
+| SQL Server @ 14332 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 28 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
+| SQL Server @ 14333 | Passed!  - Failed:     0, Passed:     4, Skipped:     4, Total:     8, Duration: 9 s - Schema.IntegrationTests.dll (net10.0) | 4 passed / 4 skipped |
