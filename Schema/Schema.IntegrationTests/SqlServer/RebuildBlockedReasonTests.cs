@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Threading;
 using NUnit.Framework;
 using Schema.DataAccess;
@@ -115,7 +116,7 @@ public class RebuildBlockedReasonTests
                 Exec(sql);
                 return;
             }
-            catch (Exception e) when (e.Message.ContainsIgnoringCase("deadlock victim"))
+            catch (DbException e) when (e.Message.ContainsIgnoringCase("deadlock victim"))
             {
                 Thread.Sleep(1000);
             }

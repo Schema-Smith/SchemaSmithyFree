@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Threading;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -31,7 +32,7 @@ public class TableQuench_CDCTests : BaseTableQuenchTests
                 cmd.ExecuteNonQuery();
                 return;
             }
-            catch (Exception e) when (e.Message.ContainsIgnoringCase("deadlock victim"))
+            catch (DbException e) when (e.Message.ContainsIgnoringCase("deadlock victim"))
             {
                 Thread.Sleep(1000);
                 cmd.CommandText = sql;
