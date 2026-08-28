@@ -53,33 +53,40 @@ namespace Schema.Domain
         [JsonIgnore]
         public IReadOnlyList<DataDelivery> DataDeliveries => DataDelivery ?? (IReadOnlyList<DataDelivery>)[];
 
-        [SchemaProperty(Description = "When set, overrides the template- and product-level DropColumnsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template- and product-level DropColumnsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
         [JsonProperty(Order = 85)]
         public bool? DropColumnsRemovedFromProduct { get; set; }
 
-        [SchemaProperty(Description = "When set, overrides the template- and product-level DropForeignKeysRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template- and product-level DropForeignKeysRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
         [JsonProperty(Order = 86)]
         public bool? DropForeignKeysRemovedFromProduct { get; set; }
 
-        [SchemaProperty(Description = "When set, overrides the template- and product-level DropCheckConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template- and product-level DropCheckConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
         [JsonProperty(Order = 87)]
         public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
 
-        [SchemaProperty(Description = "When set, overrides the template- and product-level DropExcludeConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting. PostgreSQL only.")]
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template- and product-level DropExcludeConstraintsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting. PostgreSQL only.")]
         [JsonProperty(Order = 88)]
         public bool? DropExcludeConstraintsRemovedFromProduct { get; set; }
 
-        [SchemaProperty(Description = "When set, overrides the template- and product-level DropStatisticsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template- and product-level DropStatisticsRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
         [JsonProperty(Order = 89)]
         public bool? DropStatisticsRemovedFromProduct { get; set; }
 
-        [SchemaProperty(Description = "When set, overrides the template- and product-level DropIndexesRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template- and product-level DropIndexesRemovedFromProduct flag for this table only. Null inherits from the template (or product) setting.")]
         [JsonProperty(Order = 90)]
         public bool? DropIndexesRemovedFromProduct { get; set; }
 
         [SchemaProperty(Description = "When true, this table is protected from drop-by-absence and the protection is sticky: it is persisted in SchemaSmith's ownership tracking so a protected table that is later removed from the product package is skipped (never silently dropped) rather than reconciled away. Set false and re-deploy while the table is still in the package to clear the protection before an intended removal. Default false.")]
         [JsonProperty(Order = 91)]
         public bool PreventDrop { get; set; }
+
+        // AuthoredOnly for the same reason the Drop*RemovedFromProduct family is: no catalog records the
+        // intent behind an alter-vs-rebuild choice, so extraction has nothing to read it back from and a
+        // re-extract would silently revert whatever was authored.
+        [SchemaProperty(AuthoredOnly = true, Description = "When set, overrides the template-, product- and environment-level RebuildPolicy for this table only. Null inherits from the nearest level that declares one. The winning policy applies whole — a policy declared here does NOT pick up fields it omits from a higher level.")]
+        [JsonProperty(Order = 92)]
+        public RebuildPolicy RebuildPolicy { get; set; }
 
         [JsonProperty(Order = 90)]
         public string OldName { get; set; }

@@ -2629,9 +2629,18 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 1, 1, 1, 1, 0)
-        // (prod, db, whatIf=0, dropTables=0, dropCols=1, dropChecks=1) — dropCols is the 5th arg.
-        Assert.That(mockCmd.CommandText, Does.Contain(", 0, 0, 1,"));
+        // DropColumnsRemovedFromProduct is the FIFTH positional argument of the MySQL CALL:
+        // (product, database, WhatIf, DropTablesRemovedFromProduct, DropColumnsRemovedFromProduct, ...).
+        // Assert that position rather than a floating substring: ", 0, 0, 1," does not say WHICH
+        // arguments it matched, so it would keep passing if the flag moved, and it breaks for
+        // unrelated reasons when a parameter is inserted ahead of it.
+        Assert.That(mockCmd.CommandText, Does.StartWith("CALL SchemaSmith_ModifiedTableQuench("),
+            "Expected a positional MySQL CALL to SchemaSmith_ModifiedTableQuench.");
+        var args = MySqlCallArguments(mockCmd.CommandText);
+        Assert.That(args.Length, Is.GreaterThanOrEqualTo(5),
+            $"MySQL ModifiedTableQuench CALL has too few arguments: {mockCmd.CommandText}");
+        Assert.That(args[4], Is.EqualTo("1"),
+            $"DropColumnsRemovedFromProduct must be threaded as the 5th positional argument: {mockCmd.CommandText}");
     }
 
     #endregion
@@ -2686,8 +2695,17 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchForeignKeys(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ForeignKeyQuench('Prod', 'db', 0, 0, 1)
-        Assert.That(mockCmd.CommandText, Does.EndWith(", 0, 1)"));
+        // DropForeignKeysRemovedFromProduct is the FIFTH positional argument of the MySQL CALL:
+        // (product, database, WhatIf, DropUnknownForeignKeys, DropForeignKeysRemovedFromProduct).
+        // Assert that position rather than the tail of the argument list — a tail assertion breaks
+        // the next time this procedure gains a parameter, for a reason unrelated to foreign keys.
+        Assert.That(mockCmd.CommandText, Does.StartWith("CALL SchemaSmith_ForeignKeyQuench("),
+            "Expected a positional MySQL CALL to SchemaSmith_ForeignKeyQuench.");
+        var args = MySqlCallArguments(mockCmd.CommandText);
+        Assert.That(args.Length, Is.GreaterThanOrEqualTo(5),
+            $"MySQL ForeignKeyQuench CALL has too few arguments: {mockCmd.CommandText}");
+        Assert.That(args[4], Is.EqualTo("1"),
+            $"DropForeignKeysRemovedFromProduct must be threaded as the 5th positional argument: {mockCmd.CommandText}");
     }
 
     #endregion
@@ -2742,14 +2760,132 @@ public class DatabaseQuenchTests
         var mockCmd = CreateMockCommand();
         quench.QuenchModifiedTables(mockCmd);
 
-        // MySQL positional: CALL SchemaSmith_ModifiedTableQuench('Prod', 'db', 0, 0, 0, 1, 1, 1, 0)
-        // — dropChecks (1) followed by excludes (1), stats (1), captureWouldDrop (0).
-        Assert.That(mockCmd.CommandText, Does.EndWith(", 1, 1, 1, 0)"));
+        // DropCheckConstraintsRemovedFromProduct is the SIXTH positional argument of the MySQL CALL:
+        // (product, database, WhatIf, DropTablesRemovedFromProduct, DropColumnsRemovedFromProduct,
+        //  DropCheckConstraintsRemovedFromProduct, ...). Assert that position rather than the tail of
+        // the argument list: the tail moves every time a parameter is appended (index removal moving
+        // into this procedure appended DropUnknownIndexes and DropIndexesRemovedFromProduct), so a
+        // tail assertion fails — or silently passes — for reasons that have nothing to do with check
+        // constraints, which is the only thing this test is named for.
+        Assert.That(mockCmd.CommandText, Does.StartWith("CALL SchemaSmith_ModifiedTableQuench("),
+            "Expected a positional MySQL CALL to SchemaSmith_ModifiedTableQuench.");
+        var args = MySqlCallArguments(mockCmd.CommandText);
+        Assert.That(args.Length, Is.GreaterThanOrEqualTo(6),
+            $"MySQL ModifiedTableQuench CALL has too few arguments: {mockCmd.CommandText}");
+        Assert.That(args[5], Is.EqualTo("1"),
+            $"DropCheckConstraintsRemovedFromProduct must be threaded as the 6th positional argument: {mockCmd.CommandText}");
+    }
+
+    #endregion
+
+    #region RebuildPolicy threading
+
+    // The resolved upper-tier policy is the only thing that lets a table WITHOUT its own RebuildPolicy be
+    // rebuilt, so how it is rendered into each engine's call is load-bearing: an unquoted mode, or a
+    // Threshold rendered as 0 instead of NULL, would silently change which tables get elected. These pin
+    // the rendering, not the plumbing.
+
+    [Test]
+    public void QuenchModifiedTables_SqlServer_WithNoPolicy_SendsNeverAndANullThreshold()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null);
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyMode = 'NEVER'"),
+            "A DatabaseQuench with no resolved policy must send the domain object's own NEVER default.");
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyThreshold = NULL"),
+            "An absent Threshold must be the SQL literal NULL. Rendering it as a number would make a "
+            + "THRESHOLD policy with no Threshold rebuild at some invented count.");
+    }
+
+    [Test]
+    public void QuenchModifiedTables_SqlServer_SendsTheResolvedPolicy()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.SqlServer };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null)
+        {
+            CascadedRebuildPolicy = new RebuildPolicy { Mode = "threshold", Threshold = 4 }
+        };
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyMode = 'THRESHOLD'"),
+            "The mode is upper-cased on the way out so the procs compare against one spelling.");
+        Assert.That(mockCmd.CommandText, Does.Contain("@RebuildPolicyThreshold = 4"),
+            "The resolved Threshold must reach the procedure, or THRESHOLD can never fire.");
+    }
+
+    [Test]
+    public void QuenchModifiedTables_PostgreSQL_SendsTheResolvedPolicy()
+    {
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.PostgreSQL };
+        var template = new Template { Name = "T" };
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "false", false, "false", "true", "true", "true", "true", "true", "true", "false", false, false, null)
+        {
+            CascadedRebuildPolicy = new RebuildPolicy { Mode = "ALWAYS" }
+        };
+
+        var mockCmd = CreateMockCommand();
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(mockCmd.CommandText, Does.Contain("p_RebuildPolicyMode := 'ALWAYS'"));
+        Assert.That(mockCmd.CommandText, Does.Contain("p_RebuildPolicyThreshold := NULL"),
+            "ALWAYS carries no Threshold, and NULL is what the procedure's THRESHOLD arm tests for.");
+    }
+
+    [Test]
+    public void QuenchModifiedTables_MySQL_SetsTheRebuildPolicySessionVariables()
+    {
+        // MySQL takes the policy in session variables rather than parameters (no default parameter values,
+        // ~30 direct call sites), so the SET is the whole transport. It must be issued on EVERY call: a
+        // pooled connection carrying a previous template's ALWAYS would rebuild tables that never asked.
+        RegisterMockFileWrapper();
+        var product = new Product { Name = "Prod", Platform = Platform.MySQL };
+        var template = new Template { Name = "T" };
+        template.Tables.Add(new Schema.Domain.Table { Name = "[T1]" });
+        var quench = new DatabaseQuench("srv", product, template, "db",
+            false, "0", false, "0", "1", "1", "1", "1", "1", "1", "0", false, false, null)
+        {
+            CascadedRebuildPolicy = new RebuildPolicy { Mode = "THRESHOLD", Threshold = 7 }
+        };
+
+        var mockCmd = CreateMockCommand();
+        var issued = new List<string>();
+        mockCmd.When(c => c.ExecuteNonQuery()).Do(_ => issued.Add(mockCmd.CommandText));
+
+        quench.QuenchModifiedTables(mockCmd);
+
+        Assert.That(issued.Any(s => s.Contains("@ss_rebuild_policy_mode = 'THRESHOLD'")
+                                    && s.Contains("@ss_rebuild_policy_threshold = 7")),
+            "The rebuild policy must be pushed into the session before the CALL. Statements issued: "
+            + string.Join(" | ", issued));
     }
 
     #endregion
 
     #region Helper Methods
+
+    // Positional arguments of a MySQL "CALL proc(a, b, c)" statement, trimmed. Lets a test assert the
+    // one argument it is named for by POSITION, instead of matching the head or tail of the whole
+    // list — which breaks whenever an unrelated parameter is added.
+    private static string[] MySqlCallArguments(string commandText)
+    {
+        var open = commandText.IndexOf('(');
+        var close = commandText.LastIndexOf(')');
+        return commandText.Substring(open + 1, close - open - 1).Split(',').Select(a => a.Trim()).ToArray();
+    }
 
     private static IDbCommand CreateMockCommand()
     {

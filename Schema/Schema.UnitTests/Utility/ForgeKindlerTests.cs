@@ -26,6 +26,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_SafeBracketWrap.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_ServerMajorVersion.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.PrintWithNoWait.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.RebuildTable.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingTableAndColumnQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ModifiedTableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"));
@@ -61,6 +62,25 @@ public class ForgeKindlerTests
     }
 
     [Test]
+    public void GetKindlingScriptNames_SqlServer_RebuildTableFollowsItsGuardAndPrecedesTheQuench()
+    {
+        // RebuildTable calls SchemaSmith.fn_RebuildBlockedReason to refuse a table whose live state a
+        // shadow copy would destroy -- a scalar function, which unlike an EXEC'd procedure is not covered
+        // by deferred name resolution, so the guard has to exist before this CREATE runs. And the quench
+        // procedures are what will elect a rebuild, so the engine has to be there before they are created.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.SqlServer);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith.fn_RebuildBlockedReason.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith.RebuildTable.sql");
+        var modifiedQuenchIdx = Array.IndexOf(scripts, "SchemaSmith.ModifiedTableQuench.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith.RebuildTable.sql must be kindled.");
+        Assert.That(guardIdx, Is.LessThan(rebuildIdx),
+            "fn_RebuildBlockedReason must be created before RebuildTable, which calls it.");
+        Assert.That(rebuildIdx, Is.LessThan(modifiedQuenchIdx),
+            "RebuildTable must be created before the quench procedures that will elect a rebuild.");
+    }
+
+    [Test]
     public void GetKindlingScriptNames_PostgreSQL_ReturnsExpectedScripts()
     {
         var scripts = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
@@ -74,6 +94,8 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.StripTypeCast.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ServerVersionNum.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.StripLeadingSelect.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.RebuildBlockedReason.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith.RebuildTable.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ValidateTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupTableOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupIndexOwnership.sql"));
@@ -93,6 +115,29 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.FixupMaterializedViewOwnership.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MissingMaterializedViewIndexesQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.MaterializedViewQuench.sql"));
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_PostgreSQL_RebuildTableFollowsItsGuardAndPrecedesTheQuench()
+    {
+        // PostgreSQL twin of the SQL Server ordering guard. RebuildTable calls
+        // "SchemaSmith"."RebuildBlockedReason" to refuse a table whose live state a shadow copy would
+        // destroy, and "SchemaSmith"."ExecuteOrDebug" to run or preview every statement it builds, so both
+        // have to be kindled ahead of it. And the quench procedures are what will elect a rebuild, so the
+        // engine has to be there before they are created.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.PostgreSQL);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith.RebuildBlockedReason.sql");
+        var executeOrDebugIdx = Array.IndexOf(scripts, "SchemaSmith.ExecuteOrDebug.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith.RebuildTable.sql");
+        var modifiedQuenchIdx = Array.IndexOf(scripts, "SchemaSmith.ModifiedTableQuench.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith.RebuildTable.sql must be kindled.");
+        Assert.That(guardIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "RebuildBlockedReason must be created before RebuildTable, which calls it.");
+        Assert.That(executeOrDebugIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "ExecuteOrDebug must be created before RebuildTable, which routes every statement through it.");
+        Assert.That(rebuildIdx, Is.LessThan(modifiedQuenchIdx),
+            "RebuildTable must be created before the quench procedures that will elect a rebuild.");
     }
 
     [Test]
@@ -138,6 +183,47 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith_TableQuench.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexVisibility.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith_SnapshotIndexExistence.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_RebuildBlockedReason.sql"));
+        Assert.That(scripts, Does.Contain("SchemaSmith_RebuildTable.sql"));
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_MySQL_RebuildTableFollowsItsGuardAndPrecedesTheQuench()
+    {
+        // MySQL twin of the SQL Server and PostgreSQL ordering guards. SchemaSmith_RebuildTable calls
+        // SchemaSmith_RebuildBlockedReason to refuse a table whose live state a shadow copy would destroy
+        // -- a stored FUNCTION, and unlike a CALLed procedure a function reference binds when the calling
+        // procedure is created, so the guard has to exist before this CREATE runs. It also calls the
+        // backtick helpers, kindled earlier still. And the quench procedures are what will elect a
+        // rebuild, so the engine has to be there before they are created.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.MySQL);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildBlockedReason.sql");
+        var wrapIdx = Array.IndexOf(scripts, "SchemaSmith_SafeBacktickWrap.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildTable.sql");
+        var modifiedQuenchIdx = Array.IndexOf(scripts, "SchemaSmith_ModifiedTableQuench.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith_RebuildTable.sql must be kindled.");
+        Assert.That(guardIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "SchemaSmith_RebuildBlockedReason must be created before RebuildTable, which calls it.");
+        Assert.That(wrapIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "SchemaSmith_SafeBacktickWrap must be created before RebuildTable, which quotes every identifier with it.");
+        Assert.That(rebuildIdx, Is.LessThan(modifiedQuenchIdx),
+            "RebuildTable must be created before the quench procedures that will elect a rebuild.");
+    }
+
+    [Test]
+    public void GetKindlingScriptNames_MariaDb_RebuildTableIsKindledAndOrdered()
+    {
+        // MariaDb inherits the MySQL list by base-platform routing, and it is the engine where the guard
+        // actually has something to say (system versioning, application-time periods) -- so assert the
+        // pair is present and ordered here too rather than trusting the list-equality test alone.
+        var scripts = ForgeKindler.GetKindlingScriptNames(Platform.MariaDb);
+        var guardIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildBlockedReason.sql");
+        var rebuildIdx = Array.IndexOf(scripts, "SchemaSmith_RebuildTable.sql");
+
+        Assert.That(rebuildIdx, Is.GreaterThanOrEqualTo(0), "SchemaSmith_RebuildTable.sql must be kindled on MariaDb.");
+        Assert.That(guardIdx, Is.GreaterThanOrEqualTo(0).And.LessThan(rebuildIdx),
+            "The MariaDb RebuildBlockedReason variant must be created before RebuildTable, which calls it.");
     }
 
     [Test]
@@ -193,7 +279,14 @@ public class ForgeKindlerTests
         // + SchemaSmith.fn_NormalizeCheckExpression (folds a check expression to the form SQL Server itself
         //   stores -- spaces around operators removed, parens around a bare literal -- so a constraint
         //   written in its natural form stops comparing unequal to the engine's rendering of itself).
-        Assert.That(sqlServer.Length, Is.EqualTo(30));
+        // + SchemaSmith.fn_RebuildBlockedReason (names the live state that makes a table unsafe to rebuild --
+        //   temporal, CDC, replication, Change Tracking -- so a rebuild can refuse and say which one. Its
+        //   CREATE is assembled at kindle time because temporal_type_desc is 2016+ and a function body binds
+        //   at CREATE).
+        // + SchemaSmith.RebuildTable (the shadow-copy-and-swap engine: refuse-if-blocked, capture the identity
+        //   counter, drop inbound foreign keys, create the shadow in declared order, copy, reseed, swap, drop.
+        //   Kindled after fn_RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
+        Assert.That(sqlServer.Length, Is.EqualTo(32));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
@@ -201,7 +294,14 @@ public class ForgeKindlerTests
         // (PG14-adaptive pg_stats_ext_exprs read) — the last two are the floor 14->12 cascade
         // + SchemaSmith.ColumnTypeArguments (the PostgreSQL twin of the SQL Server helper above — replaces the
         //   hand-copied CASE that dropped timestamptz(n)/time(n)/timetz(n) precision).
-        Assert.That(postgres.Length, Is.EqualTo(35));
+        // + SchemaSmith.RebuildBlockedReason (the PostgreSQL twin of the SQL Server helper above -- publication
+        //   membership, inheritance edges and declarative partitioning are the states a shadow-copy-and-swap
+        //   would silently sever).
+        // + SchemaSmith.RebuildTable (the PostgreSQL shadow-copy-and-swap engine: refuse-if-blocked, capture
+        //   the sequence position AND its name, drop inbound foreign keys, create the shadow in declared
+        //   order, copy, restore the sequence, swap, drop, put the sequence name back. Kindled after
+        //   RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
+        Assert.That(postgres.Length, Is.EqualTo(37));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor
@@ -249,7 +349,17 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_NumericDefaultsEqual (compares a decimal column's default BY VALUE: the engine
         // stores it at the column's scale, so a declared 0 comes back 0.00 and re-ALTERed the column on
         // every deploy; scoped to decimal/numeric so string defaults keep comparing as text).
-        Assert.That(mysql.Length, Is.EqualTo(46));
+        // +1 = SchemaSmith_RebuildBlockedReason (names the live state that makes a table unsafe to rebuild.
+        // The MySQL body is deliberately always-NULL -- MySQL has none of these concepts -- and the MariaDb
+        // override detects system versioning and application-time periods, the two states a
+        // shadow-copy-and-swap would silently destroy there).
+        // +1 = SchemaSmith_RebuildTable (the MySQL/MariaDB shadow-copy-and-swap engine: refuse-if-blocked,
+        // capture the AUTO_INCREMENT counter, create the shadow in declared order, copy, reseed, swap with
+        // a single atomic RENAME TABLE, then drop the inbound foreign keys and the old table. Kindled after
+        // SchemaSmith_RebuildBlockedReason, which it calls to refuse, and before the quench procedures.
+        // Unlike its two siblings it gets no transaction -- MySQL DDL is not transactional -- so the
+        // reversible work runs first and the destructive step follows the atomic swap).
+        Assert.That(mysql.Length, Is.EqualTo(48));
     }
 
     [Test]
@@ -699,7 +809,7 @@ public class ForgeKindlerTests
     }
 
     [Test]
-    public void DropSupersededPostgreSqlOverloads_DropsTheFiveAuditedSignatures()
+    public void DropSupersededPostgreSqlOverloads_DropsTheAuditedSignatures()
     {
         var mockCmd = Substitute.For<IDbCommand>();
         var executed = new System.Collections.Generic.List<string>();
@@ -707,13 +817,19 @@ public class ForgeKindlerTests
 
         ForgeKindler.DropSupersededPostgreSqlOverloads(mockCmd);
 
-        Assert.That(executed, Has.Count.EqualTo(5));
+        Assert.That(executed, Has.Count.EqualTo(7));
         Assert.That(executed, Has.All.StartsWith("DROP PROCEDURE IF EXISTS"));
         Assert.That(executed.Any(s => s.Contains("\"ValidateTableOwnership\"(varchar, boolean)")));
         Assert.That(executed.Any(s => s.Contains("\"FixupTableOwnership\"(varchar)")));
         Assert.That(executed.Any(s => s.Contains("\"ValidateMaterializedViewOwnership\"(varchar, boolean)")));
         Assert.That(executed.Any(s => s.Contains("\"FixupMaterializedViewOwnership\"(varchar)")));
         Assert.That(executed.Any(s => s.Contains("\"FixupIndexOwnership\"(varchar)")));
+        // The pre-RebuildPolicy arities. Without these two an already-kindled database keeps the old
+        // signature as a second overload and every existing named-argument call resolves as ambiguous.
+        Assert.That(executed.Any(s => s.Contains("\"ModifiedTableQuench\"(boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean)")),
+            "The 10-boolean ModifiedTableQuench must be dropped, or the 13-argument replacement is ambiguous with it.");
+        Assert.That(executed.Any(s => s.Contains("\"TableQuench\"(varchar, text, boolean, boolean, boolean, boolean)")),
+            "The 6-argument TableQuench must be dropped, or the 9-argument replacement is ambiguous with it.");
     }
 
     [Test]

@@ -10,6 +10,19 @@ namespace SchemaQuench.IntegrationTests.MariaDb;
 [SetUpFixture]
 public class FixtureSetup
 {
+    /// <summary>
+    /// MariaDB system-versioned tables arrive in 10.3. Below that <c>WITH SYSTEM VERSIONING</c> is a
+    /// syntax error, not a degrade, so a test needing that state has nothing to exercise and must skip
+    /// rather than fail -- the supported floor is 10.2.
+    /// </summary>
+    public static bool SupportsSystemVersioning(string serverVersion)
+    {
+        var parts = (serverVersion ?? "").Split('.', '-');
+        if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+            return true;   // Unrecognised: assume modern, so a parsing slip cannot silently skip the test.
+        return major > 10 || (major == 10 && minor >= 3);
+    }
+
     // Store a reference to the fully configured IConfigurationRoot so we can
     // re-register it after individual tests clear FactoryContainer.
     internal static IConfigurationRoot Config { get; private set; } = null!;

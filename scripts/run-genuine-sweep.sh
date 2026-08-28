@@ -22,14 +22,49 @@ cd "$(dirname "$0")/.." || exit 1
 #     support column encryption" -- which looks like three product failures and is not. Run it with
 #     the DEFAULT settings so the SetUpFixture reaches the modern container.
 set -u
+
+# The sweep is local-only and manual, which is exactly how it gets skipped -- and skipping it, not a gap
+# in what it covers, is how two 2017-vs-2016 defects reached the v2.5.0 cut. Every run writes a record so
+# "was this run, against what, with what result" is answerable from the repository months later rather
+# than from somebody's memory of a terminal.
+RECORD="docs/development/genuine-sweep-results.md"
+SWEEP_SHA="$(git rev-parse --short HEAD)"
+SWEEP_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SWEEP_ROWS=""
+
 echo "===== 1. GenuineOldBinary, per instance ====="
 for port in 14330 14331 14332 14333; do
   echo "--- instance $port"
   SmithySettings_SqlServer__Server=127.0.0.1 SmithySettings_SqlServer__Port=$port \
   SmithySettings_SqlServer__User=sa SmithySettings_SqlServer__Password='SchemaSmith!Old2026' \
   dotnet test Schema/Schema.IntegrationTests/Schema.IntegrationTests.csproj --no-build \
-    --filter "FullyQualifiedName~GenuineOldBinary" 2>&1 | grep -E "^(Passed!|Failed!|No test)|^  (Failed|Skipped) "
+    --filter "FullyQualifiedName~GenuineOldBinary" 2>&1 | tee "/tmp/ss-sweep-$port.log" \
+    | grep -E "^(Passed!|Failed!|No test)|^  (Failed|Skipped) "
+  summary="$(grep -E "^(Passed!|Failed!)" "/tmp/ss-sweep-$port.log" | head -1 | sed "s/ - Duration.*//")"
+  SWEEP_ROWS="${SWEEP_ROWS}| SQL Server @ $port | ${summary:-NO RESULT} | 4 passed / 4 skipped |
+"
 done
 echo "===== 2. 2008 emit-guard cert (default settings; fixture reaches 14330 itself) ====="
 dotnet test SchemaQuench/SchemaQuench.IntegrationTests/SchemaQuench.IntegrationTests.csproj --no-build \
   --filter "FullyQualifiedName~GenuineSql2008EmitGuardCert" 2>&1 | grep -E "^(Passed!|Failed!)|^  Failed "
+
+# Appended, never rewritten: the history of what was swept is the point.
+mkdir -p "$(dirname "$RECORD")"
+if [ ! -f "$RECORD" ]; then
+  {
+    echo "# Genuine-binary sweep results"
+    echo ""
+    echo "Appended by \`scripts/run-genuine-sweep.sh\`. CI cannot run this sweep -- no pre-2017 SQL"
+    echo "Server Linux image exists -- so this file is the standing evidence that it ran, and against what."
+  } > "$RECORD"
+fi
+{
+  echo ""
+  echo "## $SWEEP_STARTED - commit $SWEEP_SHA"
+  echo ""
+  echo "| Target | Result | Expected |"
+  echo "|---|---|---|"
+  printf "%s" "$SWEEP_ROWS"
+} >> "$RECORD"
+echo
+echo "Recorded in $RECORD for commit $SWEEP_SHA -- commit it alongside the work it certifies."

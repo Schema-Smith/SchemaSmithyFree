@@ -32,6 +32,7 @@ namespace Schema.Domain.PostgreSQL
         public bool InitiallyDeferred { get; set; }
 
         [JsonProperty(Order = 108)]
+        [SchemaProperty(AuthoredOnly = true)]
         public bool UpdateFillFactor { get; set; }
     }
 }

@@ -8,7 +8,13 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."TableQuench"
    p_WhatIf BOOLEAN = FALSE,
    p_DropUnknownIndexes BOOLEAN = FALSE,
    p_DropTablesRemovedFromProduct BOOLEAN = TRUE,
-   p_UpdateFillFactor BOOLEAN = TRUE)
+   p_UpdateFillFactor BOOLEAN = TRUE,
+   -- The resolved upper-tier RebuildPolicy, forwarded to ModifiedTableQuench (which owns the decision).
+   -- Defaults are the domain object's NEVER default, so an existing caller that passes nothing behaves
+   -- exactly as before and can never elect a rebuild.
+   p_RebuildPolicyMode TEXT = 'NEVER',
+   p_RebuildPolicyThreshold INT = NULL,
+   p_RebuildPolicyOnOrderMismatch BOOLEAN = FALSE)
   LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -19,7 +25,8 @@ BEGIN
 
   CALL "SchemaSmith"."MissingTableAndColumnQuench"(p_WhatIf);
   CALL "SchemaSmith"."ValidateTableOwnership"(p_ProductName, p_WhatIf);
-  CALL "SchemaSmith"."ModifiedTableQuench"(p_WhatIf, p_DropUnknownIndexes, p_DropTablesRemovedFromProduct);
+  CALL "SchemaSmith"."ModifiedTableQuench"(p_WhatIf := p_WhatIf, p_DropUnknownIndexes := p_DropUnknownIndexes, p_DropTablesRemovedFromProduct := p_DropTablesRemovedFromProduct,
+                                           p_RebuildPolicyMode := p_RebuildPolicyMode, p_RebuildPolicyThreshold := p_RebuildPolicyThreshold, p_RebuildPolicyOnOrderMismatch := p_RebuildPolicyOnOrderMismatch);
   CALL "SchemaSmith"."MissingIndexesAndConstraintsQuench"(p_WhatIf);
   CALL "SchemaSmith"."ForeignKeyQuench"(p_WhatIf);
   CALL "SchemaSmith"."FixupTableOwnership"(p_ProductName, p_WhatIf);

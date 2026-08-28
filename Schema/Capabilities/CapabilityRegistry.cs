@@ -54,6 +54,11 @@ namespace Schema.Capabilities
                 14, "PostgreSQL 14", null, DegradeKind.Skip, "per-column compression (PG14)"));
             rows.Add(new("table-access-method", "Table access method", Platform.PostgreSQL,
                 15, "PostgreSQL 15", null, DegradeKind.Skip, "table access method (PG15)"));
+            // Gated inline in MissingIndexesAndConstraintsQuench rather than by a Supports*.sql function,
+            // which is exactly why the completeness guard could not see it: it shipped in v2.5.0 as a real
+            // policy-routed degrade with no row here, invisible to the add-ons that drive off this list.
+            rows.Add(new("virtual-generated-column", "VIRTUAL generated columns", Platform.PostgreSQL,
+                18, "PostgreSQL 18", null, DegradeKind.Skip, "VIRTUAL generated column (PG18)"));
 
             // ---- MySQL (comparable major*100+minor via SchemaSmith_ServerVersionNum) ------------------------
             rows.Add(new("invisible-index", "Invisible index", Platform.MySQL,

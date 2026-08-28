@@ -93,12 +93,16 @@ public abstract class BaseTableQuenchTests
         cmd.CommandText = $"CALL SchemaSmith_MissingTableAndColumnQuench('{_mainDb}', 0)";
         ExecuteWithDeadlockRetry(cmd);
 
-        // Step 3: Modify existing tables
-        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{_productName}', '{_mainDb}', 0, 0, 1, 1, 1, 1, 0)";
+        // Step 3: Modify existing tables. Index REMOVAL (out-of-band + removed-from-product) is
+        // performed here, not in step 4 — the trailing 1, 1 are DropUnknownIndexes and
+        // DropIndexesRemovedFromProduct, which used to be passed to
+        // SchemaSmith_MissingIndexesAndConstraintsQuench below.
+        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{_productName}', '{_mainDb}', 0, 0, 1, 1, 1, 1, 0, 1, 1)";
         ExecuteWithDeadlockRetry(cmd);
 
-        // Step 4: Create missing indexes and constraints
-        cmd.CommandText = $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{_mainDb}', 0, 1, 1, 1)";
+        // Step 4: Create missing indexes and constraints (add-only for indexes; still drops check
+        // constraints removed from the product — the trailing 1).
+        cmd.CommandText = $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{_mainDb}', 0, 1)";
         ExecuteWithDeadlockRetry(cmd);
     }
 

@@ -2,7 +2,12 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
-CREATE OR REPLACE FUNCTION "SchemaSmith"."GenerateTableJSON"(p_Schema varchar(200), p_Table varchar(200))
+-- The two-argument form must go explicitly: CREATE OR REPLACE with a new parameter creates an
+-- OVERLOAD rather than replacing, and a two-argument call would then be ambiguous between the old
+-- function and the new one's default -- an error, on a kindled database that used to work.
+DROP FUNCTION IF EXISTS "SchemaSmith"."GenerateTableJSON"(varchar, varchar);
+
+CREATE OR REPLACE FUNCTION "SchemaSmith"."GenerateTableJSON"(p_Schema varchar(200), p_Table varchar(200), p_ObjectOrder varchar(20) DEFAULT 'Name')
   RETURNS text
   LANGUAGE plpgsql
 AS $function$
@@ -59,7 +64,12 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                           LEFT JOIN pg_sequence s ON s.seqrelid = d.objid
                           WHERE t.table_schema = c.table_schema
                             AND t.table_name = c.table_name
-                          ORDER BY c.column_name) sub) AS "Columns",
+                          -- Column sequence is a caller choice: 'Name' (default, and what the tool
+                          -- writes) or 'Physical', the table's own order. Only the column list honours it --
+                          -- indexes and constraints have no ordinal anyone authors toward.
+                          ORDER BY CASE WHEN LOWER(p_ObjectOrder) = 'physical' THEN c.ordinal_position END,
+                                   CASE WHEN LOWER(p_ObjectOrder) = 'physical' THEN NULL ELSE c.column_name END
+                         ) sub) AS "Columns",
                (SELECT JSON_AGG(ROW_TO_JSON(sub))
                   FROM (SELECT i.relname AS "Name",
                                idx.indisprimary AS "PrimaryKey",

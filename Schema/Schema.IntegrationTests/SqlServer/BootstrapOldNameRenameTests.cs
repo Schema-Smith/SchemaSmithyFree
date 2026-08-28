@@ -151,7 +151,16 @@ public class BootstrapOldNameRenameTests
         Exec($"CREATE TABLE dbo.{TableName} ([Id] INT IDENTITY(1,1) PRIMARY KEY, [OldCol] VARCHAR(50) NOT NULL DEFAULT '0', [Value] VARCHAR(50) NOT NULL DEFAULT '0')");
 
         var ex = Assert.Catch<Exception>(() => CallBootstrap(ColumnRenameJson(TableName, newColOldName: "OldCol")));
-        Assert.That(ex!.Message + ex.InnerException?.Message, Does.Contain("already exist"));
+        var message = ex!.Message + ex.InnerException?.Message;
+        Assert.That(message, Does.Contain("already exist"));
+        // Refusing is correct; refusing without saying WHICH objects leaves the operator to guess.
+        // PostgreSQL has always named them -- this is the parity the other engines owe.
+        Assert.Multiple(() =>
+        {
+            Assert.That(message, Does.Contain(TableName), "the message must name the table");
+            Assert.That(message, Does.Contain("OldCol"), "the message must name the OldName column");
+            Assert.That(message, Does.Contain("Value"), "the message must name the current column");
+        });
     }
 
     // ---- TABLE-level rename --------------------------------------------------
@@ -202,6 +211,12 @@ public class BootstrapOldNameRenameTests
         Exec($"CREATE TABLE dbo.{TableName} ([Id] INT IDENTITY(1,1) PRIMARY KEY, [Value] VARCHAR(50) NOT NULL DEFAULT '0')");
 
         var ex = Assert.Catch<Exception>(() => CallBootstrap(TableRenameJson(TableName, oldTableName: OldTableName)));
-        Assert.That(ex!.Message + ex.InnerException?.Message, Does.Contain("already exist"));
+        var message = ex!.Message + ex.InnerException?.Message;
+        Assert.That(message, Does.Contain("already exist"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(message, Does.Contain(OldTableName), "the message must name the OldName table");
+            Assert.That(message, Does.Contain(TableName), "the message must name the current table");
+        });
     }
 }

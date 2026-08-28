@@ -93,6 +93,7 @@ namespace Schema.Domain.SqlServer
         public bool ShouldSerializeFullTextIndex() => FullTextIndex is { Count: > 0 };
 
         [JsonProperty(Order = 106)]
+        [SchemaProperty(AuthoredOnly = true)]
         public bool UpdateFillFactor { get; set; }
 
         [JsonProperty(Order = 107)]

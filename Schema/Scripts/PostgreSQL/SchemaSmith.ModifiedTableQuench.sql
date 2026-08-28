@@ -2,6 +2,9 @@
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
+-- INDEX REMOVAL LIVES HERE on PostgreSQL (p_DropIndexesRemovedFromProduct, ANDed with the table's own
+-- value). Placement differs by engine: SQL Server also removes here; MySQL/MariaDB remove in
+-- MissingIndexesAndConstraintsQuench instead. Do not infer capability from a missing parameter.
 CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
   (p_WhatIf BOOLEAN = FALSE,
    p_DropUnknownIndexes BOOLEAN = FALSE,
@@ -12,13 +15,23 @@ CREATE OR REPLACE PROCEDURE "SchemaSmith"."ModifiedTableQuench"
    p_DropExcludeConstraintsRemovedFromProduct BOOLEAN = TRUE,
    p_DropStatisticsRemovedFromProduct BOOLEAN = TRUE,
    p_DropIndexesRemovedFromProduct BOOLEAN = TRUE,
-   p_CaptureWouldDrop BOOLEAN = FALSE)
+   p_CaptureWouldDrop BOOLEAN = FALSE,
+   -- The RESOLVED upper-tier RebuildPolicy (environment -> product -> template), already collapsed to a
+   -- single whole policy by ProductQuench.ResolveCascadedPolicy. It applies to a table ONLY when that
+   -- table declared no policy of its own; a table that declared one takes ITS policy entire (see the
+   -- decision point below). Defaults are the NEVER default of the domain object, so a caller that passes
+   -- nothing -- every pre-existing caller, and every package with no RebuildPolicy anywhere -- can never
+   -- elect a rebuild.
+   p_RebuildPolicyMode TEXT = 'NEVER',
+   p_RebuildPolicyThreshold INT = NULL,
+   p_RebuildPolicyOnOrderMismatch BOOLEAN = FALSE)
   LANGUAGE plpgsql
 AS $$
 DECLARE
   sql_script TEXT = '';
   protect_notice TEXT;
   partitioned_tables TEXT;
+  rebuild_target RECORD;
 BEGIN
     -- OldName rename parity: a table renamed via OldName still has its PRE-rename name in
     -- temp_product_ownership (owned on the prior deploy). It is NOT removed from the product — the
@@ -237,6 +250,197 @@ BEGIN
                            AND NOT a.attisdropped
         WHERE t."Schema" = c.table_schema
           AND t."Name" = c.table_name;
+
+    ------------------------------------------------------------------------------------------------
+    -- THE REBUILD DECISION POINT.
+    --
+    -- WHY HERE. temp_existing_columns -- the only live-column snapshot this procedure takes, and the
+    -- thing every column pass below compares against -- was just built one statement above, so column
+    -- detection is complete. And nothing has yet touched a table that is STILL DECLARED: the three
+    -- ExecuteOrDebug calls above this line drop tables that left the product entirely (and their
+    -- inbound keys). The first one that dismantles a dependent object OF a declared table is the
+    -- foreign-key drop further down, and a rebuild drops all of those wholesale anyway; a rebuild
+    -- inheriting a half-dismantled table would have RebuildTable's pre-rebuild refusals reasoning
+    -- about a live state that no longer matches the declared file. Renames land earlier still, in
+    -- MissingTableAndColumnQuench, which matters: RebuildTable refuses outright while a table or
+    -- column rename is pending, because the copy matches columns by their CURRENT name.
+    --
+    -- Placing the decision even earlier than the remaining "Collect Existing ..." snapshots is
+    -- deliberate on this engine: those snapshots are taken from the live catalog, so taking them AFTER
+    -- the rebuild means the drop passes see the post-rebuild reality (indexes, constraints and keys
+    -- already gone with the old table) instead of emitting drops for objects that no longer exist.
+    --
+    -- OPT-IN BY CONSTRUCTION. The election below is built by a WHERE that only an explicit
+    -- ALWAYS/THRESHOLD, or an explicit OnOrderMismatch, can satisfy. A package with no RebuildPolicy
+    -- anywhere resolves to the domain object's NEVER default with OnOrderMismatch false at every level,
+    -- matches nothing, and the loop body never runs: no rebuild,
+    -- no statement, nothing added to the run. A rebuild moves user data, so a table that did not ask
+    -- for one must never get one, and that has to be structurally true rather than true because the
+    -- conditions happen not to match.
+    --
+    -- WHOLE-OBJECT RESOLUTION. "RebuildPolicySpecified" picks WHICH policy applies -- the table's own,
+    -- or the resolved upper-tier one passed in -- and then every field comes from that ONE policy.
+    -- Never a per-field COALESCE: a table declaring only { "Mode": "ALWAYS" } must not inherit a
+    -- product's Threshold. Mirrors ProductQuench.ResolveCascadedPolicy.
+    ------------------------------------------------------------------------------------------------
+
+    ------------------------------------------------------------------------------------------------
+    -- COLUMN-ORDER DRIFT, the input to the OnOrderMismatch trigger.
+    --
+    -- Reordering existing columns is impossible in place on every engine SchemaSmith supports, so a
+    -- rebuild is the only mechanism that can converge a table whose columns are in the wrong order.
+    -- This pass names the tables where that is true.
+    --
+    -- DECLARED ORDER IS "_RowId", because that is what RebuildTable orders the shadow's CREATE by.
+    -- Detection and repair MUST read the declared order off the same column: if this pass elected on
+    -- one definition of "declared order" and the rebuild produced another, the table would be
+    -- re-elected on every subsequent deploy and rebuilt forever -- which on this feature means copying
+    -- every row of the table, every deploy.
+    --
+    -- THE COMPARISON IS RELATIVE, NEVER ABSOLUTE. temp_declared_column_order pairs each column's
+    -- declared position with its live ordinal_position, and the mismatch test below looks only for an
+    -- INVERSION -- two columns whose declared order disagrees with their live order. Comparing the two
+    -- positions for EQUALITY instead would be wrong: PostgreSQL derives ordinal_position from attnum,
+    -- which keeps the gap left by every column ever dropped, so a table that is correctly ordered but
+    -- has ever lost a column would show declared 2 against live 3 and be rebuilt on every deploy --
+    -- the infinite-rebuild trap. An inversion test never reads a position's value, only two positions'
+    -- order, so a uniform shift by any number of gaps is invisible to it.
+    --
+    -- THE COMPARED SET IS THE INTERSECTION, which the join produces by construction.
+    --   * Declared AND live -- compared. This is the real question.
+    --   * Live but NOT declared -- excluded, having no declared position to compare. These are the
+    --     columns this run drops by absence (a table RETAINING one cannot reach the election at all:
+    --     the suppressed-drop guard in the election's WHERE excludes it), so they will not exist after
+    --     the run and must not drag a correctly-ordered table into a rebuild. Including them would
+    --     re-elect any table with a retained column forever -- the same loop from the other direction.
+    --   * Declared but NOT live -- cannot occur here: MissingTableAndColumnQuench added it earlier in
+    --     the same run, so by this line it is live and the join finds it. It needs no special case.
+    --     Note this makes a NEW column in a mid-file position a genuine mismatch, correctly: the ADD
+    --     appended it to the end, and only a rebuild can move it.
+    ------------------------------------------------------------------------------------------------
+    RAISE NOTICE 'Detect declared-vs-deployed column order drift';
+    DROP TABLE IF EXISTS temp_declared_column_order;
+    CREATE TEMPORARY TABLE temp_declared_column_order AS
+      SELECT c."TableSchema", c."TableName", c."_RowId" AS "DeclaredPos", ic.ordinal_position AS "LivePos"
+        FROM temp_columns c
+        JOIN information_schema.columns ic ON ic.table_schema = c."TableSchema"
+                                          AND ic.table_name = c."TableName"
+                                          AND ic.column_name = c."Name";
+
+    DROP TABLE IF EXISTS temp_rebuild_order_mismatch;
+    CREATE TEMPORARY TABLE temp_rebuild_order_mismatch AS
+      SELECT DISTINCT a."TableSchema", a."TableName"
+        FROM temp_declared_column_order a
+        JOIN temp_declared_column_order b ON b."TableSchema" = a."TableSchema"
+                                         AND b."TableName" = a."TableName"
+       WHERE a."DeclaredPos" < b."DeclaredPos"
+         AND a."LivePos" > b."LivePos";
+
+    RAISE NOTICE 'Elect tables for rebuild';
+    -- Materialized rather than iterated straight out of the SELECT, because the loop body DELETEs from
+    -- temp_existing_columns and that table is read by the election query itself.
+    DROP TABLE IF EXISTS temp_rebuild_election;
+    CREATE TEMPORARY TABLE temp_rebuild_election AS
+      SELECT p."Schema", p."Name"
+        FROM (SELECT t."Schema", t."Name",
+                     -- The winning policy, taken WHOLE from one level.
+                     UPPER(TRIM(COALESCE(CASE WHEN COALESCE(t."RebuildPolicySpecified", FALSE) THEN t."RebuildPolicyMode" ELSE p_RebuildPolicyMode END, 'NEVER'))) AS "Mode",
+                     CASE WHEN COALESCE(t."RebuildPolicySpecified", FALSE) THEN t."RebuildPolicyThreshold" ELSE p_RebuildPolicyThreshold END AS "Threshold",
+                     -- OnOrderMismatch COMPOSES with Mode rather than replacing it -- it is one more OR
+                     -- arm on the WHERE below, not a fourth Mode value. { "Mode": "THRESHOLD",
+                     -- "Threshold": 3, "OnOrderMismatch": true } therefore reads "rebuild once three
+                     -- modifications pile up OR once the column order has drifted", and pairing it with
+                     -- the NEVER default asks for a rebuild on order drift and nothing else -- the case
+                     -- the trigger mainly exists for.
+                     COALESCE(CASE WHEN COALESCE(t."RebuildPolicySpecified", FALSE) THEN t."RebuildPolicyOnOrderMismatch" ELSE p_RebuildPolicyOnOrderMismatch END, FALSE) AS "OnOrderMismatch",
+                     EXISTS (SELECT 1 FROM temp_rebuild_order_mismatch m
+                               WHERE m."TableSchema" = t."Schema" AND m."TableName" = t."Name") AS "OrderMismatch",
+                     -- THE THRESHOLD COUNT: column-MODIFICATION passes only, which is what a rebuild
+                     -- actually eliminates. The predicate is the one the "Alter Modified Columns" pass
+                     -- uses to decide a column needs an ALTER -- MUST stay in lockstep with it (and with
+                     -- the two version-gated drop-and-re-add passes, whose columns this deliberately
+                     -- counts too: the version tail that carves them OUT of the ALTER pass is omitted
+                     -- here, so the count is the same on every server version). Columns that exist only
+                     -- in the package (adds) and columns that exist only live (by-absence drops) are not
+                     -- counted -- an add is cheap and already applied by MissingTableAndColumnQuench, a
+                     -- drop is metadata-only, and index/constraint/statistics churn is not something a
+                     -- rebuild saves either. Counting work a rebuild does not save would fire rebuilds
+                     -- that cost data movement and buy nothing.
+                     (SELECT COUNT(*)
+                        FROM temp_columns c
+                        JOIN temp_existing_columns ec ON ec."TableSchema" = c."TableSchema"
+                                                     AND ec."TableName" = c."TableName"
+                                                     AND ec."ColumnName" = c."Name"
+                        WHERE c."TableSchema" = t."Schema" AND c."TableName" = t."Name"
+                          AND (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(c."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC') != REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(ec."DataType"), ' (', '('), '( ', '('), ' )', ')'), ', ', ','), ' ,', ','), 'DECIMAL', 'NUMERIC')
+                            OR c."Nullable" != ec."Nullable"
+                            OR COALESCE("SchemaSmith"."StripTypeCast"(c."Default"), '') != COALESCE("SchemaSmith"."StripTypeCast"(ec."Default"), '')
+                            OR COALESCE(c."Collation", '') != COALESCE(ec."Collation", '')
+                            OR COALESCE(REGEXP_REPLACE(c."Generated", '\s*\(.*$', ''), 'NEVER') != COALESCE(REGEXP_REPLACE(ec."Generated", '\s*\(.*$', ''), 'NEVER')
+                            OR COALESCE(c."GenerationExpression", '') != COALESCE(ec."GenerationExpression", '')
+                            OR (COALESCE(c."Storage", '') != '' AND COALESCE(c."Storage", '') != COALESCE(ec."Storage", ''))
+                            OR (COALESCE(c."Compression", '') != '' AND COALESCE(c."Compression", '') != COALESCE(ec."Compression", '')))) AS "ModificationPasses",
+                     -- ALWAYS fires on ANY detected column change, which includes a column present live
+                     -- but absent from the package -- a rebuild delivers that removal as part of building
+                     -- the replacement from the declared definition.
+                     (EXISTS (SELECT 1
+                                FROM temp_existing_columns ec
+                                WHERE ec."TableSchema" = t."Schema" AND ec."TableName" = t."Name"
+                                  AND NOT EXISTS (SELECT 1 FROM temp_columns c
+                                                    WHERE c."TableSchema" = ec."TableSchema"
+                                                      AND c."TableName" = ec."TableName"
+                                                      AND c."Name" = ec."ColumnName"))) AS "AnyColumnDrop"
+                FROM temp_tables t
+                -- A rebuild is a by-absence destroyer: the old table goes whole and only the DECLARED
+                -- definition comes back, so anything this run deliberately declined to drop by absence
+                -- would go anyway. p_CaptureWouldDrop is set exactly when the environment is in protected
+                -- mode (ProductQuench sets CaptureWouldDrop = _protectedMode), which promises to destroy
+                -- nothing by absence at all. The second arm is the same promise scoped to one table's
+                -- columns: a live column the package no longer declares, whose drop THIS run is
+                -- suppressing. Either one outranks the policy -- declining to rebuild costs an in-place
+                -- ALTER, rebuilding anyway costs the user the data that protection existed to keep.
+                WHERE NOT p_CaptureWouldDrop
+                  AND NOT (NOT (p_DropColumnsRemovedFromProduct AND COALESCE(t."DropColumnsRemovedFromProduct", TRUE))
+                           AND EXISTS (SELECT 1
+                                         FROM temp_existing_columns ec
+                                         WHERE ec."TableSchema" = t."Schema" AND ec."TableName" = t."Name"
+                                           AND NOT EXISTS (SELECT 1 FROM temp_columns c
+                                                             WHERE c."TableSchema" = ec."TableSchema"
+                                                               AND c."TableName" = ec."TableName"
+                                                               AND c."Name" = ec."ColumnName")))
+                  AND EXISTS (SELECT 1 FROM information_schema.tables it
+                                WHERE it.table_schema = t."Schema" AND it.table_name = t."Name"
+                                  AND it.table_type = 'BASE TABLE')) p
+       WHERE (p."Mode" = 'ALWAYS' AND (p."ModificationPasses" > 0 OR p."AnyColumnDrop"))
+          OR (p."Mode" = 'THRESHOLD' AND p."Threshold" IS NOT NULL AND p."ModificationPasses" >= p."Threshold")
+          -- Deliberately NOT conjoined with any Mode or with a detected column change: drifted column
+          -- order is a standing reason to rebuild on its own, and on a table whose columns are merely in
+          -- the wrong order there is no column CHANGE to detect -- requiring one would make the trigger
+          -- unreachable in exactly the case it was added for.
+          OR (p."OnOrderMismatch" AND p."OrderMismatch");
+
+    FOR rebuild_target IN SELECT "Schema", "Name" FROM temp_rebuild_election LOOP
+      -- p_WhatIf goes straight through: RebuildTable prints its whole sequence and records 'wouldRebuild'
+      -- without executing anything, and it applies its refusals in BOTH modes. So a policy that elects a
+      -- rebuild on a BLOCKED table surfaces RebuildTable's refusal as an exception and the quench fails --
+      -- deliberately. It does NOT quietly fall back to altering in place: that would let a package ask for
+      -- a rebuild and silently get something else, and the states that block a rebuild are exactly the
+      -- ones where that difference matters.
+      CALL "SchemaSmith"."RebuildTable"(rebuild_target."Schema", rebuild_target."Name", p_WhatIf);
+    END LOOP;
+
+    -- BYPASS THE IN-PLACE COLUMN PHASES. Every column pass below joins temp_existing_columns, so removing
+    -- a rebuilt table's rows from it is the WHOLE bypass, in one place, instead of a "was it rebuilt?"
+    -- test threaded through eight queries where one missed site leaves the table both rebuilt AND altered.
+    -- It is also simply true: the replacement was built to the declared definition, so there is no longer
+    -- any live column state that differs from it. The one column pass that does not read this snapshot --
+    -- "Add New Physical Columns Switched From Generated" -- tests information_schema directly and finds
+    -- every declared column already present, so it falls out for the same reason rather than needing its
+    -- own guard.
+    DELETE FROM temp_existing_columns ec
+      WHERE EXISTS (SELECT 1 FROM temp_rebuild_election r
+                      WHERE r."Schema" = ec."TableSchema" AND r."Name" = ec."TableName");
+    DROP TABLE IF EXISTS temp_rebuild_election;
 
     RAISE NOTICE 'Collect Existing Index Definitions';
     CALL "SchemaSmith"."BuildExistingIndexesSnapshot"();

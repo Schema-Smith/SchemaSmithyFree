@@ -184,6 +184,40 @@ public class ProductQuench
         return effective;
     }
 
+    // ResolveCascadedFlag (above) and ResolveCascadedPolicy (below) resolve their cascades by DIFFERENT
+    // rules on purpose. Neither is a bug in the other; do not "fix" one to match.
+    //
+    //   ResolveCascadedFlag  — veto / AND. A false at ANY level locks the result false and the levels
+    //                          COMBINE into a single answer.
+    //   ResolveCascadedPolicy — most-specific-wins on the WHOLE object. The nearest non-null level is
+    //                          returned entire and no other level is consulted at all.
+    //
+    // So a table declaring only `Mode: ALWAYS` does NOT pick up the product's `Threshold` — it gets its
+    // own policy, whole. Blending the levels field-by-field would hand a partially-specified table a
+    // trigger its author never wrote, which is the opposite of what a per-table override is for.
+    internal static RebuildPolicy ResolveCascadedPolicy(RebuildPolicy env, RebuildPolicy product, RebuildPolicy template, RebuildPolicy table) =>
+        table ?? template ?? product ?? env ?? new RebuildPolicy();
+
+    /// <summary>
+    /// Composes the environment tier's <see cref="RebuildPolicy"/> from its three flat settings keys.
+    /// Returns null when none of them is set, so an unconfigured environment stays absent from the
+    /// cascade rather than shadowing a product/template policy with an all-defaults object.
+    /// </summary>
+    internal static RebuildPolicy ReadEnvRebuildPolicy(IConfiguration config)
+    {
+        var mode = config[SettingsKeys.RebuildPolicyMode];
+        var threshold = config[SettingsKeys.RebuildPolicyThreshold];
+        var onOrderMismatch = ConfigBool(config, SettingsKeys.RebuildPolicyOnOrderMismatch);
+
+        if (string.IsNullOrWhiteSpace(mode) && string.IsNullOrWhiteSpace(threshold) && !onOrderMismatch.HasValue)
+            return null;
+
+        var policy = new RebuildPolicy { OnOrderMismatch = onOrderMismatch == true };
+        if (!string.IsNullOrWhiteSpace(mode)) policy.Mode = mode.Trim().ToUpperInvariant();
+        if (int.TryParse(threshold, out var parsedThreshold)) policy.Threshold = parsedThreshold;
+        return policy;
+    }
+
     internal static bool? ConfigBool(IConfiguration config, string key)
     {
         var raw = config[key];
@@ -1863,6 +1897,12 @@ public class ProductQuench
             dropRemovedIndexes = FormatBooleanFlag(false);
             dropUnknownIndexes = false;
         }
+        // The three UPPER tiers, collapsed here to one whole policy. The table tier is deliberately not
+        // resolved here: it lives in the parsed working set inside the database, alongside the sentinel
+        // that says whether the table declared a policy at all, so the proc picks between this policy and
+        // the table's own — whole, never field by field.
+        var rebuildPolicy = ResolveCascadedPolicy(
+            ReadEnvRebuildPolicy(_config), _product.RebuildPolicy, template.RebuildPolicy, table: null);
         var quench = new DatabaseQuench(unit.Server, _product, template, unit.DatabaseName, unit.SchemaName,
             suppressKindling, _whatIfOnly, _runScriptsTwice, dropRemovedTables,
             dropRemovedColumns, dropRemovedForeignKeys, dropRemovedCheckConstraints, dropRemovedExcludeConstraints, dropRemovedStatistics, dropRemovedIndexes, dropUnknownIndexes,
@@ -1878,7 +1918,8 @@ public class ProductQuench
             MigrationScripts = _migrationScripts,
             WhatIf = _whatIf,
             ChangeAudit = _changeAudit,
-            CaptureWouldDrop = _protectedMode
+            CaptureWouldDrop = _protectedMode,
+            CascadedRebuildPolicy = rebuildPolicy
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();

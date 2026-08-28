@@ -68,6 +68,7 @@ namespace Schema.Domain.PostgreSQL
         public string PersistenceType { get; set; }
 
         [JsonProperty(Order = 109)]
+        [SchemaProperty(AuthoredOnly = true)]
         public bool UpdateFillFactor { get; set; }
 
         [SchemaProperty(Minimum = 0, Maximum = 100)]

@@ -109,6 +109,8 @@ public class SchemaTongs
 
     internal CheckConstraintStyle CheckConstraintStyle => _checkConstraintStyle;
     private CheckConstraintStyle _checkConstraintStyle;
+    private ObjectOrder _objectOrder = ObjectOrder.Name;
+    private bool _preserveExistingOrder = true;
 
     // The wire encoding used to KINDLE and to READ the SQL Server schema model back out of the source.
     // Below the OPENJSON/FOR JSON cliff (pre-2016 binary), or when Source:CompatEncoding=legacy, the
@@ -283,6 +285,13 @@ public class SchemaTongs
 
         var configStyle = Enum.TryParse<CheckConstraintStyle>(config[SettingsKeys.ProductKeys.CheckConstraintStyle], true, out var style)
             ? style : (CheckConstraintStyle?)null;
+
+        // Extraction ordering. Both are extraction preferences -- nothing on the deploy path reads them.
+        // PreserveExistingOrder defaults ON: it only has any effect when a file already exists, so a first
+        // extract is unaffected and nobody is opted into a surprise.
+        _objectOrder = Enum.TryParse<ObjectOrder>(config[SettingsKeys.ProductKeys.ObjectOrder], true, out var order)
+            ? order : ObjectOrder.Name;
+        _preserveExistingOrder = !bool.TryParse(config[SettingsKeys.ProductKeys.PreserveExistingOrder], out var preserve) || preserve;
 
         var productFile = Path.Combine(_productPath, "Product.json");
         var productIsNew = !FileWrapper.GetFromFactory().Exists(productFile);
@@ -2201,7 +2210,7 @@ SELECT t.schemaname, t.tablename, c.relkind, c.relispartition
             _progressLog.Info($"  Cast Json for {schema}.{table}");
             try
             {
-                command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{EscapeSql(schema)}', '{EscapeSql(table)}')";
+                command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateTableJSON\"('{EscapeSql(schema)}', '{EscapeSql(table)}', '{_objectOrder}')";
                 var tableJson = command.ExecuteScalar()?.ToString() ?? "";
                 if (string.IsNullOrWhiteSpace(tableJson) || tableJson.Trim().Equals("{}"))
                 {
@@ -2265,8 +2274,10 @@ SELECT con.conname AS ""Name"",
                 _progressLog.Info($"    Casting {tableFile}");
                 if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
                 {
-                    var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile, _platform);
+                    var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile);
                     ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                        if (_preserveExistingOrder)
+                            ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                 }
                 ScrubSchemaForTemplate(tableObj, tableFile);
                 JsonHelper.Write(tableFile, tableObj);
@@ -2934,6 +2945,13 @@ SELECT TABLE_SCHEMA, TABLE_NAME
             _progressLog.Info($"Casting Table Structures ({filteredCount} of {totalTables} tables)");
 
             var currentTable = 0;
+            // MySQL stored procedures take no default parameter values, so the ordering choice travels
+            // as a session variable rather than an argument -- see the proc for why. Set once for the
+            // connection, not per table: it is session state, and a SET per table would add a round
+            // trip to every table in the schema for a value that never changes.
+            commandJson.CommandText = $"SET @SchemaSmith_ObjectOrder = '{_objectOrder}'";
+            commandJson.ExecuteNonQuery();
+
             foreach (var (schema, table) in tables)
             {
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(table.ToLower()) && !_objectsToCast.Contains($"{schema}.{table}".ToLower())) continue;
@@ -2983,8 +3001,10 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     if (FileWrapper.GetFromFactory().Exists(filename) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
                     {
                         var originalPath = FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile;
-                        var original = JsonHelper.TableLoad(originalPath, _platform);
+                        var original = LoadOriginalForPreservation(originalPath);
                         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                        if (_preserveExistingOrder)
+                            ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                     }
 
                     JsonHelper.Write(filename, tableObj);
@@ -3092,7 +3112,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                 {
                     var json = _ingestEncoding == IngestEncoding.Xml
                         ? ExtractTableModelXml(commandJson, tableSchema, tableName)
-                        : ExtractTableModelJson(commandJson, tableSchema, tableName);
+                        : ExtractTableModelJson(commandJson, tableSchema, tableName, _objectOrder);
                     if (string.IsNullOrWhiteSpace(json) || json.Trim().Equals("{}"))
                     {
                         _progressLog.Error($"    No json returned for {tableSchema}.{tableName}");
@@ -3134,8 +3154,10 @@ SELECT cc.name AS [Name],
                     var oldTableFile = ResolveOutputPath(tableDir, EncodeObjectFileName(tableSchema, tableObj.OldName.Trim('"'), ".json"));
                     if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                     {
-                        var original = JsonHelper.TableLoad(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile, _platform);
+                        var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile);
                         ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                        if (_preserveExistingOrder)
+                            ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                     }
                     // Schema-template mode: strip the platform Schema field and any same-source RelatedTableSchema
                     // values on the in-memory table object before serialization (design §7.2), and rewrite
@@ -3169,9 +3191,9 @@ SELECT cc.name AS [Name],
 
     // Modern encoding: GenerateTableJSON emits the JSON model directly, split across rows once it exceeds
     // the row size — concatenate every row.
-    private static string ExtractTableModelJson(IDbCommand command, string tableSchema, string tableName)
+    private static string ExtractTableModelJson(IDbCommand command, string tableSchema, string tableName, ObjectOrder objectOrder)
     {
-        command.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}'";
+        command.CommandText = $"EXEC SchemaSmith.GenerateTableJSON @p_Schema = '{EscapeSql(tableSchema)}', @p_Table = '{EscapeSql(tableName)}', @p_ObjectOrder = '{objectOrder}'";
         using var reader = command.ExecuteReader();
         var json = new StringBuilder();
         while (reader.Read())
@@ -3286,6 +3308,30 @@ SELECT cc.name AS [Name],
             case "Materialized Views": _stats.MaterializedViews++; break;
             case "Collations": _stats.Collations++; break;
             case "Publications": _stats.Publications++; break;
+        }
+    }
+
+    /// <summary>
+    /// Loads the table file being overwritten so its authored settings can be carried forward. A file
+    /// that will not parse is a WARNING, not a failure: extraction is about to replace it with a good
+    /// one, so aborting the whole cast over a file we are discarding anyway is the worst of both --
+    /// the operator keeps the broken file AND gets no extract. What is genuinely lost is that file's
+    /// authored settings, which is exactly what the warning has to say out loud.
+    /// </summary>
+    private Table LoadOriginalForPreservation(string path)
+    {
+        try
+        {
+            return JsonHelper.TableLoad(path, _platform);
+        }
+        catch (Exception ex)
+        {
+            _progressLog.Warn(
+                $"    Could not read existing {Path.GetFileName(path)} to carry its settings forward "
+                + $"({ex.Message}). Extraction continues and the file will be replaced, but anything it "
+                + "declared that cannot be read back from the database -- data delivery, ShouldApplyExpression, "
+                + "drop overrides -- is NOT preserved. Check the replacement before committing it.");
+            return null;
         }
     }
 

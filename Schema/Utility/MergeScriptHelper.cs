@@ -1441,7 +1441,7 @@ SELECT c.column_name || '=' || COALESCE(PG_GET_SERIAL_SEQUENCE(c.table_schema ||
 SELECT STRING_AGG(
     CASE WHEN c.udt_name IN ('geometry','geography','point','linestring','polygon',
                               'multipoint','multilinestring','multipolygon','geometrycollection')
-         THEN 'ST_GeomFromText(elem ->> ''' || c.column_name || ''')'
+         THEN 'ST_GeomFromText(elem ->> ''' || c.column_name || ''', COALESCE(NULLIF(elem ->> ''' || c.column_name || '.STSrid'', '''')::int, 0))'
          WHEN c.udt_name = 'bytea'
          THEN 'decode(elem ->> ''' || c.column_name || ''', ''base64'')'
          WHEN LEFT(c.udt_name, 1) = '_'
@@ -1483,11 +1483,21 @@ SELECT STRING_AGG(
     // bytea value or a '*,*'-delimited array cannot be cast to its target type directly by xmltable's
     // COLUMNS typing (silent data corruption for bytea, a parse error for arrays). Everything else is
     // typed directly here with the same JsonParseType the JSON row source casts to.
+    // A geometry column declares a second xmltable column for the "<col>.STSrid" companion the
+    // extractors emit, so BuildXmlColumnExpressionPostgreSql can pass it to ST_GeomFromText. A package
+    // written before the companion existed has no such element and shreds to NULL, which the caller
+    // defaults back to 0 -- exactly the behaviour those packages already had.
     private static string BuildXmlColumnsPostgreSql(List<MergeColumnInfo> columns) =>
-        string.Join(",\n         ", columns.Select(c =>
-            RequiresXmlColumnTransformPostgreSql(c)
-                ? $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'"
-                : $"\"{c.Name}\" {c.JsonParseType} PATH 'c[@n=\"{c.Name}\"]/text()'"));
+        string.Join(",\n         ", columns.SelectMany(c =>
+            !RequiresXmlColumnTransformPostgreSql(c)
+                ? new[] { $"\"{c.Name}\" {c.JsonParseType} PATH 'c[@n=\"{c.Name}\"]/text()'" }
+                : c.IsGeometry
+                    ? new[]
+                      {
+                          $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'",
+                          $"\"{c.Name}.STSrid\" text PATH 'c[@n=\"{c.Name}.STSrid\"]/text()'"
+                      }
+                    : new[] { $"\"{c.Name}\" text PATH 'c[@n=\"{c.Name}\"]/text()'" }));
 
     // B1: same udt_name test GetJsonColumnDefinitionsPostgreSql uses for the array case
     // (LEFT(udt_name,1)='_' — PostgreSQL's own array-of-type naming convention), ported to C# rather than
@@ -1506,7 +1516,8 @@ SELECT STRING_AGG(
     internal static string BuildXmlColumnExpressionPostgreSql(MergeColumnInfo c, string sourceAlias)
     {
         var raw = $"\"{sourceAlias}\".\"{c.Name}\"";
-        if (c.IsGeometry) return $"ST_GeomFromText({raw})";
+        if (c.IsGeometry)
+            return $"ST_GeomFromText({raw}, COALESCE(NULLIF(\"{sourceAlias}\".\"{c.Name}.STSrid\", '')::int, 0))";
         if (c.IsBinary) return $"decode({raw}, 'base64')";
         if (c.DataType.StartsWith("_", StringComparison.Ordinal))
             return $"STRING_TO_ARRAY({raw}, '*,*', '*NULL_VALUE_REPRESENTATION*')::{c.JsonParseType}";
@@ -2092,7 +2103,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
 
         // MariaDB 10.2-10.5: recursive-CTE shred (cap-free), embedded in the derived table. The outer WHERE
         // bounds the sequence to the array length so an empty payload yields zero rows (JSON_TABLE parity).
-        var extractions = string.Join(",\n      ", columns.Select(BuildCteExtractionMySql));
+        var extractions = string.Join(",\n      ", columns.SelectMany(BuildCteExtractionsMySql));
         return "(\n" +
                "    WITH RECURSIVE _ss_seq AS (SELECT 0 i UNION ALL SELECT i + 1 FROM _ss_seq WHERE i + 1 < JSON_LENGTH(@json_data))\n" +
                "    SELECT\n      " + extractions + "\n" +
@@ -2100,19 +2111,30 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
                "  ) AS jt";
     }
 
-    // One recursive-CTE extraction expression, matching the JSON_TABLE column it replaces. JSON columns keep
+    // The recursive-CTE extraction expressions for one column, matching the JSON_TABLE columns they
+    // replace -- geometry yields TWO, the value and its `<col>.STSrid` companion, just as JSON_TABLE does.
     // their structure (JSON_EXTRACT); every other column is read as a null-safe scalar via
     // SchemaSmith_JsonScalarStr so an explicit JSON null becomes SQL NULL (a bare JSON_UNQUOTE would yield the
     // string 'null') -- the target column type coerces the extracted text on INSERT, matching JSON_TABLE.
-    private static string BuildCteExtractionMySql(MySqlColumnInfo col)
+    private static IEnumerable<string> BuildCteExtractionsMySql(MySqlColumnInfo col)
     {
         var pathSuffix = col.Name.Contains(' ') || col.Name.Contains('.') || col.Name.Contains('-')
             ? $"\"{col.Name}\""
             : col.Name;
         var extract = $"JSON_EXTRACT(@json_data, CONCAT('$[', _ss_seq.i, '].{pathSuffix}'))";
-        return col.IsJson
+        yield return col.IsJson
             ? $"{extract} AS `{col.Name}`"
             : $"SchemaSmith_JsonScalarStr({extract}) AS `{col.Name}`";
+
+        // Geometry carries a "<col>.STSrid" companion, exactly as the JSON_TABLE path declares it.
+        // Without it the SELECT built by BuildSingleSelectExpressionMySql reads a column this row
+        // source never produced, and delivery fails with "Unknown column '<col>.STSrid'". The key
+        // always contains a dot, so the JSON path is always the quoted form.
+        if (!IsGeometryTypeMySql(col.DataType)) yield break;
+
+        var sridExtract =
+            $"JSON_EXTRACT(@json_data, CONCAT('$[', _ss_seq.i, '].\"{col.Name}.STSrid\"'))";
+        yield return $"SchemaSmith_JsonScalarStr({sridExtract}) AS `{col.Name}.STSrid`";
     }
 
     private static string BuildJsonTableColumnsMySql(List<MySqlColumnInfo> columns)
@@ -2126,6 +2148,10 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
                 ? $"$.\"{col.Name}\""
                 : $"$.{col.Name}";
             definitions.Add($"`{col.Name}` {mysqlType} PATH '{jsonPath}'");
+            // Geometry carries a "<col>.STSrid" companion beside its WKT; declare it so the SELECT can
+            // rebuild the value in its own reference system. Absent in pre-companion packages -> NULL.
+            if (IsGeometryTypeMySql(col.DataType))
+                definitions.Add($"`{col.Name}.STSrid` INT PATH '$.\"{col.Name}.STSrid\"'");
         }
         return string.Join(",\n    ", definitions);
     }
@@ -2204,7 +2230,7 @@ WHERE tc.CONSTRAINT_SCHEMA = @db
     private static string BuildSingleSelectExpressionMySql(MySqlColumnInfo c)
     {
         return IsGeometryTypeMySql(c.DataType)
-            ? $"ST_GeomFromText(`{c.Name}`)"
+            ? $"ST_GeomFromText(`{c.Name}`, COALESCE(`{c.Name}.STSrid`, 0))"
             : IsBinaryTypeMySql(c.DataType)
                 ? $"FROM_BASE64(`{c.Name}`)"
                 : $"`{c.Name}`";

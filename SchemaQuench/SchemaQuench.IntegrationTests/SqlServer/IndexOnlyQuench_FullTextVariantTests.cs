@@ -42,6 +42,84 @@ public class IndexOnlyQuench_FullTextVariantTests : BaseTableQuenchTests
         cmd.Parameters.Clear();
     }
 
+    private static int DeployedSemanticColumns(DbCommand cmd, string tableName)
+    {
+        cmd.CommandText = $@"
+SELECT COUNT(*) FROM sys.fulltext_index_columns fc WITH (NOLOCK)
+  WHERE fc.[object_id] = OBJECT_ID('dbo.{tableName}') AND fc.statistical_semantics = 1";
+        return (int)cmd.ExecuteScalar();
+    }
+
+    // Completes the per-column full-text trio; TYPE COLUMN and LANGUAGE were already supported.
+    // Needs the Semantic Language Statistics Database attached and registered — scripts/provision-semantic-db.sh
+    // does that and CI runs it, so a failure mentioning "semantic functionality is not available" means the
+    // database is missing rather than the feature being broken.
+    [Test]
+    public void FullText_StatisticalSemantics_DeploysAndIsIdempotent()
+    {
+        const string tableName = "FtSemantics";
+        using var conn = (DbConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        CreateTestTable(cmd, tableName);
+
+        // ChangeTracking is NOT optional here. The emitter concatenates it into the CREATE statement and
+        // T-SQL concatenation with NULL yields NULL, so omitting it makes the whole statement vanish and no
+        // index is created — silently, with no error and no log line. StopList beside it is COALESCE-guarded;
+        // this one is not.
+        var ftJson = $@"{{ ""FullTextCatalog"": ""[FT_Catalog]"", ""KeyIndex"": ""[UDX_{tableName}]"",
+                           ""Columns"": ""[Title] LANGUAGE 1033 STATISTICAL_SEMANTICS"", ""ChangeTracking"": ""AUTO"" }}";
+        RunIndexOnlyQuench(cmd, tableName, ftJson);
+
+        Assert.That(DeployedSemanticColumns(cmd, tableName), Is.EqualTo(1),
+            "the declared STATISTICAL_SEMANTICS must reach the deployed index");
+
+        // The reason it is rendered on BOTH the catalog and model sides: a clause emitted by only one of them
+        // makes declared != live forever, so every deploy drops and repopulates the index. A full-text
+        // rebuild is a full repopulation, so that is expensive churn rather than a redundant statement.
+        RunIndexOnlyQuench(cmd, tableName, ftJson);
+        Assert.That(DeployedSemanticColumns(cmd, tableName), Is.EqualTo(1),
+            "a second identical deploy must leave the index alone");
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    // ChangeTracking concatenates into the CREATE FULLTEXT INDEX statement, and T-SQL concatenation with
+    // NULL yields NULL -- so a null value made the whole statement NULL and NO index was created, silently:
+    // no error, no log line, and the next deploy would try again and fail the same way. The C# default is
+    // "AUTO", but an explicit null in a table file overwrites a property initializer, so this was reachable
+    // from an ordinary package rather than only by calling the proc by hand.
+    [Test]
+    public void FullText_NullChangeTracking_StillCreatesTheIndex()
+    {
+        const string tableName = "FtNullTracking";
+        using var conn = (DbConnection)DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        CreateTestTable(cmd, tableName);
+
+        RunIndexOnlyQuench(cmd, tableName,
+            $$"""{ "FullTextCatalog": "[FT_Catalog]", "KeyIndex": "[UDX_{{tableName}}]", "Columns": "[Title]", "ChangeTracking": null }""");
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM sys.fulltext_indexes WITH (NOLOCK) WHERE [object_id] = OBJECT_ID('dbo.{tableName}')";
+        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(1),
+            "a null ChangeTracking must fall back to the default, not silently skip the whole index");
+
+        cmd.CommandText = $@"
+SELECT fi.change_tracking_state_desc FROM sys.fulltext_indexes fi WITH (NOLOCK)
+  WHERE fi.[object_id] = OBJECT_ID('dbo.{tableName}')";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("AUTO"),
+            "the fallback must match the C# default so omitted and explicitly-null behave the same");
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS dbo.{tableName}";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
     private static string DeployedCatalog(DbCommand cmd, string tableName)
     {
         cmd.CommandText = $@"

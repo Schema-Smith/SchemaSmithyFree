@@ -1,4 +1,4 @@
-# SchemaTongs Reference
+﻿# SchemaTongs Reference
 
 Cast your live database into version-controlled code with a single command. SchemaTongs grips every object in your database -- on **SQL Server**, **PostgreSQL**, **MySQL**, or **MariaDB** -- and extracts them into a clean schema package: tables as JSON, programmable objects as SQL scripts, everything organized and ready to commit to source control. Point it at a database, run it, and you have a deployable package that SchemaQuench can quench onto any compatible target.
 
@@ -187,6 +187,8 @@ The `--ConnectionString` switch bypasses all `Source` settings entirely. When pr
 | `Product:Path` | string | _(required)_ | Directory where the schema package is created or updated. |
 | `Product:Name` | string | _(directory name)_ | Product name written to `Product.json`. If blank, defaults to the last segment of `Product:Path`. |
 | `Product:CheckConstraintStyle` | string | `ColumnLevel` | Controls how check constraints are written when creating a new `Product.json`. See [CheckConstraintStyle](#checkconstraintstyle). |
+| `Product:ObjectOrder` | string | `Name` | Sequence used for a table's object lists when there is nothing to preserve. `Name` sorts alphabetically; `Physical` uses the table's own column order. See [Column and object order](#column-and-object-order). |
+| `Product:PreserveExistingOrder` | bool | `true` | When a table file already exists, keep the order it already had. See [Column and object order](#column-and-object-order). |
 | `Template:Name` | string | Source database name | Template name. Creates the template directory under `Templates/<Name>/`. Defaults to the `Source:Database` value when not specified. |
 
 ---
@@ -437,6 +439,68 @@ On subsequent runs against an existing package, SchemaTongs overwrites object sc
 ### Helper procedures
 
 On every run, SchemaTongs deploys (or updates) lightweight helper procedures in the source database under the `SchemaSmith` schema. These procedures generate the JSON representation of tables and views and are used internally by the extraction adapter. They're read-only, schema-prefixed, and excluded from extraction output.
+
+---
+
+## Column and object order
+
+Two settings decide the sequence of the lists inside an extracted table file — `Columns`, `Indexes`,
+`ForeignKeys`, `CheckConstraints` and, on SQL Server, `Statistics` and `XmlIndexes`. They answer different
+questions and compose without conflict.
+
+### PreserveExistingOrder (default `true`)
+
+When SchemaTongs overwrites a table file that already exists, every entry still present keeps the position
+that file gave it. Entries the database no longer has drop out. Entries that are genuinely new are appended
+using `ObjectOrder`.
+
+The point is that re-extracting should produce a diff of what actually changed. Without this, a one-column
+change arrives buried in a whole-file reshuffle — and a package whose ordering was arranged by hand loses
+that arrangement every time it is refreshed.
+
+> **This does not change your database.** It preserves the order *in the file*. It does **not** make a
+> deployed table's physical column order match the package — reordering the columns of an existing table
+> is a table rebuild, not a formatting preference, and is a separate opt-in. If you have never re-extracted
+> over an existing file, this setting has no effect on anything.
+
+Set it to `false` to have every extraction re-sequence the whole file from scratch using `ObjectOrder`.
+
+### ObjectOrder (default `Name`)
+
+`Name` sorts alphabetically. It is the default because it is stable: the same table extracts identically
+whichever engine it came from, and it does not shift when a source table's internal column order changes.
+
+`Physical` uses the table's own column order instead, which is useful when you want the package to read
+the way the table does. Two points worth knowing:
+
+- It applies to the **column list only**. Indexes, foreign keys, check constraints and statistics have no
+  ordinal that anyone authors toward, so those stay alphabetical either way.
+- The physical order is a property of *that* database. The same logical table on another server can order
+  its columns differently, so a package extracted with `Physical` is not guaranteed to match elsewhere.
+
+Because `PreserveExistingOrder` defaults to `true`, `ObjectOrder` decides a **first** extraction and any
+newly-added entries after that. Once a file exists, its order is what survives.
+
+### Calling the extraction procedures directly
+
+The procedures SchemaTongs uses are usable by hand, and they take the same choice. The mechanism differs by
+engine because of what each engine's stored routines support:
+
+```sql
+-- SQL Server
+EXEC SchemaSmith.GenerateTableJSON @p_Schema = 'dbo', @p_Table = 'Customer', @p_ObjectOrder = 'Physical';
+
+-- PostgreSQL
+SELECT "SchemaSmith"."GenerateTableJSON"('public', 'customer', 'Physical');
+
+-- MySQL and MariaDB: a session variable, because their stored procedures cannot
+-- declare default parameter values -- adding a parameter would break every existing CALL.
+SET @SchemaSmith_ObjectOrder = 'Physical';
+CALL SchemaSmith_GenerateTableJSON('mydb', 'customer');
+```
+
+Omit the argument (or leave the session variable unset) and you get `Name`, which is what the tool writes
+by default.
 
 ---
 

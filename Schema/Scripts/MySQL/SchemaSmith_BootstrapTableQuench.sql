@@ -54,6 +54,8 @@ BEGIN
     DECLARE v_AcDefault LONGTEXT;
     DECLARE v_AcAutoIncrement TINYINT;
     DECLARE v_ColExists INT;
+    DECLARE v_HasStatusTable INT DEFAULT 0;
+    DECLARE v_ClashDetail LONGTEXT;
     DECLARE v_AiCnt INT;
     DECLARE v_AiIdx INT;
     DECLARE v_AiClauses LONGTEXT;
@@ -101,6 +103,18 @@ BEGIN
             -- own "Data too long for condition item 'MESSAGE_TEXT'" error, which tells the operator
             -- nothing about the actual problem. Kept well under the limit deliberately, not trimmed to
             -- exactly fit -- must still contain "already exist" (asserted by the integration tests).
+            -- MESSAGE_TEXT cannot carry the object names (128-char cap), so the detail goes to
+            -- SchemaSmith_StatusMessages, which reaches the run log. That table is created by this
+            -- very proc, so on a fresh database it may not exist yet -- guarded rather than assumed,
+            -- since a failing INSERT here would replace a clear refusal with a confusing one.
+            SET v_ClashDetail = CONCAT('BootstrapTableQuench: both `', v_Db, '`.`', v_OldTableName,
+                                       '` (OldName) and `', v_Db, '`.`', v_TableName,
+                                       '` already exist; resolve manually before bootstrap can rename.');
+            SELECT COUNT(*) INTO v_HasStatusTable FROM information_schema.tables
+             WHERE BINARY table_schema = BINARY v_Db AND BINARY table_name = BINARY 'SchemaSmith_StatusMessages';
+            IF v_HasStatusTable > 0 THEN
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), v_ClashDetail);
+            END IF;
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'BootstrapTableQuench: OldName and current table already exist; rename manually.';
         ELSEIF v_TableRenameOldExists > 0 AND v_TableRenameNewExists = 0 THEN
             SET @v_stmt = CONCAT('RENAME TABLE `', v_Db, '`.`', v_OldTableName, '` TO `', v_Db, '`.`', v_TableName, '`');
@@ -200,6 +214,15 @@ BEGIN
             IF v_RenOldExists > 0 AND v_RenNewExists > 0 THEN
                 -- Same MESSAGE_TEXT 128-char limit as the table-rename SIGNAL above -- kept short with
                 -- real headroom, not trimmed to exactly fit.
+                -- Same 128-char cap and the same existence guard as the table clash above.
+                SET v_ClashDetail = CONCAT('BootstrapTableQuench: both `', v_Db, '`.`', v_TableName, '`.`',
+                                           v_RenOldName, '` (OldName) and `', v_RenNewName,
+                                           '` already exist; resolve manually before bootstrap can rename.');
+                SELECT COUNT(*) INTO v_HasStatusTable FROM information_schema.tables
+                 WHERE BINARY table_schema = BINARY v_Db AND BINARY table_name = BINARY 'SchemaSmith_StatusMessages';
+                IF v_HasStatusTable > 0 THEN
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), v_ClashDetail);
+                END IF;
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'BootstrapTableQuench: OldName and current column already exist; rename manually.';
             ELSEIF v_RenOldExists > 0 AND v_RenNewExists = 0 THEN
                 IF v_SupportsRenameColumn = 1 THEN

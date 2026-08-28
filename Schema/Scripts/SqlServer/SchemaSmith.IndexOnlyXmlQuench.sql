@@ -160,13 +160,25 @@ BEGIN TRY
   IF OBJECT_ID('tempdb..#FullTextIndexes') IS NOT NULL DROP TABLE #FullTextIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
-         f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
+         -- Guarded like StopList beside it. Unguarded, this concatenates into the CREATE FULLTEXT INDEX
+         -- statement, and T-SQL concatenation with NULL yields NULL -- the whole statement becomes NULL and
+         -- NO index is created, with no error and no log line. Reachable from an ordinary package: the C#
+         -- default is AUTO, but an explicit "ChangeTracking": null in a table file overwrites it. 'AUTO'
+         -- here matches that C# default, so an omitted and an explicitly-null value behave the same.
+         [ChangeTracking] = COALESCE(NULLIF(RTRIM(f.[ChangeTracking]), ''), 'AUTO'),
+         [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
          -- Full-text LANGUAGE churn: same round-trip contract as the JSON twin -- peel off a trailing
          -- "LANGUAGE nnnn" suffix before bracket-wrapping the column (+ optional TYPE COLUMN) part, then
          -- reattach it, so this matches the live-side build below byte-for-byte.
          [Columns] = STUFF((SELECT ',' + CASE WHEN RTRIM([value]) LIKE '% LANGUAGE [0-9]%'
                                               THEN SchemaSmith.fn_SafeBracketWrap(LEFT(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) - 1)) +
                                                    ' LANGUAGE ' + SUBSTRING(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) + 10, 4000)
+                                              -- A column may carry STATISTICAL_SEMANTICS with no LANGUAGE. Without this
+                                              -- branch the token is bracket-wrapped into the column name and never matches
+                                              -- the live side, churning the index on every deploy. (JSON twin: same shape.)
+                                              WHEN RTRIM([value]) LIKE '% STATISTICAL[_]SEMANTICS'
+                                                   THEN SchemaSmith.fn_SafeBracketWrap(LEFT(RTRIM([value]), CHARINDEX(' STATISTICAL_SEMANTICS', RTRIM([value])) - 1)) +
+                                                        ' STATISTICAL_SEMANTICS'
                                               ELSE SchemaSmith.fn_SafeBracketWrap([value])
                                               END
                       FROM SchemaSmith.fn_SplitList(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> '' ORDER BY [Ordinal] FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
@@ -358,6 +370,14 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
     
   RAISERROR('Collect Existing FullText Indexes', 10, 100) WITH NOWAIT
+  -- sys.fulltext_index_columns.statistical_semantics is a 2012 column and this proc must CREATE on the 2008
+  -- floor, so a static reference is a CREATE-time 'invalid column' error. Stage the keys through a guarded
+  -- dynamic INSERT (empty below 2012, where semantic indexing does not exist) and join to it below -- the
+  -- same shape GenerateTableXml.sql uses for sys.stats.is_temporary.
+  IF OBJECT_ID('tempdb..#SemanticCols') IS NOT NULL DROP TABLE #SemanticCols
+  CREATE TABLE #SemanticCols ([object_id] INT NOT NULL, column_id INT NOT NULL)
+  IF SchemaSmith.fn_ServerMajorVersion() >= 11
+    EXEC(N'INSERT INTO #SemanticCols ([object_id], column_id) SELECT [object_id], column_id FROM sys.fulltext_index_columns WITH (NOLOCK) WHERE statistical_semantics = 1')
   IF OBJECT_ID('tempdb..#ExistingFullTextIndexes') IS NOT NULL DROP TABLE #ExistingFullTextIndexes
   SELECT t.[Schema], [TableName] = t.[Name],
          STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
@@ -373,6 +393,9 @@ BEGIN TRY
                             CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
                                  THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
                                  ELSE '' END
+                            + CASE WHEN EXISTS (SELECT 1 FROM #SemanticCols sc
+                                                  WHERE sc.[object_id] = fc.[object_id] AND sc.column_id = fc.column_id)
+                                   THEN ' STATISTICAL_SEMANTICS' ELSE '' END
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
             JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
             WHERE fi.[object_id] = fc.[object_id]

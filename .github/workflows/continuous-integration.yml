@@ -16,6 +16,12 @@ on:
       - 'Demos/**/*.ps1'
       - 'Demos/**/*.sh'
       - 'Demos/**/*.sql'
+      # install.sh is not built, not covered by any test, and nothing in CI exercises it, so a change
+      # to it cannot alter a test outcome -- yet it spun the whole three-engine matrix. NOTE: this is
+      # coupled to release.yml's is_non_product list. Once CI skips these commits they have no
+      # check-runs at all, and a release cut straight after one fails the gate with 'check not found'
+      # unless the gate can walk back to a product-identical ancestor. The two lists move together.
+      - 'packaging/install/**'
   pull_request:
     branches: [main]
     paths-ignore:
@@ -31,6 +37,19 @@ on:
       - 'Demos/**/*.ps1'
       - 'Demos/**/*.sh'
       - 'Demos/**/*.sql'
+      # install.sh is not built, not covered by any test, and nothing in CI exercises it, so a change
+      # to it cannot alter a test outcome -- yet it spun the whole three-engine matrix. NOTE: this is
+      # coupled to release.yml's is_non_product list. Once CI skips these commits they have no
+      # check-runs at all, and a release cut straight after one fails the gate with 'check not found'
+      # unless the gate can walk back to a product-identical ancestor. The two lists move together.
+      - 'packaging/install/**'
+
+# Two pushes in quick succession used to run both matrices to completion, and closing a PR did not
+# stop its run -- a closed PR burned the full matrix until it was cancelled by hand. Cancellation is
+# gated on pull_request so a push to main is never silently superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   DOTNET_VERSION: '10.0.x'
@@ -110,7 +129,7 @@ jobs:
       checks: write
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2019-CU27-ubuntu-20.04
+        image: mcr.microsoft.com/mssql/server:2019-CU32-GDR10-ubuntu-20.04
         env:
           SA_PASSWORD: ${{ env.TEST_PASSWORD }}
           ACCEPT_EULA: Y
@@ -118,6 +137,11 @@ jobs:
           - 1440:1433
         options: --name mssql
     steps:
+      # MUST be first: "Provision the semantic language statistics database" below runs a script
+      # from ./scripts/, which does not exist until the repo is checked out. It previously sat after
+      # that step and failed with exit 127, skipping the entire SQL Server integration leg.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Install Full-Text Search on SQL Server
         run: |
           retry() {
@@ -143,18 +167,35 @@ jobs:
 
       - name: Wait for SQL Server to be ready
         run: |
+          # The tools path moved between image generations (CU27 shipped mssql-tools, CU32 ships
+          # mssql-tools18, which also needs -C). Detect it, exactly as provision-semantic-db.sh does.
+          SQLCMD="$(docker exec mssql sh -c 'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -1')"
+          if [ -z "$SQLCMD" ]; then echo "No sqlcmd in the mssql container" >&2; exit 1; fi
+          case "$SQLCMD" in *tools18*) TLS=-C ;; *) TLS= ;; esac
+          # Must FAIL when the server never answers. This loop previously swallowed every error and
+          # fell through with exit 0, so on an image where the hardcoded sqlcmd path did not exist it
+          # verified nothing at all and simply slept.
           for _ in $(seq 1 30); do
-            docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "SELECT 1" > /dev/null 2>&1 && break
+            if docker exec mssql "$SQLCMD" -S localhost -U sa -P "$TEST_PASSWORD" $TLS \
+                 -Q "SELECT 1" > /dev/null 2>&1; then exit 0; fi
             sleep 2
           done
+          echo "SQL Server never became ready" >&2
+          exit 1
+
+      - name: Provision the semantic language statistics database
+        # STATISTICAL_SEMANTICS full-text columns cannot be created without it, so the tests covering
+        # them would silently skip on a runner that lacks it -- and a test that only ever skips proves
+        # nothing. mssql-server-fts ships the database as a backup, so this needs no download.
+        run: ./scripts/provision-semantic-db.sh mssql sa "$TEST_PASSWORD"
 
       - name: Rename sa login to TestUser
         run: |
-          docker exec mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$TEST_PASSWORD" -Q "
-            ALTER LOGIN [sa] WITH NAME = [$TEST_USER];
-          "
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          # Path differs by image generation; tools18 also requires -C to trust the self-signed cert.
+          SQLCMD="$(docker exec mssql sh -c 'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -1')"
+          case "$SQLCMD" in *tools18*) TLS=-C ;; *) TLS= ;; esac
+          docker exec mssql "$SQLCMD" -S localhost -U sa -P "$TEST_PASSWORD" $TLS \
+            -Q "ALTER LOGIN [sa] WITH NAME = [$TEST_USER];"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -486,3 +527,21 @@ jobs:
 
       - name: Check coverage thresholds
         run: python3 scripts/check-coverage-thresholds.py coverage-merged/Cobertura.xml
+
+  # The genuine-binary sweep CANNOT run here -- no pre-2017 SQL Server Linux image exists, which is why
+  # it is local-only in the first place. So the only thing CI can enforce is that somebody ran it against
+  # a commit whose engine behaviour is still current. Human forgetting is the failure mode: two
+  # 2017-vs-2016 defects reached the v2.5.0 cut because the sweep was skipped, not because it lacked
+  # coverage. Seconds to run, and it needs full history to walk the record's commits.
+  sweep-record:
+    name: Genuine Sweep Record
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Sweep record still covers this tree
+        run: bash scripts/check-sweep-record.sh

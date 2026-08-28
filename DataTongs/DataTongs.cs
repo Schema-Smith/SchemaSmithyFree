@@ -627,7 +627,7 @@ SELECT STRING_AGG(CASE WHEN c.DATA_TYPE IN ('GEOGRAPHY', 'GEOMETRY')
 SELECT STRING_AGG(
     CASE WHEN c.udt_name IN ('geometry','geography','point','linestring','polygon',
                               'multipoint','multilinestring','multipolygon','geometrycollection')
-         THEN 'ST_AsText(""' || c.column_name || '"") AS ""' || c.column_name || '""'
+         THEN 'ST_AsText(""' || c.column_name || '"") AS ""' || c.column_name || '"", ST_SRID(""' || c.column_name || '"") AS ""' || c.column_name || '.STSrid""'
          WHEN c.udt_name = 'bytea'
          THEN 'encode(""' || c.column_name || '"", ''base64'') AS ""' || c.column_name || '""'
          WHEN LEFT(c.udt_name, 1) = '_'
@@ -656,7 +656,7 @@ SELECT GROUP_CONCAT(
         WHEN c.DATA_TYPE IN ('binary','varbinary','tinyblob','blob','mediumblob','longblob')
             THEN CONCAT('REPLACE(REPLACE(TO_BASE64(`', c.COLUMN_NAME, '`), ''\n'', ''''), ''\r'', '''') AS `', c.COLUMN_NAME, '`')
         WHEN c.DATA_TYPE IN ('geometry','point','linestring','polygon','multipoint','multilinestring','multipolygon','geometrycollection')
-            THEN CONCAT('ST_AsText(`', c.COLUMN_NAME, '`) AS `', c.COLUMN_NAME, '`')
+            THEN CONCAT('ST_AsText(`', c.COLUMN_NAME, '`) AS `', c.COLUMN_NAME, '`, ST_SRID(`', c.COLUMN_NAME, '`) AS `', c.COLUMN_NAME, '.STSrid`')
         WHEN c.DATA_TYPE = 'bit'
             THEN CONCAT('CAST(`', c.COLUMN_NAME, '` AS UNSIGNED) AS `', c.COLUMN_NAME, '`')
         WHEN c.DATA_TYPE IN ('date')
@@ -924,7 +924,10 @@ ORDER BY c.ORDINAL_POSITION;";
                 => $"{quotedName}, REPLACE(REPLACE(TO_BASE64({columnRef}), '\n', ''), '\r', '')",
             "geometry" or "point" or "linestring" or "polygon" or "multipoint"
                 or "multilinestring" or "multipolygon" or "geometrycollection"
-                => $"{quotedName}, ST_AsText({columnRef})",
+                // WKT alone drops the reference system. Pair it with a "<col>.STSrid" companion, the
+                // same shape SQL Server extraction has always produced, so the CRS survives delivery
+                // into an untyped destination column.
+                => $"{quotedName}, ST_AsText({columnRef}), '{column.Name.Replace("'", "''")}.STSrid', ST_SRID({columnRef})",
             "bit" => $"{quotedName}, CAST({columnRef} AS UNSIGNED)",
             _ => $"{quotedName}, {columnRef}"
         };

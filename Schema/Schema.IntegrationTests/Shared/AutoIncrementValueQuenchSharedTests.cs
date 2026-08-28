@@ -121,7 +121,9 @@ public abstract class AutoIncrementValueQuenchSharedTests
         cmd.CommandText = $"CALL SchemaSmith_MissingTableAndColumnQuench('{_testDb}', {whatIfVal})";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('TestProduct', '{_testDb}', {whatIfVal}, 0, 1, 1, 1, 1, 0)";
+        // Trailing 0, 0 are p_DropUnknownIndexes / p_DropIndexesRemovedFromProduct: this fixture is not
+        // about index drops, so both are off.
+        cmd.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('TestProduct', '{_testDb}', {whatIfVal}, 0, 1, 1, 1, 1, 0, 0, 0)";
         cmd.ExecuteNonQuery();
     }
 

@@ -256,10 +256,15 @@ public static class ForgeKindler
                 new("SchemaSmith.fn_SplitList.sql"),
                 new("SchemaSmith.fn_ServerMajorVersion.sql"),
                 new("SchemaSmith.fn_NormalizeTemporalRetentionPeriod.sql"),
+                // Must follow fn_ServerMajorVersion: its CREATE is version-gated at kindle time and calls it.
+                new("SchemaSmith.fn_RebuildBlockedReason.sql"),
                 new("SchemaSmith.UnsupportedFeaturePolicy.sql"),
                 new("SchemaSmith.DegradeUnsupportedColumnStore.sql"),
                 new("SchemaSmith.DegradeUnsupportedFeatures.sql"),
                 new("SchemaSmith.PrintWithNoWait.sql"),
+                // Must follow fn_RebuildBlockedReason (it calls it to refuse) and PrintWithNoWait (its
+                // WhatIf output), and precede the quench procedures that will elect a rebuild.
+                new("SchemaSmith.RebuildTable.sql"),
                 new("SchemaSmith.MissingTableAndColumnQuench.sql"),
                 new("SchemaSmith.ModifiedTableQuench.sql"),
                 new("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"),
@@ -296,6 +301,10 @@ public static class ForgeKindler
                 new("SchemaSmith.ColumnCompression.sql"),
                 new("SchemaSmith.StatisticsExpressionColumns.sql"),
                 new("SchemaSmith.StripLeadingSelect.sql"),
+                new("SchemaSmith.RebuildBlockedReason.sql"),
+                // Must follow RebuildBlockedReason (it calls it to refuse) and ExecuteOrDebug (its
+                // execute/preview path), and precede the quench procedures that will elect a rebuild.
+                new("SchemaSmith.RebuildTable.sql"),
                 new("SchemaSmith.ValidateTableOwnership.sql"),
                 new("SchemaSmith.FixupTableOwnership.sql"),
                 new("SchemaSmith.FixupIndexOwnership.sql"),
@@ -356,6 +365,10 @@ public static class ForgeKindler
                 new("SchemaSmith_SnapshotIndexExistence.sql"),
                 new("SchemaSmith_DropCheckClause.sql"),
                 new("SchemaSmith_IndexInvisibleClause.sql"),
+                new("SchemaSmith_RebuildBlockedReason.sql"),
+                // Must follow SchemaSmith_RebuildBlockedReason (it calls it to refuse) and the identifier
+                // helpers above, and precede the quench procedures that will elect a rebuild.
+                new("SchemaSmith_RebuildTable.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),
                 new("SchemaSmith_MissingTableAndColumnQuench.sql"),
@@ -556,6 +569,12 @@ public static class ForgeKindler
             "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"ValidateMaterializedViewOwnership\"(varchar, boolean)",
             "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"FixupMaterializedViewOwnership\"(varchar)",
             "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"FixupIndexOwnership\"(varchar)",
+            // The pre-RebuildPolicy arities. PostgreSQL keys a procedure by its argument TYPES, so
+            // CREATE OR REPLACE with three extra defaulted parameters leaves the old signature in place
+            // as a second overload — and every existing call site passes named arguments that BOTH
+            // overloads can satisfy, which resolves as "procedure is not unique" rather than picking one.
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"ModifiedTableQuench\"(boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean)",
+            "DROP PROCEDURE IF EXISTS \"SchemaSmith\".\"TableQuench\"(varchar, text, boolean, boolean, boolean, boolean)",
         ];
         foreach (var sql in drops)
         {

@@ -50,6 +50,15 @@
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [VariantName], [EnableCDC] = ISNULL([EnableCDC], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
+         -- RebuildPolicy resolves MOST-SPECIFIC-WINS on the WHOLE object (ProductQuench.ResolveCascadedPolicy),
+         -- so the apply side needs to know whether this table declared one AT ALL -- not just what its fields
+         -- say. [RebuildPolicySpecified] is that sentinel, read from the presence of the OBJECT rather than
+         -- from any field: a table declaring only { "Mode": "ALWAYS" } must NOT inherit a product-level
+         -- Threshold, and a per-field COALESCE against the passed-in tier would graft one on. A JSON null
+         -- ('"RebuildPolicy": null', which is what an undeclared policy serializes to) yields NULL for
+         -- '$.RebuildPolicy' AS JSON in lax mode, so absent and null both read as not-specified.
+         [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch],
+         [RebuildPolicySpecified] = CONVERT(BIT, CASE WHEN [RebuildPolicyJson] IS NOT NULL THEN 1 ELSE 0 END),
          [PreventDrop] = ISNULL([PreventDrop], 0)
     INTO #TableDefinitions
     FROM OPENJSON(@TableDefinitions) WITH (
@@ -79,6 +88,11 @@
       [DropExcludeConstraintsRemovedFromProduct] BIT '$.DropExcludeConstraintsRemovedFromProduct',
       [DropStatisticsRemovedFromProduct] BIT '$.DropStatisticsRemovedFromProduct',
       [DropIndexesRemovedFromProduct] BIT '$.DropIndexesRemovedFromProduct',
+      [RebuildPolicyMode] NVARCHAR(20) '$.RebuildPolicy.Mode',
+      [RebuildPolicyThreshold] INT '$.RebuildPolicy.Threshold',
+      [RebuildPolicyOnOrderMismatch] BIT '$.RebuildPolicy.OnOrderMismatch',
+      -- The OBJECT, read only to answer "did this table declare a policy at all?" -- see the sentinel above.
+      [RebuildPolicyJson] NVARCHAR(MAX) '$.RebuildPolicy' AS JSON,
       [PreventDrop] BIT '$.PreventDrop'
       ) t;
   
@@ -94,6 +108,7 @@
   SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [UpdateFillFactor], [EnableCDC], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
+         [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch], [RebuildPolicySpecified],
          ISNULL([PreventDrop], 0) AS [PreventDrop]
     INTO #Tables
     FROM #TableDefinitions WITH (NOLOCK);
@@ -115,7 +130,7 @@
                             ELSE REPLACE(c.[DataType], 'ROWVERSION', 'TIMESTAMP') END,
          [Nullable] = ISNULL(c.[Nullable], 0),
          c.[Default], c.[CheckExpression], c.[ComputedExpression], [Persisted] = ISNULL(c.[Persisted], 0),
-         [Sparse] = ISNULL(c.[Sparse], 0), [IsColumnSet] = ISNULL(c.[IsColumnSet], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
+         [Sparse] = ISNULL(c.[Sparse], 0), [IsColumnSet] = ISNULL(c.[IsColumnSet], 0), [BackfillExistingRows] = ISNULL(c.[BackfillExistingRows], 0), [Collation] = RTRIM(ISNULL(c.[Collation], '')), [DataMaskFunction] = RTRIM(ISNULL(c.[DataMaskFunction], '')),
          [EncryptionType] = ISNULL(c.[EncryptionType], 'NONE'), [EncryptionKey] = RTRIM(ISNULL(c.[EncryptionKey], '')), [EncryptionAlgorithm] = RTRIM(ISNULL(c.[EncryptionAlgorithm], '')),
          [OldName] = SchemaSmith.fn_SafeBracketWrap(c.[OldName]),
          CONVERT(BIT, CASE WHEN (RTRIM(ISNULL([ComputedExpression], '')) <> '' OR NOT EXISTS (SELECT * FROM #Tables x WHERE x.[Name] = t.[Name] AND x.[Schema] = t.[Schema] AND x.NewTable = 1))
@@ -165,6 +180,7 @@
       [Persisted] BIT '$.Persisted',
       [Sparse] BIT '$.Sparse',
       [IsColumnSet] BIT '$.IsColumnSet',
+      [BackfillExistingRows] BIT '$.BackfillExistingRows',
       [Collation] NVARCHAR(500) '$.Collation',
       [DataMaskFunction] NVARCHAR(500) '$.DataMaskFunction',
       [EncryptionType] NVARCHAR(100) '$.EncryptionType',
@@ -361,7 +377,13 @@
   DROP TABLE IF EXISTS #FullTextIndexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
          t.[Schema], t.[Name] AS [TableName], [FullTextCatalog] = SchemaSmith.fn_SafeBracketWrap(f.[FullTextCatalog]), [KeyIndex] = SchemaSmith.fn_SafeBracketWrap(f.[KeyIndex]),
-         f.[ChangeTracking], [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
+         -- Guarded like StopList beside it. Unguarded, this concatenates into the CREATE FULLTEXT INDEX
+         -- statement, and T-SQL concatenation with NULL yields NULL -- the whole statement becomes NULL and
+         -- NO index is created, with no error and no log line. Reachable from an ordinary package: the C#
+         -- default is AUTO, but an explicit "ChangeTracking": null in a table file overwrites it. 'AUTO'
+         -- here matches that C# default, so an omitted and an explicitly-null value behave the same.
+         [ChangeTracking] = COALESCE(NULLIF(RTRIM(f.[ChangeTracking]), ''), 'AUTO'),
+         [StopList] = SchemaSmith.fn_SafeBracketWrap(COALESCE(NULLIF(RTRIM(f.[StopList]), ''), 'SYSTEM')),
          -- Full-text LANGUAGE churn: a per-column "LANGUAGE nnnn" suffix must round-trip byte-identical
          -- against the live-side build in ModifiedTableQuench.sql (drift compares these as strings). Peel
          -- it off before bracket-wrapping the column (+ optional TYPE COLUMN) part -- same shape as the
@@ -371,6 +393,12 @@
          [Columns] = (SELECT STRING_AGG(CAST(CASE WHEN RTRIM([value]) LIKE '% LANGUAGE [0-9]%'
                                                    THEN SchemaSmith.fn_SafeBracketWrap(LEFT(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) - 1)) +
                                                         ' LANGUAGE ' + SUBSTRING(RTRIM([value]), CHARINDEX(' LANGUAGE ', RTRIM([value])) + 10, 4000)
+                                                   -- A column may carry STATISTICAL_SEMANTICS with no LANGUAGE. Without this branch the whole
+                                                   -- token would be bracket-wrapped as part of the column name ([Body STATISTICAL_SEMANTICS]),
+                                                   -- which never matches the live-side render and churns the index on every deploy.
+                                                   WHEN RTRIM([value]) LIKE '% STATISTICAL[_]SEMANTICS'
+                                                        THEN SchemaSmith.fn_SafeBracketWrap(LEFT(RTRIM([value]), CHARINDEX(' STATISTICAL_SEMANTICS', RTRIM([value])) - 1)) +
+                                                             ' STATISTICAL_SEMANTICS'
                                                    ELSE SchemaSmith.fn_SafeBracketWrap([value])
                                                    END AS NVARCHAR(MAX)), ',') FROM STRING_SPLIT(f.[Columns], ',') WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
          f.[ShouldApplyExpression], f.[VariantName]

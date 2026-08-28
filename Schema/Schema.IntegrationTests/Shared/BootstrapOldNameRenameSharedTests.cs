@@ -198,6 +198,21 @@ public abstract class BootstrapOldNameRenameSharedTests
 
         var ex = Assert.Catch<Exception>(() => CallBootstrap(ColumnRenameJson(TableName, newColOldName: "OldCol")));
         Assert.That(ex!.Message + ex.InnerException?.Message, Does.Contain("already exist"));
+
+        // MESSAGE_TEXT is capped at 128 chars so the SIGNAL cannot name the objects. Asserting only
+        // that it fired would leave the operator no way to find out WHICH column clashed, so assert
+        // the detail is actually retrievable -- that is the outcome, the SIGNAL is just the mechanism.
+        var detail = ScalarStr(
+            "SELECT Message FROM SchemaSmith_StatusMessages WHERE Message LIKE '%already exist%' " +
+            "ORDER BY CreatedAt DESC, Id DESC LIMIT 1");
+        Assert.That(detail, Is.Not.Null.And.Not.Empty,
+            "the guard recorded no detail row, so the operator has no way to learn which column clashed");
+        Assert.Multiple(() =>
+        {
+            Assert.That(detail, Does.Contain(TableName), "the recorded detail must name the table");
+            Assert.That(detail, Does.Contain("OldCol"), "the recorded detail must name the OldName column");
+            Assert.That(detail, Does.Contain("Value"), "the recorded detail must name the current column");
+        });
     }
 
     [Test]

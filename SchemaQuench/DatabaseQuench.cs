@@ -115,6 +115,35 @@ public class DatabaseQuench
     /// </summary>
     public bool CaptureWouldDrop { get; init; }
 
+    /// <summary>
+    /// The upper-tier <see cref="RebuildPolicy"/> for this work unit — environment, product and template
+    /// already collapsed to ONE whole policy by <c>ProductQuench.ResolveCascadedPolicy</c>. Forwarded to
+    /// each engine's <c>ModifiedTableQuench</c>, which applies it only to tables that declared no policy
+    /// of their own (a table that declared one takes ITS policy entire — the resolution is
+    /// most-specific-wins on the whole object, never a per-field blend).
+    ///
+    /// Set through the object initializer, like <see cref="CaptureWouldDrop"/>, rather than as another
+    /// positional constructor parameter: the four constructor overloads already carry nineteen of those,
+    /// and a null here is exactly what "no tier declared a policy" means — so a DatabaseQuench built
+    /// without one (every existing test) behaves as it did and can never elect a rebuild.
+    /// </summary>
+    public RebuildPolicy CascadedRebuildPolicy { get; init; }
+
+    /// <summary>NEVER when no tier declared a policy — the domain object's own default.</summary>
+    private string RebuildPolicyMode =>
+        EscapeSqlLiteral((CascadedRebuildPolicy?.Mode ?? "NEVER").Trim().ToUpperInvariant());
+
+    /// <summary>
+    /// The SQL literal NULL when unset, which is what each proc's "no threshold" branch tests for. Never
+    /// substituted with a number: a THRESHOLD policy with no Threshold must elect nothing, not rebuild at
+    /// some invented count.
+    /// </summary>
+    private string RebuildPolicyThreshold =>
+        CascadedRebuildPolicy?.Threshold?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
+
+    private string RebuildPolicyOnOrderMismatch =>
+        FormatBooleanFlag(CascadedRebuildPolicy?.OnOrderMismatch == true);
+
     private readonly ILog _progressLog = LogFactory.GetLogger("ProgressLog");
     private readonly ILog _errorLog = LogFactory.GetLogger("ErrorLog");
 
@@ -1491,17 +1520,25 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
         switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}";
+                tableCommand.CommandText = $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}, @RebuildPolicyMode = '{RebuildPolicyMode}', @RebuildPolicyThreshold = {RebuildPolicyThreshold}, @RebuildPolicyOnOrderMismatch = {RebuildPolicyOnOrderMismatch}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"
 CALL ""SchemaSmith"".""ValidateTableOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
-CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables}, p_DropColumnsRemovedFromProduct := {_dropRemovedColumns}, p_DropForeignKeysRemovedFromProduct := {_dropRemovedForeignKeys}, p_DropCheckConstraintsRemovedFromProduct := {_dropRemovedCheckConstraints}, p_DropExcludeConstraintsRemovedFromProduct := {_dropRemovedExcludeConstraints}, p_DropStatisticsRemovedFromProduct := {_dropRemovedStatistics}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_CaptureWouldDrop := {FormatBooleanFlag(CaptureWouldDrop)});";
+CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnknownIndexes}, p_WhatIf := {_whatIfOnly}, p_DropTablesRemovedFromProduct := {_dropRemovedTables}, p_DropColumnsRemovedFromProduct := {_dropRemovedColumns}, p_DropForeignKeysRemovedFromProduct := {_dropRemovedForeignKeys}, p_DropCheckConstraintsRemovedFromProduct := {_dropRemovedCheckConstraints}, p_DropExcludeConstraintsRemovedFromProduct := {_dropRemovedExcludeConstraints}, p_DropStatisticsRemovedFromProduct := {_dropRemovedStatistics}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_CaptureWouldDrop := {FormatBooleanFlag(CaptureWouldDrop)}, p_RebuildPolicyMode := '{RebuildPolicyMode}', p_RebuildPolicyThreshold := {RebuildPolicyThreshold}, p_RebuildPolicyOnOrderMismatch := {RebuildPolicyOnOrderMismatch});";
                 break;
             case Platform.MySQL:
             {
                 if (!MySqlTempTablesExist(tableCommand))
                     ParseMySqlTableJson(tableCommand);
+                // The #270 index no-drop-protection capture moved into ModifiedTableQuench with STEP 8,
+                // and it gates on the @ss_capture_would_drop SESSION variable rather than a parameter
+                // (it was written for a proc that had none). This branch never set it, so after the move
+                // it would read whatever the pooled connection happened to carry -- NULL on a fresh one,
+                // or a stale value from a previous template. Set it here as QuenchIndexesAndConstraints
+                // and QuenchForeignKeys already do. Must precede the CommandText assignment below,
+                // because SetMySqlCaptureFlag reuses the same command.
+                SetMySqlCaptureFlag(tableCommand);
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropRemoved = _dropRemovedTables == "1" ? 1 : 0;
                 var dropRemovedCols = _dropRemovedColumns == "1" ? 1 : 0;
@@ -1509,7 +1546,10 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
                 var dropRemovedExcludes = _dropRemovedExcludeConstraints == "1" ? 1 : 0;
                 var dropRemovedStats = _dropRemovedStatistics == "1" ? 1 : 0;
                 var captureWouldDrop = CaptureWouldDrop ? 1 : 0;
-                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemoved}, {dropRemovedCols}, {dropRemovedChecks}, {dropRemovedExcludes}, {dropRemovedStats}, {captureWouldDrop})";
+                var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
+                var dropRemovedIndexes = _dropRemovedIndexes == "1" ? 1 : 0;
+                SetMySqlRebuildPolicy(tableCommand);
+                tableCommand.CommandText = $"CALL SchemaSmith_ModifiedTableQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemoved}, {dropRemovedCols}, {dropRemovedChecks}, {dropRemovedExcludes}, {dropRemovedStats}, {captureWouldDrop}, {dropUnknown}, {dropRemovedIndexes})";
                 break;
             }
         }
@@ -1557,10 +1597,14 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
                 var whatIf = _whatIfOnly == "1" ? 1 : 0;
                 var dropUnknown = _dropUnknownIndexes == "1" ? 1 : 0;
                 var dropRemovedChecks = _dropRemovedCheckConstraints == "1" ? 1 : 0;
+                // On MySQL/MariaDB the index REMOVAL happens inside ModifiedTableQuench, matching SQL
+                // Server and PostgreSQL; MissingIndexesAndConstraintsQuench is add-only for indexes and
+                // no longer takes the two index-drop flags. IndexOnlyQuench still owns both of them --
+                // do not infer from a signature that an engine cannot do the thing.
                 var dropRemovedIndexes = _dropRemovedIndexes == "1" ? 1 : 0;
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $"CALL SchemaSmith_IndexOnlyQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedIndexes})"
-                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropUnknown}, {dropRemovedChecks}, {dropRemovedIndexes})";
+                    : $"CALL SchemaSmith_MissingIndexesAndConstraintsQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', {whatIf}, {dropRemovedChecks})";
                 break;
             }
         }
@@ -1577,6 +1621,20 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private void SetMySqlCaptureFlag(IDbCommand tableCommand)
     {
         tableCommand.CommandText = $"SET @ss_capture_would_drop = {(CaptureWouldDrop ? 1 : 0)}";
+        tableCommand.ExecuteNonQuery();
+    }
+
+    // The resolved upper-tier RebuildPolicy reaches MySQL's ModifiedTableQuench the same way the no-drop
+    // capture signal does, and for the same reason: MySQL has no default parameter values, so adding one
+    // is a breaking change for every direct call site (~30 of them here). Set all three explicitly before
+    // each call so a pooled connection never carries a previous template's policy into this one — a stale
+    // ALWAYS would rebuild tables that never asked for it. The proc reads them through COALESCE, so an
+    // unset variable means NEVER.
+    private void SetMySqlRebuildPolicy(IDbCommand tableCommand)
+    {
+        tableCommand.CommandText = $"SET @ss_rebuild_policy_mode = '{RebuildPolicyMode}', "
+                                   + $"@ss_rebuild_policy_threshold = {RebuildPolicyThreshold}, "
+                                   + $"@ss_rebuild_policy_on_order_mismatch = {RebuildPolicyOnOrderMismatch}";
         tableCommand.ExecuteNonQuery();
     }
 
@@ -1625,7 +1683,7 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     private static readonly ConcurrentDictionary<string, object> MaterializedViewPhaseLocks = new();
 
     private object MaterializedViewPhaseLock() =>
-        MaterializedViewPhaseLocks.GetOrAdd($"{_server} {_databaseName}", _ => new object());
+        MaterializedViewPhaseLocks.GetOrAdd($"{_server}\0{_databaseName}", _ => new object());
 
     internal void QuenchMaterializedViews(IDbCommand tableCommand)
     {

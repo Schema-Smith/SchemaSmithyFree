@@ -61,7 +61,16 @@ BEGIN TRY
     BEGIN
         DECLARE @v_OldQualifiedName NVARCHAR(1000) = '[' + @v_SchemaBare + '].[' + @v_OldNameBare + ']';
         IF OBJECT_ID(@v_OldQualifiedName, 'U') IS NOT NULL AND OBJECT_ID(@v_QualifiedName, 'U') IS NOT NULL
-            THROW 51000, 'BootstrapTableQuench: both the OldName table and the current table already exist; resolve manually before bootstrap can rename.', 1;
+        BEGIN
+            -- Name the objects. Refusing is right, but an operator told only that "a" table clashes has
+            -- to go find which; PostgreSQL has always interpolated them and THROW takes a variable
+            -- message (2048 chars), so there is no reason for the gap. Keep the 'already exist'
+            -- substring -- the integration tests assert on it.
+            DECLARE @v_TblClashMsg NVARCHAR(2048) =
+              'BootstrapTableQuench: both ' + @v_OldQualifiedName + ' (OldName) and ' + @v_QualifiedName +
+              ' already exist; resolve manually before bootstrap can rename.';
+            THROW 51000, @v_TblClashMsg, 1;
+        END
 
         IF OBJECT_ID(@v_OldQualifiedName, 'U') IS NOT NULL AND OBJECT_ID(@v_QualifiedName, 'U') IS NULL
         BEGIN
@@ -164,7 +173,12 @@ BEGIN TRY
 
             IF COLUMNPROPERTY(OBJECT_ID(@v_QualifiedName), @v_ColRenameOld, 'AllowsNull') IS NOT NULL
                AND COLUMNPROPERTY(OBJECT_ID(@v_QualifiedName), @v_ColRenameNew, 'AllowsNull') IS NOT NULL
-                THROW 51000, 'BootstrapTableQuench: both the OldName column and the current column already exist; resolve manually before bootstrap can rename.', 1;
+            BEGIN
+                DECLARE @v_ColClashMsg NVARCHAR(2048) =
+                  'BootstrapTableQuench: both ' + @v_QualifiedName + '.[' + @v_ColRenameOld + '] (OldName) and [' +
+                  @v_ColRenameNew + '] already exist; resolve manually before bootstrap can rename.';
+                THROW 51000, @v_ColClashMsg, 1;
+            END
 
             IF COLUMNPROPERTY(OBJECT_ID(@v_QualifiedName), @v_ColRenameOld, 'AllowsNull') IS NOT NULL
                AND COLUMNPROPERTY(OBJECT_ID(@v_QualifiedName), @v_ColRenameNew, 'AllowsNull') IS NULL

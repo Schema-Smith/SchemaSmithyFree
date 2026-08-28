@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
+using Schema.Domain.SqlServer;
 using Index = Schema.Domain.Index;
 
 namespace Schema.Validation.Checks;
@@ -23,6 +24,8 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string RelatedColumnCode = "SS-FK-004";
     private const string CardinalityCode = "SS-FK-005";
     private const string IndexColumnCode = "SS-IDX-001";
+    private const string BackfillWithoutDefaultCode = "SS-COL-001";
+    private const string RebuildThresholdCode = "SS-TBL-001";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -45,6 +48,9 @@ public sealed class CoherenceCheck : ISchemaCheck
 
             foreach (var index in table.Indexes)
                 findings.AddRange(CheckIndex(table, index, location));
+
+            findings.AddRange(CheckBackfill(table, location));
+            findings.AddRange(CheckRebuildPolicy(table, location));
         }
 
         return findings;
@@ -63,20 +69,20 @@ public sealed class CoherenceCheck : ISchemaCheck
 
         foreach (var column in fkColumns.Where(column => !localColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, LocalColumnCode, Category, location,
-                $"{location}: local column '{column}' referenced in Columns does not exist on table '{table.Name}'.");
+                $"Local column '{column}' referenced in Columns does not exist on table '{table.Name}'.");
 
         // Cardinality is a pure string-count comparison — independent of whether the related
         // table resolves, so it always runs.
         if (fkColumns.Count != fkRelatedColumns.Count)
             yield return new Finding(Severity.Error, CardinalityCode, Category, location,
-                $"{location}: Columns has {fkColumns.Count} entries but RelatedColumns has {fkRelatedColumns.Count} — FK column lists must be the same length.");
+                $"Columns has {fkColumns.Count} entries but RelatedColumns has {fkRelatedColumns.Count} — FK column lists must be the same length.");
 
         var (schema, name) = ResolveRelatedTarget(table, fk);
 
         if (!tablesByKey.TryGetValue((schema, name), out var relatedTables))
         {
             yield return new Finding(Severity.Error, RelatedTableCode, Category, location,
-                $"{location}: RelatedTable '{fk.RelatedTable}' does not resolve to any known table (resolved schema '{schema}').");
+                $"RelatedTable '{fk.RelatedTable}' does not resolve to any known table (resolved schema '{schema}').");
             yield break;
         }
 
@@ -86,7 +92,45 @@ public sealed class CoherenceCheck : ISchemaCheck
 
         foreach (var column in fkRelatedColumns.Where(column => !relatedColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, RelatedColumnCode, Category, location,
-                $"{location}: related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
+                $"Related column '{column}' referenced in RelatedColumns does not exist on related table '{fk.RelatedTable}'.");
+    }
+
+    /// <summary>
+    /// BackfillExistingRows renders as ALTER TABLE ... WITH VALUES, which SQL Server rejects as a SYNTAX
+    /// error when the column has no DEFAULT — so the deploy path only emits it alongside one. That guard
+    /// keeps the batch runnable but makes the setting a silent no-op, which is the shape worth catching
+    /// here: the author asked for existing rows to be populated and nothing would populate them.
+    /// </summary>
+    private static IEnumerable<Finding> CheckBackfill(Table table, string tableLocation)
+    {
+        foreach (var column in table.Columns.OfType<SqlServerColumn>()
+                     .Where(c => c.BackfillExistingRows && string.IsNullOrWhiteSpace(c.Default)))
+            yield return new Finding(Severity.Warning, BackfillWithoutDefaultCode, Category, tableLocation,
+                $"Column '{column.Name}' sets BackfillExistingRows but has no Default, so there is no value to " +
+                "apply to existing rows and the setting has no effect.");
+    }
+
+    /// <summary>
+    /// Error, not Warning — the distinction from SS-COL-001 is the point. A BackfillExistingRows with no
+    /// Default is INERT: the deploy runs, the setting simply does nothing, and a warning is proportionate.
+    /// A THRESHOLD mode with no threshold is UNEVALUABLE: there is no number to compare pending changes
+    /// against, so a deploy would have to invent a behaviour — alter in place, or rebuild — and either
+    /// choice is a guess about what the author meant.
+    /// <para>Only the table's OWN declared policy is examined. The deploy-time cascade (environment,
+    /// product, template) is not visible from a package-authoring check, and a table that declares
+    /// nothing here is not the level that would be at fault.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckRebuildPolicy(Table table, string tableLocation)
+    {
+        var policy = table.RebuildPolicy;
+        if (policy == null) yield break;
+        if (!string.Equals(policy.Mode, "THRESHOLD", StringComparison.OrdinalIgnoreCase)) yield break;
+        if (policy.Threshold is >= 1) yield break;
+
+        yield return new Finding(Severity.Error, RebuildThresholdCode, Category, tableLocation,
+            $"Table '{table.Name}' sets RebuildPolicy.Mode 'THRESHOLD' but no Threshold of 1 or more. " +
+            "THRESHOLD needs a threshold to compare against, so the policy cannot be evaluated — set a " +
+            "Threshold, or choose Mode 'ALWAYS' or 'NEVER'.");
     }
 
     private static IEnumerable<Finding> CheckIndex(Table table, Index index, string tableLocation)
@@ -98,7 +142,7 @@ public sealed class CoherenceCheck : ISchemaCheck
                      .Where(column => !IsExpressionKeyPart(column))
                      .Where(column => !localColumnNames.Contains(NormalizeIdentifier(column))))
             yield return new Finding(Severity.Error, IndexColumnCode, Category, location,
-                $"{location}: index column '{column}' referenced in IndexColumns does not exist on table '{table.Name}'.");
+                $"Index column '{column}' referenced in IndexColumns does not exist on table '{table.Name}'.");
     }
 
     /// <summary>

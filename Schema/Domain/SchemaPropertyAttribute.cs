@@ -14,6 +14,15 @@ namespace Schema.Domain
         public string Format { get; set; }
         public int MaxLength { get; set; } = -1;
         public string Description { get; set; }
+        /// <summary>
+        /// Marks a property that extraction cannot reconstruct because it is authored intent rather than
+        /// something the catalog knows -- a deploy-behaviour switch, say. SchemaTongs copies every marked
+        /// property forward from the file it is overwriting, and a completeness test requires each
+        /// table/component property to be either reachable by an extractor or marked here, so a new one
+        /// cannot silently start disappearing on re-extract.
+        /// </summary>
+        public bool AuthoredOnly { get; set; }
+
         public bool Deprecated { get; set; }
         public bool Required { get; set; }
 

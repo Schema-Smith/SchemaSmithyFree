@@ -14,7 +14,7 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 2)]
         public string Columns { get; set; }
 
-        [SchemaProperty(Minimum = 0, Maximum = 100)]
+        [SchemaProperty(AuthoredOnly = true, Minimum = 0, Maximum = 100)]
         [JsonProperty(Order = 3)]
         public byte SampleSize { get; set; }
 

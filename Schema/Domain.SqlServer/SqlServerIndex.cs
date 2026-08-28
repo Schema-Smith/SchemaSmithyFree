@@ -26,6 +26,7 @@ namespace Schema.Domain.SqlServer
         public string IncludeColumns { get; set; }
 
         [JsonProperty(Order = 106)]
+        [SchemaProperty(AuthoredOnly = true)]
         public bool UpdateFillFactor { get; set; }
 
         // Filegroup placement (#filegroups): same name-only, null-means-default contract as

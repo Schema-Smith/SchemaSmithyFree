@@ -382,12 +382,11 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
         // Verify index was created
@@ -443,12 +442,11 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
         // Verify unique index was created
@@ -525,12 +523,11 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
         command.CommandText = "CALL SchemaSmith_ForeignKeyQuench(@productName, @databaseName, @whatIf, @dropUnknown, @dropRemovedFks)";
@@ -605,12 +602,11 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
         // Verify check constraint was created
@@ -667,12 +663,11 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 1);
-        command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
         // Verify index was NOT created
@@ -745,12 +740,23 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        // Index removal lives in ModifiedTableQuench, so THIS is the call that drops idx_email —
+        // the trailing @dropUnknown, 1 are DropUnknownIndexes and DropIndexesRemovedFromProduct,
+        // the two flags this test used to pass to MissingIndexesAndConstraintsQuench.
+        // Non-index drop flags are all 0 so the call cannot remove tables or columns.
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, 0, 0, 1, 1, 1, 0, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
         command.AddParameterWithValue("@dropUnknown", 1);
+        command.ExecuteNonQuery();
+
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
+        command.Parameters.Clear();
+        command.AddParameterWithValue("@productName", "TestProduct");
+        command.AddParameterWithValue("@databaseName", _testDb);
+        command.AddParameterWithValue("@whatIf", 0);
         command.ExecuteNonQuery();
 
         // Verify index was dropped
@@ -818,12 +824,23 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        // Index removal lives in ModifiedTableQuench, so THIS is the call that must run for the
+        // assertion below to mean anything — the trailing @dropUnknown, 1 are DropUnknownIndexes
+        // (off, the axis under test) and DropIndexesRemovedFromProduct (on, its default).
+        // Non-index drop flags are all 0 so the call cannot remove tables or columns.
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, 0, 0, 1, 1, 1, 0, @dropUnknown, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
         command.AddParameterWithValue("@dropUnknown", 0);
+        command.ExecuteNonQuery();
+
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
+        command.Parameters.Clear();
+        command.AddParameterWithValue("@productName", "TestProduct");
+        command.AddParameterWithValue("@databaseName", _testDb);
+        command.AddParameterWithValue("@whatIf", 0);
         command.ExecuteNonQuery();
 
         // Verify index was NOT dropped
@@ -879,7 +896,9 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
+        // Trailing 0, 0 are DropUnknownIndexes and DropIndexesRemovedFromProduct: index removal now
+        // lives in this procedure, and this test does not exercise it, so both stay off.
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0, 0, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -940,7 +959,9 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
+        // Trailing 0, 0 are DropUnknownIndexes and DropIndexesRemovedFromProduct: index removal now
+        // lives in this procedure, and this test does not exercise it, so both stay off.
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0, 0, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -1001,7 +1022,9 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0)";
+        // Trailing 0, 0 are DropUnknownIndexes and DropIndexesRemovedFromProduct: index removal now
+        // lives in this procedure, and this test does not exercise it, so both stay off.
+        command.CommandText = "CALL SchemaSmith_ModifiedTableQuench(@productName, @databaseName, @whatIf, @dropTables, @dropRemovedCols, 1, 1, 1, 0, 0, 0)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
@@ -1685,12 +1708,11 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@whatIf", 0);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
         // Verify included index exists
@@ -1915,12 +1937,11 @@ public abstract class TableQuenchTestsSharedTests
         command.AddParameterWithValue("@tableJson", tableJson);
         command.ExecuteNonQuery();
 
-        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, @dropUnknown, 1, 1)";
+        command.CommandText = "CALL SchemaSmith_MissingIndexesAndConstraintsQuench(@productName, @databaseName, @whatIf, 1)";
         command.Parameters.Clear();
         command.AddParameterWithValue("@productName", "TestProduct");
         command.AddParameterWithValue("@databaseName", _testDb);
         command.AddParameterWithValue("@whatIf", 0);
-        command.AddParameterWithValue("@dropUnknown", 0);
         command.ExecuteNonQuery();
 
         command.CommandText = "CALL SchemaSmith_ForeignKeyQuench(@productName, @databaseName, @whatIf, @dropUnknown, @dropRemovedFks)";

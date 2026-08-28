@@ -436,7 +436,7 @@ Each platform's table definition extends the shared properties with engine-speci
 | `Statistics` | array | `[]` | Custom statistics definitions. See [Statistics (SQL Server)](#statistics-sql-server). |
 | `FullTextIndex` | object or array | `null` | Full-text index on the table -- a single definition, or an array of conditional variants. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
 | `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. |
-| `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. |
+| `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. Changing a tracked table's columns rotates to a new capture instance rather than discarding history -- see [Change Data Capture (SQL Server)](#change-data-capture-sql-server). |
 | `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
 | `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
@@ -548,6 +548,15 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 `CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`. Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
 
 `IsColumnSet: true` declares `COLUMN_SET FOR ALL_SPARSE_COLUMNS` -- an XML column that aggregates the table's sparse columns. Available at the SQL Server 2008 floor, alongside `Sparse`. Adding a column set and the sparse columns it aggregates together in one deploy always works, whether the table is new or already exists. **Known limitation:** converting an *already-deployed* plain column into a column set in the same deploy that also introduces a brand-new sparse column is not supported -- the new sparse column commits before the conversion runs, and SQL Server refuses a column set on a table that already has a sparse column. The conversion works on its own (no new sparse columns in the same deploy, and none pre-existing on the table); combined with a new sparse column, it fails with SQL Server's own error.
+
+`BackfillExistingRows: true` populates rows that are **already in the table** when the column is added, using its
+`Default`. SQL Server leaves those rows `NULL` when a *nullable* column with a default is added -- a `NOT NULL`
+column is backfilled anyway -- so this is the setting that makes "new nullable column, existing rows get the
+default" authorable. It requires `Default`; without one there is no value to apply and `--Validate` reports
+`SS-COL-001`. It has no effect when the column is created as part of a new table, since there are no existing rows.
+
+> **Note:** This is a SQL Server difference, not a general one. PostgreSQL, MySQL and MariaDB backfill the default
+> on `ADD COLUMN` already, so the setting exists only here.
 
 ### PostgreSQL column extras
 
@@ -977,6 +986,24 @@ Custom statistics definitions in the `Statistics` array. SQL Server uses traditi
 
 ---
 
+## Change Data Capture (SQL Server)
+
+Change Data Capture records inserts, updates, and deletes into a *change table* managed by SQL Server, so downstream readers can consume what happened rather than poll for differences. A table opts in with `"EnableCDC": true`. The tracked column set is fixed at the moment CDC is enabled, which is what makes schema change interesting: a capture instance created against three columns keeps capturing those three, whatever you do to the table afterwards.
+
+SQL Server's answer is to allow **two capture instances per table** so a new one can be stood up beside the old, and SchemaSmith uses exactly that. When a deploy changes the columns of a tracked table it:
+
+1. Leaves CDC running throughout -- the column work does not interrupt capture.
+2. Creates a second capture instance covering the new column set, named `<schema>_<table>_2` (or the base `<schema>_<table>` if the surviving instance already carries the `_2` suffix).
+3. Leaves the original instance and everything it has captured untouched, and names it in the deploy log along with the command to remove it.
+
+> **Action required:** Retiring the old instance is your call, not SchemaSmith's -- only you know when your readers have drained it. Drop it with `EXEC sys.sp_cdc_disable_table @source_schema = N'<schema>', @source_name = N'<table>', @capture_instance = N'<name>'`.
+
+> **Warning:** Because the old instance occupies one of the two slots, a **second** column change before you drop it has nowhere to rotate to. SchemaSmith refuses that deploy **before touching any column**, naming the tables at the limit and the command to clear them, so nothing is left half-applied. Drop the drained instance and re-run.
+
+Setting `EnableCDC` back to `false` disables capture on the table outright, which drops its capture instances and their history. That is a deliberate opt-out rather than a side effect of a schema change.
+
+---
+
 ## Full-Text Index (SQL Server)
 
 SQL Server allows one full-text index per table. Declare it as a single `FullTextIndex` object -- or as an **array of conditional variants** when different targets need different definitions, such as a different full-text catalog per region. At deploy time, each variant's `ShouldApplyExpression` runs against the target and the matching variant deploys.
@@ -987,7 +1014,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 | `KeyIndex` | string | Name of the unique index used as the full-text key. |
 | `ChangeTracking` | string | `"OFF"`, `"MANUAL"`, or `"AUTO"`. |
 | `StopList` | string | Name of a full-text stop list. |
-| `Columns` | string | Comma-separated column specification, e.g. `"[Title],[Body] TYPE COLUMN [BodyType] LANGUAGE 1033"`. Each entry is a bracketed column name, optionally followed by `TYPE COLUMN [col]` (the column holding the document's file extension for a binary column) and `LANGUAGE <lcid>` (the word breaker to tokenize with). |
+| `Columns` | string | Comma-separated column specification, e.g. `"[Title],[Body] TYPE COLUMN [BodyType] LANGUAGE 1033 STATISTICAL_SEMANTICS"`. Each entry is a bracketed column name, optionally followed by `TYPE COLUMN [col]` (the column holding the document's file extension for a binary column), `LANGUAGE <lcid>` (the word breaker to tokenize with), and `STATISTICAL_SEMANTICS` (semantic key phrase and document similarity indexing). Order matters -- SQL Server expects exactly that sequence. |
 | `ShouldApplyExpression` | string | Boolean SQL expression evaluated on the target; the index (or variant) applies only when it is true. |
 | `VariantName` | string | Optional label for a conditional variant. Appears in deployment log messages when the variant applies, and documents the intent behind the `ShouldApplyExpression`. Max 128 characters. |
 | `Extensions` | object | Custom metadata. |
@@ -998,6 +1025,7 @@ SQL Server allows one full-text index per table. Declare it as a single `FullTex
 - **No match means none.** When no variant matches a target, the table behaves as if no full-text index were declared there -- any existing full-text index is removed.
 - **No-op when unchanged.** When the deployed index already matches the selected variant, re-deployment performs no full-text work: no drop, no repopulation.
 - **`LANGUAGE` extracts only when it differs from the column default.** SchemaTongs omits `LANGUAGE` for a column already indexed in the language its collation implies, so extracted packages stay uncluttered. A column with no collation (a binary document column indexed through `TYPE COLUMN`) always extracts its `LANGUAGE`, because it has no implied default to fall back on.
+- **`STATISTICAL_SEMANTICS` needs the semantic database.** The clause requires SQL Server 2012 or later with the Semantic Language Statistics Database installed and registered on the instance; without it the server rejects the index with "semantic functionality is not available." SchemaSmith deploys and compares the clause on every supported SQL Server encoding, so declaring it does not force a rebuild on each deploy.
 
 > **Note:** When no variant matches a target, an existing full-text index on that table is dropped -- the absence of a match is treated as "no full-text index here," not "leave it alone."
 

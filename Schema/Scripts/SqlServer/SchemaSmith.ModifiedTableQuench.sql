@@ -1,7 +1,11 @@
--- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
+-- INDEX REMOVAL LIVES HERE on SQL Server (@DropIndexesRemovedFromProduct). Placement differs by engine:
+-- PostgreSQL also removes here, but MySQL/MariaDB remove in MissingIndexesAndConstraintsQuench instead,
+-- whose name reads as add-only. Do not infer an engine's capability from one procedure's signature --
+-- that inference produced six wrong conclusions in a single audit. All three engines honour the flag.
 IF OBJECT_ID('SchemaSmith.ModifiedTableQuench', 'P') IS NOT NULL DROP PROCEDURE SchemaSmith.ModifiedTableQuench
 GO
 CREATE PROCEDURE SchemaSmith.ModifiedTableQuench
@@ -15,7 +19,15 @@ CREATE PROCEDURE SchemaSmith.ModifiedTableQuench
   @DropExcludeConstraintsRemovedFromProduct BIT = 1,
   @DropStatisticsRemovedFromProduct BIT = 1,
   @DropIndexesRemovedFromProduct BIT = 1,
-  @CaptureWouldDrop BIT = 0
+  @CaptureWouldDrop BIT = 0,
+  -- The RESOLVED upper-tier RebuildPolicy (environment -> product -> template), already collapsed to a
+  -- single whole policy by ProductQuench.ResolveCascadedPolicy. It applies to a table ONLY when that table
+  -- declared no policy of its own; a table that declared one takes ITS policy entire (see the decision
+  -- point below). Defaults are the NEVER default of the domain object, so a caller that passes nothing --
+  -- every pre-existing caller, and every package with no RebuildPolicy anywhere -- can never elect a rebuild.
+  @RebuildPolicyMode NVARCHAR(20) = 'NEVER',
+  @RebuildPolicyThreshold INT = NULL,
+  @RebuildPolicyOnOrderMismatch BIT = 0
 AS
 BEGIN TRY
   DECLARE @v_SQL NVARCHAR(MAX) = '',
@@ -477,6 +489,196 @@ BEGIN TRY
     WHERE cc.DropOnly = 1
       AND (@DropColumnsRemovedFromProduct = 0 OR ISNULL(t.[DropColumnsRemovedFromProduct], 1) = 0)
 
+  ----------------------------------------------------------------------------------------------------
+  -- THE REBUILD DECISION POINT.
+  --
+  -- WHY HERE. Column-change detection finished one statement above: #ColumnChanges holds every
+  -- modification and every by-absence drop, and #SuppressedColumnDrops names the drops this run will NOT
+  -- perform. And nothing has yet touched a table that is STILL DECLARED: everything executed above this
+  -- line either turns off temporal tracking for a table no longer declared temporal or drops a table that
+  -- left the product entirely. The very next EXEC -- the foreign-key capture and drop immediately below --
+  -- is where this procedure starts dismantling the dependent objects OF a declared table, and a rebuild
+  -- drops all of those wholesale anyway. A rebuild inheriting a half-dismantled table would have
+  -- RebuildTable's pre-rebuild refusals reasoning about a live state that no longer matches the declared
+  -- file, so "before the ALTER phases" is the wrong boundary and this one is the right one. Renames land
+  -- earlier still, in MissingTableAndColumnQuench, which matters: RebuildTable refuses outright while a
+  -- table or column rename is pending, because the copy matches columns by their CURRENT name.
+  --
+  -- OPT-IN BY CONSTRUCTION. #RebuildElection is built by a WHERE that only an explicit ALWAYS/THRESHOLD,
+  -- or an explicit OnOrderMismatch, can satisfy. A package with no RebuildPolicy anywhere resolves to the
+  -- domain object's NEVER default with OnOrderMismatch false
+  -- at every level, elects nothing, and this whole block is a no-op: no rebuild, no statement, nothing
+  -- added to the run. A rebuild moves user data, so a table that did not ask for one must never get one,
+  -- and that has to be structurally true rather than true because the conditions happen not to match.
+  --
+  -- WHOLE-OBJECT RESOLUTION. [RebuildPolicySpecified] picks WHICH policy applies -- the table's own, or
+  -- the resolved upper-tier one passed in -- and then every field comes from that ONE policy. Never a
+  -- per-field COALESCE: a table declaring only { "Mode": "ALWAYS" } must not inherit a product's
+  -- Threshold. Mirrors ProductQuench.ResolveCascadedPolicy, which collapses the three upper tiers the
+  -- same way before this procedure is called.
+  ----------------------------------------------------------------------------------------------------
+
+  ----------------------------------------------------------------------------------------------------
+  -- COLUMN-ORDER DRIFT, the input to the OnOrderMismatch trigger.
+  --
+  -- Reordering existing columns is impossible in place on every engine SchemaSmith supports, so a rebuild
+  -- is the only mechanism that can converge a table whose columns are in the wrong order. This pass names
+  -- the tables where that is true.
+  --
+  -- DECLARED ORDER IS [_RowId], because that is what RebuildTable orders the shadow's CREATE by. Detection
+  -- and repair MUST read the declared order off the same column: if this pass elected on one definition of
+  -- "declared order" and the rebuild produced another, the table would be re-elected on every subsequent
+  -- deploy and rebuilt forever -- which on this feature means copying every row of the table, every deploy.
+  --
+  -- THE COMPARISON IS RELATIVE, NEVER ABSOLUTE. #DeclaredColumnOrder pairs each column’s declared position
+  -- with its live ORDINAL_POSITION, and the mismatch test below looks only for an INVERSION -- two columns
+  -- whose declared order disagrees with their live order. Comparing the two positions for EQUALITY would be
+  -- wrong, and the reason is engine-specific rather than universal (measured 2026-08-27):
+  --   * PostgreSQL’s information_schema.ordinal_position is attnum and KEEPS the gap left by every column
+  --     ever dropped. A correctly-ordered table that has ever lost a column would show declared 2 against
+  --     live 3 and be rebuilt on every single deploy -- the infinite-rebuild trap, and on this feature that
+  --     means moving every row of the table every time.
+  --   * SQL Server’s INFORMATION_SCHEMA.ORDINAL_POSITION RENUMBERS, so the gap is invisible here. It is
+  --     sys.columns.column_id that retains it -- which this query deliberately does not read.
+  --   * MySQL renumbers contiguously and never exposes a gap either.
+  -- An inversion test never reads a position’s value, only two positions’ order, so a uniform shift by any
+  -- number of gaps is invisible to it on every engine and only genuine drift is detected. Writing it this
+  -- way means the three engines need no per-engine branch.
+  --
+  -- THE COMPARED SET IS THE INTERSECTION, which the join produces by construction.
+  --   * Declared AND live -- compared. This is the real question.
+  --   * Live but NOT declared -- excluded, because it has no declared position to compare. These are the
+  --     columns this run drops by absence (a table RETAINING one cannot reach the election at all: the
+  --     #SuppressedColumnDrops guard below excludes it), so they will not exist after the run and must not
+  --     drag a correctly-ordered table into a rebuild. Including them would re-elect any table with a
+  --     retained column forever -- the same infinite loop from the other direction.
+  --   * Declared but NOT live -- cannot occur here: MissingTableAndColumnQuench added it earlier in the
+  --     same run, so by this line it is live and the join finds it. It needs no special case, and the
+  --     comparison is simply over the live set. Note this makes a NEW column in a mid-file position a
+  --     genuine mismatch, correctly: the ADD appended it to the end, and only a rebuild can move it.
+  ----------------------------------------------------------------------------------------------------
+  RAISERROR('Detect declared-vs-deployed column order drift', 10, 100) WITH NOWAIT
+  IF OBJECT_ID('tempdb..#DeclaredColumnOrder') IS NOT NULL DROP TABLE #DeclaredColumnOrder
+  SELECT c.[Schema], c.[TableName], [DeclaredPos] = c.[_RowId], [LivePos] = ic.ORDINAL_POSITION
+    INTO #DeclaredColumnOrder
+    FROM #Columns c WITH (NOLOCK)
+    JOIN INFORMATION_SCHEMA.COLUMNS ic WITH (NOLOCK)
+      ON ic.TABLE_SCHEMA = SchemaSmith.fn_StripBracketWrapping(c.[Schema])
+     AND ic.TABLE_NAME = SchemaSmith.fn_StripBracketWrapping(c.[TableName])
+     AND ic.COLUMN_NAME = SchemaSmith.fn_StripBracketWrapping(c.[ColumnName])
+
+  IF OBJECT_ID('tempdb..#RebuildOrderMismatch') IS NOT NULL DROP TABLE #RebuildOrderMismatch
+  SELECT DISTINCT a.[Schema], a.[TableName]
+    INTO #RebuildOrderMismatch
+    FROM #DeclaredColumnOrder a WITH (NOLOCK)
+    JOIN #DeclaredColumnOrder b WITH (NOLOCK) ON b.[Schema] = a.[Schema]
+                                             AND b.[TableName] = a.[TableName]
+    WHERE a.[DeclaredPos] < b.[DeclaredPos]
+      AND a.[LivePos] > b.[LivePos]
+
+  RAISERROR('Elect tables for rebuild', 10, 100) WITH NOWAIT
+  IF OBJECT_ID('tempdb..#RebuildElection') IS NOT NULL DROP TABLE #RebuildElection
+  SELECT p.[Schema], p.[TableName]
+    INTO #RebuildElection
+    FROM (SELECT t.[Schema], [TableName] = t.[Name],
+                 -- The winning policy, taken WHOLE from one level.
+                 [Mode] = UPPER(LTRIM(RTRIM(ISNULL(CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyMode] ELSE @RebuildPolicyMode END, 'NEVER')))),
+                 [Threshold] = CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyThreshold] ELSE @RebuildPolicyThreshold END,
+                 -- OnOrderMismatch COMPOSES with Mode rather than replacing it -- it is one more OR arm on
+                 -- the WHERE below, not a fourth Mode value. { "Mode": "THRESHOLD", "Threshold": 3,
+                 -- "OnOrderMismatch": true } therefore reads "rebuild once three modifications pile up OR
+                 -- once the column order has drifted", and pairing it with the NEVER default asks for a
+                 -- rebuild on order drift and nothing else -- the case the trigger mainly exists for.
+                 [OnOrderMismatch] = CONVERT(BIT, ISNULL(CASE WHEN ISNULL(t.[RebuildPolicySpecified], 0) = 1 THEN t.[RebuildPolicyOnOrderMismatch] ELSE @RebuildPolicyOnOrderMismatch END, 0)),
+                 [OrderMismatch] = CONVERT(BIT, CASE WHEN EXISTS (SELECT 1 FROM #RebuildOrderMismatch m WITH (NOLOCK)
+                                                                    WHERE m.[Schema] = t.[Schema] AND m.[TableName] = t.[Name])
+                                                     THEN 1 ELSE 0 END),
+                 -- THE THRESHOLD COUNT: column-MODIFICATION passes only, which is what a rebuild actually
+                 -- eliminates -- each #ColumnChanges row that is not a pure drop becomes its own ALTER.
+                 -- DropOnly rows are excluded (a column drop is metadata-only here, so a rebuild saves
+                 -- nothing by absorbing it); column ADDs never reach #ColumnChanges at all, having already
+                 -- been applied by MissingTableAndColumnQuench before this procedure starts; index /
+                 -- constraint / statistics churn is excluded for the same reason. Counting work a rebuild
+                 -- does not save would fire rebuilds that cost data movement and buy nothing.
+                 [ModificationPasses] = (SELECT COUNT(*) FROM #ColumnChanges cc WITH (NOLOCK)
+                                           WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name] AND cc.DropOnly = 0),
+                 [AnyColumnChange] = CONVERT(BIT, CASE WHEN EXISTS (SELECT 1 FROM #ColumnChanges cc WITH (NOLOCK)
+                                                                      WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name])
+                                                       THEN 1 ELSE 0 END)
+            FROM #Tables t WITH (NOLOCK)
+            WHERE t.NewTable = 0
+              AND OBJECT_ID(t.[Schema] + '.' + t.[Name], 'U') IS NOT NULL
+              -- A rebuild is a by-absence destroyer: the old table goes whole and only the DECLARED
+              -- definition comes back, so anything this run deliberately declined to drop by absence would
+              -- go anyway. #SuppressedColumnDrops is the data-losing case (a column retained by PreventDrop
+              -- or by the per-table DropColumnsRemovedFromProduct opt-out), and @CaptureWouldDrop is set
+              -- exactly when the environment is in protected mode (ProductQuench sets
+              -- CaptureWouldDrop = _protectedMode), which promises to destroy nothing by absence at all.
+              -- Either one outranks the policy: declining to rebuild costs an in-place ALTER, rebuilding
+              -- anyway costs the user the data that protection existed to keep.
+              AND @CaptureWouldDrop = 0
+              AND NOT EXISTS (SELECT 1 FROM #SuppressedColumnDrops s WITH (NOLOCK)
+                                WHERE s.[Schema] = t.[Schema] AND s.[TableName] = t.[Name])) p
+    WHERE (p.[Mode] = 'ALWAYS' AND p.[AnyColumnChange] = 1)
+       OR (p.[Mode] = 'THRESHOLD' AND p.[Threshold] IS NOT NULL AND p.[ModificationPasses] >= p.[Threshold])
+       -- Deliberately NOT conjoined with any Mode or with [AnyColumnChange]: drifted column order is a
+       -- standing reason to rebuild on its own, and on a table whose columns are merely in the wrong order
+       -- there is no column CHANGE to detect -- requiring one would make the trigger unreachable in exactly
+       -- the case it was added for.
+       OR (p.[OnOrderMismatch] = 1 AND p.[OrderMismatch] = 1)
+
+  IF EXISTS (SELECT 1 FROM #RebuildElection)
+  BEGIN
+    DECLARE @v_RebuildSchema NVARCHAR(500), @v_RebuildTable NVARCHAR(500)
+    DECLARE rebuild_cursor CURSOR LOCAL FAST_FORWARD FOR
+      SELECT [Schema], [TableName] FROM #RebuildElection
+    OPEN rebuild_cursor
+    FETCH NEXT FROM rebuild_cursor INTO @v_RebuildSchema, @v_RebuildTable
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+      -- @WhatIf goes straight through: RebuildTable prints its whole sequence and records 'wouldRebuild'
+      -- without executing anything, and it applies its refusals in BOTH modes. So a policy that elects a
+      -- rebuild on a BLOCKED table (temporal, CDC, replicated, Change Tracking) surfaces RebuildTable's
+      -- refusal as an error and the quench fails -- deliberately. It does NOT quietly fall back to
+      -- altering in place: that would let a package ask for a rebuild and silently get something else,
+      -- and the states that block a rebuild are exactly the ones where that difference matters.
+      EXEC SchemaSmith.RebuildTable @p_Schema = @v_RebuildSchema, @p_Table = @v_RebuildTable, @p_WhatIf = @WhatIf
+      FETCH NEXT FROM rebuild_cursor INTO @v_RebuildSchema, @v_RebuildTable
+    END
+    CLOSE rebuild_cursor
+    DEALLOCATE rebuild_cursor
+
+    -- BYPASS THE IN-PLACE COLUMN PHASES. Every column pass below -- the data-preserving swaps, the
+    -- computed-column drop-and-recreate, the by-absence column drops -- and every dependent cleanup that
+    -- clears the way for one (index, statistics, fulltext, default, check) drives off #ColumnChanges.
+    -- Emptying it for a rebuilt table is therefore the WHOLE bypass, in one place, instead of a
+    -- "was it rebuilt?" test threaded through a dozen queries where one missed site leaves the table both
+    -- rebuilt AND altered. It is also simply true: the replacement was built to the declared definition,
+    -- so it has no pending column change left to apply.
+    DELETE cc
+      FROM #ColumnChanges cc
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = cc.[Schema] AND r.[TableName] = cc.[TableName]
+
+    -- The rebuild drops the old table whole and its extended properties go with it. The ownership stamp
+    -- further down re-adds ProductName only for tables MISSING from #TableProperties -- a snapshot taken
+    -- before the rebuild -- so a rebuilt table would come back unowned and the next deploy would not
+    -- recognise it as this product's. Drop its snapshot row so the stamp sees it as missing and re-applies.
+    DELETE tp
+      FROM #TableProperties tp
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = tp.[Schema]
+                                           AND SchemaSmith.fn_StripBracketWrapping(r.[TableName]) = tp.TableName
+
+    -- Same staleness on the index side: these rows describe indexes the rebuild took with the table.
+    -- MissingIndexesAndConstraintsQuench re-collects index properties from the live catalog and re-stamps,
+    -- so all these rows can still do here is describe objects that no longer exist.
+    DELETE ip
+      FROM #IndexProperties ip
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = ip.[Schema] AND r.[TableName] = ip.TableName
+    DELETE ir
+      FROM #IndexesRemovedFromProduct ir
+      JOIN #RebuildElection r WITH (NOLOCK) ON r.[Schema] = ir.[Schema] AND r.[TableName] = ir.TableName
+  END
+
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropForeignKeysRemovedFromProduct to 0 so the drop block below never runs. Record the foreign
   -- keys that WOULD have been dropped by absence (present on the table, absent from the package,
@@ -539,6 +741,15 @@ BEGIN TRY
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
   
   RAISERROR('Collect Existing FullText Indexes', 10, 100) WITH NOWAIT
+  -- sys.fulltext_index_columns.statistical_semantics is a 2012 column. This proc is NOT swapped on the
+  -- legacy tier (see ForgeKindler's SqlServerXmlSwaps) so it is kindled on the 2008 floor too, where a
+  -- static reference is a CREATE-time 'invalid column' error -- the whole proc fails to deploy, not just
+  -- the semantics clause. Stage through a guarded dynamic INSERT (empty below 2012, where semantic
+  -- indexing does not exist) and join to it below.
+  IF OBJECT_ID('tempdb..#SemanticCols') IS NOT NULL DROP TABLE #SemanticCols
+  CREATE TABLE #SemanticCols ([object_id] INT NOT NULL, column_id INT NOT NULL)
+  IF SchemaSmith.fn_ServerMajorVersion() >= 11
+    EXEC(N'INSERT INTO #SemanticCols ([object_id], column_id) SELECT [object_id], column_id FROM sys.fulltext_index_columns WITH (NOLOCK) WHERE statistical_semantics = 1')
   IF OBJECT_ID('tempdb..#ExistingFullTextIndexes') IS NOT NULL DROP TABLE #ExistingFullTextIndexes
   SELECT t.[Schema], [TableName] = t.[Name],
          STUFF((SELECT ',' + '[' + COL_NAME(fc.[object_id], fc.column_id) + ']' +
@@ -556,7 +767,12 @@ BEGIN TRY
                             -- default to compare against, so LANGUAGE is always emitted for it.
                             CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
                                  THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
-                                 ELSE '' END
+                                 ELSE '' END +
+                            -- Mirrors the extractor's render exactly -- drift compares these as strings,
+                            -- so a clause on one side only would drop and repopulate the index every deploy.
+                            CASE WHEN EXISTS (SELECT 1 FROM #SemanticCols sc
+                                                WHERE sc.[object_id] = fc.[object_id] AND sc.column_id = fc.column_id)
+                                 THEN ' STATISTICAL_SEMANTICS' ELSE '' END
             FROM sys.fulltext_index_columns fc WITH (NOLOCK)
             JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
             WHERE fi.[object_id] = fc.[object_id]
@@ -1052,23 +1268,36 @@ BEGIN TRY
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
-  RAISERROR('Temporarily Disable CDC For Tables With Column Changes', 10, 100) WITH NOWAIT
+  RAISERROR('Verify CDC Capture-Instance Headroom For Tables With Column Changes', 10, 100) WITH NOWAIT
+  -- CDC deliberately stays ON through the column work. Disabling it here used to drop the capture
+  -- instance outright, discarding every captured change a downstream reader had not yet consumed.
+  -- A second instance is created after the column work instead (rotation), and SQL Server permits
+  -- only two per table -- so refuse up front rather than failing partway through the column work.
+  CREATE TABLE #CdcRotate ([Schema] NVARCHAR(256), [TableName] NVARCHAR(256), OldCaptureInstance NVARCHAR(256))
   IF EXISTS (SELECT 1 FROM sys.databases WHERE database_id = DB_ID() AND is_cdc_enabled = 1)
   BEGIN
-    SET @v_SQL = ''
-    SELECT @v_SQL = @v_SQL +
-      'RAISERROR(''  Temporarily disabling CDC on ' + t.[Schema] + '.' + t.[Name] + ' for column modifications'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-      'EXEC sys.sp_cdc_disable_table @source_schema = N''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @source_name = N''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''', @capture_instance = N''' + ct.capture_instance + ''';' + CHAR(13) + CHAR(10)
-      FROM #Tables t WITH (NOLOCK)
-      JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
-      JOIN cdc.change_tables ct WITH (NOLOCK) ON ct.source_object_id = st.[object_id]
-      WHERE st.is_tracked_by_cdc = 1
+    INSERT #CdcRotate ([Schema], [TableName], OldCaptureInstance)
+      SELECT t.[Schema], t.[Name], MAX(ct.capture_instance)
+        FROM #Tables t WITH (NOLOCK)
+        JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+        JOIN cdc.change_tables ct WITH (NOLOCK) ON ct.source_object_id = st.[object_id]
+        WHERE st.is_tracked_by_cdc = 1 AND t.EnableCDC = 1
         AND (EXISTS (SELECT 1 FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name])
           OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK) WHERE c.[Schema] = t.[Schema] AND c.[TableName] = t.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) = ''))
-    IF @v_SQL <> ''
-    BEGIN
-      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
-    END
+        GROUP BY t.[Schema], t.[Name]
+        HAVING COUNT(*) = 1
+
+    DECLARE @v_CdcAtCeiling NVARCHAR(MAX) =
+      STUFF((SELECT ', ' + t.[Schema] + '.' + t.[Name]
+               FROM #Tables t WITH (NOLOCK)
+               JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+               WHERE st.is_tracked_by_cdc = 1
+                 AND (SELECT COUNT(*) FROM cdc.change_tables ct2 WITH (NOLOCK) WHERE ct2.source_object_id = st.[object_id]) >= 2
+        AND (EXISTS (SELECT 1 FROM #ColumnChanges cc WITH (NOLOCK) WHERE cc.[Schema] = t.[Schema] AND cc.[TableName] = t.[Name])
+          OR EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK) WHERE c.[Schema] = t.[Schema] AND c.[TableName] = t.[Name] AND c.NewColumn = 1 AND RTRIM(ISNULL(c.[ComputedExpression], '')) = ''))
+               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    IF @v_CdcAtCeiling IS NOT NULL
+      RAISERROR('CDC capture-instance limit reached on: %s. SQL Server permits two capture instances per table and both are already in use, so this column change cannot rotate without discarding change history. Drain the older instance on each listed table and drop it (EXEC sys.sp_cdc_disable_table @source_schema = N''<schema>'', @source_name = N''<table>'', @capture_instance = N''<name>''), then re-run.', 16, 1, @v_CdcAtCeiling)
   END
 
   RAISERROR('Swap Columns Requiring Data-Preserving Replacement', 10, 100) WITH NOWAIT
@@ -1568,6 +1797,24 @@ BEGIN TRY
       LEFT JOIN cdc.change_tables ct WITH (NOLOCK) ON ct.source_object_id = st.[object_id]
       WHERE (t.EnableCDC = 1 AND st.is_tracked_by_cdc = 0)
          OR (t.EnableCDC = 0 AND st.is_tracked_by_cdc = 1)
+    IF @v_SQL <> ''
+    BEGIN
+      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+    END
+  END
+
+  RAISERROR('Rotate CDC Capture Instances For Tables With Column Changes', 10, 100) WITH NOWAIT
+  -- The pre-existing instance keeps the history it already captured and is deliberately NOT dropped:
+  -- only the operator knows when downstream readers have drained it. It does occupy one of the two
+  -- slots, so the guard above will refuse the NEXT column change until it is dropped.
+  IF EXISTS (SELECT 1 FROM #CdcRotate)
+  BEGIN
+    SET @v_SQL = ''
+    SELECT @v_SQL = @v_SQL +
+      'RAISERROR(''  CDC ROTATED on ' + r.[Schema] + '.' + r.[TableName] + ': new capture instance ' + CASE WHEN r.OldCaptureInstance = b.BaseName THEN b.BaseName + '_2' ELSE b.BaseName END + ' now captures the new column set. The previous instance ' + r.OldCaptureInstance + ' STILL HOLDS ITS HISTORY and was NOT dropped -- drain it, then drop it with EXEC sys.sp_cdc_disable_table @capture_instance = N''''' + r.OldCaptureInstance + '''''. Until then the next column change on this table WILL FAIL: SQL Server allows only two capture instances.'', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+      'EXEC sys.sp_cdc_enable_table @source_schema = N''' + SchemaSmith.fn_StripBracketWrapping(r.[Schema]) + ''', @source_name = N''' + SchemaSmith.fn_StripBracketWrapping(r.[TableName]) + ''', @capture_instance = N''' + CASE WHEN r.OldCaptureInstance = b.BaseName THEN b.BaseName + '_2' ELSE b.BaseName END + ''', @role_name = NULL;' + CHAR(13) + CHAR(10)
+      FROM #CdcRotate r WITH (NOLOCK)
+      CROSS APPLY (SELECT SchemaSmith.fn_StripBracketWrapping(r.[Schema]) + '_' + SchemaSmith.fn_StripBracketWrapping(r.[TableName]) AS BaseName) b
     IF @v_SQL <> ''
     BEGIN
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)

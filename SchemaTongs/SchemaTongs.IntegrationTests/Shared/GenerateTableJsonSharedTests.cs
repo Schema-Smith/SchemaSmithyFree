@@ -1,8 +1,9 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using Schema.DataAccess;
 using Schema.Domain;
 using Schema.Domain.MySQL;
@@ -102,32 +103,32 @@ CREATE TABLE `{_integrationDb}`.`TestColumns` (
         Assert.That(result.Columns, Has.Count.EqualTo(22));
 
         // Columns are ordered by ORDINAL_POSITION (creation order)
-        AssertColumnProperties(result.Columns[0], "MyBit", "bit(1)", false, null);
-        AssertColumnProperties(result.Columns[1], "MyInt", ExpectedIntegerType("int"), true, null);
-        AssertColumnProperties(result.Columns[2], "MyDecimal", "decimal(10,2)", false, null);
-        AssertColumnProperties(result.Columns[3], "MyNumeric", "decimal(5,3)", true, null);
-        AssertColumnProperties(result.Columns[4], "MyString", "varchar(200)", true, null);
-        AssertColumnProperties(result.Columns[5], "MyDateTime", "datetime", true, null);
-        AssertColumnProperties(result.Columns[6], "MyTimestamp", "timestamp", true, null);
-        AssertColumnProperties(result.Columns[7], "MyText", "text", true, null);
-        AssertColumnProperties(result.Columns[8], "MyBlob", "blob", true, null);
-        AssertColumnProperties(result.Columns[9], "MyEnum", "enum('a','b','c')", true, null);
-        AssertColumnProperties(result.Columns[10], "MySet", "set('x','y','z')", true, null);
-        AssertColumnProperties(result.Columns[11], "MyFloat", "float", true, null);
-        AssertColumnProperties(result.Columns[12], "MySmallint", ExpectedIntegerType("smallint"), true, null);
-        AssertColumnProperties(result.Columns[13], "MyTinyint", ExpectedIntegerType("tinyint"), true, null);
-        AssertColumnProperties(result.Columns[14], "MyBigint", ExpectedIntegerType("bigint"), true, null);
-        AssertColumnProperties(result.Columns[15], "MyDate", "date", true, null);
-        AssertColumnProperties(result.Columns[16], "MyTime", "time", true, null);
-        AssertColumnProperties(result.Columns[17], "MyBitWithDefault", "bit(1)", false, "b'1'");
-        AssertColumnProperties(result.Columns[18], "MyIntWithDefault", ExpectedIntegerType("int"), false, "42");
-        AssertColumnProperties(result.Columns[19], "MyDecimalWithDefault", "decimal(12,4)", false, "3.1400");
+        AssertColumnProperties(ColumnNamed(result, "MyBit"), "MyBit", "bit(1)", false, null);
+        AssertColumnProperties(ColumnNamed(result, "MyInt"), "MyInt", ExpectedIntegerType("int"), true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyDecimal"), "MyDecimal", "decimal(10,2)", false, null);
+        AssertColumnProperties(ColumnNamed(result, "MyNumeric"), "MyNumeric", "decimal(5,3)", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyString"), "MyString", "varchar(200)", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyDateTime"), "MyDateTime", "datetime", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyTimestamp"), "MyTimestamp", "timestamp", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyText"), "MyText", "text", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyBlob"), "MyBlob", "blob", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyEnum"), "MyEnum", "enum('a','b','c')", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MySet"), "MySet", "set('x','y','z')", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyFloat"), "MyFloat", "float", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MySmallint"), "MySmallint", ExpectedIntegerType("smallint"), true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyTinyint"), "MyTinyint", ExpectedIntegerType("tinyint"), true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyBigint"), "MyBigint", ExpectedIntegerType("bigint"), true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyDate"), "MyDate", "date", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyTime"), "MyTime", "time", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyBitWithDefault"), "MyBitWithDefault", "bit(1)", false, "b'1'");
+        AssertColumnProperties(ColumnNamed(result, "MyIntWithDefault"), "MyIntWithDefault", ExpectedIntegerType("int"), false, "42");
+        AssertColumnProperties(ColumnNamed(result, "MyDecimalWithDefault"), "MyDecimalWithDefault", "decimal(12,4)", false, "3.1400");
 
-        var identityCol = (MySqlColumn)result.Columns[20];
+        var identityCol = (MySqlColumn)ColumnNamed(result, "MyIdentity");
         Assert.That(identityCol.Name, Is.EqualTo("`MyIdentity`"), "Name of MyIdentity");
         Assert.That(identityCol.AutoIncrement, Is.True, "AutoIncrement of MyIdentity");
 
-        AssertColumnProperties(result.Columns[21], "MyMediumText", "mediumtext", true, null);
+        AssertColumnProperties(ColumnNamed(result, "MyMediumText"), "MyMediumText", "mediumtext", true, null);
 
         Assert.That(result.ForeignKeys, Is.Not.Null);
         Assert.That(result.ForeignKeys, Has.Count.EqualTo(0));
@@ -322,17 +323,29 @@ CREATE TABLE `{_integrationDb}`.`TestGenerated` (
         Assert.That(result.Columns, Is.Not.Null);
         Assert.That(result.Columns, Has.Count.EqualTo(4));
 
-        var totalCol = (MySqlColumn)result.Columns[2];
+        var totalCol = (MySqlColumn)ColumnNamed(result, "Total");
         Assert.That(totalCol.Name, Is.EqualTo("`Total`"));
         Assert.That(totalCol.Generated, Is.EqualTo("STORED"));
         Assert.That(totalCol.GenerationExpression, Is.Not.Null.And.Not.Empty);
 
-        var doubleTotalCol = (MySqlColumn)result.Columns[3];
+        var doubleTotalCol = (MySqlColumn)ColumnNamed(result, "DoubleTotal");
         Assert.That(doubleTotalCol.Name, Is.EqualTo("`DoubleTotal`"));
         Assert.That(doubleTotalCol.Generated, Is.EqualTo("VIRTUAL"));
         Assert.That(doubleTotalCol.GenerationExpression, Is.Not.Null.And.Not.Empty);
 
         conn.Close();
+    }
+
+    // Look columns up by name, not by array position. Extraction order is a formatting decision -- it
+    // changed once already when MySQL moved from ordinal to alphabetical to match the other engines --
+    // and these tests are about a column's PROPERTIES, so coupling them to position made an unrelated
+    // change look like a regression in bit/decimal/generated-column handling.
+    private static Column ColumnNamed(Table table, string bareName)
+    {
+        var column = table.Columns.FirstOrDefault(c =>
+            string.Equals(c.Name?.Trim('`'), bareName, System.StringComparison.Ordinal));
+        Assert.That(column, Is.Not.Null, $"extraction produced no column named '{bareName}'");
+        return column;
     }
 
     private void AssertColumnProperties(Column column, string name, string dataType, bool nullable, string defaultValue)
@@ -417,6 +430,45 @@ VALUES ('TABLE', '{_integrationDb}', 'ProtectedExtractTable', 'TestProduct', '',
         }
 
         return tableJson;
+    }
+
+    [Test]
+    public void ShouldOrderColumnsPhysicallyWhenTheSessionAsksForIt()
+    {
+        // The Physical branch is opt-in, so nothing else in the suite exercises it -- an untested branch
+        // is an unimplemented one. MySQL and MariaDB carry the choice in a session variable because their
+        // stored procedures take no default parameter values, so this also pins that mechanism.
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+CREATE TABLE `{_integrationDb}`.`TestPhysicalOrder` (
+    `Zebra` INT NOT NULL,
+    `Apple` INT NULL,
+    `Mango` INT NULL
+) ENGINE=InnoDB;
+";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = "SET @SchemaSmith_ObjectOrder = 'Physical'";
+        cmd.ExecuteNonQuery();
+        var physical = GenerateTable(cmd, _integrationDb, "TestPhysicalOrder");
+
+        cmd.CommandText = "SET @SchemaSmith_ObjectOrder = 'Name'";
+        cmd.ExecuteNonQuery();
+        var byName = GenerateTable(cmd, _integrationDb, "TestPhysicalOrder");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(physical.Columns.Select(c => c.Name.Trim('`')),
+                Is.EqualTo(new[] { "Zebra", "Apple", "Mango" }),
+                "Physical must give the table's own column order");
+            Assert.That(byName.Columns.Select(c => c.Name.Trim('`')),
+                Is.EqualTo(new[] { "Apple", "Mango", "Zebra" }),
+                "Name must sort alphabetically, and must not be affected by the previous session value");
+        });
+
+        conn.Close();
     }
 
     private MySqlTable GenerateTable(IDbCommand cmd, string schema, string table)

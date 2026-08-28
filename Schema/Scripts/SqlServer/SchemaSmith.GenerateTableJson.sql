@@ -6,7 +6,8 @@ IF OBJECT_ID('SchemaSmith.GenerateTableJSON', 'P') IS NOT NULL DROP PROCEDURE Sc
 GO
 CREATE PROCEDURE SchemaSmith.GenerateTableJSON 
   @p_Schema SYSNAME = 'dbo',
-  @p_Table SYSNAME
+  @p_Table SYSNAME,
+  @p_ObjectOrder SYSNAME = 'Name' -- 'Name' (default) or 'Physical' (the table's own column order)
 AS
 SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
@@ -127,7 +128,14 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     -- regenerates ValidFrom/ValidTo from IsTemporal by convention on apply, so emitting them
                     -- as user columns would double-declare them on re-deploy (#369).
                     AND sc.generated_always_type = 0) x
-          ORDER BY [Name]
+          -- Column sequence: 'Name' (default) or 'Physical', the table's own order. The ordinal is looked up
+          -- rather than projected: this is SELECT * over the derived table, so adding ORDINAL_POSITION to it
+          -- would write the ordinal into the package file. The lookup only runs when Physical is asked for.
+          ORDER BY CASE WHEN @p_ObjectOrder = 'Physical'
+                        THEN (SELECT c2.ORDINAL_POSITION FROM INFORMATION_SCHEMA.COLUMNS c2
+                               WHERE c2.TABLE_SCHEMA = @p_Schema AND c2.TABLE_NAME = @p_Table
+                                 AND '[' + c2.COLUMN_NAME + ']' = x.[Name]) END,
+                   CASE WHEN @p_ObjectOrder = 'Physical' THEN NULL ELSE x.[Name] END
           FOR JSON AUTO) AS [Columns],
        (SELECT '[' + [Name] + ']' AS [Name],
                -- Same per-partition aggregation as the table-level [CompressionType] above.
@@ -244,7 +252,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                                        -- make such a column's language permanently unrepresentable.
                                        CASE WHEN c.collation_name IS NULL OR fc.language_id <> COLLATIONPROPERTY(c.collation_name, 'LCID')
                                             THEN ' LANGUAGE ' + CAST(fc.language_id AS NVARCHAR(10))
-                                            ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
+                                            ELSE '' END +
+                                       -- STATISTICAL_SEMANTICS is the last of the per-column trio and
+                                       -- follows LANGUAGE, matching SQL Server's own DDL order.
+                                       CASE WHEN fc.statistical_semantics = 1
+                                            THEN ' STATISTICAL_SEMANTICS' ELSE '' END
+                                             AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY COL_NAME(fc.[object_id], fc.column_id))
                   FROM sys.fulltext_index_columns fc WITH (NOLOCK)
                   JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = fc.[object_id] AND c.column_id = fc.column_id
                   WHERE fi.[object_id] = fc.[object_id]) AS [Columns]

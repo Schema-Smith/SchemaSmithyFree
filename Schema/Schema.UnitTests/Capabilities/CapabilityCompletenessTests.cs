@@ -1,9 +1,11 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Schema.Capabilities;
 
@@ -81,6 +83,64 @@ namespace Schema.UnitTests.Capabilities
 
                 if (!CapabilityRegistry.All.Any(c => c.Key == key))
                     problems.Add($"{gate}: mapped to registry key '{key}' but CapabilityRegistry.All has no row for it — add one");
+            }
+
+            Assert.That(problems, Is.Empty, string.Join("; ", problems));
+        }
+
+        // The Supports*.sql sweep above only sees gates written as a gate FUNCTION. A degrade written as an
+        // inline version comparison has no such file and is invisible to it -- which is how PostgreSQL's
+        // VIRTUAL generated-column degrade shipped in v2.5.0 with no registry row, fully policy-routed and
+        // completely absent from the list the paid add-ons drive their UI and AI behaviour from.
+        //
+        // This closes that hole by keying on BEHAVIOUR instead of file naming: every degrade, however it is
+        // gated, records a 'downgraded' ChangeAudit row, and the ObjectType it writes is the string the
+        // registry calls ManifestObjectType. Any script writing a downgrade for a type the registry does not
+        // know about is a gate nobody catalogued.
+        [Test]
+        public void EveryDowngradeWrittenBySqlHasARegistryRow()
+        {
+            var known = CapabilityRegistry.All
+                .Select(c => c.ManifestObjectType)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToHashSet(StringComparer.Ordinal);
+
+            // The session-id call is the reliable anchor: every engine writes ChangeAudit as
+            // (<session id>, '<ObjectType>', <name>, '<action>'), so the literal straight after it is the type.
+            var typeAfterSessionId = new Regex(
+                @"(?:@@SPID|pg_backend_pid\(\)|CONNECTION_ID\(\))\s*,\s*'([^']+)'",
+                RegexOptions.IgnoreCase);
+
+            var problems = new List<string>();
+            foreach (var resource in SchemaAsm.GetManifestResourceNames().Where(n => n.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)))
+            {
+                using var stream = SchemaAsm.GetManifestResourceStream(resource);
+                if (stream == null) continue;
+                var sql = new StreamReader(stream).ReadToEnd();
+                // Strip line comments first. These scripts explain their own behaviour in prose, so a
+                // comment saying "records one 'downgraded' row" would otherwise be read as a downgrade and
+                // attributed to whatever literal happened to precede it.
+                sql = Regex.Replace(sql, @"--[^
+]*", "");
+                if (!sql.Contains("'downgraded'", StringComparison.Ordinal)) continue;
+
+                // Scope to the individual INSERT that records the downgrade -- ChangeAudit also records
+                // ordinary creates and drops through the same shape, and those are not degrades.
+                foreach (var chunk in Regex.Split(sql, @"INSERT\s+INTO", RegexOptions.IgnoreCase))
+                {
+                    if (!chunk.Contains("ChangeAudit", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!chunk.Contains("'downgraded'", StringComparison.Ordinal)) continue;
+
+                    var match = typeAfterSessionId.Match(chunk);
+                    if (!match.Success) continue;
+                    var objectType = match.Groups[1].Value;
+                    if (objectType == "downgraded" || known.Contains(objectType)) continue;
+
+                    problems.Add(
+                        $"{BareFileName(resource)} records a downgrade as '{objectType}', which no CapabilityRegistry "
+                        + "row claims — add a row (ManifestObjectType must match this string exactly) so the add-ons "
+                        + "can see the degrade");
+                }
             }
 
             Assert.That(problems, Is.Empty, string.Join("; ", problems));

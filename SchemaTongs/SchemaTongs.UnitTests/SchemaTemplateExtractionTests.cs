@@ -1,4 +1,4 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
 using System.Collections.Generic;
@@ -129,7 +129,7 @@ public class SchemaTemplateExtractionTests
     // NSubstitute "last call" tracking is thread-local — calling Returns(builderHelper())
     // would conflate the helper's own Returns() calls with the outer assignment. These helpers
     // therefore return the substitute WITHOUT the outer Returns wiring; callers assign the
-    // reader to the command via `var r = Helper(...); _command.ExecuteReader().Returns(r);`.
+    // reader to the command via `var r = Helper(...); _command.StubReaders(r);`.
 
     private static IDataReader EmptyReader()
     {
@@ -226,8 +226,8 @@ public class SchemaTemplateExtractionTests
             var tableListReader = SingleSqlServerTableListReader(SourceSchema, "Customers");
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"Columns\":[],\"ForeignKeys\":[],\"OldName\":\"\"}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -259,8 +259,8 @@ public class SchemaTemplateExtractionTests
             var tableListReader = SingleSqlServerTableListReader(SourceSchema, "Customers");
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"Columns\":[],\"ForeignKeys\":[],\"OldName\":\"\"}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -298,8 +298,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"tenant_seed\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -341,8 +341,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[tenant_seed]\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -380,8 +380,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"FK_Customers_Country\",\"Columns\":\"CountryId\",\"RelatedTable\":\"Countries\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"dbo\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -421,8 +421,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[tenant_seed]\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -461,8 +461,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"FK_Customers_Country\",\"Columns\":\"CountryId\",\"RelatedTable\":\"Countries\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[other_schema]\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -504,7 +504,7 @@ public class SchemaTemplateExtractionTests
             pgTableListReader["tablename"].Returns("orders");
             pgTableListReader["relkind"].Returns("r");
             pgTableListReader["relispartition"].Returns(false);
-            _command.ExecuteReader().Returns(pgTableListReader);
+            _command.StubReaders(pgTableListReader);
             var ordersJson =
                 "{\"Name\":\"orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"fk_orders_customers\",\"Columns\":\"customer_id\",\"RelatedTable\":\"customers\",\"RelatedColumns\":\"id\",\"RelatedTableSchema\":\"\\\"tenant_seed\\\"\"}]}";
@@ -549,8 +549,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -593,8 +593,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -618,8 +618,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -666,8 +666,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -699,8 +699,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -725,8 +725,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -753,8 +753,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -787,8 +787,8 @@ public class SchemaTemplateExtractionTests
             var tableListReader = SingleSqlServerTableListReader("dbo", "Customers");
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"dbo\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -823,8 +823,8 @@ public class SchemaTemplateExtractionTests
 
             var emptyMain = EmptyReader();
             var emptyJson = EmptyReader();
-            _command.ExecuteReader().Returns(emptyMain);
-            _commandJson.ExecuteReader().Returns(emptyJson);
+            _command.StubReaders(emptyMain);
+            _commandJson.StubReaders(emptyJson);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -870,8 +870,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[]," +
                 "\"CheckConstraints\":[{\"Name\":\"CK_Email_Domain\",\"Expression\":\"([tenant_seed].[fn_IsValidEmail](Email) = 1)\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -912,8 +912,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[]," +
                 "\"CheckConstraints\":[{\"Name\":\"CK_Shared\",\"Expression\":\"([dbo].[fn_Validate](Code) = 1)\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -950,8 +950,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Columns\":[{\"Name\":\"OrderNumber\",\"DataType\":\"int\",\"Nullable\":false," +
                 "\"Default\":\"(NEXT VALUE FOR [tenant_seed].[OrderNumberSeq])\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -989,8 +989,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"Invoices\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Columns\":[{\"Name\":\"Total\",\"DataType\":\"decimal(18,2)\",\"Nullable\":true," +
                 "\"ComputedExpression\":\"([tenant_seed].[fn_CalcTotal](Lines))\",\"Persisted\":true}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1027,8 +1027,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Columns\":[{\"Name\":\"Email\",\"DataType\":\"varchar(200)\",\"Nullable\":false," +
                 "\"CheckExpression\":\"([tenant_seed].[fn_IsValidEmail](Email) = 1)\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1063,8 +1063,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Indexes\":[{\"Name\":\"IX_Active\",\"IndexColumns\":\"Email\"," +
                 "\"FilterExpression\":\"([tenant_seed].[fn_IsActive](Id) = 1)\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1104,7 +1104,7 @@ public class SchemaTemplateExtractionTests
             pgTableListReader["tablename"].Returns("invoices");
             pgTableListReader["relkind"].Returns("r");
             pgTableListReader["relispartition"].Returns(false);
-            _command.ExecuteReader().Returns(pgTableListReader);
+            _command.StubReaders(pgTableListReader);
             // Discriminate by CommandText: the PG kindle-gate pg_class existence check must return
             // 0L (table absent → stamp null → DDL runs via ExecuteNonQuery, which is fine for
             // unit tests). All other ExecuteScalar calls (GenerateTableJSON) return the table JSON.
@@ -1155,7 +1155,7 @@ public class SchemaTemplateExtractionTests
             pgTableListReader["tablename"].Returns("customers");
             pgTableListReader["relkind"].Returns("r");
             pgTableListReader["relispartition"].Returns(false);
-            _command.ExecuteReader().Returns(pgTableListReader);
+            _command.StubReaders(pgTableListReader);
             var customersJson =
                 "{\"Name\":\"customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Indexes\":[{\"Name\":\"ix_active\",\"IndexColumns\":\"email\"," +
@@ -1202,7 +1202,7 @@ public class SchemaTemplateExtractionTests
             pgTableListReader["tablename"].Returns("rooms");
             pgTableListReader["relkind"].Returns("r");
             pgTableListReader["relispartition"].Returns(false);
-            _command.ExecuteReader().Returns(pgTableListReader);
+            _command.StubReaders(pgTableListReader);
             var roomsJson =
                 "{\"Name\":\"rooms\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"ExcludeConstraints\":[{\"Name\":\"no_overlap\",\"ExcludeColumns\":[{\"Column\":\"during\",\"Operator\":\"&&\"}]," +
@@ -1249,8 +1249,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[]," +
                 "\"CheckConstraints\":[{\"Name\":\"CK_Reachable\",\"Expression\":\"(EXISTS (SELECT 1 FROM ReachableSet))\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1283,8 +1283,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Statistics\":[{\"Name\":\"ST_Active\",\"Columns\":\"Email\"," +
                 "\"FilterExpression\":\"([tenant_seed].[fn_IsActive](Id) = 1)\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1326,8 +1326,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"Customers\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[],\"CheckConstraints\":[]," +
                 "\"Statistics\":[{\"Name\":\"ST_Shared\",\"Columns\":\"Code\"," +
                 "\"FilterExpression\":\"([dbo].[fn_IsActive](Id) = 1)\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1367,7 +1367,7 @@ public class SchemaTemplateExtractionTests
             viewListReader.Read().Returns(_ => calls++ < 1, _ => false);
             viewListReader["SchemaName"].Returns(SourceSchema);
             viewListReader["ViewName"].Returns("ActiveCustomers");
-            _command.ExecuteReader().Returns(viewListReader);
+            _command.StubReaders(viewListReader);
             _command.ExecuteScalar().Returns(
                 "{\"Name\":\"ActiveCustomers\",\"Schema\":\"tenant_seed\",\"Definition\":\"SELECT 1\"," +
                 "\"Indexes\":[{\"Name\":\"IX_ActiveCustomers\",\"IndexColumns\":\"Id\"," +
@@ -1416,7 +1416,7 @@ public class SchemaTemplateExtractionTests
             viewListReader.Read().Returns(_ => calls++ < 1, _ => false);
             viewListReader["schemaname"].Returns(SourceSchema);
             viewListReader["matviewname"].Returns("active_customers");
-            _command.ExecuteReader().Returns(viewListReader);
+            _command.StubReaders(viewListReader);
             var activeCustomersJson =
                 "{\"Name\":\"active_customers\",\"Schema\":\"tenant_seed\",\"Definition\":\"SELECT 1\",\"WithData\":true," +
                 "\"Indexes\":[{\"Name\":\"ix_active\",\"IndexColumns\":\"id\"," +
@@ -1476,8 +1476,8 @@ public class SchemaTemplateExtractionTests
             var tableListReader = SingleSqlServerTableListReader("Tenant_Seed", "Customers");
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Customers\",\"Schema\":\"Tenant_Seed\",\"Columns\":[],\"ForeignKeys\":[],\"OldName\":\"\"}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             var tongs = new SchemaTongs(Platform.SqlServer);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
@@ -1510,8 +1510,8 @@ public class SchemaTemplateExtractionTests
             var jsonReader = SingleColumnReader(
                 "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\",\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"Tenant_Seed\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1551,7 +1551,7 @@ public class SchemaTemplateExtractionTests
             pgTableListReader.Read().Returns(_ => calls++ < 1, _ => false);
             pgTableListReader["schemaname"].Returns("Tenant_Seed");
             pgTableListReader["tablename"].Returns("invoices");
-            _command.ExecuteReader().Returns(pgTableListReader);
+            _command.StubReaders(pgTableListReader);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1666,8 +1666,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"Orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"FK_Orders_Customers\",\"Columns\":\"CustomerId\",\"RelatedTable\":\"Customers\"," +
                 "\"RelatedColumns\":\"Id\",\"RelatedTableSchema\":\"[tenant_seed]\"}]}");
-            _command.ExecuteReader().Returns(tableListReader);
-            _commandJson.ExecuteReader().Returns(jsonReader);
+            _command.StubReaders(tableListReader);
+            _commandJson.StubReaders(jsonReader);
 
             string capturedTableJson = null;
             _fileWrapper.When(f => f.WriteAllText(

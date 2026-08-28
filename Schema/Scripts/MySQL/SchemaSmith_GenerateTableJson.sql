@@ -1,4 +1,4 @@
--- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿-- Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 -- Licensed for use and modification with SchemaSmith products only.
 -- Redistribution outside of SchemaSmith product usage is prohibited.
 
@@ -122,7 +122,19 @@ BEGIN
             END,
             'Comment', CASE WHEN c.COLUMN_COMMENT = '' THEN NULL ELSE c.COLUMN_COMMENT END
         )
-        ORDER BY c.ORDINAL_POSITION
+        -- Alphabetical, matching SQL Server and PostgreSQL. Ordinal order made the same table extract
+        -- differently depending on which engine it came from, so a package re-extracted elsewhere showed
+        -- a whole-file diff that was pure noise. Name order is also stable against a source table whose
+        -- ordinal order changes, which is the determinism the sort exists for.
+        -- Column sequence: 'Name' (default) or 'Physical', the table's own order. MySQL stored procedures
+        -- cannot carry default parameter values, so adding a parameter would break every existing caller --
+        -- including the hand-written CALL this proc exists to serve. A session variable keeps those working
+        -- unchanged; SQL Server and PostgreSQL take a defaulted parameter instead, which they support.
+        --   SET @SchemaSmith_ObjectOrder = 'Physical';
+        ORDER BY CASE WHEN LOWER(COALESCE(@SchemaSmith_ObjectOrder, 'Name')) = 'physical'
+                      THEN c.ORDINAL_POSITION END,
+                 CASE WHEN LOWER(COALESCE(@SchemaSmith_ObjectOrder, 'Name')) = 'physical'
+                      THEN NULL ELSE c.COLUMN_NAME END
         SEPARATOR ','
     ), ']') INTO v_columns
     FROM INFORMATION_SCHEMA.COLUMNS c

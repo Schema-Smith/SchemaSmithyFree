@@ -380,6 +380,34 @@ public class DataTongsTests
         Assert.That(cmd.CommandText, Does.Contain("'GEOMETRY'"));
     }
 
+    // SQL Server has always paired a spatial column's WKT with an [Col.STSrid] companion, and the shred
+    // consumes it. PostgreSQL and MySQL extracted the WKT alone, so a spatial value delivered into an
+    // untyped destination column silently lost its reference system -- right coordinates, wrong CRS, no
+    // error. These pin the companion into the other two extractors so all four engines agree.
+    [Test]
+    public void GetSelectColumns_PostgreSQL_EmitsSridCompanionForSpatial()
+    {
+        var dt = new global::DataTongs.DataTongs(Platform.PostgreSQL);
+        var cmd = Substitute.For<IDbCommand>();
+        cmd.ExecuteScalar().Returns("ST_AsText(\"shape\") AS \"shape\",ST_SRID(\"shape\") AS \"shape.STSrid\"");
+
+        dt.GetSelectColumns(cmd, "public", "shapes");
+        Assert.That(cmd.CommandText, Does.Contain("ST_SRID"), "spatial columns must carry their SRID");
+        Assert.That(cmd.CommandText, Does.Contain(".STSrid"), "the companion must use the shared column name");
+    }
+
+    [Test]
+    public void GetSelectColumns_MySQL_EmitsSridCompanionForSpatial()
+    {
+        var dt = new global::DataTongs.DataTongs(Platform.MySQL);
+        var cmd = Substitute.For<IDbCommand>();
+        cmd.ExecuteScalar().Returns("ST_AsText(`shape`) AS `shape`,ST_SRID(`shape`) AS `shape.STSrid`");
+
+        dt.GetSelectColumns(cmd, "testdb", "shapes");
+        Assert.That(cmd.CommandText, Does.Contain("ST_SRID"), "spatial columns must carry their SRID");
+        Assert.That(cmd.CommandText, Does.Contain(".STSrid"), "the companion must use the shared column name");
+    }
+
     [Test]
     public void GetSelectColumns_SqlServer_HandlesHierarchyId()
     {

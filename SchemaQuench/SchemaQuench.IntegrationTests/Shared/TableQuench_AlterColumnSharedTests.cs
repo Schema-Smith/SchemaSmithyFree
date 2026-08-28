@@ -240,8 +240,16 @@ public abstract class TableQuench_AlterColumnSharedTests : BaseTableQuenchTests
         conn.Open();
         using var cmd = conn.CreateCommand();
 
-        // Create test schema (database in MySQL)
-        cmd.CommandText = $"CREATE DATABASE IF NOT EXISTS `{TestSchema}`";
+        // Create test schema (database in MySQL). DROPPED FIRST, deliberately: TestSchema is a fixed
+        // name shared by every run, the CREATE TABLEs below are IF NOT EXISTS but the CREATE INDEXes
+        // are not, so a run whose TearDown did not execute (interrupted, killed, crashed) leaves the
+        // tables behind and the NEXT run dies in OneTimeSetUp with "Duplicate key name
+        // 'IDX_NoDependency'" -- surfacing as 18 failed tests that look like product defects and are
+        // not. Dropping makes setup self-healing regardless of how the previous run ended.
+        cmd.CommandText = $"DROP DATABASE IF EXISTS `{TestSchema}`";
+        cmd.ExecuteNonQuery();
+
+        cmd.CommandText = $"CREATE DATABASE `{TestSchema}`";
         cmd.ExecuteNonQuery();
 
         cmd.CommandText = $"USE `{TestSchema}`";
@@ -384,10 +392,12 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`ModifyColumnCollation` (`Column1` VAR
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
+        // Trailing 0, 1 are DropUnknownIndexes and DropIndexesRemovedFromProduct: index removal now
+        // happens here, and the 1 carries over from the MissingIndexesAndConstraintsQuench call below.
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0, 0, 1)";
         cmd.ExecuteNonQuery();
 
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1)";
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingIndexesAndConstraintsQuench('{_productName}', '{TestSchema}', 0, 1)";
         cmd.ExecuteNonQuery();
 
         conn.Close();
@@ -469,7 +479,10 @@ CREATE TABLE IF NOT EXISTS `{TestSchema}`.`ModifyColumnCollation` (`Column1` VAR
         cmd.ExecuteNonQuery();
         cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_MissingTableAndColumnQuench('{TestSchema}', 0)";
         cmd.ExecuteNonQuery();
-        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0)";
+        // Trailing 0, 0 are DropUnknownIndexes and DropIndexesRemovedFromProduct. Index removal lives
+        // in this procedure now, but nothing here recreates an index, so both stay off — and the
+        // deployed definition declares no indexes at all, so there is nothing to reconcile.
+        cmd.CommandText = $"CALL `{_mainDb}`.SchemaSmith_ModifiedTableQuench('{_productName}', '{TestSchema}', 0, 0, 1, 1, 1, 1, 0, 0, 0)";
         cmd.ExecuteNonQuery();
     }
 
