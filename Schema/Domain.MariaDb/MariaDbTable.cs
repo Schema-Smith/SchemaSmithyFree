@@ -1,5 +1,6 @@
 // Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Schema.Domain.MySQL;
 
@@ -32,6 +33,21 @@ namespace Schema.Domain.MariaDb
         /// </summary>
         [JsonProperty(Order = 110)]
         public bool IsSystemVersioned { get; set; }
+
+        /// <summary>
+        /// Application-time periods declared on the table (<c>PERIOD FOR &lt;name&gt;(start, end)</c>,
+        /// MariaDB 10.4.3+). Empty for the overwhelming majority of tables.
+        /// <para>
+        /// <b>Detection has a genuine version hole, and it is not one SchemaSmith can close.</b> The
+        /// feature arrived in 10.4.3 but the catalog that reports it,
+        /// <c>INFORMATION_SCHEMA.PERIODS</c>, did not land until 11.4. Between those releases a period
+        /// can exist on a table and nothing can be asked about it, so extraction from a 10.4.3 - 11.3
+        /// server returns none and a package round-tripped through one loses its periods. Deploying a
+        /// declared period to such a server still works; it is only the read that is blind.
+        /// </para>
+        /// </summary>
+        [JsonProperty(Order = 111)]
+        public List<TablePeriod> Periods { get; set; } = [];
 
     }
 }

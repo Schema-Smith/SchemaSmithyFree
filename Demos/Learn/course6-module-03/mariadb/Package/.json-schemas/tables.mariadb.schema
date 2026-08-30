@@ -415,6 +415,24 @@
     "IsSystemVersioned": {
       "type": "boolean"
     },
+    "Periods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "StartColumn": {
+            "type": "string"
+          },
+          "EndColumn": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "Extensions": {
       "type": "object",
       "required": [

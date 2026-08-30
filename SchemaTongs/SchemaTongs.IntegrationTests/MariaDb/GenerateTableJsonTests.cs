@@ -113,4 +113,83 @@ CREATE TABLE `{_integrationDb}`.`NotVersioned` (`Id` INT NOT NULL PRIMARY KEY) E
         conn.Close();
     }
 
+    /// <summary>
+    /// Application-time periods extract, and a system-versioned table does not acquire a phantom one.
+    /// <para>That second half is the trap. MariaDB lists <c>SYSTEM_TIME</c> in
+    /// <c>INFORMATION_SCHEMA.PERIODS</c> alongside real application periods on an explicitly-versioned
+    /// table, so a naive read gives such a table a period whose columns extraction already excludes --
+    /// a package declaring the same state twice, in two shapes that can then disagree.</para>
+    /// <para><b>Version-gated on 11.4, not on 10.4.3, and the difference is the feature's sharpest
+    /// edge.</b> Periods themselves arrive in 10.4.3, but the catalog that reports them does not land
+    /// until 11.4. Between those releases a period can exist and nothing can be asked about it, so this
+    /// skips rather than pretending the blind spot is a pass.</para>
+    /// </summary>
+    [Test]
+    public void ShouldExtractApplicationTimePeriods_AndNotInventOneForSystemVersioning()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform).GetDbConnection(_testConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        if (ServerVersionNum < 1104)
+            Assert.Ignore(
+                $"MariaDB {ServerVersionNum} has no INFORMATION_SCHEMA.PERIODS (11.4+). Application-time "
+                + "periods arrive in 10.4.3, so on 10.4.3-11.3 the state can exist and no catalog can "
+                + "report it -- a documented blind spot, not something this test can cover.");
+
+        cmd.CommandText = $@"
+CREATE TABLE `{_integrationDb}`.`PeriodOnly` (
+    `Id` INT NOT NULL PRIMARY KEY,
+    `ValidFrom` DATE NOT NULL, `ValidTo` DATE NOT NULL,
+    PERIOD FOR `Validity`(`ValidFrom`, `ValidTo`)
+) ENGINE=InnoDB;
+
+CREATE TABLE `{_integrationDb}`.`VersionedWithExplicitPeriodCols` (
+    `Id` INT NOT NULL PRIMARY KEY,
+    `RowStart` TIMESTAMP(6) GENERATED ALWAYS AS ROW START,
+    `RowEnd` TIMESTAMP(6) GENERATED ALWAYS AS ROW END,
+    PERIOD FOR SYSTEM_TIME(`RowStart`, `RowEnd`)
+) ENGINE=InnoDB WITH SYSTEM VERSIONING;
+
+CREATE TABLE `{_integrationDb}`.`OrdinaryTable` (`Id` INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+";
+        cmd.ExecuteNonQuery();
+
+        var periodJson = GenerateTableJson(cmd, _integrationDb, "PeriodOnly");
+        var versionedJson = GenerateTableJson(cmd, _integrationDb, "VersionedWithExplicitPeriodCols");
+        var plainJson = GenerateTableJson(cmd, _integrationDb, "OrdinaryTable");
+
+        var periodTable = (MariaDbTable)PlatformDeserializer.DeserializeTable(periodJson, Platform);
+        var versionedTable = (MariaDbTable)PlatformDeserializer.DeserializeTable(versionedJson, Platform);
+        var plainTable = (MariaDbTable)PlatformDeserializer.DeserializeTable(plainJson, Platform);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(periodTable.Periods, Has.Count.EqualTo(1),
+                "The declared application-time period must survive extraction.");
+            var p = periodTable.Periods[0];
+            Assert.That(p.Name, Is.EqualTo("Validity"));
+            Assert.That(p.StartColumn, Is.EqualTo("ValidFrom"));
+            Assert.That(p.EndColumn, Is.EqualTo("ValidTo"),
+                "Start and end must not be transposed -- the interval would silently invert.");
+
+            Assert.That(versionedTable.Periods, Is.Empty,
+                "SYSTEM_TIME is listed in PERIODS for an explicitly-versioned table, but it is already "
+                + "described by IsSystemVersioned and its columns are excluded. Surfacing it here as well "
+                + "would have the package declare the same state twice.");
+            Assert.That(versionedTable.IsSystemVersioned, Is.True,
+                "...and the versioning itself must still be reported, or the exclusion has thrown the "
+                + "state away instead of relocating it.");
+
+            Assert.That(plainTable.Periods, Is.Empty);
+            Assert.That(plainJson, Does.Not.Contain("\"Periods\""),
+                "A table with no periods must omit the key entirely rather than carry an empty array. "
+                + "Matched on the quoted key: a bare \"Periods\" substring also matches a table NAME that "
+                + "happens to contain it, which is how this assertion first failed against a table called NoPeriods.");
+        });
+
+        conn.Close();
+    }
+
+
 }

@@ -368,7 +368,12 @@ public class ForgeKindlerTests
         // system-versioned table. A procedure with a MySQL no-op and a MariaDb override, because MySQL
         // refuses to CREATE a routine that merely mentions @@system_versioning_alter_history -- ERROR
         // 1193 at create time, even inside an unreachable branch).
-        Assert.That(mysql.Length, Is.EqualTo(50));
+        // +1 = SchemaSmith_TablePeriodsJson (reads a MariaDB table's application-time periods. MySQL
+        // stub returns '[]'; the MariaDb override wraps the INFORMATION_SCHEMA.PERIODS read in a
+        // /*M!110400 */ version comment, because that catalog is 11.4+ and an unknown TABLE is rejected
+        // when the routine is CREATED -- so the reference must be invisible to the parser, not merely
+        // unreached).
+        Assert.That(mysql.Length, Is.EqualTo(51));
     }
 
     [Test]

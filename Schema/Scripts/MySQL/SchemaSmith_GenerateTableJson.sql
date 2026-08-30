@@ -337,7 +337,10 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         '$.Indexes', JSON_EXTRACT(v_indexes, '$'),
         '$.ForeignKeys', JSON_EXTRACT(v_foreign_keys, '$'),
         '$.CheckConstraints', JSON_EXTRACT(v_check_constraints, '$'),
-        '$.FullTextIndexes', JSON_EXTRACT(v_fulltext_indexes, '$')
+        '$.FullTextIndexes', JSON_EXTRACT(v_fulltext_indexes, '$'),
+        -- Application-time periods, MariaDB only. Nested the same way as every array above, and for the
+        -- same reason the comment there gives: MariaDB rejects CAST(x AS JSON).
+        '$.Periods', JSON_EXTRACT(SchemaSmith_TablePeriodsJson(p_Schema, p_Table), '$')
     );
 
     -- Remove null values for cleaner output
@@ -348,7 +351,11 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PreventDrop')), 'NULL') = 'NULL' THEN '$.PreventDrop' ELSE '$.___dummy___' END,
         -- Same treatment as PreventDrop: a bool the package only carries when true. Without this the
         -- property serialises as null and deserialisation of the non-nullable bool fails outright.
-        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.IsSystemVersioned')), 'NULL') = 'NULL' THEN '$.IsSystemVersioned' ELSE '$.___dummy___' END
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.IsSystemVersioned')), 'NULL') = 'NULL' THEN '$.IsSystemVersioned' ELSE '$.___dummy___' END,
+        -- Empty array, not null: the function returns '[]' for a table with no periods, and an
+        -- ordinary table's package must not carry the key at all -- nor must any MySQL package,
+        -- whose schema does not declare this property.
+        CASE WHEN JSON_LENGTH(JSON_EXTRACT(v_json, '$.Periods')) = 0 THEN '$.Periods' ELSE '$.___dummy___' END
     );
 
     SELECT v_json AS TableJson;
