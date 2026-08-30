@@ -10,9 +10,11 @@ Most database tooling ships with a runtime to install, a service to configure, a
 | Debian / Ubuntu | `.deb` package | `install.sh`, manual `.tar.gz` |
 | RHEL / Fedora / Amazon Linux | `.rpm` package | `install.sh`, manual `.tar.gz` |
 | Other Linux | `install.sh` | Manual `.tar.gz` |
+| Arch Linux | AUR (`schemasmith-bin`) | `install.sh`, manual `.tar.gz` |
+| Anywhere with Docker | `schemasmithyfree/schemaquench` image (SchemaQuench only) | -- |
 | macOS | `install.sh` | Manual `.tar.gz` |
 
-Every channel installs the same four CLI commands and the same self-contained binaries. The choice is logistics -- what fits your environment's policies, your update workflow, your CI runners. Pick once and the channel handles installs and upgrades from there.
+Every channel except the Docker image installs the same four CLI commands and the same self-contained binaries -- the image carries SchemaQuench alone. The choice is logistics -- what fits your environment's policies, your update workflow, your CI runners. Pick once and the channel handles installs and upgrades from there.
 
 ## Windows: Chocolatey
 
@@ -47,6 +49,30 @@ sudo rpm -i schemasmith-2.0.0.x86_64.rpm
 ```
 
 Layout matches the `.deb` package -- binaries under `/usr/lib/schemasmith/`, symlinks in `/usr/bin/`, no system dependencies. Both `x86_64` and `aarch64` builds are published per release. Works on Fedora, RHEL/CentOS Stream, Amazon Linux 2023, and any other distro that supports `rpm -i`.
+
+## Arch Linux: AUR
+
+```bash
+yay -S schemasmith-bin
+```
+
+The `schemasmith-bin` package installs all four CLI commands from the official
+release binaries -- any AUR helper works, or build it directly with `makepkg`.
+The PKGBUILD is updated with each release.
+
+## Docker: run SchemaQuench without installing
+
+```bash
+docker pull schemasmithyfree/schemaquench:latest
+```
+
+The SchemaQuench container image is published multi-arch (`linux/amd64` +
+`linux/arm64`) to Docker Hub (`schemasmithyfree/schemaquench`) and GHCR
+(`ghcr.io/schema-smith/schemaquench`) with each release. Tags: `latest`,
+immutable `X.Y.Z`, and floating `X.Y` and `X`. This channel ships SchemaQuench
+only, for running deployments where nothing may be installed. Configure
+through `SmithySettings_` environment variables or a mounted
+`SchemaQuench.settings.json`.
 
 ## Linux and macOS: install.sh
 
@@ -103,7 +129,7 @@ The available RIDs are `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-
 
 ## Verifying Your Install
 
-Two checks anyone can run on any release.
+A few checks anyone can run, from a basic hash comparison available on any release up to build provenance and SBOM checks introduced in v2.4.0.
 
 ### SHA-256 verification
 
@@ -129,6 +155,26 @@ signtool verify /pa /v DataTongs.exe
 ```
 
 `signtool` ships with the Windows SDK. A successful verify confirms the signature chains to a Microsoft-trusted root and the binary hasn't been altered since signing.
+
+### Build provenance attestation
+
+Starting with the v2.4.0 release, every release artifact also carries a signed build-provenance attestation, generated as part of the official release workflow. Verify one with the GitHub CLI:
+
+```bash
+gh attestation verify SchemaSmith-2.4.0-linux-x64.tar.gz --repo Schema-Smith/SchemaSmith
+```
+
+A successful verification confirms the artifact was built by `.github/workflows/release.yml` in the `Schema-Smith/SchemaSmith` repository -- not just that the file matches a hash, but where it came from. That's a step beyond SHA-256: a checksum proves the file matches a published value, an attestation proves who published it.
+
+### CycloneDX SBOM
+
+Starting with the v2.4.0 release, each release also publishes a CycloneDX-format software bill of materials as a release asset named `SchemaSmith-<version>.cdx.json`, listing the components that went into that build.
+
+```bash
+gh release download v2.4.0 --repo Schema-Smith/SchemaSmith --pattern 'SchemaSmith-2.4.0.cdx.json'
+```
+
+Useful for procurement review and dependency auditing.
 
 ## Per-Platform Notes
 
