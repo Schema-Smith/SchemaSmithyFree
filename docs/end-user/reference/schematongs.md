@@ -501,6 +501,11 @@ CALL SchemaSmith_GenerateTableJSON('mydb', 'customer');
 
 Omit the argument (or leave the session variable unset) and you get `Name`, which is what the tool writes
 by default.
+> **Called by hand, the argument reorders columns only.** The setting orders a table's other object
+> lists too — indexes, foreign keys, check constraints, and on SQL Server statistics and XML indexes
+> — but SchemaTongs sequences those itself after the procedure returns. So a direct `CALL` with
+> `Physical` gives you physical *column* order and leaves the rest as the procedure emitted them.
+
 
 ---
 

@@ -126,7 +126,9 @@ BEGIN
         -- differently depending on which engine it came from, so a package re-extracted elsewhere showed
         -- a whole-file diff that was pure noise. Name order is also stable against a source table whose
         -- ordinal order changes, which is the determinism the sort exists for.
-        -- Column sequence: 'Name' (default) or 'Physical', the table's own order. MySQL stored procedures
+        -- Column sequence: 'Name' (default) or 'Physical', the table's own order. COLUMNS ONLY here --
+        -- the same Product:ObjectOrder setting also orders indexes, foreign keys and check
+        -- constraints, but the caller sequences those after this proc returns. MySQL stored procedures
         -- cannot carry default parameter values, so adding a parameter would break every existing caller --
         -- including the hand-written CALL this proc exists to serve. A session variable keeps those working
         -- unchanged; SQL Server and PostgreSQL take a defaulted parameter instead, which they support.

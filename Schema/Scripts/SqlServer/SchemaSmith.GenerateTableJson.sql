@@ -7,7 +7,14 @@ GO
 CREATE PROCEDURE SchemaSmith.GenerateTableJSON 
   @p_Schema SYSNAME = 'dbo',
   @p_Table SYSNAME,
-  @p_ObjectOrder SYSNAME = 'Name' -- 'Name' (default) or 'Physical' (the table's own column order)
+  @p_ObjectOrder SYSNAME = 'Name'
+  -- 'Name' (default, alphabetical) or 'Physical' (the table's own column order).
+  --
+  -- COLUMNS ONLY at this layer, which is why the parameter is broader than what it does here.
+  -- It carries SchemaTongs' Product:ObjectOrder setting, and that setting also orders indexes,
+  -- foreign keys, check constraints, statistics and XML indexes -- but those are sequenced by the
+  -- caller after this proc returns, not here. Called by hand, this argument reorders the Columns
+  -- array and nothing else.
 AS
 SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))

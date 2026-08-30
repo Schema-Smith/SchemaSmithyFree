@@ -7,6 +7,10 @@
 -- function and the new one's default -- an error, on a kindled database that used to work.
 DROP FUNCTION IF EXISTS "SchemaSmith"."GenerateTableJSON"(varchar, varchar);
 
+-- p_ObjectOrder: 'Name' (default, alphabetical) or 'Physical' (the table's own column order).
+-- COLUMNS ONLY at this layer. It carries SchemaTongs' Product:ObjectOrder setting, which also orders
+-- indexes, foreign keys and check constraints -- but the caller sequences those after this function
+-- returns, not here.
 CREATE OR REPLACE FUNCTION "SchemaSmith"."GenerateTableJSON"(p_Schema varchar(200), p_Table varchar(200), p_ObjectOrder varchar(20) DEFAULT 'Name')
   RETURNS text
   LANGUAGE plpgsql
