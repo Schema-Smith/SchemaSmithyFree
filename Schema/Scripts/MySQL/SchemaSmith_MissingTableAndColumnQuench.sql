@@ -45,6 +45,19 @@ BEGIN
                      WHERE i.TableName = t.TableName AND i.IsPrimaryKey = 1),
                     ''
                 ),
+                -- Application-time periods (MariaDB 10.4.3+). Inside the CREATE rather than a follow-up
+                -- ALTER because a period's columns must already exist when it is declared, and here they
+                -- provably do. Suppressed below the threshold so the table still deploys -- the same
+                -- degrade shape as a column SRID -- rather than failing the whole CREATE on a clause the
+                -- engine cannot parse. MySQL never has rows here.
+                COALESCE(
+                    (SELECT GROUP_CONCAT(CONCAT(', PERIOD FOR ', pd.PeriodName, '(', pd.StartColumn, ', ', pd.EndColumn, ')')
+                                         ORDER BY pd.PeriodName SEPARATOR '')
+                     FROM _SchemaSmith_Periods pd
+                     WHERE pd.TableName = t.TableName
+                       AND SchemaSmith_SupportsApplicationTimePeriods() = 1),
+                    ''
+                ),
                 ') ENGINE=', COALESCE(t.Engine, 'InnoDB'),
                 CASE WHEN t.RowFormat IS NOT NULL AND t.RowFormat != ''
                      THEN CONCAT(' ROW_FORMAT=', t.RowFormat)

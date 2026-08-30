@@ -373,7 +373,7 @@ public class ForgeKindlerTests
         // /*M!110400 */ version comment, because that catalog is 11.4+ and an unknown TABLE is rejected
         // when the routine is CREATED -- so the reference must be invisible to the parser, not merely
         // unreached).
-        Assert.That(mysql.Length, Is.EqualTo(51));
+        Assert.That(mysql.Length, Is.EqualTo(52));
     }
 
     [Test]

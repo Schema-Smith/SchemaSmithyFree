@@ -351,6 +351,7 @@ public static class ForgeKindler
                 new("SchemaSmith_SupportsDefaultExpression.sql"),
                 new("SchemaSmith_SupportsInvisibleColumn.sql"),
                 new("SchemaSmith_SupportsColumnSrid.sql"),
+                new("SchemaSmith_SupportsApplicationTimePeriods.sql"),
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_IndexHasFunctionalKeyPart.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),
