@@ -229,6 +229,48 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- APPLICATION-TIME PERIOD BELOW THE ENGINE THRESHOLD
+    -- =========================================================================
+    -- A declared PERIOD FOR needs MariaDB 10.4.3, and MySQL has no equivalent at any version. Below the
+    -- threshold the clause is suppressed at CREATE-build time so the table still deploys -- what the user
+    -- loses is the period, not the table, which is why the registry records this as Reduced rather than
+    -- Skipped.
+    --
+    -- Suppressing it SILENTLY would be the failure this whole guard exists to prevent: the table would
+    -- come out looking correct and quietly missing a declared part of its schema. 'fail' refuses the
+    -- deploy naming the periods; 'warn' (default) records a 'downgraded' manifest row per period so the
+    -- loss stays discoverable afterwards.
+    IF SchemaSmith_SupportsApplicationTimePeriods() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Periods pd
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+                   WHERE t.NewTable = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Application-time period requires MariaDB 10.4.3 (MySQL unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(pd.TableName), '.', SchemaSmith_StripBacktickWrapping(pd.PeriodName))
+            FROM _SchemaSmith_Periods pd
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+            WHERE t.NewTable = 1;
+            SET @ss_msg = 'Application-time period needs MariaDB 10.4.3 (UnsupportedFeaturePolicy=fail). See the run log.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Application-time period not created (requires MariaDB 10.4.3, MySQL unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(pd.TableName), '.', SchemaSmith_StripBacktickWrapping(pd.PeriodName))
+            FROM _SchemaSmith_Periods pd
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+            WHERE t.NewTable = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'table without its PERIOD FOR clause',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(pd.TableName), '.', SchemaSmith_StripBacktickWrapping(pd.PeriodName)), 'downgraded'
+            FROM _SchemaSmith_Periods pd
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+            WHERE t.NewTable = 1;
+        END IF;
+    END IF;
+
+
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
 

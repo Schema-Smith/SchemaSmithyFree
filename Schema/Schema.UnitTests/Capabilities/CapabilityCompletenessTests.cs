@@ -34,6 +34,7 @@ namespace Schema.UnitTests.Capabilities
             ["SchemaSmith_SupportsInvisibleIndex.sql"] = "invisible-index",
             ["SchemaSmith_SupportsDefaultExpression.sql"] = "default-expression",
             ["SchemaSmith_SupportsInvisibleColumn.sql"] = "invisible-column",
+            ["SchemaSmith_SupportsApplicationTimePeriods.sql"] = "application-time-period",
             ["SchemaSmith_SupportsColumnSrid.sql"] = "column-srid",
             ["SchemaSmith_SupportsFunctionalIndex.sql"] = "functional-index",
         };

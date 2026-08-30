@@ -103,6 +103,22 @@ namespace Schema.Capabilities
             rows.Add(new("column-srid", "Column SRID restriction", Platform.MySQL,
                 800, "MySQL 8.0.3", null, DegradeKind.Reduced, "column (SRID, MySQL 8.0.3)"));
 
+            // Application-time period (MariaDB PERIOD FOR <name>(start, end)): the mirror image of
+            // column-srid above. MySQL has NO equivalent at any version, so
+            // SchemaSmith_SupportsApplicationTimePeriods() returns 0 unconditionally there and MySQL gets
+            // no row -- the registry has no way to say "never" other than omission.
+            //
+            // Below the MariaDB threshold the period clause is dropped and the table is still created, so
+            // this is Reduced rather than Skipped: what the user loses is the period, not the table.
+            //
+            // Worth knowing for anything driving UI or AI off this row: the version that can DECLARE a
+            // period (10.4.3) is NOT the version that can report one back. INFORMATION_SCHEMA.PERIODS
+            // arrives in 11.4, so between those releases a period deploys correctly and cannot be read
+            // from the catalog at all. The row encodes the declare threshold, because that is what the
+            // gate compares against; the read gap is documented on MariaDbTable.Periods.
+            rows.Add(new("application-time-period", "Application-time period", Platform.MariaDb,
+                1004, "MariaDB 10.4.3", null, DegradeKind.Reduced, "table without its PERIOD FOR clause"));
+
             // Functional/expression index (including a multi-valued index, CAST(... AS ... ARRAY) —
             // MySQL 8.0.17+, same NULL-COLUMN_NAME/EXPRESSION shape as a plain functional key part, so it
             // rides this same row rather than needing one of its own): below the floor the whole index is
