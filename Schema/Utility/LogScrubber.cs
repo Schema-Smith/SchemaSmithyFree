@@ -26,6 +26,23 @@ public static class LogScrubber
     private static readonly Regex ConnectionStringSecret =
         new(@"(?<key>\b(?:password|pwd)\s*=)\s*(?:""[^""]*""|'[^']*'|\{[^}]*\}|[^;]*)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // A credential in a URL's userinfo component -- scheme://user:password@host. Not covered by the
+    // keyword pattern above, so "?password=x" in a value masked while "user:pass@host" earlier in the
+    // SAME value did not. Written against the general URL shape rather than one connection-string
+    // dialect, because this class of string turns up as a webhook or an API endpoint at least as often
+    // as a database URI.
+    //
+    // Three things the shape has to get right, each of which is a test:
+    //   * the (?=@) lookahead is what separates "user:password@host" from "host:8080/path" -- without
+    //     it every port number in every logged URL is masked;
+    //   * [^\s@/?#]* cannot cross a path separator, so "…/a:b/mail@example.com" is left alone rather
+    //     than having everything between the colon and a much later @ destroyed;
+    //   * the username is preserved. It is not a secret, and it is most of what makes a scrubbed log
+    //     still diagnosable.
+    private static readonly Regex UrlUserInfoSecret =
+        new(@"(?<prefix>[a-z][a-z0-9+.\-]*://[^\s:/?#@]+:)[^\s@/?#]*(?=@)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
 
     public static bool ShouldScrubName(string name, LogHygieneOptions options)
     {
@@ -43,7 +60,8 @@ public static class LogScrubber
     public static string ScrubConnectionStringSubfields(string value)
     {
         if (string.IsNullOrEmpty(value)) return value;
-        return ConnectionStringSecret.Replace(value, m => $"{m.Groups["key"].Value}{Mask}");
+        var masked = ConnectionStringSecret.Replace(value, m => $"{m.Groups["key"].Value}{Mask}");
+        return UrlUserInfoSecret.Replace(masked, m => $"{m.Groups["prefix"].Value}{Mask}");
     }
 
     public static string ScrubTokenValue(string name, string value, LogHygieneOptions options)

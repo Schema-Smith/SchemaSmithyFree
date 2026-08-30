@@ -273,4 +273,75 @@ public class LogScrubberTests
             Assert.That(options.AllowTokens.Contains("publictoken"), Is.True);
         });
     }
+
+    // ---- URL userinfo credentials ----
+    //
+    // A credential in a URL's userinfo component was untouched: "?password=secret" in a string masked
+    // while "user:pass@host" two characters earlier in the SAME string did not. Not reachable through
+    // the shipped connection path -- ConnectionString.Build only ever emits discrete keyword=value
+    // fields, and a raw --ConnectionString is masked whole by name before subfield scrubbing runs. What
+    // IS reachable is any OTHER url-shaped value under an unremarkable name: a webhook, a custom LLM
+    // endpoint, a URL inside a map-typed parameter.
+
+    [Test]
+    public void ScrubConnectionStringSubfields_MasksUrlUserinfoPassword()
+    {
+        var result = LogScrubber.ScrubConnectionStringSubfields("endpoint=https://svc:hunter2@api.example.com/v1");
+        Assert.That(result, Does.Not.Contain("hunter2"),
+            "a credential in a URL's userinfo component must not survive scrubbing");
+        Assert.That(result, Does.Contain("https://svc:"),
+            "the scheme and username are not secrets and are what make a scrubbed log diagnosable");
+        Assert.That(result, Does.Contain("@api.example.com/v1"),
+            "the host and path must survive -- masking the whole URL would make the log useless");
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_MasksPostgresStyleUri()
+    {
+        var result = LogScrubber.ScrubConnectionStringSubfields("postgresql://appuser:s3cr3t@db.internal:5432/orders");
+        Assert.That(result, Does.Not.Contain("s3cr3t"));
+        Assert.That(result, Does.Contain("@db.internal:5432/orders"),
+            "a port after the host must not be mistaken for part of the credential");
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_LeavesAPortAlone()
+    {
+        // The failure this guards against: "host:8080" looks exactly like "user:password" until you
+        // notice there is no '@' after it. A pattern without that lookahead masks every port number.
+        const string url = "http://build.example.com:8080/status";
+        Assert.That(LogScrubber.ScrubConnectionStringSubfields(url), Is.EqualTo(url),
+            "a URL with a port and no credentials must be returned unchanged");
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_LeavesUsernameOnlyUrlAlone()
+    {
+        const string url = "ftp://anonymous@files.example.com/pub";
+        Assert.That(LogScrubber.ScrubConnectionStringSubfields(url), Is.EqualTo(url),
+            "userinfo with no password has no secret to mask, and masking the username would lose "
+            + "information without protecting anything");
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_DoesNotReachAcrossAPathToALaterAt()
+    {
+        // "a:b" here is a path segment, and the '@' belongs to a different part of the string. A greedy
+        // pattern would mask everything between them and destroy the line.
+        const string url = "https://example.com/a:b/mail@example.com";
+        Assert.That(LogScrubber.ScrubConnectionStringSubfields(url), Is.EqualTo(url),
+            "the credential match must not span a path separator to find a later '@'");
+    }
+
+    [Test]
+    public void ScrubConnectionStringSubfields_MasksBothAUserinfoAndAKeywordPasswordInOneValue()
+    {
+        var result = LogScrubber.ScrubConnectionStringSubfields(
+            "Server=db1;Password=keywordsecret;Callback=https://hook:urlsecret@example.com");
+        Assert.That(result, Does.Not.Contain("keywordsecret"));
+        Assert.That(result, Does.Not.Contain("urlsecret"),
+            "both forms must mask in the same pass -- the original gap was that one did and one did not, "
+            + "in the very same string");
+    }
+
 }
