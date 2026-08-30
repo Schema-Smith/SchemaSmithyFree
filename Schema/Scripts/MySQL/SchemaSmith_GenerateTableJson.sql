@@ -37,6 +37,9 @@ BEGIN
         'Collation', t.TABLE_COLLATION,
         'Comment', CASE WHEN t.TABLE_COMMENT = '' THEN NULL ELSE t.TABLE_COMMENT END,
         'AutoIncrementValue', t.AUTO_INCREMENT,
+        -- MariaDB only, and NULL (stripped by the JSON_REMOVE pass) everywhere else, so a MySQL package
+        -- never carries a property its schema does not declare.
+        'IsSystemVersioned', CASE WHEN t.TABLE_TYPE = 'SYSTEM VERSIONED' THEN TRUE ELSE NULL END,
         -- Emit the sticky drop-protection marker first-class. Emitted as NULL when unset and stripped by the
         -- JSON_REMOVE pass below, so only protected tables carry "PreventDrop": true. Read from ProductOwnership. #270
         'PreventDrop', CASE WHEN EXISTS (SELECT 1 FROM SchemaSmith_ProductOwnership po
@@ -49,7 +52,10 @@ BEGIN
     FROM INFORMATION_SCHEMA.TABLES t
     WHERE t.TABLE_SCHEMA = p_Schema
       AND t.TABLE_NAME = p_Table
-      AND t.TABLE_TYPE = 'BASE TABLE';
+      -- MariaDB reports a system-versioned table as 'SYSTEM VERSIONED', not 'BASE TABLE'. Filtering on
+      -- BASE TABLE alone silently omitted such a table from the extracted package -- no error, no warning,
+      -- and the deploy-side twin of this filter was fixed separately. MySQL never reports this type.
+      AND t.TABLE_TYPE IN ('BASE TABLE', 'SYSTEM VERSIONED');
 
     -- Get columns
     SELECT CONCAT('[', GROUP_CONCAT(
@@ -141,7 +147,12 @@ BEGIN
     ), ']') INTO v_columns
     FROM INFORMATION_SCHEMA.COLUMNS c
     WHERE c.TABLE_SCHEMA = p_Schema
-      AND c.TABLE_NAME = p_Table;
+      AND c.TABLE_NAME = p_Table
+      -- A system-versioned table's row-start/row-end columns are generated and maintained by the engine.
+      -- Extracting them as ordinary columns would have the apply path try to manage them on re-deploy.
+      -- Only the explicit authoring form exposes them at all; the implicit form hides them. Isolated in a
+      -- function because the catalog columns behind it do not exist on MySQL -- see that function.
+      AND SchemaSmith_IsSystemTimePeriodColumn(p_Schema, p_Table, c.COLUMN_NAME) = 0;
 
     -- Get indexes (excluding FULLTEXT which are handled separately). A functional/expression key part
     -- (MySQL 8.0.13+) has NULL COLUMN_NAME and reports its text via EXPRESSION instead; that column does

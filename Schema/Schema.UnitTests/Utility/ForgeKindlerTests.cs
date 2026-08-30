@@ -359,7 +359,12 @@ public class ForgeKindlerTests
         // SchemaSmith_RebuildBlockedReason, which it calls to refuse, and before the quench procedures.
         // Unlike its two siblings it gets no transaction -- MySQL DDL is not transactional -- so the
         // reversible work runs first and the destructive step follows the atomic swap).
-        Assert.That(mysql.Length, Is.EqualTo(48));
+        // +1 = SchemaSmith_IsSystemTimePeriodColumn (answers whether a column is a system-versioned
+        // table's engine-owned row-start/row-end column, so extraction can exclude it. Isolated in a
+        // function with an always-0 MySQL definition and a real MariaDb override, because the catalog
+        // columns behind it do not exist on MySQL and column resolution inside a routine is deferred to
+        // execution -- a static reference would CREATE cleanly on MySQL and fail at every CALL).
+        Assert.That(mysql.Length, Is.EqualTo(49));
     }
 
     [Test]

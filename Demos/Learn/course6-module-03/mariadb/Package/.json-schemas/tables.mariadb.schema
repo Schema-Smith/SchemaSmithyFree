@@ -412,6 +412,9 @@
         ]
       }
     },
+    "IsSystemVersioned": {
+      "type": "boolean"
+    },
     "Extensions": {
       "type": "object",
       "required": [

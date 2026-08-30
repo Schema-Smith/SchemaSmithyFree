@@ -395,6 +395,9 @@
         ]
       }
     },
+    "IsSystemVersioned": {
+      "type": "boolean"
+    },
     "Extensions": {}
   },
   "additionalProperties": false,

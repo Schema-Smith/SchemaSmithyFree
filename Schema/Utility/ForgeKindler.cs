@@ -361,6 +361,7 @@ public static class ForgeKindler
                 new("SchemaSmith_ColumnOnUpdateClause.sql"),
                 new("SchemaSmith_IndexIsVisible.sql"),
                 new("SchemaSmith_ColumnSrid.sql"),
+                new("SchemaSmith_IsSystemTimePeriodColumn.sql"),
                 new("SchemaSmith_SnapshotIndexVisibility.sql"),
                 new("SchemaSmith_SnapshotIndexExistence.sql"),
                 new("SchemaSmith_DropCheckClause.sql"),
