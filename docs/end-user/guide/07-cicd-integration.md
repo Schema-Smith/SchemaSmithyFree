@@ -64,6 +64,17 @@ jobs:
 
 This uses a self-hosted runner with SchemaQuench pre-installed. Credentials flow from GitHub Repository Secrets -- never stored in the workflow file, never printed in logs. The `workflow_dispatch` trigger lets you run deployments manually when needed. Nothing in this YAML is platform-specific -- the same workflow deploys a SQL Server, PostgreSQL, MySQL, or MariaDB package.
 
+### First-party composite action: SchemaSmith Deploy
+
+The repository root ships a composite action -- `uses: Schema-Smith/SchemaSmith@vX.Y.Z`
+(replace with a release tag; pinning the tag pins both the action and the CLI
+version it runs, or set the `version` input explicitly). It fetches the matching
+self-contained binary for the runner OS at run time -- no runtime install, and no
+self-hosted runner with SchemaQuench pre-installed required. Modes: `deploy`,
+`whatif`, `validate`, `test-connection`, `preview-targets`; connection inputs
+pass the password via env, never on the command line; outputs include
+`exit-code`, `log-dir`, and `summary-path`.
+
 ### Jenkins
 
 ```groovy
