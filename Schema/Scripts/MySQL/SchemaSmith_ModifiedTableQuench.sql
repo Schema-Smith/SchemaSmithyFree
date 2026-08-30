@@ -3039,12 +3039,21 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     -- removing a table's only period leaves _SchemaSmith_Periods empty for it, and MariaDB permits at
     -- most one period per table, so gating solely on "something is declared" made the drop unreachable
     -- in exactly the case it exists for.
-    IF EXISTS (SELECT 1 FROM _SchemaSmith_Periods pd
-               INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
-               WHERE COALESCE(t.NewTable, 0) = 0)
-       OR EXISTS (SELECT 1 FROM _SchemaSmith_Tables t
-                  WHERE COALESCE(t.NewTable, 0) = 0
-                    AND COALESCE(t.DropPeriodsRemovedFromProduct, @ss_drop_periods_removed, 0) = 1) THEN
+    -- Counted in TWO statements, not one OR-ed EXISTS. MySQL and MariaDB refuse to reference the same
+    -- TEMPORARY table twice in a single statement -- "Can't reopen table" (1137) -- and both arms need
+    -- _SchemaSmith_Tables. Folding them into one expression cost 37 tests across the suite.
+    SET @ss_pd_work = (SELECT COUNT(*) FROM _SchemaSmith_Periods pd
+                       INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+                       WHERE COALESCE(t.NewTable, 0) = 0);
+    SET @ss_pd_work = COALESCE(@ss_pd_work, 0) + (SELECT COUNT(*) FROM _SchemaSmith_Tables t
+                       WHERE COALESCE(t.NewTable, 0) = 0
+                         AND COALESCE(t.DropPeriodsRemovedFromProduct, @ss_drop_periods_removed, 0) = 1);
+
+    -- Enters when there is period work of EITHER kind. The declared-periods test alone was not enough:
+    -- removing a table's only period leaves _SchemaSmith_Periods empty for it, and MariaDB permits at
+    -- most one period per table, so gating solely on "something is declared" made the drop unreachable
+    -- in exactly the case it exists for.
+    IF COALESCE(@ss_pd_work, 0) > 0 THEN
 
         IF VERSION() LIKE '%MariaDB%' AND SchemaSmith_ServerVersionNum() >= 1104 THEN
 
