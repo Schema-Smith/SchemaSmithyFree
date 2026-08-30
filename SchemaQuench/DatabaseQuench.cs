@@ -130,6 +130,16 @@ public class DatabaseQuench
     public RebuildPolicy CascadedRebuildPolicy { get; init; }
 
     /// <summary>NEVER when no tier declared a policy — the domain object's own default.</summary>
+    /// <summary>
+    /// MariaDB only. <c>KEEP</c> opts into altering a system-versioned table; the engine then applies the
+    /// DDL to the stored history as well, rewriting it to a shape it never had. Anything else (including
+    /// unset) leaves the engine default, which refuses such a change -- so the conservative answer needs
+    /// no configuration and the destructive one has to be asked for.
+    /// </summary>
+    private string SystemVersioningAlterHistory =>
+        EscapeSqlLiteral((FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.SystemVersioningAlterHistory]
+                          ?? "").Trim().ToUpperInvariant());
+
     private string RebuildPolicyMode =>
         EscapeSqlLiteral((CascadedRebuildPolicy?.Mode ?? "NEVER").Trim().ToUpperInvariant());
 
@@ -1634,7 +1644,8 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     {
         tableCommand.CommandText = $"SET @ss_rebuild_policy_mode = '{RebuildPolicyMode}', "
                                    + $"@ss_rebuild_policy_threshold = {RebuildPolicyThreshold}, "
-                                   + $"@ss_rebuild_policy_on_order_mismatch = {RebuildPolicyOnOrderMismatch}";
+                                   + $"@ss_rebuild_policy_on_order_mismatch = {RebuildPolicyOnOrderMismatch}, "
+                                   + $"@ss_system_versioning_alter_history = '{SystemVersioningAlterHistory}'";
         tableCommand.ExecuteNonQuery();
     }
 

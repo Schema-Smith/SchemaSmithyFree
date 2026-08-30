@@ -186,6 +186,12 @@ public static class SettingsKeys
     public const string RebuildPolicyMode = "RebuildPolicyMode";
     public const string RebuildPolicyThreshold = "RebuildPolicyThreshold";
     public const string RebuildPolicyOnOrderMismatch = "RebuildPolicyOnOrderMismatch";
+
+    /// <summary>
+    /// MariaDB only. <c>KEEP</c> opts into altering a system-versioned table, which rewrites its stored
+    /// history to the new shape. Anything else leaves the engine default, which refuses the change.
+    /// </summary>
+    public const string SystemVersioningAlterHistory = "SystemVersioningAlterHistory";
     public const string PreventDrop = "PreventDrop";
     public const string UpdateTables = "UpdateTables";
     public const string KindleTheForge = "KindleTheForge";

@@ -364,7 +364,11 @@ public class ForgeKindlerTests
         // function with an always-0 MySQL definition and a real MariaDb override, because the catalog
         // columns behind it do not exist on MySQL and column resolution inside a routine is deferred to
         // execution -- a static reference would CREATE cleanly on MySQL and fail at every CALL).
-        Assert.That(mysql.Length, Is.EqualTo(49));
+        // +1 = SchemaSmith_SetSystemVersioningAlterHistory (applies the operator opt-in for altering a
+        // system-versioned table. A procedure with a MySQL no-op and a MariaDb override, because MySQL
+        // refuses to CREATE a routine that merely mentions @@system_versioning_alter_history -- ERROR
+        // 1193 at create time, even inside an unreachable branch).
+        Assert.That(mysql.Length, Is.EqualTo(50));
     }
 
     [Test]

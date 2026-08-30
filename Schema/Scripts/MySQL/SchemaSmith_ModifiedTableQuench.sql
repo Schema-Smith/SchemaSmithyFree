@@ -591,6 +591,19 @@ BEGIN
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildFacts;
 
     -- =======================
+    -- STEP 2.96: SYSTEM-VERSIONED TABLES -- HISTORY-REWRITE OPT-IN
+    -- =======================
+    -- MariaDB refuses every column DDL on a system-versioned table unless
+    -- @@system_versioning_alter_history is KEEP, and KEEP rewrites the stored history to match the new
+    -- shape. That is a data-retention decision, so it is opted into and off by default. Delegated to a
+    -- procedure because MySQL will not CREATE a routine that merely mentions that variable -- verified
+    -- live on 8.0.45, ERROR 1193, even inside an unreachable IF VERSION() LIKE '%MariaDB%' branch.
+    -- System-variable resolution is not deferred the way column resolution is.
+    --
+    -- Placed here because STEP 2.9 below carries the first DDL this procedure executes.
+    CALL SchemaSmith_SetSystemVersioningAlterHistory(@ss_system_versioning_alter_history);
+
+    -- =======================
     -- STEP 2.9: DROP FOREIGN KEYS THAT BLOCK A COLUMN-LEVEL COLLATION CHANGE
     -- =======================
     -- Twin of the drop that guards the table-level CONVERT TO CHARACTER SET further down, hoisted here

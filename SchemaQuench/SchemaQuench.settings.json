@@ -64,6 +64,13 @@
     // "RebuildPolicyThreshold": 3, // With THRESHOLD: rebuild once this many columns need modifying. Additions and removals are not counted — a rebuild saves nothing on those.
     // "RebuildPolicyOnOrderMismatch": false, // Composes with ANY mode rather than replacing it: also rebuild when deployed column order has drifted from the package. Pairing it with NEVER asks for a rebuild on order drift and nothing else.
 
+    // --- MariaDB system-versioned tables -------------------------------------------------------
+    // MariaDB refuses every column change on a system-versioned table unless this is KEEP -- and KEEP
+    // does not merely permit the change, it applies it to the STORED HISTORY too, rewriting it to a
+    // shape it never actually had. That is a data-retention decision, so it is off by default and the
+    // engine refuses instead. Set KEEP only if rewriting history is what you want.
+    // "SystemVersioningAlterHistory": "KEEP",
+
     // --- Helper objects (the Forge) ---------------------------------------------------------------
     "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
     "ForceReKindle": false, // Re-install helper objects regardless of kindle version — use after a failed/partial kindle or when debugging helper objects (CLI: --ForceReKindle)

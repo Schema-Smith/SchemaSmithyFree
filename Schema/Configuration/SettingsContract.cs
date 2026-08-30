@@ -67,7 +67,7 @@ public static class SettingsContract
             SettingsKeys.DropExcludeConstraintsRemovedFromProduct, SettingsKeys.DropStatisticsRemovedFromProduct,
             SettingsKeys.DropIndexesRemovedFromProduct,
             SettingsKeys.RebuildPolicyMode, SettingsKeys.RebuildPolicyThreshold,
-            SettingsKeys.RebuildPolicyOnOrderMismatch,
+            SettingsKeys.RebuildPolicyOnOrderMismatch, SettingsKeys.SystemVersioningAlterHistory,
             SettingsKeys.PreventDrop, SettingsKeys.UpdateTables,
             SettingsKeys.KindleTheForge, SettingsKeys.ForceReKindle, SettingsKeys.CheckpointDirectory,
             SettingsKeys.DeliverData, SettingsKeys.VerboseLogging, SettingsKeys.FailureContextLines,
