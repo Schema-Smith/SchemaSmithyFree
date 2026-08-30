@@ -259,6 +259,8 @@ When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills
 | `Functions/` | Objects | Functions |
 | `Views/` | Objects | Views |
 | `Procedures/` | Objects | Procedures |
+| `Sequences/` | Objects | Sequences |
+| `Synonyms/` | Objects | Synonyms |
 | `Triggers/` | AfterTablesObjects | Triggers |
 | `DDLTriggers/` | AfterTablesObjects | DDLTriggers |
 | `SchemaBound Views/` | AfterTablesObjects | SchemaBoundViews |
@@ -277,12 +279,14 @@ When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills
 | `Domain Types/` | Objects | DomainTypes |
 | `Enum Types/` | Objects | EnumTypes |
 | `Composite Types/` | Objects | CompositeTypes |
+| `Collations/` | Objects | Collations |
 | `Functions/` | Objects | Functions |
 | `Trigger Functions/` | Objects | TriggerFunctions |
 | `Window Functions/` | Objects | WindowFunctions |
 | `Aggregates/` | Objects | Aggregates |
 | `Procedures/` | Objects | Procedures |
 | `Sequences/` | Objects | Sequences |
+| `Publications/` | Objects | Publications |
 | `Rules/` | AfterTablesObjects | Rules |
 | `Triggers/` | AfterTablesObjects | Triggers |
 | `Views/` | AfterTablesObjects | Views |
@@ -310,10 +314,13 @@ When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills
 | `Events/` | Objects | Events |
 | `Functions/` | Objects | Functions |
 | `Procedures/` | Objects | Procedures |
+| `Sequences/` | Objects | Sequences |
 | `Triggers/` | AfterTablesObjects | Triggers |
 | `Views/` | AfterTablesObjects | Views |
 | `Table Data/` | TableData | — |
 | `After Scripts/` | After | — |
+
+MariaDB has a native `SEQUENCE` object and so gets a `Sequences/` folder; MySQL has no equivalent at any version, which is why its default set has none -- a `Sequences/` folder in a MySQL package is simply not read.
 
 Tables are always loaded from `Tables/` regardless of platform. SQL Server adds `Indexed Views/`; PostgreSQL adds `Materialized Views/`. These are not script folders -- they hold structured JSON object definitions, not `.sql` files.
 
@@ -622,6 +629,8 @@ default" authorable. It requires `Default`; without one there is no value to app
 ### MySQL column extras
 
 `GenerationExpression`, `CharacterSet`, `Collation`, `Comment`, auto-increment via `DataType` (`INT AUTO_INCREMENT`).
+
+`Invisible` (bool) hides a column from `SELECT *` and from an `INSERT` that names no column list; it is still readable when named explicitly. Requires MySQL 8.0.23 or MariaDB 10.3 -- below those the column deploys visible, per the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation).
 
 `Srid` (int) restricts a spatial column to one spatial reference system -- `"Srid": 4326` deploys as `col POINT SRID 4326`, so the column accepts only geometries in that reference system. MySQL 8.0.3+ only; below that (and on MariaDB, which has no equivalent attribute at any version) the restriction is silently skipped and the column deploys unrestricted, per the [unsupported-feature policy](schemaquench.md#version-adaptive-code-generation). Omit `Srid` for an unrestricted spatial column.
 
