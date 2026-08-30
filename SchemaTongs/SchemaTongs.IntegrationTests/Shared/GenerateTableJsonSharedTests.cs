@@ -33,9 +33,9 @@ public abstract class GenerateTableJsonSharedTests
     /// (>= 10.2 floor) always.</summary>
     protected bool TargetSupportsCheckConstraints => Platform != Platform.MySQL || ServerVersionNum >= 800;
 
-    private string _integrationDb = "";
+    protected string _integrationDb = "";
     private string _connectionString;
-    private string _testConnectionString;
+    protected string _testConnectionString;
 
     [OneTimeSetUp]
     public void OneTimeSetup()
@@ -418,7 +418,7 @@ VALUES ('TABLE', '{_integrationDb}', 'ProtectedExtractTable', 'TestProduct', '',
         conn.Close();
     }
 
-    private string GenerateTableJson(IDbCommand cmd, string schema, string table)
+    protected string GenerateTableJson(IDbCommand cmd, string schema, string table)
     {
         cmd.CommandText = $"CALL SchemaSmith_GenerateTableJSON('{schema}', '{table}')";
         using var reader = cmd.ExecuteReader();
@@ -426,6 +426,11 @@ VALUES ('TABLE', '{_integrationDb}', 'ProtectedExtractTable', 'TestProduct', '',
         var tableJson = string.Empty;
         while (reader.Read())
         {
+            // DBNull, not an empty string, is what the proc returns for a table it did not match -- and a
+            // table it does not match is exactly the silent-omission failure these tests exist to detect.
+            // GetString threw InvalidCastException there, which reported as a cast bug and buried the real
+            // finding under it. Degrade to empty so the caller's own assertion gets to speak.
+            if (reader.IsDBNull(0)) continue;
             tableJson += reader.GetString(0);
         }
 

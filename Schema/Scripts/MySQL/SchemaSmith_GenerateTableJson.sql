@@ -345,7 +345,10 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         CASE WHEN JSON_EXTRACT(v_json, '$.Comment') IS NULL THEN '$.Comment' ELSE '$.___dummy___' END,
         CASE WHEN JSON_EXTRACT(v_json, '$.AutoIncrementValue') IS NULL THEN '$.AutoIncrementValue' ELSE '$.___dummy___' END,
         CASE WHEN JSON_EXTRACT(v_json, '$.RowFormat') IS NULL THEN '$.RowFormat' ELSE '$.___dummy___' END,
-        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PreventDrop')), 'NULL') = 'NULL' THEN '$.PreventDrop' ELSE '$.___dummy___' END
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PreventDrop')), 'NULL') = 'NULL' THEN '$.PreventDrop' ELSE '$.___dummy___' END,
+        -- Same treatment as PreventDrop: a bool the package only carries when true. Without this the
+        -- property serialises as null and deserialisation of the non-nullable bool fails outright.
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.IsSystemVersioned')), 'NULL') = 'NULL' THEN '$.IsSystemVersioned' ELSE '$.___dummy___' END
     );
 
     SELECT v_json AS TableJson;
