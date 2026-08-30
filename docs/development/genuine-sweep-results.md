@@ -81,3 +81,11 @@ Server Linux image exists -- so this file is the standing evidence that it ran, 
 | mcr.microsoft.com/mssql/server:2017-latest @ 14340 | SEMANTIC DB PROVISION FAILED | full SqlServer category |
 | mcr.microsoft.com/mssql/server:2022-latest (16.0.4265.3) @ 14342 | Passed! - 0 failed, 606 passed across 4 assemblies | full SqlServer category, 0 failed |
 | mcr.microsoft.com/mssql/server:2025-latest (17.0.4075.5) @ 14345 | Passed! - 0 failed, 606 passed across 4 assemblies | full SqlServer category, 0 failed |
+
+## 2026-08-30T09:50:06Z - modern bands - commit f7b554fd
+
+| Target | Result | Expected |
+|---|---|---|
+| mcr.microsoft.com/mssql/server:2017-latest (14.0.3540.1) @ 14340 | Passed! - 0 failed, 605 passed across 4 assemblies + SEMANTIC COVERAGE SKIPPED (no semanticsdb) | full SqlServer category, 0 failed |
+| mcr.microsoft.com/mssql/server:2022-latest (16.0.4265.3) @ 14342 | Passed! - 0 failed, 606 passed across 4 assemblies | full SqlServer category, 0 failed |
+| mcr.microsoft.com/mssql/server:2025-latest (17.0.4075.5) @ 14345 | Passed! - 0 failed, 606 passed across 4 assemblies | full SqlServer category, 0 failed |
