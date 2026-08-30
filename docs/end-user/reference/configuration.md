@@ -741,6 +741,33 @@ you do not want the history rewritten, the alternative is to drop system version
 and re-enable it — accepting the gap deliberately rather than discovering it later.
 
 
+
+### Application-time periods
+
+A period names a pair of columns that describe the interval a row is valid **for** — the dates a price
+applied, or an assignment ran. That is a different question from system versioning, which records when
+a row was *stored*. A table can declare both, and the values in an application-time period are the
+application's to set.
+
+```json
+{
+  "Name": "`Rate`",
+  "Periods": [
+    { "Name": "Validity", "StartColumn": "ValidFrom", "EndColumn": "ValidTo" }
+  ]
+}
+```
+
+> **Extraction has a version blind spot — and it is not the version you would expect.** Periods work
+> from MariaDB **10.4.3**, but the catalog that reports them only arrives in **11.4**. Extracting from
+> anything in between returns no periods even where the table plainly has them, so a package
+> round-tripped through such a server loses them. Deploying a declared period to those versions works
+> normally; only the read is blind. If you extract from MariaDB below 11.4, check your periods survived.
+
+The `SYSTEM_TIME` period is not listed here. MariaDB reports it alongside application periods, but the
+table already declares that state through `IsSystemVersioned` — carrying it in both places would let a
+package contradict itself.
+
 ---
 
 ## DropColumnsRemovedFromProduct
