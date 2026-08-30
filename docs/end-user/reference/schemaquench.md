@@ -389,7 +389,7 @@ The version-sensitive system-catalog reads SchemaSmith uses to compare and extra
 
 > **SQL Server:** Two independent adaptations, both automatic. Below **compatibility level** 130 (SQL Server 2016) SchemaSmith switches its entire model-ingest and compare encoding from JSON to XML. Separately, features introduced after the target's **server version** are degraded through the unsupported-feature policy, exactly as on the other engines.
 
-**Adaptation 1 — the encoding switch (compatibility-level gated).** This one is not a degrade; nothing is lost. SchemaSmith hands its parsed schema model to the server as JSON (`OPENJSON` / `FOR JSON`) at compatibility level 130 and above, and as XML (`.nodes()` / `.value()` / `FOR XML PATH`) below 130 — because `OPENJSON`'s JSON path is a parse error under compatibility level 130. The switch is chosen from the detected compatibility level and server version, and applies to deployment (SchemaQuench) and extraction (SchemaTongs) alike, reaching down to compatibility level 100 (SQL Server 2008). Compatibility-level-gated constructs SchemaSmith itself uses — `STRING_AGG … WITHIN GROUP` and `STRING_SPLIT` — fall back to `FOR XML PATH` ordered aggregation and a split function on the XML path, so the end state is identical to a modern deployment.
+**Adaptation 1 — the encoding switch (compatibility-level gated).** This one is not a degrade; nothing is lost. SchemaSmith hands its parsed schema model to the server as JSON (`OPENJSON` / `FOR JSON`) at compatibility level 130 and above, and as XML (`.nodes()` / `.value()` / `FOR XML PATH`) below 130 — because `OPENJSON`'s JSON path is a parse error under compatibility level 130. The switch is chosen from the detected compatibility level and server version, and applies to deployment (SchemaQuench) and extraction (SchemaTongs) alike, reaching down to compatibility level 100 (SQL Server 2008). Constructs SchemaSmith itself uses — `STRING_AGG … WITHIN GROUP` and `STRING_SPLIT` — fall back to `FOR XML PATH` ordered aggregation and a split function on the XML path, so the end state is identical to a modern deployment. **These two are gated differently, and only one gate is the compatibility level.** `STRING_SPLIT` requires compatibility level 130. `STRING_AGG` requires **SQL Server 2017** (server major 14) and is not compatibility-level gated at all — it parses at every level down to 100 on a server that has it. The distinction matters because a SQL Server 2016 server reports compatibility level 130 while having no `STRING_AGG` whatsoever, so the fallback is chosen from the detected server version, not the compatibility level alone. (`STRING_AGG`'s optional `WITHIN GROUP (ORDER BY …)` clause additionally requires compatibility level 110.)
 
 You normally never touch this, but you can force the encoding with `Target:CompatEncoding` (deployment) or `Source:CompatEncoding` (extraction): `auto` (the default — pick by detected version), `legacy` (XML), or `modern` (JSON) — for example `SmithySettings_Target__CompatEncoding=legacy`.
 
@@ -890,6 +890,17 @@ A `false` at either the environment or product level suppresses the drop pass fo
 4. After the retention period, either enable the setting for one deployment or add an explicit DROP in a migration script.
 
 For an alternative that keeps auto-drops on while still protecting data, see [Recyclebin -- Soft-Drop and Restore Hooks](recyclebin.md) (posture 2: drop-but-recoverable via the `SchemaSmith.CustomTableDrop` / `SchemaSmith.CustomTableRestore` hooks).
+
+**Partitioned tables are never dropped by absence -- the run fails instead.** SchemaSmith has no partitioning support of its own, so a partitioned table is one someone partitioned by hand, typically once it had grown large enough to need it. Dropping such a table by absence would destroy data spread across every partition, so a guard inspects each table selected for drop-by-absence and, on finding it partitioned, refuses to drop it and **fails the run closed** (exit code `2`) rather than proceeding. The failure names the table and tells you to drop it manually or mark it `PreventDrop`:
+
+```
+Partitioned table(s) skipped by drop-by-absence guard; drop manually or mark PreventDrop.
+  Partitioned table removed from product, not dropped (data-loss guard): <table>
+```
+
+Partition detection is per engine: `sys.partitions` on SQL Server (heap or clustered index), a partitioned parent or an `ATTACH`ed child partition on PostgreSQL, and `INFORMATION_SCHEMA.PARTITIONS` on MySQL and MariaDB.
+
+This is a safety net for the case where a partitioned table was never marked, not the primary mechanism. `PreventDrop` takes precedence and remains the intended way to protect a table from drop-by-absence: a table marked `PreventDrop` never reaches the guard at all -- the drop is skipped, the run succeeds, and the skip is recorded as `Table <name> removed from product but PreventDrop is set — skipping drop (protected)`.
 
 ---
 
