@@ -13,23 +13,16 @@ cd "$(dirname "$0")/.." || exit 1
 #   a worse one.
 #   This script is the PRE-RELEASE breadth pass instead: run once per release, where hours are affordable.
 #
-# NOT YET USABLE -- the containers below are under-provisioned. Its first real run (2026-08-27,
-# after the Git Bash path bug below was fixed) reached all three bands and then failed 464/464
-# SchemaQuench tests on every one of them, in 3 seconds, with:
-#     Full-Text Search is not installed, or a full-text component cannot be loaded.  (error 7609)
-# That is not a product finding. A stock mcr.microsoft.com/mssql/server image ships no full-text
-# component, and the SchemaQuench SqlServer [SetUpFixture] requires one. Everywhere SQL Server
-# tests actually pass, something installs it first:
-#   * CI  -- an explicit "Install Full-Text Search on SQL Server" step (mssql-server-fts), then a
-#            restart, then scripts/provision-semantic-db.sh for the STATISTICAL_SEMANTICS tests.
-#   * local -- Demos/SqlServer/demoserver/demoserver.Dockerfile does the same at build time and
-#            takes a BASE_IMAGE arg, which is exactly the per-band knob this script needs.
-# The fix is to stop hand-rolling a container here and drive that demo image per band
-# (MSSQL_IMAGE + MSSQL_PORT), which also deletes the bespoke sqlcmd probing below. One open
-# question blocks a straight swap: that Dockerfile maps Ubuntu 20.04/22.04/24.04 -> 2019/2022/2025
-# and hard-fails otherwise, so the 2017 band (Ubuntu 16.04, long EOL) needs either a 16.04 case
-# that can still reach packages.microsoft.com, or an explicit decision to drop 2017 from the bands.
-# Until that lands this script FAILS rather than reporting a pass -- see the exit guard at the end.
+# The bands are provisioned the way CI provisions its SQL Server: stock images ship NO full-text
+# component, and every SQL Server fixture needs one. Without it each band failed 464/464 SchemaQuench
+# tests in OneTimeSetUp with error 7609 -- a setup failure that reads exactly like a product failure.
+# So each band installs mssql-server-fts, restarts, and provisions the semantic language statistics
+# database before a single test runs. Any of those failing records the band as NOT RUN; none of them
+# is allowed to degrade into a quiet pass.
+#
+# 2017 is deliberately still here. It was added because it caught a specific issue, and it can still
+# be provisioned: 2017-latest is built on Ubuntu 18.04 (not 16.04), packages.microsoft.com still
+# serves the 18.04/mssql-server-2017 list, and mssql-server-fts 14.0.3540.1 installs cleanly on it.
 #
 # Each band gets its own container and port so a leftover container from another band cannot silently
 # answer for it -- the same failure shape as an all-skip reading as a pass.
@@ -65,6 +58,37 @@ for band in $BANDS; do
 "
     continue
   fi
+
+  # Full-Text Search is NOT in the stock image, and the SQL Server fixtures require it -- without it
+  # every SchemaQuench test dies in OneTimeSetUp with 7609 and the whole band reads as a product
+  # failure. CI installs it explicitly; so must this. The product line is derived from the image's
+  # Ubuntu release, exactly as demoserver.Dockerfile does it, with 18.04 -> 2017 added: 2017-latest is
+  # built on 18.04 (not 16.04), and packages.microsoft.com still serves that list.
+  echo "  installing full-text search"
+  if ! docker exec -u 0 "$name" sh -c '
+      set -e
+      . /etc/os-release
+      case "$VERSION_ID" in
+        18.04) PROD=2017 ;;
+        20.04) PROD=2019 ;;
+        22.04) PROD=2022 ;;
+        24.04) PROD=2025 ;;
+        *) echo "unsupported Ubuntu base $VERSION_ID for mssql-server-fts" >&2; exit 1 ;;
+      esac
+      command -v curl >/dev/null || { apt-get update -qq; apt-get install -y -qq curl; }
+      curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/mssql-server-${PROD}.list" \
+        -o /etc/apt/sources.list.d/mssql-server.list
+      apt-get update -qq
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq mssql-server-fts
+  ' >/dev/null 2>&1; then
+    echo "  full-text install FAILED -- recording as NOT RUN rather than certifying without it"
+    SWEEP_ROWS="${SWEEP_ROWS}| $image @ $port | FULL-TEXT INSTALL FAILED | full SqlServer category |
+"
+    docker rm -f "$name" >/dev/null 2>&1
+    continue
+  fi
+  docker restart "$name" >/dev/null
+
 
   # sqlcmd moved between images: 2017 ships /opt/mssql-tools (no -C flag -- it predates the
   # mandatory-TLS client), while 2022+ ship /opt/mssql-tools18, which REQUIRES -C to trust the
@@ -104,6 +128,28 @@ for band in $BANDS; do
     continue
   fi
 
+  # STATISTICAL_SEMANTICS full-text columns cannot be created without this, so the tests covering them
+  # would SKIP rather than fail -- and a test that only ever skips proves nothing, which is the exact
+  # failure mode this whole sweep exists to catch. Same script CI uses.
+  # Best-effort, deliberately NOT fatal. On the 2017 image this cannot succeed: mssql-server-fts ships
+  # a semanticsdb.bak stamped 14.00.0700 while the engine is 14.00.3540, so the restore is refused with
+  # Msg 3169 -- the backup shipped with the server cannot be restored into that server. Failing the band
+  # for that would make 2017 permanently uncertifiable over a packaging artifact that is not ours, and
+  # dropping 2017 is not an option: it is in the bands because it caught a specific issue.
+  #
+  # The trade is that a band can now pass having skipped a feature, which is the exact shape this sweep
+  # exists to catch -- so the row is NOT allowed to read as a bare "Passed!". It carries the gap, and
+  # the reason is captured rather than discarded (the first failure arrived with no explanation because
+  # this went to /dev/null).
+  SEMANTIC_NOTE=""
+  if ! bash scripts/provision-semantic-db.sh "$name" sa "$PASSWORD" \
+       > "/tmp/ss-band-$port-semantic.log" 2>&1; then
+    SEMANTIC_NOTE=" + SEMANTIC COVERAGE SKIPPED (no semanticsdb)"
+    echo "  semantic DB unavailable -- STATISTICAL_SEMANTICS will self-skip. Reason:"
+    grep -E "^Msg|error|Error" "/tmp/ss-band-$port-semantic.log" | head -3 | sed "s/^/    /"
+  fi
+
+
   version="$(docker exec "$name" sh -c \
       "$SQLCMD -S localhost -U sa -P '$PASSWORD' $TLS -h -1 -W -Q \"SET NOCOUNT ON; SELECT CONVERT(varchar(20), SERVERPROPERTY('ProductVersion'))\"" \
       2>/dev/null | tr -d '\r' | head -1)"
@@ -136,7 +182,7 @@ for band in $BANDS; do
   else
     summary="Passed! - 0 failed, $band_passed passed across $band_assemblies assemblies"
   fi
-  SWEEP_ROWS="${SWEEP_ROWS}| $image ($version) @ $port | ${summary:-NO RESULT} | full SqlServer category, 0 failed |
+  SWEEP_ROWS="${SWEEP_ROWS}| $image ($version) @ $port | ${summary:-NO RESULT}$SEMANTIC_NOTE | full SqlServer category, 0 failed |
 "
   docker rm -f "$name" >/dev/null 2>&1
 done
@@ -159,7 +205,7 @@ echo "Recorded in $RECORD for commit $SWEEP_SHA -- commit it alongside the relea
 # sweep must not report success for it. Exiting 0 on an all-NEVER-READY run is how a broken probe
 # looked exactly like a clean pass -- the record said so plainly while the exit code said otherwise,
 # and the exit code is what a caller (or a hook) actually reads.
-if printf "%s" "$SWEEP_ROWS" | grep -qE "NEVER READY|CONTAINER FAILED TO START|NO RESULT|Failed!"; then
+if printf "%s" "$SWEEP_ROWS" | grep -qE "NEVER READY|CONTAINER FAILED TO START|FULL-TEXT INSTALL FAILED|NO RESULT|Failed!"; then
   echo "FAIL: at least one band did not run. The rows above are not a certification."
   exit 1
 fi
