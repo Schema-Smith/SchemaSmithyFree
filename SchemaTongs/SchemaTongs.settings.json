@@ -10,6 +10,11 @@
                   // Source.Database, but Source.Database is preferred.
         "Port": "", // Optional for all platforms — overrides default port
         "Platform": "", // SqlServer, PostgreSQL, MySQL, or MariaDb
+        // "IntegratedSecurity": true, // SQL Server: use Windows Authentication and IGNORE any
+                                       // User/Password above — for when a credential is present
+                                       // but should not be used.
+        // "CompatEncoding": "", // Override the payload encoding chosen for the source server
+                                 // (Json | Xml). Blank = choose automatically.
         "ConnectionProperties": {
             "TrustServerCertificate": "True" // Trust self-signed certificates (recommended for development)
         }
@@ -25,6 +30,7 @@
     // This becomes the folder name for the template that is exported as well as the template name.
     "Template": {
         "Name": "",
+        "TemplatePath": "", // Where the template directory is written. Blank = under Product.Path.
         "SchemaIdentificationScript": "" // Optional. Used only when Source.Schema is set. Written into the
                                          // generated Template.json verbatim. When blank, a stub script that
                                          // returns the source schema as a single row is generated so the
@@ -49,6 +55,7 @@
         "DDLTriggers": true,
         "XMLSchemaCollections": true,
         "IndexedViews": true, // SQL Server only — indexed views
+        "Synonyms": true,
 
         // PostgreSQL only
         "DomainTypes": true,
@@ -58,6 +65,8 @@
         "Sequences": true,
         "Rules": true,
         "MaterializedViews": true,
+        "Collations": true, // CREATE COLLATION objects
+        "Publications": true, // Logical-replication publications
 
         // All platforms
         "Functions": true,
@@ -94,5 +103,11 @@
         //   "Rules": "Rules"
         // MySQL-specific defaults (uncomment and replace SQL Server entries as needed):
         //   "Events": "Events"
-    }
+    },
+    "LogHygiene": {
+        // Optional — extra value names to scrub from logs, beyond the built-in sensitive-name list.
+        // Keys are matched case-insensitively against setting and token names.
+        // "ApiKey": true
+    },
+    "ScriptTokens": {} // Token values substituted into extracted scripts, e.g. { "MainDB": "AppDb" }.
 }
