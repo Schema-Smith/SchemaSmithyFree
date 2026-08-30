@@ -3017,6 +3017,85 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8TC;
     END IF;
 
+    -- =======================
+    -- STEP 9: ADD DECLARED APPLICATION-TIME PERIODS TO EXISTING TABLES
+    -- =======================
+    -- MariaDB `ALTER TABLE ... ADD PERIOD FOR <name>(start, end)`. A new table gets its periods inside
+    -- the CREATE (MissingTableAndColumnQuench); this is the existing-table half.
+    --
+    -- WHY LAST: a period can only be declared once its columns exist, and by this point every column
+    -- pass in this procedure has run. The ordering rule is satisfied by placement rather than by a
+    -- check that could drift out of step with it.
+    --
+    -- GATED ON 11.4, NOT 10.4.3, and the difference is the whole reason this is careful. Deciding
+    -- whether to ADD requires knowing whether the period is already present, and
+    -- INFORMATION_SCHEMA.PERIODS -- the only catalog that can answer -- does not arrive until 11.4.
+    -- Below that SchemaSmith_TablePeriodsJson returns '[]' because it genuinely cannot see, and acting
+    -- on that would emit ADD PERIOD on every deploy for a period that already exists and fail the run.
+    -- So below 11.4 an existing table is left alone and the reason is logged, rather than guessed at.
+    --
+    -- MySQL never reaches this: it has no periods, so _SchemaSmith_Periods is always empty there.
+    IF EXISTS (SELECT 1 FROM _SchemaSmith_Periods pd
+               INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+               WHERE COALESCE(t.NewTable, 0) = 0) THEN
+
+        IF VERSION() LIKE '%MariaDB%' AND SchemaSmith_ServerVersionNum() >= 1104 THEN
+            SET @ss_pd_done = 0;
+            SET @ss_pd_id := (SELECT MIN(pd.RowId) FROM _SchemaSmith_Periods pd
+                              INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+                              WHERE COALESCE(t.NewTable, 0) = 0);
+            WHILE @ss_pd_id IS NOT NULL DO
+                SELECT pd.TableName, pd.PeriodName, pd.StartColumn, pd.EndColumn
+                  INTO @ss_pd_table, @ss_pd_name, @ss_pd_start, @ss_pd_end
+                  FROM _SchemaSmith_Periods pd WHERE pd.RowId = @ss_pd_id;
+
+                -- Present already? Compared against the live catalog through the same reader extraction
+                -- uses, so the two can never disagree about what "already there" means.
+                IF JSON_SEARCH(SchemaSmith_TablePeriodsJson(p_DatabaseName,
+                                   SchemaSmith_StripBacktickWrapping(@ss_pd_table)),
+                               'one', SchemaSmith_StripBacktickWrapping(@ss_pd_name),
+                               NULL, '$[*].Name') IS NULL THEN
+                    SET @ss_pd_sql = CONCAT('ALTER TABLE `', p_DatabaseName, '`.', @ss_pd_table,
+                                            ' ADD PERIOD FOR ', @ss_pd_name,
+                                            '(', @ss_pd_start, ', ', @ss_pd_end, ')');
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+                    VALUES (CONNECTION_ID(), CONCAT('  Adding application-time period: ',
+                            SchemaSmith_StripBacktickWrapping(@ss_pd_table), '.',
+                            SchemaSmith_StripBacktickWrapping(@ss_pd_name)));
+
+                    IF p_WhatIf = 0 THEN
+                        SET @ss_pd_stmt = @ss_pd_sql;
+                        PREPARE ss_pd_exec FROM @ss_pd_stmt;
+                        EXECUTE ss_pd_exec;
+                        DEALLOCATE PREPARE ss_pd_exec;
+
+                        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+                        VALUES (CONNECTION_ID(), 'PERIOD',
+                                CONCAT(SchemaSmith_StripBacktickWrapping(@ss_pd_table), '.',
+                                       SchemaSmith_StripBacktickWrapping(@ss_pd_name)), 'added');
+                    END IF;
+                END IF;
+
+                SET @ss_pd_id := (SELECT MIN(pd.RowId) FROM _SchemaSmith_Periods pd
+                                  INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+                                  WHERE COALESCE(t.NewTable, 0) = 0 AND pd.RowId > @ss_pd_id);
+            END WHILE;
+        ELSE
+            -- Not a degrade row: nothing was suppressed and nothing was lost. The period may well
+            -- already be correct; this server simply cannot be asked, so convergence is declined rather
+            -- than attempted blind.
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Application-time period on an existing table not reconciled '
+                   '(needs MariaDB 11.4 to read the current state): ',
+                   SchemaSmith_StripBacktickWrapping(pd.TableName), '.',
+                   SchemaSmith_StripBacktickWrapping(pd.PeriodName))
+            FROM _SchemaSmith_Periods pd
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+            WHERE COALESCE(t.NewTable, 0) = 0;
+        END IF;
+    END IF;
+
+
 END//
 
 DELIMITER ;

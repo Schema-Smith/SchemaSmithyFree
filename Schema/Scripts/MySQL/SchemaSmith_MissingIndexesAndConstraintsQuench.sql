@@ -442,7 +442,21 @@ WHERE col.CheckExpression IS NOT NULL
               SELECT 1 FROM _SchemaSmith_Columns col
               WHERE BINARY SchemaSmith_StripBacktickWrapping(col.TableName) = BINARY tc.TABLE_NAME
                 AND col.CheckExpression IS NOT NULL AND TRIM(col.CheckExpression) != ''
-                AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)));
+                AND BINARY tc.CONSTRAINT_NAME = BINARY CONCAT('CK_', SchemaSmith_StripBacktickWrapping(col.TableName), '_', SchemaSmith_StripBacktickWrapping(col.ColumnName)))
+          -- MariaDB backs an application-time period with a CHECK constraint named after the period
+          -- (`start < end`), indistinguishable from a user check constraint in the catalog -- same
+          -- CONSTRAINT_TYPE, same LEVEL. Without this it looks like an undeclared check and
+          -- drop-by-absence tries to remove it, which the engine refuses outright:
+          --   ERROR 4158: Can't DROP CONSTRAINT `x`. Use DROP PERIOD `x` for this
+          -- That failed EVERY re-deploy of a table carrying a period -- a pre-existing defect reachable
+          -- by any MariaDB user with one, whether or not SchemaSmith manages the period.
+          --
+          -- Identified by name against the period reader, which is truthful only from 11.4. Below that
+          -- it returns '[]' and the exclusion cannot fire, so the defect remains on 10.4.3-11.3: nothing
+          -- in that catalog distinguishes the two, and guessing from the check clause would risk
+          -- silently preserving a genuine user constraint that happens to compare two columns.
+          AND JSON_SEARCH(SchemaSmith_TablePeriodsJson(p_DatabaseName, tc.TABLE_NAME),
+                          'one', CONVERT(tc.CONSTRAINT_NAME USING utf8mb4), NULL, '$[*].Name') IS NULL;
 
         IF p_WhatIf = 1 THEN
             INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Drop check constraints removed from product');

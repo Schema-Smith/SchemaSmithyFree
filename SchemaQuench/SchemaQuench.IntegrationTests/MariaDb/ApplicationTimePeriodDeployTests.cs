@@ -92,4 +92,77 @@ SELECT CONCAT(PERIOD, '|', START_COLUMN_NAME, '|', END_COLUMN_NAME)
         cmd.ExecuteNonQuery();
         conn.Close();
     }
+
+    /// <summary>
+    /// A period declared for a table that ALREADY exists is added to it, and declaring it again does
+    /// nothing.
+    /// <para>The idempotence half is the one that bites: `ADD PERIOD FOR` fails outright if the period
+    /// is already there, so a convergence pass that cannot tell would break every re-deploy. That is
+    /// exactly why this is gated on 11.4 rather than on 10.4.3 — declaring a period needs 10.4.3, but
+    /// knowing whether one is already present needs the catalog that arrives in 11.4.</para>
+    /// </summary>
+    [Test]
+    public void APeriodIsAddedToAnExistingTable_AndReDeployingIsANoOp()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MariaDb).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "SELECT SchemaSmith_ServerVersionNum()";
+        if (Convert.ToInt32(cmd.ExecuteScalar()) < 1104)
+            Assert.Ignore("Reconciling a period on an existing table needs MariaDB 11.4 to read the "
+                          + "current state; below that it is declined by design.");
+
+        const string existing = "PeriodAddedLater";
+        cmd.CommandText = $"DROP TABLE IF EXISTS `{existing}`";
+        cmd.ExecuteNonQuery();
+
+        // Deployed WITHOUT a period first, so the period genuinely has to be added by a later pass
+        // rather than riding the CREATE.
+        cmd.CommandText = $@"
+CREATE TABLE `{existing}` (`Id` INT NOT NULL PRIMARY KEY,
+                           `ValidFrom` DATE NOT NULL, `ValidTo` DATE NOT NULL) ENGINE=InnoDB";
+        cmd.ExecuteNonQuery();
+
+        var json = $$"""
+            [{
+                "Name": "{{existing}}",
+                "Columns": [
+                    { "Name": "Id", "DataType": "INT", "Nullable": false },
+                    { "Name": "ValidFrom", "DataType": "DATE", "Nullable": false },
+                    { "Name": "ValidTo", "DataType": "DATE", "Nullable": false }
+                ],
+                "Indexes": [ { "Name": "PRIMARY", "IndexColumns": "Id", "PrimaryKey": true, "Unique": true } ],
+                "Periods": [
+                    { "Name": "Validity", "StartColumn": "ValidFrom", "EndColumn": "ValidTo" }
+                ]
+            }]
+            """;
+
+        RunTableQuenchProc(cmd, json);
+
+        cmd.CommandText = $@"
+SELECT CONCAT(PERIOD, '|', START_COLUMN_NAME, '|', END_COLUMN_NAME)
+  FROM INFORMATION_SCHEMA.PERIODS
+ WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{existing}' AND PERIOD <> 'SYSTEM_TIME'";
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("Validity|ValidFrom|ValidTo"),
+            "A period declared for an existing table must be added to it.");
+
+        // The second pass is the real assertion. ADD PERIOD FOR errors if the period exists, so a
+        // convergence pass that cannot see the current state would throw here on every re-deploy.
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, json),
+            "Re-deploying an unchanged package must be a no-op. ADD PERIOD FOR fails when the period is "
+            + "already present, so this throwing means the existence check is not working.");
+
+        cmd.CommandText = $@"
+SELECT COUNT(*) FROM INFORMATION_SCHEMA.PERIODS
+ WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{existing}' AND PERIOD <> 'SYSTEM_TIME'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(1),
+            "and the re-deploy must not have duplicated it.");
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS `{existing}`";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
 }
