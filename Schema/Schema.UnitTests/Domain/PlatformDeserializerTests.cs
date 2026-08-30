@@ -2,6 +2,7 @@
 
 using Newtonsoft.Json;
 using Schema.Domain;
+using Schema.Domain.MariaDb;
 using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
@@ -529,6 +530,7 @@ namespace Schema.UnitTests.Domain
         [TestCase(Platform.SqlServer, typeof(SqlServerTable))]
         [TestCase(Platform.PostgreSQL, typeof(PostgreSqlTable))]
         [TestCase(Platform.MySQL, typeof(MySqlTable))]
+        [TestCase(Platform.MariaDb, typeof(MariaDbTable))]
         public void GetTableType_ReturnsCorrectType(Platform platform, System.Type expectedType)
         {
             Assert.That(PlatformDeserializer.GetTableType(platform), Is.EqualTo(expectedType));
@@ -540,6 +542,23 @@ namespace Schema.UnitTests.Domain
         public void GetColumnType_ReturnsCorrectType(Platform platform, System.Type expectedType)
         {
             Assert.That(PlatformDeserializer.GetColumnType(platform), Is.EqualTo(expectedType));
+        }
+
+        /// <summary>
+        /// MariaDB resolves to its own type, and MySQL must not follow it there. The MySQL case above is
+        /// the other half of this: Type equality is exact, so it would fail if MySQL ever started
+        /// resolving to the MariaDbTable subclass.
+        /// <para>The leak this seam prevents -- a MariaDB-only property appearing in
+        /// tables.mysql.schema -- cannot be asserted yet, because MariaDbTable declares no properties
+        /// of its own and the assertion would pass vacuously. That test belongs with the first
+        /// MariaDB-only property, not here.</para>
+        /// </summary>
+        [Test]
+        public void MariaDbTable_IsAMySqlTable_SoSharedBehaviourIsInherited()
+        {
+            Assert.That(typeof(MariaDbTable).IsSubclassOf(typeof(MySqlTable)), Is.True,
+                "MariaDB shares nearly all of its table shape with MySQL; the subclass exists to add to "
+                + "that, not to replace it.");
         }
 
         [TestCase(Platform.SqlServer, typeof(SqlServerIndex))]

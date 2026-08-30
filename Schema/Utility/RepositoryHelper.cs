@@ -7,6 +7,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Schema.Domain;
+using Schema.Domain.MariaDb;
 using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
@@ -266,6 +267,11 @@ public static class RepositoryHelper
     private static Type GetTypeForSchemaFile(string fileName, Platform platform)
     {
         var objectPart = fileName.Split('.')[0]; // "products", "templates", "tables", "indexedviews", "materializedviews"
+
+        // MariaDB before the base-platform fold: GetBasePlatform() maps it to MySQL, which is right for
+        // every shared shape but would hand MariaDB the MySQL table schema and lose the MariaDB-only
+        // properties MariaDbTable exists to carry.
+        if (objectPart == "tables" && platform == Platform.MariaDb) return typeof(MariaDbTable);
 
         return (objectPart, platform.GetBasePlatform()) switch
         {
