@@ -690,6 +690,59 @@ policy cannot be evaluated, so it is an error rather than a setting that quietly
 
 ---
 
+## System-versioned tables (MariaDB)
+
+MariaDB can keep a table's own history: every update leaves the superseded row behind, queryable
+through `FOR SYSTEM_TIME`. SchemaSmith reads that state and round-trips it.
+
+```json
+{
+  "Name": "`Account`",
+  "IsSystemVersioned": true,
+  "Columns": [ ... ]
+}
+```
+
+`IsSystemVersioned` is detected from the table's catalog type, which is the only signal that answers
+for **both** ways of writing one — whether you declare the period columns yourself or let the engine
+keep them hidden. Those engine-owned row-start and row-end columns are deliberately left out of the
+extracted package: the engine maintains them, and a package that listed them would have SchemaSmith
+trying to manage columns that are not yours to manage.
+
+> **MariaDB only, and not an omission elsewhere.** MySQL has no system versioning at any version, so
+> the property does not exist in a MySQL package or its editor schema. SQL Server's equivalent is its
+> temporal-table support, which is configured separately.
+
+### SystemVersioningAlterHistory
+
+Changing a column on a system-versioned table is not an ordinary alter. MariaDB refuses it outright
+unless `@@system_versioning_alter_history` is `KEEP` — and `KEEP` does not simply permit the change,
+it applies the change to **the stored history as well**. Rows that were recorded years ago are
+rewritten into the new shape, so the history stops being a record of what the table actually looked
+like at the time.
+
+That is a decision about your data retention, not a detail of syntax, so SchemaSmith will not make it
+for you.
+
+| Setting | Effect |
+|---|---|
+| _unset_ (default) | The engine refuses the column change, exactly as it does today. |
+| `KEEP` | The change proceeds and the stored history is rewritten to match. |
+
+```json
+{
+  "SystemVersioningAlterHistory": "KEEP"
+}
+```
+
+Leaving it unset costs nothing on a healthy deploy: the refusal only fires when a change genuinely
+requires rewriting history, never on a re-deploy where the table already matches its definition. If
+you do not want the history rewritten, the alternative is to drop system versioning, make the change,
+and re-enable it — accepting the gap deliberately rather than discovering it later.
+
+
+---
+
 ## DropColumnsRemovedFromProduct
 
 Controls whether SchemaQuench drops columns that exist in the database but no longer appear in the table JSON. Four tiers compose to produce the effective value, resolved environment → product → template → table.
