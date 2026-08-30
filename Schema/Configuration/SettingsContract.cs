@@ -65,7 +65,7 @@ public static class SettingsContract
             SettingsKeys.DropUnknownIndexes, SettingsKeys.DropColumnsRemovedFromProduct,
             SettingsKeys.DropForeignKeysRemovedFromProduct, SettingsKeys.DropCheckConstraintsRemovedFromProduct,
             SettingsKeys.DropExcludeConstraintsRemovedFromProduct, SettingsKeys.DropStatisticsRemovedFromProduct,
-            SettingsKeys.DropIndexesRemovedFromProduct,
+            SettingsKeys.DropIndexesRemovedFromProduct, SettingsKeys.DropPeriodsRemovedFromProduct,
             SettingsKeys.RebuildPolicyMode, SettingsKeys.RebuildPolicyThreshold,
             SettingsKeys.RebuildPolicyOnOrderMismatch, SettingsKeys.SystemVersioningAlterHistory,
             SettingsKeys.PreventDrop, SettingsKeys.UpdateTables,

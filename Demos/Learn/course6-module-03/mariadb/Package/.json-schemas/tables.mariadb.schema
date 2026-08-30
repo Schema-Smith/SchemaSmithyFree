@@ -433,6 +433,10 @@
         "additionalProperties": false
       }
     },
+    "DropPeriodsRemovedFromProduct": {
+      "type": "boolean",
+      "description": "MariaDB only. When set, overrides the environment-level DropPeriodsRemovedFromProduct for this table. Defaults to off, unlike the other drop-by-absence flags, because a package that predates periods or was extracted below MariaDB 11.4 cannot declare the periods its table actually has."
+    },
     "Extensions": {
       "type": "object",
       "required": [

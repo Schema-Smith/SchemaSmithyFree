@@ -1878,6 +1878,12 @@ public class ProductQuench
         var dropRemovedIndexes = FormatBooleanFlag(ResolveCascadedFlag(
             ConfigBool(_config, SettingsKeys.DropIndexesRemovedFromProduct), _product.DropIndexesRemovedFromProduct,
             template.DropIndexesRemovedFromProduct, defaultValue: true));
+        // Environment tier only. The table tier lives on MariaDbTable and is resolved inside the proc,
+        // because putting it on the shared Table type would publish a MariaDB-only setting into the
+        // SQL Server, PostgreSQL and MySQL schemas -- the exact leak MariaDbTable exists to prevent.
+        // Default FALSE, unlike every sibling above: a package that cannot declare its periods must not
+        // have them dropped for not declaring them.
+        var dropRemovedPeriods = ConfigBool(_config, SettingsKeys.DropPeriodsRemovedFromProduct) ?? false;
         var dropUnknownIndexes = ResolveCascadedFlag(
             ConfigBool(_config, SettingsKeys.DropUnknownIndexes), _product.DropUnknownIndexes,
             template.DropUnknownIndexes, defaultValue: false);
@@ -1896,6 +1902,7 @@ public class ProductQuench
             dropRemovedStatistics = FormatBooleanFlag(false);
             dropRemovedIndexes = FormatBooleanFlag(false);
             dropUnknownIndexes = false;
+            dropRemovedPeriods = false;
         }
         // The three UPPER tiers, collapsed here to one whole policy. The table tier is deliberately not
         // resolved here: it lives in the parsed working set inside the database, alongside the sentinel
@@ -1919,7 +1926,8 @@ public class ProductQuench
             WhatIf = _whatIf,
             ChangeAudit = _changeAudit,
             CaptureWouldDrop = _protectedMode,
-            CascadedRebuildPolicy = rebuildPolicy
+            CascadedRebuildPolicy = rebuildPolicy,
+            DropPeriodsRemovedFromProduct = dropRemovedPeriods
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();

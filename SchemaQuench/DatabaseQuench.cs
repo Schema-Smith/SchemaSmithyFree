@@ -129,6 +129,15 @@ public class DatabaseQuench
     /// </summary>
     public RebuildPolicy CascadedRebuildPolicy { get; init; }
 
+    /// <summary>
+    /// Whether an application-time period present on the table but absent from the package is dropped
+    /// (MariaDB). Defaults to FALSE unlike every sibling drop flag, because a package that predates
+    /// periods -- or was extracted below 11.4, where the catalog cannot report them -- carries none even
+    /// when the table has one, and dropping on that absence removes a declaration the package never had
+    /// the chance to make.
+    /// </summary>
+    public bool DropPeriodsRemovedFromProduct { get; init; }
+
     /// <summary>NEVER when no tier declared a policy — the domain object's own default.</summary>
     /// <summary>
     /// MariaDB only. <c>KEEP</c> opts into altering a system-versioned table; the engine then applies the
@@ -1645,7 +1654,8 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
         tableCommand.CommandText = $"SET @ss_rebuild_policy_mode = '{RebuildPolicyMode}', "
                                    + $"@ss_rebuild_policy_threshold = {RebuildPolicyThreshold}, "
                                    + $"@ss_rebuild_policy_on_order_mismatch = {RebuildPolicyOnOrderMismatch}, "
-                                   + $"@ss_system_versioning_alter_history = '{SystemVersioningAlterHistory}'";
+                                   + $"@ss_system_versioning_alter_history = '{SystemVersioningAlterHistory}', "
+                                   + $"@ss_drop_periods_removed = {(DropPeriodsRemovedFromProduct ? 1 : 0)}";
         tableCommand.ExecuteNonQuery();
     }
 

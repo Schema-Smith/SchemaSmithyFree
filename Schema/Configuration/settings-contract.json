@@ -11,6 +11,7 @@
       "DropExcludeConstraintsRemovedFromProduct",
       "DropForeignKeysRemovedFromProduct",
       "DropIndexesRemovedFromProduct",
+      "DropPeriodsRemovedFromProduct",
       "DropStatisticsRemovedFromProduct",
       "DropTablesRemovedFromProduct",
       "DropUnknownIndexes",

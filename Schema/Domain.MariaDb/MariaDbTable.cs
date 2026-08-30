@@ -49,5 +49,25 @@ namespace Schema.Domain.MariaDb
         [JsonProperty(Order = 111)]
         public List<TablePeriod> Periods { get; set; } = [];
 
+        /// <summary>
+        /// When set, overrides the environment-level <c>DropPeriodsRemovedFromProduct</c> for this table
+        /// only. Null inherits.
+        /// <para>
+        /// <b>Defaults to off, unlike every other drop-by-absence flag.</b> Extraction omits the
+        /// <c>Periods</c> key entirely when a table has none, so a package written before periods were
+        /// supported — or extracted from MariaDB 10.4.3–11.3, where the catalog cannot report them —
+        /// carries no periods even when the table has one. Dropping on that absence would remove a
+        /// declaration the package never had the chance to make.
+        /// </para>
+        /// <para>
+        /// It lives here rather than on the shared <c>Table</c> for the same reason the rest of this
+        /// type exists: on the shared type it would appear in the SQL Server, PostgreSQL and MySQL
+        /// schemas as well, offering three engines a setting none of them can honour.
+        /// </para>
+        /// </summary>
+        [SchemaProperty(AuthoredOnly = true, Description = "MariaDB only. When set, overrides the environment-level DropPeriodsRemovedFromProduct for this table. Defaults to off, unlike the other drop-by-absence flags, because a package that predates periods or was extracted below MariaDB 11.4 cannot declare the periods its table actually has.")]
+        [JsonProperty(Order = 112)]
+        public bool? DropPeriodsRemovedFromProduct { get; set; }
+
     }
 }

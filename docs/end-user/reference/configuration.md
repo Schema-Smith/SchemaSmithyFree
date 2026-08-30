@@ -768,6 +768,27 @@ The `SYSTEM_TIME` period is not listed here. MariaDB reports it alongside applic
 table already declares that state through `IsSystemVersioned` — carrying it in both places would let a
 package contradict itself.
 
+#### DropPeriodsRemovedFromProduct
+
+A period on the table that the package no longer declares is only removed if you ask for it.
+
+| Setting | Effect |
+|---|---|
+| _unset_ (default) | The period stays, even though the package does not mention it. |
+| `true` | The period is dropped. |
+
+**This is the only drop-by-absence setting that defaults to off, and the reason matters.** A package
+that has no `Periods` entry is not necessarily saying "this table has no period" — it may simply never
+have been able to say otherwise. Packages written before periods were supported have no such entry, and
+neither does one extracted from MariaDB 10.4.3–11.3, where the server cannot report periods at all.
+Defaulting to drop would delete a period on the strength of a silence that means nothing.
+
+Turn it on when your package is genuinely the authority on the table's periods. It can also be set on a
+single table, which overrides the environment setting for that table alone.
+
+> **Dropping a period does not touch your data.** The columns it spanned, and everything in them,
+> remain. What is removed is the period itself and the check constraint MariaDB uses to enforce it.
+
 ---
 
 ## DropColumnsRemovedFromProduct

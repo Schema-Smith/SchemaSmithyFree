@@ -165,4 +165,109 @@ SELECT COUNT(*) FROM INFORMATION_SCHEMA.PERIODS
         conn.Close();
     }
 
+
+    private const string DropTarget = "PeriodDropTarget";
+
+    /// <summary>Package for <see cref="DropTarget"/> that declares a period, or none.</summary>
+    /// <summary>Package for <see cref="DropTarget"/>, with its single period or with none.</summary>
+    /// <remarks>MariaDB permits at most ONE application-time period per table (error 4154), so the
+    /// choice is "the period" or "no periods" -- there is no partial case to test.</remarks>
+    private static string DropTargetJson(bool withPeriod) => $$"""
+        [{
+            "Name": "{{DropTarget}}",
+            "Columns": [
+                { "Name": "Id", "DataType": "INT", "Nullable": false },
+                { "Name": "ValidFrom", "DataType": "DATE", "Nullable": false },
+                { "Name": "ValidTo", "DataType": "DATE", "Nullable": false }
+            ],
+            "Indexes": [ { "Name": "PRIMARY", "IndexColumns": "Id", "PrimaryKey": true, "Unique": true } ],
+            "Periods": [{{(withPeriod ? "{ \"Name\": \"Validity\", \"StartColumn\": \"ValidFrom\", \"EndColumn\": \"ValidTo\" }" : "")}}]
+        }]
+        """;
+
+    private int PeriodCount(IDbCommand cmd, string table)
+    {
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.PERIODS "
+                          + $"WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{table}' AND PERIOD <> 'SYSTEM_TIME'";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    private bool SkipUnlessPeriodsReadable(IDbCommand cmd)
+    {
+        cmd.CommandText = "SELECT SchemaSmith_ServerVersionNum()";
+        return Convert.ToInt32(cmd.ExecuteScalar()) < 1104;
+    }
+
+    /// <summary>
+    /// A period on the table but no longer in the package is dropped — but ONLY when asked for.
+    /// <para>The off-by-default half is the whole safety argument and is asserted first. Extraction omits
+    /// the <c>Periods</c> key when a table has none, so a package written before periods were supported,
+    /// or extracted from MariaDB 10.4.3–11.3 where the catalog cannot report them, carries no periods
+    /// even when the table has one. Dropping on that absence would remove a declaration the package
+    /// never had the chance to make — so the default has to be pinned, not assumed.</para>
+    /// </summary>
+    [Test]
+    public void APeriodRemovedFromThePackageIsDropped_OnlyWhenTheFlagIsOn()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.MariaDb).GetDbConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+
+        if (SkipUnlessPeriodsReadable(cmd))
+            Assert.Ignore("Deciding what to drop needs MariaDB 11.4 to read the current periods.");
+
+        cmd.CommandText = $"DROP TABLE IF EXISTS `{DropTarget}`";
+        cmd.ExecuteNonQuery();
+
+        // Deploy WITH both periods, flag irrelevant on a create.
+        cmd.CommandText = "SET @ss_drop_periods_removed = 0";
+        cmd.ExecuteNonQuery();
+        RunTableQuenchProc(cmd, DropTargetJson(withPeriod: true));
+        Assert.That(PeriodCount(cmd, DropTarget), Is.EqualTo(1), "setup: the period must be created");
+
+        // Now remove one from the package with the flag OFF -- it must survive.
+        RunTableQuenchProc(cmd, DropTargetJson(withPeriod: false));
+        Assert.That(PeriodCount(cmd, DropTarget), Is.EqualTo(1),
+            "With the flag off, a period missing from the package must be LEFT ALONE. This is the "
+            + "default, and it is what stops a package that predates periods -- or was extracted below "
+            + "11.4 and so carries none -- from silently deleting periods it never had the chance to "
+            + "declare.");
+
+        // And with the variable never set at all -- the state a direct CALL leaves it in, and the real
+        // default. Asserted separately because setting it to 0 exercises a DIFFERENT branch: the
+        // COALESCE fallback only applies when the variable is NULL, so a test that always assigns it
+        // cannot detect the default being flipped. Found exactly that way -- flipping the fallback to 1
+        // left the earlier assertion green.
+        cmd.CommandText = "SET @ss_drop_periods_removed = NULL";
+        cmd.ExecuteNonQuery();
+        RunTableQuenchProc(cmd, DropTargetJson(withPeriod: false));
+        Assert.That(PeriodCount(cmd, DropTarget), Is.EqualTo(1),
+            "With the variable UNSET, the period must still be left alone. Unset is what a caller that has never heard of this flag leaves behind, and it must mean off.");
+
+        // Same package, flag ON -- now it goes.
+        cmd.CommandText = "SET @ss_drop_periods_removed = 1";
+        cmd.ExecuteNonQuery();
+        RunTableQuenchProc(cmd, DropTargetJson(withPeriod: false));
+
+        Assert.That(PeriodCount(cmd, DropTarget), Is.Zero,
+            "with the flag on, the period the package no longer declares must be dropped");
+        // Not data-destructive: the columns the period spanned are still there.
+        cmd.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                          + $"WHERE TABLE_SCHEMA = '{_mainDb}' AND TABLE_NAME = '{DropTarget}'";
+        Assert.That(Convert.ToInt32(cmd.ExecuteScalar()), Is.EqualTo(3),
+            "dropping a period must not take its columns with it -- this is what separates 'removed the "
+            + "period' from 'removed the data'");
+
+        // And re-running is a no-op rather than an error on an already-absent period.
+        Assert.DoesNotThrow(() => RunTableQuenchProc(cmd, DropTargetJson(withPeriod: false)),
+            "re-deploying after the drop must not try to drop it again");
+        Assert.That(PeriodCount(cmd, DropTarget), Is.Zero);
+
+        cmd.CommandText = "SET @ss_drop_periods_removed = 0";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = $"DROP TABLE IF EXISTS `{DropTarget}`";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
 }

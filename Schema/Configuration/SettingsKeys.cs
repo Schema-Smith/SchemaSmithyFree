@@ -180,6 +180,13 @@ public static class SettingsKeys
     public const string DropExcludeConstraintsRemovedFromProduct = "DropExcludeConstraintsRemovedFromProduct";
     public const string DropStatisticsRemovedFromProduct = "DropStatisticsRemovedFromProduct";
     public const string DropIndexesRemovedFromProduct = "DropIndexesRemovedFromProduct";
+
+    /// <summary>
+    /// MariaDB only, and the one drop-by-absence flag that defaults to FALSE. See the property
+    /// description on Table for why -- a package that predates periods, or was extracted below
+    /// 11.4, cannot declare the periods its table actually has.
+    /// </summary>
+    public const string DropPeriodsRemovedFromProduct = "DropPeriodsRemovedFromProduct";
     // Flat keys, not a bound RebuildPolicy section: every other setting here is a flat string key and
     // there is no section-binding facility to reuse. The three compose ONE policy object at the env
     // tier, which then competes with the product/template/table levels as a whole.
