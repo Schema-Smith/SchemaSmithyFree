@@ -26,11 +26,11 @@
         "Name": "",
         "CheckConstraintStyle": "" // ColumnLevel (default) or TableLevel — for new products only; existing products use Product.json value
     },
+    "TemplatePath": "", // Where the template directory is written. Blank = under Product.Path.
     // Name will default to Database if not provided.
     // This becomes the folder name for the template that is exported as well as the template name.
     "Template": {
         "Name": "",
-        "TemplatePath": "", // Where the template directory is written. Blank = under Product.Path.
         "SchemaIdentificationScript": "" // Optional. Used only when Source.Schema is set. Written into the
                                          // generated Template.json verbatim. When blank, a stub script that
                                          // returns the source schema as a single row is generated so the
