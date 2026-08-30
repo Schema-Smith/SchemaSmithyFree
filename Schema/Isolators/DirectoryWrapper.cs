@@ -48,6 +48,19 @@ public class DirectoryWrapper : IDirectory
             .Select(LongPathSupport.StripLongPathPrefix);
     }
 
+    public IEnumerable<TimestampedFile> EnumerateFilesWithTimestamps(string path, string searchPattern, SearchOption searchOption)
+    {
+        // DirectoryInfo.EnumerateFiles, not Directory.EnumerateFiles: the FileInfo it yields already
+        // carries LastWriteTimeUtc from the directory walk, so reading it costs no further syscall.
+        // The string overload throws that away and forces the caller to stat each entry back.
+        //
+        // Select keeps this deferred -- EnumerateFiles is lazy and projection does not change that, so
+        // a caller taking the first twenty of fifty thousand walks twenty.
+        return new DirectoryInfo(LongPathSupport.MakeSafeLongFilePath(path))
+            .EnumerateFiles(searchPattern, searchOption)
+            .Select(f => new TimestampedFile(LongPathSupport.StripLongPathPrefix(f.FullName), f.LastWriteTimeUtc));
+    }
+
     public void Delete(string path, bool recursive = false)
     {
         Directory.Delete(LongPathSupport.MakeSafeLongFilePath(path), recursive);
