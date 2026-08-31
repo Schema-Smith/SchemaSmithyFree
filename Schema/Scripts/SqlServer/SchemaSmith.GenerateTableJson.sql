@@ -47,6 +47,10 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
          WHERE tfg.[object_id] = st.[object_id]
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
+       -- FILESTREAM_ON. Read from the table's filestream data space, which is NOT implied by having
+       -- FILESTREAM columns: dropping the last one leaves the assignment behind.
+       (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
+         WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
        st.is_tracked_by_cdc AS [EnableCDC],
        -- Table-level Change Tracking round-trip. Emitted only when ON, like IsTemporal above: every
        -- extracted package would otherwise gain "EnableChangeTracking": false on every table.
@@ -114,6 +118,9 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        ISNULL(cc.is_persisted, CAST(0 AS BIT)) AS [Persisted],
                        sc.is_sparse AS [Sparse],
+                       -- FILESTREAM round-trip. Emitted only when set, so no existing package gains
+                       -- a false on every column. Both catalog columns predate the 2008 floor.
+                       CASE WHEN sc.is_filestream = 1 THEN CAST(1 AS BIT) END AS [FileStream],
                        sc.is_column_set AS [IsColumnSet],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,

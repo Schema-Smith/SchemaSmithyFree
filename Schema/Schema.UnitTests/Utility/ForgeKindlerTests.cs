@@ -286,7 +286,7 @@ public class ForgeKindlerTests
         // + SchemaSmith.RebuildTable (the shadow-copy-and-swap engine: refuse-if-blocked, capture the identity
         //   counter, drop inbound foreign keys, create the shadow in declared order, copy, reseed, swap, drop.
         //   Kindled after fn_RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
-        Assert.That(sqlServer.Length, Is.EqualTo(33));
+        Assert.That(sqlServer.Length, Is.EqualTo(34));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)

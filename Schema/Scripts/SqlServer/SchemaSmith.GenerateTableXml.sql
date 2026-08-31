@@ -147,6 +147,9 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
          WHERE tfg.[object_id] = st.[object_id]
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
+       -- FILESTREAM_ON -- not implied by having FILESTREAM columns; the assignment outlives them.
+       (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
+         WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
        -- Table-level Change Tracking round-trip -- emitted only when ON, like IsTemporal above.
        CASE WHEN ctt.[object_id] IS NOT NULL THEN 'true' END AS [EnableChangeTracking],
@@ -183,6 +186,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        CASE WHEN ISNULL(cc.is_persisted, 0) = 1 THEN 'true' ELSE 'false' END AS [Persisted],
                        CASE WHEN sc.is_sparse = 1 THEN 'true' ELSE 'false' END AS [Sparse],
+                       -- FILESTREAM round-trip -- emitted only when set.
+                       CASE WHEN sc.is_filestream = 1 THEN 'true' END AS [FileStream],
                        CASE WHEN sc.is_column_set = 1 THEN 'true' ELSE 'false' END AS [IsColumnSet],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(cm.MaskingFunction, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,

@@ -31,6 +31,7 @@ namespace Schema.UnitTests.Capabilities
             "table without its PERIOD FOR clause",
             "CDC (database not enabled)",
             "Change Tracking (database not enabled)",
+            "FILESTREAM (server or filegroup not available)",
             "INDEX (invisible, MySQL 8.0 / MariaDB 10.6)",
             "INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)",
             "CHECK constraint (MySQL 8.0.16)",

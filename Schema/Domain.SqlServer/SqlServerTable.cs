@@ -121,6 +121,13 @@ namespace Schema.Domain.SqlServer
         // item) -- it errors if the declared name differs from where the table already lives.
         [JsonProperty(Order = 111, NullValueHandling = NullValueHandling.Ignore)]
         public string FileGroup { get; set; }
+        // FILESTREAM_ON <filegroup>: which FILESTREAM filegroup this table's FILESTREAM data lands on.
+        // Name only, like FileGroup, and null means "the database's default FILESTREAM filegroup".
+        // Effectively immutable once assigned -- ALTER TABLE ... SET (FILESTREAM_ON = ...) fails 1726 on a
+        // table that already has one -- so a declared name that differs from the live one is refused
+        // rather than silently ignored, the same posture FileGroup takes.
+        [JsonProperty(Order = 114, NullValueHandling = NullValueHandling.Ignore)]
+        public string FileStreamFileGroup { get; set; }
 
     }
 }

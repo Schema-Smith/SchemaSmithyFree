@@ -138,6 +138,14 @@ namespace Schema.Capabilities
                 "Change Tracking (database not enabled)",
                 "Change Tracking enabled on the database (ALTER DATABASE ... SET CHANGE_TRACKING = ON)"));
 
+            // Reduced rather than Skip: without FILESTREAM the column still deploys as a plain
+            // VARBINARY(MAX), so the user keeps the column and loses only its storage location.
+            rows.Add(new("filestream-column", "FILESTREAM columns", Platform.SqlServer,
+                0, "any supported version (needs FILESTREAM on the server and a filegroup on the database)",
+                null, DegradeKind.Reduced,
+                "FILESTREAM (server or filegroup not available)",
+                "FILESTREAM enabled on the server and a FILESTREAM filegroup on the database"));
+
             // Functional/expression index (including a multi-valued index, CAST(... AS ... ARRAY) —
             // MySQL 8.0.17+, same NULL-COLUMN_NAME/EXPRESSION shape as a plain functional key part, so it
             // rides this same row rather than needing one of its own): below the floor the whole index is

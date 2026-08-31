@@ -159,4 +159,44 @@ BEGIN
     END
   END
 
+
+  -- FILESTREAM columns -- the third database-scoped prerequisite, and the only one that degrades to a
+  -- still-usable column rather than to a missing capability. Dropping FILESTREAM leaves a plain
+  -- VARBINARY(MAX): the data still stores and reads, it just lives in-row instead of on the filegroup.
+  -- That is a storage difference, not a correctness one, so the column is kept and the change reported.
+  --
+  -- Two prerequisites, neither of which SchemaSmith creates: FILESTREAM enabled on the SERVER
+  -- (sp_configure + a Windows-level setting, which is not even reachable from T-SQL) and a FILESTREAM
+  -- filegroup on the DATABASE. Creating the filegroup would mean choosing a filesystem path on the
+  -- target, which belongs to whoever owns the database.
+  --
+  -- Clearing [FileStream] is what re-routes these columns: MissingTableAndColumnQuench withholds
+  -- FileStream = 1 columns from the create/add pass, so zeroing the flag puts them back on the normal
+  -- path. ColumnScript is rewritten to match, because it was assembled at parse time.
+  IF EXISTS (SELECT 1 FROM #Columns WITH (NOLOCK) WHERE [FileStream] = 1)
+     AND (CONVERT(INT, ISNULL(SERVERPROPERTY('FilestreamEffectiveLevel'), 0)) = 0
+          OR NOT EXISTS (SELECT 1 FROM sys.filegroups WHERE [type] = 'FD'))
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + C.[Schema] + '.' + C.[TableName] + '.' + C.[ColumnName]
+                             FROM #Columns C WITH (NOLOCK) WHERE C.[FileStream] = 1
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'FILESTREAM requires it enabled on the server and a FILESTREAM filegroup on the database, ' +
+                   'neither of which SchemaSmith creates for you; column(s): ' + LEFT(@v_list, 1700) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'FILESTREAM (server or filegroup not available)',
+               C.[Schema] + '.' + C.[TableName] + '.' + C.[ColumnName], 'downgraded'
+          FROM #Columns C WITH (NOLOCK) WHERE C.[FileStream] = 1
+      RAISERROR('  FILESTREAM skipped: not enabled on this server, or the database has no FILESTREAM filegroup. The column(s) deploy as plain VARBINARY(MAX) - downgraded', 10, 100) WITH NOWAIT
+      UPDATE #Columns
+        SET [ColumnScript] = REPLACE([ColumnScript], ' FILESTREAM', ''), [FileStream] = 0
+        WHERE [FileStream] = 1
+    END
+  END
+
 END

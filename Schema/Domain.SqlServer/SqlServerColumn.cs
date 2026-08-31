@@ -55,6 +55,16 @@ namespace Schema.Domain.SqlServer
                           "Requires Default; ignored when the column is created with the table.")]
         [JsonProperty(Order = 110)]
         public bool BackfillExistingRows { get; set; }
+        // FILESTREAM storage for a VARBINARY(MAX) column: the value lives in the NTFS filegroup rather
+        // than in the row. Requires FILESTREAM enabled on the server AND a FILESTREAM filegroup on the
+        // database -- neither of which SchemaSmith turns on, so a package asking for it without them is
+        // reported through UnsupportedFeaturePolicy rather than failing on a raw engine error.
+        //
+        // The table must also carry a ROWGUIDCOL column (error 5505 otherwise). SchemaSmith requires the
+        // package to declare it rather than inventing one: a column SchemaSmith adds by itself appears in
+        // no package and vanishes on the next extract-redeploy round trip.
+        [JsonProperty(Order = 111)]
+        public bool FileStream { get; set; }
 
     }
 }
