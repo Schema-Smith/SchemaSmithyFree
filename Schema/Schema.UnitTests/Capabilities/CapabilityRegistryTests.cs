@@ -29,6 +29,7 @@ namespace Schema.UnitTests.Capabilities
             "table access method (PG15)",
             "VIRTUAL generated column (PG18)",
             "table without its PERIOD FOR clause",
+            "CDC (database not enabled)",
             "INDEX (invisible, MySQL 8.0 / MariaDB 10.6)",
             "INDEX (descending key part, MySQL 8.0 / MariaDB 10.8)",
             "CHECK constraint (MySQL 8.0.16)",
@@ -49,7 +50,12 @@ namespace Schema.UnitTests.Capabilities
                     Assert.That(c.Key, Is.Not.Null.And.Not.Empty, "Key");
                     Assert.That(c.DisplayName, Is.Not.Null.And.Not.Empty, $"DisplayName for {c.Key}");
                     Assert.That(c.IntroducedInDisplay, Is.Not.Null.And.Not.Empty, $"IntroducedInDisplay for {c.Key}");
-                    Assert.That(c.IntroducedInComparable, Is.GreaterThan(0), $"IntroducedInComparable for {c.Key}/{c.Platform}");
+                    // 0 means "not version-gated" and is legal ONLY alongside a stated database
+                    // prerequisite -- otherwise it is a row that forgot its version.
+                    if (c.RequiredDatabaseSetting == null)
+                        Assert.That(c.IntroducedInComparable, Is.GreaterThan(0), $"IntroducedInComparable for {c.Key}/{c.Platform}");
+                    else
+                        Assert.That(c.IntroducedInComparable, Is.Zero, $"a database-gated row must not carry a version it never compares against: {c.Key}/{c.Platform}");
                     Assert.That(c.Platform, Is.Not.EqualTo(Platform.Unknown), $"Platform for {c.Key}");
                     Assert.That(c.RequiredCompatLevel, Is.Null.Or.GreaterThan(0), $"RequiredCompatLevel for {c.Key}");
                 }

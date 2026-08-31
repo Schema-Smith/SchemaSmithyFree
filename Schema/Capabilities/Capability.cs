@@ -27,6 +27,12 @@ namespace Schema.Capabilities
     /// binary/version-gated; null otherwise. All current rows are version-gated, so this is null — the field
     /// exists for features (e.g. certain syntax) whose availability tracks compatibility level.
     /// </param>
+    /// <param name="RequiredDatabaseSetting">
+    /// A DATABASE-scoped prerequisite the feature needs and SchemaSmith does not own (e.g. CDC enabled on
+    /// the database). Null for the version-gated majority. When set, the degrade does not depend on the
+    /// engine version at all, so <see cref="IntroducedInComparable"/> is 0 and means "not version-gated"
+    /// rather than "unknown" -- a row must not invent a version its .sql guard never compares against.
+    /// </param>
     /// <param name="Degrade">Whether the feature is skipped or applied with reduced fidelity below the floor.</param>
     /// <param name="ManifestObjectType">
     /// The exact <c>ChangeAudit</c> "downgraded" ObjectType string when the degrade routes through
@@ -41,5 +47,6 @@ namespace Schema.Capabilities
         string IntroducedInDisplay,
         int? RequiredCompatLevel,
         DegradeKind Degrade,
-        string? ManifestObjectType);
+        string? ManifestObjectType,
+        string? RequiredDatabaseSetting = null);
 }

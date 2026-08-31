@@ -119,6 +119,17 @@ namespace Schema.Capabilities
             rows.Add(new("application-time-period", "Application-time period", Platform.MariaDb,
                 1004, "MariaDB 10.4.3", null, DegradeKind.Reduced, "table without its PERIOD FOR clause"));
 
+            // Change Data Capture, gated by a DATABASE setting rather than an engine version -- the first
+            // row of that kind, which is why Capability gained RequiredDatabaseSetting. IntroducedInComparable
+            // is 0 and means "not version-gated": CDC is old enough that no supported server lacks it, and
+            // the .sql guard compares is_cdc_enabled, not a version. Inventing a version here would break the
+            // promise that this column matches the literal the guard compares against.
+            //
+            // Reduced, not Skipped: the table still deploys, without its capture.
+            rows.Add(new("cdc-database-toggle", "Change Data Capture", Platform.SqlServer,
+                0, "any supported version (needs CDC enabled on the database)", null, DegradeKind.Reduced,
+                "CDC (database not enabled)", "CDC enabled on the database (sys.sp_cdc_enable_db)"));
+
             // Functional/expression index (including a multi-valued index, CAST(... AS ... ARRAY) —
             // MySQL 8.0.17+, same NULL-COLUMN_NAME/EXPRESSION shape as a plain functional key part, so it
             // rides this same row rather than needing one of its own): below the floor the whole index is
