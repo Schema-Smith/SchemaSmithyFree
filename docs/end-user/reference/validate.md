@@ -17,7 +17,7 @@ SchemaQuench --Validate
 Run it from the directory containing `SchemaQuench.settings.json`, or point `SchemaPackagePath` (config file, `SmithySettings_SchemaPackagePath` environment variable, or `--SchemaPackagePath` switch) at the package you want to check:
 
 ```bash
-SchemaQuench --Validate --SchemaPackagePath:./MyProduct
+SchemaQuench --Validate --SchemaPackagePath=./MyProduct
 ```
 
 No `Target`, no `--ConnectionString`, no credentials of any kind -- `--Validate` never opens a connection. It reads `Product.json` to determine the declared `Platform` (`SqlServer`, `PostgreSQL`, `MySQL`, or `MariaDb`), loads the package through that platform's domain types, runs every check, prints the findings, and exits.

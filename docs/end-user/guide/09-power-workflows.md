@@ -490,7 +490,7 @@ SchemaShears reads the manifest, pulls in the scaffolding (`Product.json` plus t
 ### Verify before deploying
 
 ```bash
-SchemaQuench --SchemaPackagePath:./MyProduct-patch --WhatIfONLY=true
+SchemaQuench --SchemaPackagePath=./MyProduct-patch --WhatIfONLY=true
 ```
 
 The WhatIf output shows exactly which objects the patch will touch. Review it against your intent: if the manifest was complete, only the objects you chose will appear. If something unexpected shows up -- or something expected is missing -- adjust the manifest and rebuild.
@@ -500,7 +500,7 @@ The WhatIf output shows exactly which objects the patch will touch. Review it ag
 Once verified against a non-production target, deploy to production:
 
 ```bash
-SchemaQuench --SchemaPackagePath:./MyProduct-patch
+SchemaQuench --SchemaPackagePath=./MyProduct-patch
 ```
 
 The patch updates only the objects it includes. Every other object in the target database -- tables, procedures, indexes, anything not in the patch -- is left untouched. Drop suppression is baked into the emitted `Product.json` by SchemaShears: absent objects are preserved, not reconciled away.
