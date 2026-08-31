@@ -207,6 +207,41 @@ Custom script folders are how you make the schema package fit *your* deployment 
 
 ---
 
+
+## PostgreSQL Extensions
+
+SchemaSmith has no `Extensions` property, and does not need one. An extension is database-scoped and is not part of any table, so it is deployed the same way schemas and collations are — as a **scripted object**, in a folder you declare.
+
+Add the folder to the template and put one file per extension in it:
+
+```json
+{
+  "Name": "Main",
+  "ScriptFolders": [
+    { "FolderPath": "Extensions", "QuenchSlot": "Objects" }
+  ]
+}
+```
+
+```sql
+-- Templates/Main/Extensions/vector.sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+`QuenchSlot: Objects` runs the folder **before** the tables, which is what you want when a column's type comes from the extension — `vector`, `citext`, `hstore`, `postgis` all need the extension in place before the table that uses them is created.
+
+> **Warning:** Object scripts run on **every** quench, so the script must be idempotent. `CREATE EXTENSION IF NOT EXISTS` is; a bare `CREATE EXTENSION` fails on the second deploy.
+
+### What SchemaSmith will and will not do
+
+- **Create it** when the script says so, on every target the template reaches.
+- **Never remove it.** Scripted objects are not dropped by absence — that applies only to tables, their components, and materialized views. Deleting the file stops SchemaSmith creating the extension; it does not uninstall one that is already there. That is deliberate: `DROP EXTENSION` cascades into every column, index, and constraint that depends on its types, which is not something a package edit should be able to do.
+- **Never upgrade it.** Pin a version with `CREATE EXTENSION … VERSION '1.2'` if you need one. `ALTER EXTENSION … UPDATE` runs migration scripts written by the extension's author, so it belongs in a migration script you control, not in a schema deploy.
+
+### Privileges
+
+`CREATE EXTENSION` usually needs superuser; PostgreSQL 13+ relaxes that to the database owner for *trusted* extensions. If the deploy user has neither, the script fails with PostgreSQL's own permission error — install the extension once as an administrator and the idempotent script becomes a no-op from then on.
+
 ## Default Folders
 
 When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills in a platform-specific default set. Each platform's defaults reflect the object types and lifecycle stages that platform actually supports.
