@@ -195,7 +195,7 @@ Any category not listed in `--AllowDrops` continues to be suppressed.
 The same SchemaQuench workflow you use for full-product deployments applies to patches -- the patch output is a valid schema package:
 
 ```bash
-SchemaQuench --SchemaPackagePath:./patch --WhatIfONLY=true
+SchemaQuench --SchemaPackagePath=./patch --WhatIfONLY=true
 ```
 
 Review the WhatIf output to confirm the patch will affect only the objects you intended.
