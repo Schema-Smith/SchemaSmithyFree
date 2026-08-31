@@ -56,22 +56,24 @@ public static class ForgeKindler
         try
         {
             var expected = ComputeKindleStamp(platform, encoding, serverMajorVersion, policy);
-
-            // Extraction only ever READS the helpers, so it opts in to running against a read-only
-            // target -- an Availability Group readable secondary being the case that matters, since it
-            // is the copy people are allowed to hammer. Deploy does not opt in: it genuinely cannot work
-            // against a read-only database, and failing here with a clear reason beats failing later on
-            // the first write.
-            if (allowReadOnlyTarget && ReadOnlyTargetDetector.IsReadOnly(command, platform))
-            {
-                VerifyKindledOnReadOnlyTarget(command, platform, expected);
-                return;
-            }
-
             var current = ReadStamp(command, platform);
             if (!forceReKindle && string.Equals(current, expected, StringComparison.Ordinal))
             {
                 Log.Info($"  Kindle stamp current ({expected[..12]}…) — skipping kindle");
+                return;
+            }
+
+            // Only now is a WRITE about to happen, which is the only thing a read-only target rules out.
+            // Probing here rather than up front keeps the common path at one round trip and means an
+            // already-current replica never needs the question asked at all.
+            //
+            // Extraction opts in because it only ever reads the helpers -- an Availability Group readable
+            // secondary being the case that matters, since it is the copy people are allowed to hammer.
+            // Deploy does not opt in: it genuinely cannot work against a read-only database, and failing
+            // here with a clear reason beats failing later on the first write.
+            if (allowReadOnlyTarget && ReadOnlyTargetDetector.IsReadOnly(command, platform))
+            {
+                VerifyKindledOnReadOnlyTarget(command, platform, current, expected);
                 return;
             }
 
@@ -493,10 +495,10 @@ public static class ForgeKindler
     /// version ahead — which is most of the time. Helpers present but <b>unverifiable</b> is also a
     /// warning, and says exactly that rather than implying everything is fine.</para>
     /// </summary>
-    internal static void VerifyKindledOnReadOnlyTarget(IDbCommand command, Platform platform, string expectedStamp)
+    internal static void VerifyKindledOnReadOnlyTarget(IDbCommand command, Platform platform, string currentStamp, string expectedStamp)
     {
         var state = ClassifyReadOnlyKindle(KindleStampStoreExists(command, platform),
-                                           () => ReadStamp(command, platform), expectedStamp);
+                                           () => currentStamp, expectedStamp);
 
         if (state == ReadOnlyKindleState.NotKindled)
             throw new InvalidOperationException(
@@ -517,7 +519,7 @@ public static class ForgeKindler
         if (state == ReadOnlyKindleState.Stale)
         {
             Log.Warn($"  Read-only target: kindling was SKIPPED and the helper objects here are OUT OF DATE "
-                     + $"(found {Abbreviate(ReadStamp(command, platform))}, this build expects {Abbreviate(expectedStamp)}). Extraction "
+                     + $"(found {Abbreviate(currentStamp)}, this build expects {Abbreviate(expectedStamp)}). Extraction "
                      + "will proceed against them and may not reflect everything this build understands. Kindle on "
                      + "the primary and let it reach this replica to clear the warning.");
             return;

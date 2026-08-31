@@ -289,6 +289,7 @@ public class TableExtractionFailureIsolationTests
             const string badJson = "{ not valid json";
             _command.ExecuteScalar().Returns(_ =>
             {
+                if (KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText)) return (object)0;
                 var cmdText = _command.CommandText ?? "";
                 // KindleTheForge's own ExecuteScalar calls (the pg_class kindle-stamp existence
                 // check) must fall through to NSubstitute's default null — only GenerateTableJSON
@@ -332,6 +333,7 @@ public class TableExtractionFailureIsolationTests
             var normalJson = $"{{\"Name\":\"{normal}\",\"Schema\":\"{schema}\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[]}}";
             _command.ExecuteScalar().Returns(_ =>
             {
+                if (KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText)) return (object)0;
                 var cmdText = _command.CommandText ?? "";
                 if (!cmdText.Contains("GenerateTableJSON")) return null;
                 return normalJson;

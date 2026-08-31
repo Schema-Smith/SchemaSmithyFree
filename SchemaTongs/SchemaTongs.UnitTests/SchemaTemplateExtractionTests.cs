@@ -509,7 +509,8 @@ public class SchemaTemplateExtractionTests
                 "{\"Name\":\"orders\",\"Schema\":\"tenant_seed\",\"OldName\":\"\",\"Columns\":[],\"ForeignKeys\":[" +
                 "{\"Name\":\"fk_orders_customers\",\"Columns\":\"customer_id\",\"RelatedTable\":\"customers\",\"RelatedColumns\":\"id\",\"RelatedTableSchema\":\"\\\"tenant_seed\\\"\"}]}";
             _command.ExecuteScalar().Returns(_ =>
-                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0
+                : _command.CommandText?.Contains("pg_catalog.pg_class") == true
                     ? (object)0L
                     : (object)ordersJson);
 
@@ -1113,7 +1114,8 @@ public class SchemaTemplateExtractionTests
                 "\"Columns\":[{\"Name\":\"total\",\"DataType\":\"numeric\",\"Nullable\":true," +
                 "\"GenerationExpression\":\"(tenant_seed.fn_calc_total(lines))\",\"Generated\":\"ALWAYS\"}]}";
             _command.ExecuteScalar().Returns(_ =>
-                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0
+                : _command.CommandText?.Contains("pg_catalog.pg_class") == true
                     ? (object)0L
                     : (object)invoicesJson);
 
@@ -1161,7 +1163,8 @@ public class SchemaTemplateExtractionTests
                 "\"Indexes\":[{\"Name\":\"ix_active\",\"IndexColumns\":\"email\"," +
                 "\"FilterExpression\":\"(tenant_seed.fn_is_active(id))\"}]}";
             _command.ExecuteScalar().Returns(_ =>
-                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0
+                : _command.CommandText?.Contains("pg_catalog.pg_class") == true
                     ? (object)0L
                     : (object)customersJson);
 
@@ -1208,7 +1211,8 @@ public class SchemaTemplateExtractionTests
                 "\"ExcludeConstraints\":[{\"Name\":\"no_overlap\",\"ExcludeColumns\":[{\"Column\":\"during\",\"Operator\":\"&&\"}]," +
                 "\"FilterExpression\":\"(tenant_seed.fn_is_bookable(room_id))\"}]}";
             _command.ExecuteScalar().Returns(_ =>
-                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0
+                : _command.CommandText?.Contains("pg_catalog.pg_class") == true
                     ? (object)0L
                     : (object)roomsJson);
 
@@ -1368,10 +1372,12 @@ public class SchemaTemplateExtractionTests
             viewListReader["SchemaName"].Returns(SourceSchema);
             viewListReader["ViewName"].Returns("ActiveCustomers");
             _command.StubReaders(viewListReader);
-            _command.ExecuteScalar().Returns(
+            var activeCustomersJson =
                 "{\"Name\":\"ActiveCustomers\",\"Schema\":\"tenant_seed\",\"Definition\":\"SELECT 1\"," +
                 "\"Indexes\":[{\"Name\":\"IX_ActiveCustomers\",\"IndexColumns\":\"Id\"," +
-                "\"FilterExpression\":\"([tenant_seed].[fn_IsActive](Id) = 1)\"}]}");
+                "\"FilterExpression\":\"([tenant_seed].[fn_IsActive](Id) = 1)\"}]}";
+            _command.ExecuteScalar().Returns(_ =>
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0 : activeCustomersJson);
 
             string capturedJson = null;
             _fileWrapper.When(f => f.WriteAllText(
@@ -1422,6 +1428,7 @@ public class SchemaTemplateExtractionTests
                 "\"Indexes\":[{\"Name\":\"ix_active\",\"IndexColumns\":\"id\"," +
                 "\"FilterExpression\":\"(tenant_seed.fn_is_active(id))\"}]}";
             _command.ExecuteScalar().Returns(_ =>
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0 :
                 _command.CommandText?.Contains("pg_catalog.pg_class") == true
                     ? (object)0L
                     : (object)activeCustomersJson);

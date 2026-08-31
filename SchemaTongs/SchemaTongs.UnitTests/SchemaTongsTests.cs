@@ -659,7 +659,10 @@ public class SchemaTongsTests
             listReader.GetString(1).Returns("MyXmlSchema");
 
             // ExecuteScalar: XML content
-            _command.ExecuteScalar().Returns("<xsd:schema xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"></xsd:schema>");
+            _command.ExecuteScalar().Returns(_ =>
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText)
+                    ? (object)0
+                    : "<xsd:schema xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"></xsd:schema>");
 
             // 2nd reader: extended properties (empty)
             var extReader = Substitute.For<IDataReader>();
@@ -1431,6 +1434,7 @@ public class SchemaTongsTests
             // All other ExecuteScalar calls (GenerateMaterializedViewJson) return the matview JSON.
             var matViewJson = "{\"Name\":\"my_matview\",\"Schema\":\"public\",\"Definition\":\"SELECT 1\",\"WithData\":true}";
             _command.ExecuteScalar().Returns(_ =>
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0 :
                 _command.CommandText?.Contains("pg_catalog.pg_class") == true
                     ? (object)0L
                     : (object)matViewJson);
