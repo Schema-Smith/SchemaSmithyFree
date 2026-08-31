@@ -490,7 +490,7 @@ SchemaShears reads the manifest, pulls in the scaffolding (`Product.json` plus t
 ### Verify before deploying
 
 ```bash
-SchemaQuench --SchemaPackagePath:./MyProduct-patch --WhatIf
+SchemaQuench --SchemaPackagePath:./MyProduct-patch --WhatIfONLY=true
 ```
 
 The WhatIf output shows exactly which objects the patch will touch. Review it against your intent: if the manifest was complete, only the objects you chose will appear. If something unexpected shows up -- or something expected is missing -- adjust the manifest and rebuild.
