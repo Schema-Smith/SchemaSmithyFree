@@ -546,6 +546,19 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 | `OldName` | string | `""` | Previous column name for rename detection. Clear after the rename has deployed everywhere. |
 | `Extensions` | object | `null` | Custom metadata for this column. See [Custom Properties](custom-properties.md). |
 
+
+### `DataType` is passed through, not validated
+
+`DataType` is free text. SchemaSmith does not keep a list of type names — it hands what you wrote to the engine, which is what lets you use any type the engine accepts, including ones newer than your copy of SchemaSmith. `IDENTITY` and `ROWGUIDCOL` ride the same string for the same reason.
+
+The trade is worth knowing before it surprises you:
+
+> **Warning:** A type that the target's engine version does not have fails with the **engine's own error**, not a SchemaSmith message. Declaring `UUID` against MariaDB 10.6 gets you `Unknown data type: 'UUID'`. Version-*gated features* degrade politely through [`UnsupportedFeaturePolicy`](schemaquench.md); types do not, because SchemaSmith has no list to check them against.
+
+Types this affects in practice: MariaDB `UUID` (10.7+), MySQL `VECTOR` (9.0+), SQL Server native `json` (2025+), and vector types generally.
+
+**If your fleet straddles the version**, gate the declaration rather than hoping: put the newer form behind a [`ShouldApplyExpression`](#conditional-application) so only targets that can take it receive it. That is the supported answer, and it works for any type, including ones added after this page was written.
+
 ### SQL Server column extras
 
 `CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`, `FileStream` (see [FILESTREAM (SQL Server)](#filestream-sql-server)). Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
