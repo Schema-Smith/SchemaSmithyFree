@@ -166,11 +166,11 @@ SchemaQuench --ConfigFile:C:\configs\production.json
 
 The path can be absolute or relative to the current working directory.
 
-### Unrecognised settings are reported
+### Unrecognized settings are reported
 
 A mistyped setting is otherwise invisible. `Target:Sever` binds nothing, so the run proceeds exactly as though you had never set it -- and a deployment that silently ignores half your configuration is worse than one that refuses to start.
 
-Each tool therefore checks the settings it was given against the settings it actually reads, and warns about anything it does not recognise:
+Each tool therefore checks the settings it was given against the settings it actually reads, and warns about anything it does not recognize:
 
 ```
 WARN  Configuration key 'Target:Sever' is not read by SchemaQuench and will have no effect. Check for a typo.
@@ -188,7 +188,7 @@ It is a warning, not an error -- the run continues. Treat one as a typo until pr
 
 ### The settings surface is enforced, not just documented
 
-The set of settings each tool reads is data the tool checks itself against at startup, not a list maintained separately in prose. That is why an unrecognised key is reported rather than silently ignored: the reference above and the check the tool performs come from the same source, so they cannot drift apart.
+The set of settings each tool reads is data the tool checks itself against at startup, not a list maintained separately in prose. That is why an unrecognized key is reported rather than silently ignored: the reference above and the check the tool performs come from the same source, so they cannot drift apart.
 
 ---
 
