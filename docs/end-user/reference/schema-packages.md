@@ -897,7 +897,7 @@ This is automatic. You don't order the tables yourself; SchemaQuench computes th
   "Name": "[Employee]",
   "Schema": "HumanResources",
   "Columns": [
-    { "Name": "[EmployeeID]",   "DataType": "INT",          "Identity": true, "Nullable": false },
+    { "Name": "[EmployeeID]",   "DataType": "INT IDENTITY(1,1)", "Nullable": false },
     { "Name": "[ManagerID]",    "DataType": "INT",          "Nullable": true },
     { "Name": "[DepartmentID]", "DataType": "INT",          "Nullable": false },
     { "Name": "[FullName]",     "DataType": "NVARCHAR(100)","Nullable": false }
