@@ -437,6 +437,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FullTextIndex` | object or array | `null` | Full-text index on the table -- a single definition, or an array of conditional variants. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
 | `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. |
 | `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. Changing a tracked table's columns rotates to a new capture instance rather than discarding history -- see [Change Data Capture (SQL Server)](#change-data-capture-sql-server). |
+| `EnableChangeTracking` | bool | `false` | When `true`, the table is enabled for SQL Server change tracking. Requires Change Tracking enabled on the database -- see [Change Tracking (SQL Server)](#change-tracking-sql-server). Unrelated to the full-text index option also spelled `ChangeTracking`. |
+| `TrackColumnsUpdated` | bool | `false` | Only meaningful with `EnableChangeTracking`. When `true`, change tracking records **which columns** changed, not merely that the row did, at the cost of extra tracking storage. |
 | `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
 | `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
@@ -990,6 +992,8 @@ Custom statistics definitions in the `Statistics` array. SQL Server uses traditi
 
 Change Data Capture records inserts, updates, and deletes into a *change table* managed by SQL Server, so downstream readers can consume what happened rather than poll for differences. A table opts in with `"EnableCDC": true`. The tracked column set is fixed at the moment CDC is enabled, which is what makes schema change interesting: a capture instance created against three columns keeps capturing those three, whatever you do to the table afterwards.
 
+> **Before you start:** CDC must be enabled on the *database* first (`EXEC sys.sp_cdc_enable_db`). SchemaSmith does not do that for you -- it changes retention, cleanup jobs, and storage for every table in the database, which is not a decision one table's package should make. Declare `EnableCDC` without it and the table still deploys, but capture is reported as downgraded and named in the deploy log rather than skipped in silence.
+
 SQL Server's answer is to allow **two capture instances per table** so a new one can be stood up beside the old, and SchemaSmith uses exactly that. When a deploy changes the columns of a tracked table it:
 
 1. Leaves CDC running throughout -- the column work does not interrupt capture.
@@ -1001,6 +1005,28 @@ SQL Server's answer is to allow **two capture instances per table** so a new one
 > **Warning:** Because the old instance occupies one of the two slots, a **second** column change before you drop it has nowhere to rotate to. SchemaSmith refuses that deploy **before touching any column**, naming the tables at the limit and the command to clear them, so nothing is left half-applied. Drop the drained instance and re-run.
 
 Setting `EnableCDC` back to `false` disables capture on the table outright, which drops its capture instances and their history. That is a deliberate opt-out rather than a side effect of a schema change.
+
+---
+
+## Change Tracking (SQL Server)
+
+Change tracking answers a narrower question than [Change Data Capture](#change-data-capture-sql-server): *which rows changed since the version you last saw*, rather than a full history of what each change was. It is lighter, and it is the right tool when a downstream reader only needs to re-fetch the rows that moved. A table opts in with `"EnableChangeTracking": true`.
+
+> **Before you start:** Change Tracking must be enabled on the *database* first (`ALTER DATABASE <db> SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)`). SchemaSmith does not do that for you -- it sets retention and auto-cleanup for every table in the database. Declare `EnableChangeTracking` without it and the table still deploys, but tracking is reported as downgraded and named in the deploy log rather than skipped in silence.
+
+The table also needs a **primary key** -- SQL Server refuses to enable change tracking without one. SchemaSmith enables tracking after it creates the table's indexes and constraints, so a primary key declared in the same package is already in place.
+
+### Tracking which columns changed
+
+`"TrackColumnsUpdated": true` records *which columns* changed rather than only that the row did, which lets a reader skip rows whose relevant columns are untouched. It costs extra tracking storage, so it is off by default.
+
+> **Warning:** SQL Server has no in-place alter for this option -- changing it requires disabling and re-enabling change tracking, which **discards the tracking baseline**. Every consumer of that table must then re-synchronize in full, and `CHANGE_TRACKING_MIN_VALID_VERSION` reports the new baseline. SchemaSmith performs the change because you asked for it, and names the table and the consequence in the deploy log so the resynchronization is not a surprise.
+
+Removing `EnableChangeTracking` (or setting it to `false`) disables tracking on the table, which likewise discards its tracking information.
+
+### Not the full-text option
+
+Full-text indexes carry an unrelated option also spelled `ChangeTracking`, with values `AUTO`, `MANUAL`, and `OFF` -- it governs how a full-text index refreshes, and has nothing to do with table change tracking. See [Full-Text Index (SQL Server)](#full-text-index-sql-server).
 
 ---
 
