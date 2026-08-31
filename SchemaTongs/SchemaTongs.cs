@@ -1036,7 +1036,8 @@ public class SchemaTongs
             // Bake the detected SOURCE major version into SchemaSmith.fn_ServerMajorVersion so the version-gated
             // compare/extraction helpers resolve the source version on a genuine pre-2016 binary (where the
             // former SESSION_CONTEXT transport is unavailable); 0 falls back to the server property on modern.
-            ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding, serverMajorVersion: sourceMajor);
+            ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding, serverMajorVersion: sourceMajor,
+                                        allowReadOnlyTarget: true);
 
             if (_includeTables) ExtractTableDefinitions(command, targetDb);
             if (_includeSchemas) ScriptSqlServerSchemas(command);
@@ -2127,7 +2128,7 @@ SELECT s.name AS SchemaName, v.name AS ViewName
             using var command = connection.CreateCommand();
 
             _progressLog.Info("Kindling The Forge");
-            ForgeKindler.KindleTheForge(command, _platform);
+            ForgeKindler.KindleTheForge(command, _platform, allowReadOnlyTarget: true);
 
             if (_includeTables) CastPostgreSqlTableDefinitions(command, targetDb);
             if (_includeSchemas) CastPostgreSqlSchemas(command);
@@ -2708,7 +2709,7 @@ SELECT mv.schemaname, mv.matviewname
                 command.ExecuteNonQuery();
 
                 _progressLog.Info("Kindling The Forge");
-                ForgeKindler.KindleTheForge(command, _platform);
+                ForgeKindler.KindleTheForge(command, _platform, allowReadOnlyTarget: true);
 
                 if (_includeTables) ExtractMySqlTableDefinitions(command, targetSchema);
                 if (_includeUserDefinedFunctions) ScriptMySqlFunctions(command, targetSchema);

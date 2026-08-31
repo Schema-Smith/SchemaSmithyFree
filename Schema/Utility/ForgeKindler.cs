@@ -49,12 +49,25 @@ public static class ForgeKindler
     /// helpers. Otherwise drops superseded PG overloads (PG only), re-kindles, and re-stamps.
     /// </summary>
     public static void KindleTheForge(IDbCommand command, Platform platform, bool forceReKindle = false,
-        IngestEncoding encoding = IngestEncoding.Json, int serverMajorVersion = 0, string policy = "warn")
+        IngestEncoding encoding = IngestEncoding.Json, int serverMajorVersion = 0, string policy = "warn",
+        bool allowReadOnlyTarget = false)
     {
         AcquireKindleLock(command, platform); // throws ArgumentException for unsupported platforms (before the try)
         try
         {
             var expected = ComputeKindleStamp(platform, encoding, serverMajorVersion, policy);
+
+            // Extraction only ever READS the helpers, so it opts in to running against a read-only
+            // target -- an Availability Group readable secondary being the case that matters, since it
+            // is the copy people are allowed to hammer. Deploy does not opt in: it genuinely cannot work
+            // against a read-only database, and failing here with a clear reason beats failing later on
+            // the first write.
+            if (allowReadOnlyTarget && ReadOnlyTargetDetector.IsReadOnly(command, platform))
+            {
+                VerifyKindledOnReadOnlyTarget(command, platform, expected);
+                return;
+            }
+
             var current = ReadStamp(command, platform);
             if (!forceReKindle && string.Equals(current, expected, StringComparison.Ordinal))
             {
@@ -417,6 +430,105 @@ public static class ForgeKindler
     /// by querying pg_class/pg_namespace instead, and only issuing the second SELECT when the table
     /// is confirmed to exist.
     /// </summary>
+    /// <summary>
+    /// Does the kindle-stamp store exist at all? Distinguishes "never kindled here" (a hard error on a
+    /// read-only target) from "kindled, but currency unknown" (a warning). ReadStamp collapses both to
+    /// null, which is right for its own callers and wrong for this one.
+    /// </summary>
+    internal static bool KindleStampStoreExists(IDbCommand command, Platform platform)
+    {
+        command.CommandText = platform.GetBasePlatform() switch
+        {
+            Platform.SqlServer =>
+                "SELECT CASE WHEN OBJECT_ID('[SchemaSmith].[KindleStamp]', 'U') IS NULL THEN 0 ELSE 1 END",
+            Platform.PostgreSQL =>
+                "SELECT COUNT(*) FROM pg_catalog.pg_class c " +
+                "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace " +
+                "WHERE n.nspname = 'SchemaSmith' AND c.relname = 'KindleStamp' AND c.relkind = 'r'",
+            Platform.MySQL =>
+                "SELECT COUNT(*) FROM information_schema.tables " +
+                "WHERE table_schema = DATABASE() AND table_name = 'SchemaSmith_KindleStamp'",
+            _ => throw new ArgumentException($"Unsupported platform: {platform}", nameof(platform))
+        };
+        var raw = command.ExecuteScalar();
+        return raw != null && raw != DBNull.Value && Convert.ToInt64(raw) > 0;
+    }
+
+    /// <summary>What a read-only target's helper objects are, relative to this build.</summary>
+    public enum ReadOnlyKindleState
+    {
+        /// <summary>Never kindled here. Nothing to extract with — a hard error.</summary>
+        NotKindled,
+        /// <summary>Kindled, but the stamp cannot be read. Usable, currency unknown — warn and say so.</summary>
+        Unverifiable,
+        /// <summary>Kindled at a different version than this build. Usable but possibly incomplete — warn.</summary>
+        Stale,
+        /// <summary>Kindled and matching this build. Proceed silently.</summary>
+        Current
+    }
+
+    /// <summary>
+    /// Decide what a read-only target's helpers are, kept separate from the I/O so the four outcomes can
+    /// be tested without a database. <paramref name="readStamp"/> is deferred because it is only worth a
+    /// round trip once the store is known to exist.
+    /// </summary>
+    internal static ReadOnlyKindleState ClassifyReadOnlyKindle(bool storeExists, Func<string> readStamp, string expectedStamp)
+    {
+        if (!storeExists) return ReadOnlyKindleState.NotKindled;
+
+        var current = readStamp();
+        if (string.IsNullOrEmpty(current)) return ReadOnlyKindleState.Unverifiable;
+
+        return string.Equals(current, expectedStamp, StringComparison.Ordinal)
+            ? ReadOnlyKindleState.Current
+            : ReadOnlyKindleState.Stale;
+    }
+
+    /// <summary>
+    /// A read-only target cannot be kindled, so confirm it is usable instead.
+    /// <para>Three outcomes, and the split is deliberate. Helpers <b>missing</b> is a hard error: there
+    /// is nothing to extract with, and proceeding would fail later with a confusing "could not find
+    /// stored procedure" or, worse, quietly produce nothing. Helpers <b>stale</b> is a warning rather
+    /// than an error, because refusing would make a secondary useless the moment the primary is one
+    /// version ahead — which is most of the time. Helpers present but <b>unverifiable</b> is also a
+    /// warning, and says exactly that rather than implying everything is fine.</para>
+    /// </summary>
+    internal static void VerifyKindledOnReadOnlyTarget(IDbCommand command, Platform platform, string expectedStamp)
+    {
+        var state = ClassifyReadOnlyKindle(KindleStampStoreExists(command, platform),
+                                           () => ReadStamp(command, platform), expectedStamp);
+
+        if (state == ReadOnlyKindleState.NotKindled)
+            throw new InvalidOperationException(
+                "The SchemaSmith helper objects are not present on this read-only database, and they cannot be "
+                + "created here. Kindle on the primary (any deploy or extraction against a writable copy does "
+                + "it) and let the change reach this replica, then re-run. SchemaSmith does not attempt the "
+                + "install because a read-only target rejects every write it would need.");
+
+        if (state == ReadOnlyKindleState.Unverifiable)
+        {
+            Log.Warn("  Read-only target: kindling was SKIPPED and its currency could NOT be verified — the "
+                     + "SchemaSmith helper objects present here MIGHT be out of date, and an extraction taken "
+                     + "with helpers older than this build can be silently wrong. Verify against the primary "
+                     + "if the result looks unexpected.");
+            return;
+        }
+
+        if (state == ReadOnlyKindleState.Stale)
+        {
+            Log.Warn($"  Read-only target: kindling was SKIPPED and the helper objects here are OUT OF DATE "
+                     + $"(found {Abbreviate(ReadStamp(command, platform))}, this build expects {Abbreviate(expectedStamp)}). Extraction "
+                     + "will proceed against them and may not reflect everything this build understands. Kindle on "
+                     + "the primary and let it reach this replica to clear the warning.");
+            return;
+        }
+
+        Log.Info($"  Read-only target: kindling skipped; helper objects are current ({Abbreviate(expectedStamp)})");
+    }
+
+    private static string Abbreviate(string stamp) =>
+        string.IsNullOrEmpty(stamp) ? "(none)" : (stamp.Length <= 12 ? stamp : stamp[..12] + "…");
+
     internal static string ReadStamp(IDbCommand command, Platform platform)
     {
         if (platform == Platform.PostgreSQL)

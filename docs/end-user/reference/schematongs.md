@@ -87,6 +87,26 @@ Failing here is deliberate. Without the pre-flight, a below-floor source dies de
 
 ---
 
+
+## Extracting from a Read-Only Replica
+
+SchemaTongs installs a small set of helper procedures into the database it reads from, and refreshes them whenever they are out of date. That needs write access — which the copy you most want to extract from often will not give you. A SQL Server Availability Group readable secondary, a PostgreSQL hot standby, and a MySQL/MariaDB replica are all read-only by design, and they are precisely the copies you are allowed to query hard without upsetting anyone.
+
+Against a read-only target SchemaTongs **verifies the helpers instead of installing them**, then extracts as normal. Three outcomes:
+
+| What it finds | What happens |
+|---|---|
+| Helpers present and matching this build | Extraction proceeds; nothing to report. |
+| Helpers present but **older** than this build | **Warning**, then extraction proceeds. |
+| Helpers present, version **not determinable** | **Warning** saying the install was skipped and they might be out of date, then extraction proceeds. |
+| Helpers **absent** | **Error.** Nothing is extracted. |
+
+> **Action required:** if extraction stops because the helpers are absent, run SchemaSmith once against the **primary** — any deploy or any extraction against a writable copy installs them — and let the change reach the replica. SchemaSmith does not attempt the install itself, because a read-only target rejects every write it needs.
+
+A stale-helpers warning is not fatal on purpose. Refusing would make a replica useless the moment the primary is one version ahead of your CLI, which is most of the time. The warning exists because an extraction taken with older helpers can be quietly incomplete — it may not know about properties this build understands — so treat it as a reason to check the result against the primary if anything looks wrong, not as a reason to stop.
+
+Deployment is unaffected: SchemaQuench still requires a writable target, because applying a schema genuinely cannot work without one. Use [`SkipIfReadOnly`](schema-packages.md) on a template if you want a deploy to pass over a read-only target rather than fail against it.
+
 ## Configuration Reference
 
 SchemaTongs reads configuration from multiple sources, merged in precedence order (highest priority last):
