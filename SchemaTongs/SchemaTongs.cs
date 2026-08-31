@@ -271,6 +271,21 @@ public class SchemaTongs
         PreFlightVersionGuard.CheckOrThrow(info, server, targetDb);
     }
 
+    // Detected SOURCE server major, kept so extraction queries can gate a filter on a catalog column
+    // that does not exist on older servers. 0 until version detection has run.
+    private int _sourceMajor;
+
+    /// <summary>
+    /// Excludes a LIVE ledger view (<c>&lt;table&gt;_Ledger</c>), which a ledger table generates and
+    /// which carries no engine-reserved name prefix — only <c>sys.tables.ledger_view_id</c> identifies
+    /// it. That column is 2022+, so the clause is added only when the source is new enough to have it;
+    /// referencing it statically would fail to bind on an older server.
+    /// </summary>
+    private string LedgerViewFilter() =>
+        _sourceMajor >= 16
+            ? Environment.NewLine + "   AND NOT EXISTS (SELECT 1 FROM sys.tables lt WITH (NOLOCK) WHERE lt.ledger_view_id = o.object_id)"
+            : "";
+
     public void CastTemplate()
     {
         _stopwatch.Start();
@@ -1030,6 +1045,7 @@ public class SchemaTongs
                         FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.SourceCompatEncoding],
                         info.CompatibilityLevel, info.ServerComparable);
                 sourceMajor = info?.ServerComparable ?? 0;
+                _sourceMajor = sourceMajor;
             }
 
             _progressLog.Info("Kindling The Forge");
@@ -1573,6 +1589,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
  WHERE o.type = 'V'
    AND o.is_ms_shipped = 0
    AND s.name <> 'SchemaSmith'
+   AND o.name NOT LIKE 'MSSQL[_]DroppedLedgerView[_]%'" + LedgerViewFilter() + @"
  ORDER BY s.name, o.name";
 
         var views = new List<(string Schema, string Name)>();
@@ -3102,6 +3119,11 @@ SELECT TABLE_SCHEMA, TABLE_NAME
     -- object id from the source server, so the extracted file could not be deployed anywhere. Matched
     -- by its engine-reserved prefix, the same way the replication tables above are.
     AND TABLE_NAME NOT LIKE 'MSSQL[_]LedgerHistoryFor[_]%'
+    -- Dropping a ledger table does NOT remove it: SQL Server renames it to
+    -- MSSQL_DroppedLedgerTable_<name>_<guid> and leaves MSSQL_DroppedLedgerHistory_* beside it.
+    -- Both report is_ms_shipped = 0, and the History one has is_dropped_ledger_table = 0, so the
+    -- obvious flag misses it -- the engine-reserved name prefix is the reliable discriminator.
+    AND TABLE_NAME NOT LIKE 'MSSQL[_]DroppedLedger%'
   ORDER BY 1, 2
 ";
 
