@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Linq;
 using log4net;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
@@ -65,6 +66,11 @@ public class HistoryTableExtractionTests
                     PERIOD FOR SYSTEM_TIME (SysStart, SysEnd))
                 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.Versioned_Hist))
                 """);
+
+            // Graph tables join the fixture so one round trip covers #402 and #403 together --
+            // both were "extraction emits something that cannot be deployed".
+            Run(cmd, "CREATE TABLE dbo.GraphPerson (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NULL) AS NODE");
+            Run(cmd, "CREATE TABLE dbo.GraphKnows (Since DATE NULL) AS EDGE");
 
             cmd.CommandText = "SELECT COUNT(*) FROM sys.all_columns "
                               + "WHERE object_id = OBJECT_ID('sys.tables') AND name = 'ledger_type'";
@@ -174,6 +180,10 @@ public class HistoryTableExtractionTests
             ["Source:User"] = root["SqlServer:User"],
             ["Source:Password"] = root["SqlServer:Password"],
             ["Source:Database"] = _db,
+            ["Target:Server"] = root["SqlServer:Server"],
+            ["Target:Port"] = root["SqlServer:Port"],
+            ["Target:User"] = root["SqlServer:User"],
+            ["Target:Password"] = root["SqlServer:Password"],
             ["ScriptTokens:MainDB"] = _db,
             ["Product:Path"] = _tempProductPath,
             ["Product:Name"] = ProductName,
@@ -192,8 +202,13 @@ public class HistoryTableExtractionTests
             ["ShouldCast:FullTextCatalogs"] = "false",
             ["ShouldCast:FullTextStopLists"] = "false",
         };
+        // Both halves need them: extraction reads Source:*, the redeploy reads Target:*, and a missing
+        // TrustServerCertificate surfaces only as "Error validating configured servers".
         foreach (var kv in ConnectionString.ReadProperties(root, "SqlServer:ConnectionProperties"))
+        {
             values[$"Source:ConnectionProperties:{kv.Key}"] = kv.Value;
+            values[$"Target:ConnectionProperties:{kv.Key}"] = kv.Value;
+        }
 
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
     }
