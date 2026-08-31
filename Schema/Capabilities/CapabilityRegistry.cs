@@ -34,6 +34,11 @@ namespace Schema.Capabilities
             // ---- SQL Server (binary/major-version gated via fn_ServerMajorVersion; all skipped) -------------
             rows.Add(new("temporal", "Temporal tables (system-versioning)", Platform.SqlServer,
                 13, "SQL Server 2016", null, DegradeKind.Skip, "temporal (SQL Server 2016)"));
+
+            // Reduced, not Skipped: without the graph clause the table still deploys with all its
+            // declared columns -- only the node/edge semantics are lost.
+            rows.Add(new("graph-table", "Graph tables (NODE/EDGE)", Platform.SqlServer,
+                14, "SQL Server 2017", null, DegradeKind.Reduced, "graph table (SQL Server 2017)"));
             rows.Add(new("data-masking", "Dynamic data masking", Platform.SqlServer,
                 13, "SQL Server 2016", null, DegradeKind.Skip, "data masking (SQL Server 2016)"));
             rows.Add(new("always-encrypted", "Always Encrypted", Platform.SqlServer,

@@ -20,6 +20,7 @@ namespace Schema.UnitTests.Capabilities
         private static readonly HashSet<string> KnownManifestObjectTypes = new()
         {
             "temporal (SQL Server 2016)",
+            "graph table (SQL Server 2017)",
             "data masking (SQL Server 2016)",
             "Always Encrypted (SQL Server 2016)",
             "columnstore index (SQL Server 2012/2014)",

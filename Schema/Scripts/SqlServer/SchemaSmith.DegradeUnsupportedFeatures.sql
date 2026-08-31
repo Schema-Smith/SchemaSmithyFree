@@ -43,6 +43,31 @@ BEGIN
     END
   END
 
+  -- Graph tables (AS NODE / AS EDGE) -- SQL Server 2017 (major 14). Below it the clause is not syntax at
+  -- all, so an ungated emit fails with a bare parser error naming nothing useful. Clearing GraphType
+  -- deploys the table as an ordinary one, which keeps its columns and data shape intact and loses only
+  -- the graph semantics -- a Reduced degrade rather than a skipped table.
+  IF @v_major < 14 AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE [GraphType] IN ('Node', 'Edge'))
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE T.[GraphType] IN ('Node', 'Edge')
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'Graph tables (AS NODE / AS EDGE) require SQL Server 2017 (detected major ' +
+                   CONVERT(NVARCHAR(10), @v_major) + '); table(s): ' + LEFT(@v_list, 1800) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'graph table (SQL Server 2017)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE T.[GraphType] IN ('Node', 'Edge')
+      RAISERROR('  Graph node/edge skipped: requires SQL Server 2017 - the table deploys as an ordinary table (downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET [GraphType] = 'None' WHERE [GraphType] IN ('Node', 'Edge')
+    END
+  END
+
+
   -- Dynamic data masking (MASKED WITH) -- SQL Server 2016 (major 13).
   IF @v_major < 13 AND EXISTS (SELECT 1 FROM #Columns WITH (NOLOCK) WHERE RTRIM(ISNULL([DataMaskFunction], '')) <> '')
   BEGIN

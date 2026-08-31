@@ -128,6 +128,18 @@ namespace Schema.Domain.SqlServer
         // rather than silently ignored, the same posture FileGroup takes.
         [JsonProperty(Order = 114, NullValueHandling = NullValueHandling.Ignore)]
         public string FileStreamFileGroup { get; set; }
+        // Graph tables (#graph): "Node" or "Edge" appends AS NODE / AS EDGE to the CREATE TABLE.
+        // Null or "None" is an ordinary table.
+        //
+        // Create-time only, and that is the whole design constraint: SQL Server has no ALTER for it --
+        // ALTER TABLE ... SET (AS NODE) is not syntax at all (error 156) -- so changing this on a table
+        // that already exists is refused by name rather than attempted.
+        //
+        // The system-generated pseudo-columns SQL Server adds ($node_id, $edge_id, graph_id and the edge
+        // *_id pair) are excluded from extraction via sys.columns.graph_type; see #402.
+        [SchemaProperty(Pattern = "None|Node|Edge")]
+        [JsonProperty(Order = 115, NullValueHandling = NullValueHandling.Ignore)]
+        public string GraphType { get; set; }
 
     }
 }

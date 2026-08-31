@@ -138,6 +138,38 @@ BEGIN TRY
     RAISERROR('Table %s declares filegroup %s, but is currently deployed on partition scheme %s. SchemaSmith cannot place a partitioned table on a single filegroup -- remove the declared FileGroup, or migrate the table manually.', 16, 1, @v_PsTable, @v_PsDeclared, @v_PsScheme)
   END
 
+  RAISERROR('Validate declared GraphType matches deployed', 10, 100) WITH NOWAIT
+  -- Graph tables are create-time only: SQL Server has no ALTER for them at all -- ALTER TABLE ... SET
+  -- (AS NODE) is error 156, not even syntax. So a declaration that disagrees with the deployed table
+  -- cannot be applied, and the choice is refuse or silently ignore. Refusing names the table and the
+  -- property; ignoring would leave a package permanently claiming something untrue about its target.
+  --
+  -- sys.tables.is_node / is_edge are 2017+ and this is the JSON tier (2017 floor), but the same proc
+  -- body is kindled for the XML tier, which reaches older servers -- hence the version guard around the
+  -- read rather than a static reference.
+  IF SchemaSmith.fn_ServerMajorVersion() >= 14
+  BEGIN
+    IF OBJECT_ID('tempdb..#DeployedGraphType') IS NOT NULL DROP TABLE #DeployedGraphType
+    CREATE TABLE #DeployedGraphType (FullName NVARCHAR(1010), Declared NVARCHAR(10), Deployed NVARCHAR(10))
+    EXEC sp_executesql N'
+      INSERT INTO #DeployedGraphType (FullName, Declared, Deployed)
+        SELECT t.[Schema] + ''.'' + t.[Name],
+               ISNULL(NULLIF(t.[GraphType], ''''), ''None''),
+               CASE WHEN st.is_node = 1 THEN ''Node'' WHEN st.is_edge = 1 THEN ''Edge'' ELSE ''None'' END
+          FROM #Tables t WITH (NOLOCK)
+          JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + ''.'' + t.[Name])
+         WHERE t.NewTable = 0'
+
+    IF EXISTS (SELECT 1 FROM #DeployedGraphType WHERE Declared <> Deployed)
+    BEGIN
+      DECLARE @v_GraphTable NVARCHAR(1010), @v_GraphDeclared NVARCHAR(10), @v_GraphLive NVARCHAR(10)
+      SELECT TOP 1 @v_GraphTable = FullName, @v_GraphDeclared = Declared, @v_GraphLive = Deployed
+        FROM #DeployedGraphType WHERE Declared <> Deployed
+      RAISERROR('Table %s declares GraphType %s, but is currently deployed as %s. SQL Server has no ALTER that converts a table to or from a graph node/edge table, so SchemaSmith will not attempt it -- recreate the table, or correct the declared GraphType to match.', 16, 1, @v_GraphTable, @v_GraphDeclared, @v_GraphLive)
+    END
+  END
+
+
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropTablesRemovedFromProduct to 0 so the drop block below never runs. Record the tables that
   -- WOULD have been dropped by absence (owned by this product, absent from the package, not already
@@ -461,6 +493,24 @@ BEGIN TRY
                                    AND c.[ColumnName] = cc.[ColumnName]
       WHERE NOT EXISTS (SELECT * FROM #ColumnChanges cc2 WITH (NOLOCK) WHERE cc2.[Schema] = cc.[Schema] AND cc2.[TableName] = cc.[TableName] AND cc2.[ColumnName] = cc.[ColumnName])
   
+  -- Graph pseudo-columns must never be considered for a drop. They exist because the table is a node or
+  -- edge table, not because anything declared them, so the drop-by-absence pass would otherwise try to
+  -- remove every one on the SECOND deploy -- and SQL Server refuses with "Internal graph columns cannot
+  -- be altered", which turns an unchanged package into a failing one.
+  --
+  -- sys.columns.graph_type is 2017+, so it is staged behind a version guard rather than referenced
+  -- statically: this proc body is kindled for the XML tier too, which reaches older servers. Empty below
+  -- 2017, where graph tables cannot exist.
+  IF OBJECT_ID('tempdb..#GraphColumns') IS NOT NULL DROP TABLE #GraphColumns
+  CREATE TABLE #GraphColumns (TableSchema NVARCHAR(256), TableName NVARCHAR(256), ColumnName NVARCHAR(256))
+  IF SchemaSmith.fn_ServerMajorVersion() >= 14
+    EXEC sp_executesql N'
+      INSERT INTO #GraphColumns (TableSchema, TableName, ColumnName)
+        SELECT SCHEMA_NAME(st.[schema_id]), st.[name], c.[name]
+          FROM sys.columns c WITH (NOLOCK)
+          JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = c.[object_id]
+         WHERE c.graph_type IS NOT NULL'
+
   RAISERROR('Detect Column Drops', 10, 100) WITH NOWAIT
   INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, MustSwapColumn, [DropOnly])
     SELECT t.[Schema], [TableName] = t.[Name], [ColumnName] = '[' + COLUMN_NAME + ']', '', '', 0, 0, 1
@@ -473,6 +523,9 @@ BEGIN TRY
                             AND c.[TableName] = t.[Name]
                             AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = COLUMN_NAME)
         AND NOT (t.IsTemporal = 1 AND COLUMN_NAME IN ('ValidFrom', 'ValidTo'))
+        AND NOT EXISTS (SELECT 1 FROM #GraphColumns g WITH (NOLOCK)
+                         WHERE g.TableSchema = TABLE_SCHEMA AND g.TableName = TABLE_NAME
+                           AND g.ColumnName = COLUMN_NAME)
 
   -- #358: A DropOnly column whose drop is SUPPRESSED (env PreventDrop forces
   -- @DropColumnsRemovedFromProduct = 0, or the per-table cascade opts out) survives -- so its

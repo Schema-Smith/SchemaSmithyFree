@@ -586,6 +586,10 @@
     "FileStreamFileGroup": {
       "type": "string"
     },
+    "GraphType": {
+      "type": "string",
+      "pattern": "None|Node|Edge"
+    },
     "Extensions": {
       "type": "object",
       "required": [

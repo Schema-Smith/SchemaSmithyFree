@@ -78,13 +78,18 @@ BEGIN TRY
                                   -- Filegroup placement (#filegroups): ON comes right after the column list,
                                   -- BEFORE the WITH clause, per CREATE TABLE's own grammar. Existence was
                                   -- already validated above, so this can emit unconditionally.
+                                  -- Graph tables (#graph): AS NODE / AS EDGE follows the column list.
+                                  -- Create-time only -- SQL Server has no ALTER for it -- so a change on an
+                                  -- existing table is refused in ModifiedTableQuench rather than attempted.
+                                  CASE WHEN T.[GraphType] = 'Node' THEN ' AS NODE'
+                                       WHEN T.[GraphType] = 'Edge' THEN ' AS EDGE' ELSE '' END +
                                   CASE WHEN T.[FileGroup] IS NOT NULL THEN ' ON ' + T.[FileGroup] ELSE '' END +
                                   -- Sparse columns and a COLUMN_SET are incompatible with data compression, and SQL Server 2008
                                   -- REJECTS the clause outright on such a table -- even DATA_COMPRESSION=NONE. Modern servers
                                   -- accept the redundant NONE, so this only fails at the floor, where the XML ingest path runs.
                                   CASE WHEN t.[HasSparseOrColumnSet] = 0 AND ISNULL(t.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + ISNULL(t.[CompressionType], 'NONE') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + T.[Schema] + '.' + T.[Name] + ''', ''created'');' AS NVARCHAR(MAX))
-                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[FileGroup], T.[VariantName],
+                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[FileGroup], T.[VariantName], T.[GraphType],
                                         HasSparseOrColumnSet = CASE WHEN EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
                                                                                   WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
                                                                                     AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1)) THEN 1 ELSE 0 END,

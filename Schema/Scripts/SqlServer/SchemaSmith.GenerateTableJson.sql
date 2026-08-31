@@ -52,6 +52,9 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
          WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
        st.is_tracked_by_cdc AS [EnableCDC],
+       -- Graph tables (#graph). Emitted only when the table IS one, so no existing package gains a
+       -- "GraphType": "None" on every table. is_node/is_edge are 2017+, which the JSON tier requires.
+       CASE WHEN st.is_node = 1 THEN 'Node' WHEN st.is_edge = 1 THEN 'Edge' END AS [GraphType],
        -- Table-level Change Tracking round-trip. Emitted only when ON, like IsTemporal above: every
        -- extracted package would otherwise gain "EnableChangeTracking": false on every table.
        -- sys.change_tracking_tables shipped with Change Tracking in 2008, so it is safe to read

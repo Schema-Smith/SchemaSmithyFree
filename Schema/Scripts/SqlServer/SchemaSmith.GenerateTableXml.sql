@@ -119,6 +119,13 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 14
 -- columns report generated_always_type = 0 like any user column, and the four $-prefixed ones are
 -- is_hidden = 0. Their names end in a per-table GUID, so emitting them yields a package that cannot be
 -- deployed anywhere. Mirrors the JSON twin's `sc.graph_type IS NULL` filter.
+-- sys.tables.is_node / is_edge are 2017+, staged behind the same guard as #GraphCols and simply
+-- 'None' below 2017, where graph tables cannot exist.
+DECLARE @v_GraphType NVARCHAR(10) = NULL
+IF SchemaSmith.fn_ServerMajorVersion() >= 14
+  EXEC sp_executesql N'SELECT @p_GraphType = CASE WHEN is_node = 1 THEN ''Node'' WHEN is_edge = 1 THEN ''Edge'' END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId',
+    N'@p_ObjId INT, @p_GraphType NVARCHAR(10) OUTPUT', @p_ObjId = @v_ObjectId, @p_GraphType = @v_GraphType OUTPUT
+
 CREATE TABLE #GraphCols ([column_id] INT NOT NULL)
 IF SchemaSmith.fn_ServerMajorVersion() >= 14
   EXEC sp_executesql N'INSERT INTO #GraphCols ([column_id]) SELECT column_id FROM sys.columns WITH (NOLOCK) WHERE graph_type IS NOT NULL AND [object_id] = @p_ObjId',
@@ -162,6 +169,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
          WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
+       @v_GraphType AS [GraphType],
        -- Table-level Change Tracking round-trip -- emitted only when ON, like IsTemporal above.
        CASE WHEN ctt.[object_id] IS NOT NULL THEN 'true' END AS [EnableChangeTracking],
        CASE WHEN ctt.is_track_columns_updated_on = 1 THEN 'true' END AS [TrackColumnsUpdated],
