@@ -288,7 +288,9 @@ Version-adaptive packages need to gate on what the target can actually do — ap
 
 ### Gate syntax on compatibility level, gate features on server version
 
-These are two different questions, and confusing them is a real footgun. A modern binary can host a database left at an old compatibility level — a SQL Server 2022 server (`{{ServerMajorVersion}}` = `16`) with a database at compatibility level 100 (`{{CompatibilityLevel}}` = `100`). Compatibility-level-gated **syntax** — `STRING_AGG … WITHIN GROUP` and `STRING_SPLIT` (compat 130), `TRY_CONVERT` (compat 110), `OPENJSON` (compat 130) — parse-errors on that database even though the binary is brand new. So:
+These are two different questions, and confusing them is a real footgun. A modern binary can host a database left at an old compatibility level — a SQL Server 2022 server (`{{ServerMajorVersion}}` = `16`) with a database at compatibility level 100 (`{{CompatibilityLevel}}` = `100`). Compatibility-level-gated **syntax** — `STRING_SPLIT` and `OPENJSON` (compat 130), `TRY_CONVERT` and `STRING_AGG`'s optional `WITHIN GROUP (ORDER BY …)` clause (compat 110) — parse-errors on that database even though the binary is brand new. So:
+
+> ⚠ **`STRING_AGG` itself is *not* compatibility-level gated**, and this list used to imply it was. The function requires **SQL Server 2017** (server major 14) and parses at every compatibility level down to 100 on a server that has it — so it is a `{{ServerMajorVersion}}` gate, not a `{{CompatibilityLevel}}` one. Only its optional `WITHIN GROUP (ORDER BY …)` clause carries a compatibility-level requirement (110). Conflating the two is what allowed a compat-only probe to emit `STRING_AGG` onto a SQL Server 2016 server, which reports compatibility level 130 while having no `STRING_AGG` at all — see [SchemaQuench — the encoding switch](schemaquench.md#version-adaptive-code-generation), corrected for the same reason.
 
 - **Syntax availability** follows the database's compatibility level → gate on `{{CompatibilityLevel}}`.
 - **Server features** (a new engine capability, a version-only DDL form) follow the binary → gate on `{{ServerMajorVersion}}`.
