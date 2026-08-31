@@ -113,6 +113,17 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 14
 -- pre-2012 binary. Stage the temporary-stat keys via a fn_ServerMajorVersion()>=11 guarded dynamic INSERT (empty
 -- below 2012, where temporary statistics cannot exist) and exclude them from the extracted stats list below,
 -- matching the JSON twin's `is_temporary = 0` filter (temporary stats appear on Always On readable secondaries).
+-- sys.columns.graph_type is 2017+, so a STATIC reference is a CREATE-time "invalid column" error on an
+-- older binary. Stage the graph pseudo-column ids behind a fn_ServerMajorVersion()>=14 guard -- empty
+-- below 2017, where graph tables cannot exist. graph_type is the only reliable discriminator: these
+-- columns report generated_always_type = 0 like any user column, and the four $-prefixed ones are
+-- is_hidden = 0. Their names end in a per-table GUID, so emitting them yields a package that cannot be
+-- deployed anywhere. Mirrors the JSON twin's `sc.graph_type IS NULL` filter.
+CREATE TABLE #GraphCols ([column_id] INT NOT NULL)
+IF SchemaSmith.fn_ServerMajorVersion() >= 14
+  EXEC sp_executesql N'INSERT INTO #GraphCols ([column_id]) SELECT column_id FROM sys.columns WITH (NOLOCK) WHERE graph_type IS NOT NULL AND [object_id] = @p_ObjId',
+    N'@p_ObjId INT', @p_ObjId = @v_ObjectId
+
 CREATE TABLE #TempStats ([object_id] INT NOT NULL, stats_id INT NOT NULL)
 IF SchemaSmith.fn_ServerMajorVersion() >= 11
   EXEC sp_executesql N'INSERT INTO #TempStats ([object_id], stats_id) SELECT [object_id], stats_id FROM sys.stats WITH (NOLOCK) WHERE is_temporary = 1 AND [object_id] = @p_ObjId',
@@ -215,6 +226,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     -- from IsTemporal on apply (#369). generated_always_type is 2016+ -> staged into #ColMeta
                     -- (0 below 2016, where no period columns exist).
                     AND ISNULL(cm.GeneratedAlwaysType, 0) = 0
+                    -- and the graph pseudo-columns staged above (empty below 2017).
+                    AND NOT EXISTS (SELECT 1 FROM #GraphCols g WITH (NOLOCK) WHERE g.[column_id] = sc.column_id)
                   ORDER BY c.COLUMN_NAME
                   FOR XML PATH('Columns'), TYPE),
        (SELECT 'true' AS [@json:Array],
@@ -260,6 +273,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
             AND is_hypothetical = 0
             AND is_disabled = 0
             AND index_id > 0
+            -- GRAPH_UNIQUE_INDEX_<guid> over the graph_id column: excluding the columns alone
+            -- would leave an index pointing at one that is no longer declared.
+            AND NOT EXISTS (SELECT 1 FROM sys.index_columns gic WITH (NOLOCK)
+                            JOIN #GraphCols g WITH (NOLOCK) ON g.[column_id] = gic.column_id
+                           WHERE gic.[object_id] = si.[object_id] AND gic.index_id = si.index_id)
           ORDER BY [Name]
           FOR XML PATH('Indexes'), TYPE),
        (SELECT 'true' AS [@json:Array],

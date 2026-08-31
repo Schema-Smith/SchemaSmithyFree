@@ -147,7 +147,17 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     -- Exclude the temporal period columns (GENERATED ALWAYS AS ROW START/END). SchemaSmith
                     -- regenerates ValidFrom/ValidTo from IsTemporal by convention on apply, so emitting them
                     -- as user columns would double-declare them on re-deploy (#369).
-                    AND sc.generated_always_type = 0) x
+                    AND sc.generated_always_type = 0
+                    -- Exclude SQL Server graph pseudo-columns. A node or edge table carries
+                    -- system-generated columns ($node_id, $edge_id, $from_id, $to_id, graph_id and
+                    -- the *_obj_id pair) whose names end in a per-table GUID, so emitting them
+                    -- produces a package that cannot be deployed anywhere -- not even back to the
+                    -- database it came from. generated_always_type does NOT catch them (they all
+                    -- report 0/NOT_APPLICABLE) and neither does is_hidden (the four $-prefixed ones
+                    -- are is_hidden = 0). sys.columns.graph_type is the discriminator: non-null for
+                    -- exactly these, null for every user column -- including one merely NAMED like
+                    -- them. 2017+, which the JSON ingest tier already requires (STRING_AGG).
+                    AND sc.graph_type IS NULL) x
           -- Column sequence: 'Name' (default) or 'Physical', the table's own order. The ordinal is looked up
           -- rather than projected: this is SELECT * over the derived table, so adding ORDINAL_POSITION to it
           -- would write the ordinal into the package file. The lookup only runs when Physical is asked for.
@@ -199,6 +209,15 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
             AND is_hypothetical = 0
             AND is_disabled = 0
             AND index_id > 0
+            -- A graph table also gets a system-generated GRAPH_UNIQUE_INDEX_<guid> over its
+            -- graph_id column. Both names carry a per-table GUID, so emitting the index is the
+            -- same undeployable-package problem as emitting the column, and excluding the columns
+            -- alone leaves an index pointing at one that is no longer declared.
+            AND NOT EXISTS (SELECT 1 FROM sys.index_columns gic WITH (NOLOCK)
+                            JOIN sys.columns gc WITH (NOLOCK)
+                              ON gc.[object_id] = gic.[object_id] AND gc.column_id = gic.column_id
+                           WHERE gic.[object_id] = si.[object_id] AND gic.index_id = si.index_id
+                             AND gc.graph_type IS NOT NULL)
           ORDER BY [Name]
           FOR JSON AUTO) AS [Indexes],
        (SELECT '[' + i.[name] COLLATE DATABASE_DEFAULT + ']' AS [Name],
