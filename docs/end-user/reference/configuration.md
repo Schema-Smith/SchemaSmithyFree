@@ -729,7 +729,7 @@ scripts for these.
 | PostgreSQL | belongs to a logical replication publication, inherits or is inherited from, or is partitioned |
 | MariaDB | is system-versioned, or has an application-time period |
 
-The refusal fires in `--WhatIf` too, so a preview shows the impossibility rather than leaving it to the
+The refusal fires under `WhatIfONLY` too, so a preview shows the impossibility rather than leaving it to the
 real run.
 
 A rebuild is also **skipped** — quietly, and the table is altered in place instead — when this run has

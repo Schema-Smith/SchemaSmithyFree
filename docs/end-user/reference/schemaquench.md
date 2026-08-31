@@ -1222,7 +1222,7 @@ A table's `DataDelivery` block can also be an array of independently-gated deliv
 
 A delivery's gate resolves the same token vocabulary a folder gate resolves: [`{{ServerMajorVersion}}` and `{{CompatibilityLevel}}`](script-tokens.md#servermajorversion-and-compatibilitylevel) for version gating (see [Gating on the target version](#gating-on-the-target-version) above), plus `{{SchemaName}}` inside a schema-template iteration. A dev/test-only delivery can therefore combine both in one gate -- `"{{CompatibilityLevel}} >= 130 AND DB_NAME() LIKE '%_dev'"` -- without hand-writing the version predicate.
 
-Gate evaluation also runs during `--WhatIf`, so a dry run reports the same deliver-vs-skip decisions a real quench would make. The `Insert/Update/Delete` CASCADE-FK check (below) only considers deliveries whose gate is currently passing -- a `Delete` variant that's gated off this run can't abort the deployment over a CASCADE FK it will never execute.
+Gate evaluation also runs under `WhatIfONLY`, so a dry run reports the same deliver-vs-skip decisions a real quench would make. The `Insert/Update/Delete` CASCADE-FK check (below) only considers deliveries whose gate is currently passing -- a `Delete` variant that's gated off this run can't abort the deployment over a CASCADE FK it will never execute.
 
 See [Schema Packages -- Multiple Deliveries](schema-packages.md#multiple-deliveries) for the JSON shape, the three common gating patterns, and the delete-overlap warning for multi-delivery tables that mix `Insert/Update/Delete` with overlapping `MergeFilter`s.
 
