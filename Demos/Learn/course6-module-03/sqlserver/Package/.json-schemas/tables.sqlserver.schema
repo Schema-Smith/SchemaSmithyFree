@@ -67,6 +67,9 @@
             "type": "boolean",
             "description": "SQL Server only. When adding this column to an existing table, apply its Default to rows that are already there. Without it a nullable column's existing rows stay NULL. Requires Default; ignored when the column is created with the table."
           },
+          "FileStream": {
+            "type": "boolean"
+          },
           "Extensions": {
             "type": "object",
             "required": [
@@ -579,6 +582,9 @@
     },
     "TrackColumnsUpdated": {
       "type": "boolean"
+    },
+    "FileStreamFileGroup": {
+      "type": "string"
     },
     "Extensions": {
       "type": "object",
