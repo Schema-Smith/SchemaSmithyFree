@@ -148,6 +148,9 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
+       -- Table-level Change Tracking round-trip -- emitted only when ON, like IsTemporal above.
+       CASE WHEN ctt.[object_id] IS NOT NULL THEN 'true' END AS [EnableChangeTracking],
+       CASE WHEN ctt.is_track_columns_updated_on = 1 THEN 'true' END AS [TrackColumnsUpdated],
        -- System-versioning round-trip (#369): emit IsTemporal only when true. sys.tables.temporal_type is
        -- 2016+, so it is read into @v_IsTemporal via the version-gated dynamic pre-stage above (0 below 2016).
        CASE WHEN @v_IsTemporal = 1 THEN 'true' END AS [IsTemporal],
@@ -357,6 +360,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+  LEFT JOIN sys.change_tracking_tables ctt WITH (NOLOCK) ON ctt.[object_id] = st.[object_id]
   WHERE TABLE_NAME = @p_Table
     AND TABLE_SCHEMA = @p_Schema
   FOR XML PATH('Table')

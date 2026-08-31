@@ -99,6 +99,20 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 107)]
         public bool EnableCDC { get; set; }
 
+        // Table-level Change Tracking (#change-tracking). Distinct from the FullTextIndex option spelled
+        // WITH CHANGE_TRACKING = AUTO|MANUAL|OFF, which is unrelated and already implemented.
+        // Requires Change Tracking enabled on the DATABASE (sys.change_tracking_databases). SchemaSmith
+        // does not turn that on -- ALTER DATABASE ... SET CHANGE_TRACKING = ON changes retention and
+        // cleanup for every table in the database. Declaring it without the database toggle is reported
+        // through UnsupportedFeaturePolicy rather than silently skipped.
+        [JsonProperty(Order = 112)]
+        public bool EnableChangeTracking { get; set; }
+
+        // Only meaningful when EnableChangeTracking is true; ignored otherwise. Records WHICH columns
+        // changed, not merely that the row did, at the cost of extra tracking storage.
+        [JsonProperty(Order = 113)]
+        public bool TrackColumnsUpdated { get; set; }
+
         // Filegroup placement (#filegroups): a NAME only -- never a physical file path, which would make
         // the package non-portable across environments. Null means "SQL Server's own default filegroup",
         // preserving today's behavior for every existing package. SchemaSmith does not create filegroups

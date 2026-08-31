@@ -130,6 +130,14 @@ namespace Schema.Capabilities
                 0, "any supported version (needs CDC enabled on the database)", null, DegradeKind.Reduced,
                 "CDC (database not enabled)", "CDC enabled on the database (sys.sp_cdc_enable_db)"));
 
+            // The second database-gated degrade. Its ObjectType must match the string
+            // SchemaSmith.DegradeUnsupportedFeatures writes, or the add-ons cannot join a manifest row
+            // back to the capability that produced it.
+            rows.Add(new("change-tracking-database-toggle", "Change Tracking", Platform.SqlServer,
+                0, "any supported version (needs Change Tracking enabled on the database)", null, DegradeKind.Reduced,
+                "Change Tracking (database not enabled)",
+                "Change Tracking enabled on the database (ALTER DATABASE ... SET CHANGE_TRACKING = ON)"));
+
             // Functional/expression index (including a multi-valued index, CAST(... AS ... ARRAY) —
             // MySQL 8.0.17+, same NULL-COLUMN_NAME/EXPRESSION shape as a plain functional key part, so it
             // rides this same row rather than needing one of its own): below the floor the whole index is

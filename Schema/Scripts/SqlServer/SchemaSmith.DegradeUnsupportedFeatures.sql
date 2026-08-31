@@ -129,4 +129,34 @@ BEGIN
     END
   END
 
+
+  -- Table-level Change Tracking -- the second feature gated by a DATABASE-scoped toggle, and written
+  -- this way from the start precisely because the CDC block above had to be retrofitted after shipping
+  -- the silent version of it. Not the full-text CHANGE_TRACKING option, which is unrelated.
+  --
+  -- Same refusal for the same reason: ALTER DATABASE ... SET CHANGE_TRACKING = ON sets retention and
+  -- auto-cleanup for the whole database, so SchemaSmith names the tables that asked instead of
+  -- reconfiguring the database around one declaration.
+  IF NOT EXISTS (SELECT 1 FROM sys.change_tracking_databases WHERE database_id = DB_ID())
+     AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE EnableChangeTracking = 1)
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE T.EnableChangeTracking = 1
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'Change Tracking requires it enabled on the database (ALTER DATABASE ... SET CHANGE_TRACKING = ON), ' +
+                   'which SchemaSmith does not do for you because it is database-wide; table(s): ' +
+                   LEFT(@v_list, 1700) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'Change Tracking (database not enabled)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE T.EnableChangeTracking = 1
+      RAISERROR('  Change Tracking skipped: not enabled on this database (ALTER DATABASE ... SET CHANGE_TRACKING = ON to allow it - downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET EnableChangeTracking = 0 WHERE EnableChangeTracking = 1
+    END
+  END
+
 END

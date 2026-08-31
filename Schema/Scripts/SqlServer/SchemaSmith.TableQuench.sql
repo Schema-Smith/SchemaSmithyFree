@@ -31,6 +31,9 @@ BEGIN TRY
   EXEC SchemaSmith.ModifiedTableQuench @ProductName = @ProductName, @WhatIf = @WhatIf, @DropUnknownIndexes = @DropUnknownIndexes, @DropTablesRemovedFromProduct = @DropTablesRemovedFromProduct,
                                        @RebuildPolicyMode = @RebuildPolicyMode, @RebuildPolicyThreshold = @RebuildPolicyThreshold, @RebuildPolicyOnOrderMismatch = @RebuildPolicyOnOrderMismatch
   EXEC SchemaSmith.MissingIndexesAndConstraintsQuench @ProductName, @WhatIf
+  -- After the indexes/constraints pass on purpose: enabling change tracking requires a primary key,
+  -- which for a table created in this same run does not exist until the line above has run.
+  EXEC SchemaSmith.ChangeTrackingQuench @WhatIf
   EXEC SchemaSmith.ForeignKeyQuench @ProductName, @WhatIf
   SET NOCOUNT OFF
 END TRY

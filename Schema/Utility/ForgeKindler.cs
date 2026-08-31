@@ -268,6 +268,9 @@ public static class ForgeKindler
                 new("SchemaSmith.MissingTableAndColumnQuench.sql"),
                 new("SchemaSmith.ModifiedTableQuench.sql"),
                 new("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"),
+                // Must follow MissingIndexesAndConstraintsQuench: enabling change tracking requires a
+                // primary key, which a table created in the same run does not have until that pass.
+                new("SchemaSmith.ChangeTrackingQuench.sql"),
                 new("SchemaSmith.ForeignKeyQuench.sql"),
                 new("SchemaSmith.TableQuench.sql", ReplaceParseJson: true),
                 new("SchemaSmith.IndexOnlyQuench.sql"),

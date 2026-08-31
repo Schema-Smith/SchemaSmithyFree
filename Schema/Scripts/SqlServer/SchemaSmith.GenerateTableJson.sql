@@ -48,6 +48,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
        st.is_tracked_by_cdc AS [EnableCDC],
+       -- Table-level Change Tracking round-trip. Emitted only when ON, like IsTemporal above: every
+       -- extracted package would otherwise gain "EnableChangeTracking": false on every table.
+       -- sys.change_tracking_tables shipped with Change Tracking in 2008, so it is safe to read
+       -- statically at the floor -- SchemaSmith.fn_RebuildBlockedReason already does.
+       CASE WHEN ctt.[object_id] IS NOT NULL THEN CAST(1 AS BIT) END AS [EnableChangeTracking],
+       CASE WHEN ctt.is_track_columns_updated_on = 1 THEN CAST(1 AS BIT) END AS [TrackColumnsUpdated],
        -- System-versioning round-trip (#369): emit IsTemporal so an extracted temporal table re-deploys
        -- as temporal (previously omitted -> silently lost on round-trip). Only when true, to keep non-
        -- temporal tables minimal. sys.tables.temporal_type is 2016+ (safe at the current 2017 floor;
@@ -274,6 +280,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
 	   JSON_QUERY('{"ExtendedProperties": {' + (SELECT STRING_AGG(CAST('"' + [Name] + '": "' + CONVERT(NVARCHAR(MAX), [Value]) + '"' AS NVARCHAR(MAX)), ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, default, default) x WHERE x.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)) + '}}') AS [Extensions]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+  LEFT JOIN sys.change_tracking_tables ctt WITH (NOLOCK) ON ctt.[object_id] = st.[object_id]
   LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
   LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
   WHERE TABLE_NAME = @p_Table
