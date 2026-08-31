@@ -440,6 +440,7 @@ Each platform's table definition extends the shared properties with engine-speci
 | `EnableChangeTracking` | bool | `false` | When `true`, the table is enabled for SQL Server change tracking. Requires Change Tracking enabled on the database -- see [Change Tracking (SQL Server)](#change-tracking-sql-server). Unrelated to the full-text index option also spelled `ChangeTracking`. |
 | `TrackColumnsUpdated` | bool | `false` | Only meaningful with `EnableChangeTracking`. When `true`, change tracking records **which columns** changed, not merely that the row did, at the cost of extra tracking storage. |
 | `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
+| `FileStreamFileGroup` | string | `null` | The table's `FILESTREAM_ON` filegroup, as a **name only**. `null` means the database's default FILESTREAM filegroup. Effectively immutable -- SQL Server refuses to reassign a table that already has one, so a declared name differing from the deployed one fails rather than being ignored. See [FILESTREAM (SQL Server)](#filestream-sql-server). |
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
 | `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
 | `HistoryRetentionPeriod` | string | `null` | Retention for the temporal history table, as the SQL Server token (e.g. `"5 YEARS"`, `"90 DAYS"`, `"INFINITE"`). `null` leaves retention unmanaged. |
@@ -547,7 +548,7 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 
 ### SQL Server column extras
 
-`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`. Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
+`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`, `FileStream` (see [FILESTREAM (SQL Server)](#filestream-sql-server)). Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
 
 `IsColumnSet: true` declares `COLUMN_SET FOR ALL_SPARSE_COLUMNS` -- an XML column that aggregates the table's sparse columns. Available at the SQL Server 2008 floor, alongside `Sparse`. Adding a column set and the sparse columns it aggregates together in one deploy always works, whether the table is new or already exists. **Known limitation:** converting an *already-deployed* plain column into a column set in the same deploy that also introduces a brand-new sparse column is not supported -- the new sparse column commits before the conversion runs, and SQL Server refuses a column set on a table that already has a sparse column. The conversion works on its own (no new sparse columns in the same deploy, and none pre-existing on the table); combined with a new sparse column, it fails with SQL Server's own error.
 
@@ -1027,6 +1028,53 @@ Removing `EnableChangeTracking` (or setting it to `false`) disables tracking on 
 ### Not the full-text option
 
 Full-text indexes carry an unrelated option also spelled `ChangeTracking`, with values `AUTO`, `MANUAL`, and `OFF` -- it governs how a full-text index refreshes, and has nothing to do with table change tracking. See [Full-Text Index (SQL Server)](#full-text-index-sql-server).
+
+---
+
+## FILESTREAM (SQL Server)
+
+FILESTREAM stores a `VARBINARY(MAX)` column's value as a file on an NTFS filegroup instead of in the row, which suits large blobs — documents, images, media — that you want in the database's transactional and backup story without paying for them in every row read. Declare it with `"FileStream": true` on the column.
+
+> **Before you start:** FILESTREAM must be enabled on the *server* (a Windows-level setting plus `sp_configure 'filestream access level'`) and the *database* must have a FILESTREAM filegroup. SchemaSmith creates neither — the server setting is not reachable from T-SQL at all, and creating the filegroup means choosing a filesystem path on the target, which belongs to whoever owns the database. Without them the column still deploys, as a plain `VARBINARY(MAX)`, and the storage change is reported as downgraded rather than applied in silence.
+
+FILESTREAM is a Windows-only SQL Server feature — it is not supported on SQL Server on Linux at any version.
+
+### The ROWGUIDCOL requirement is stricter than it looks
+
+SQL Server requires the table to carry a non-null `UNIQUEIDENTIFIER` column with the `ROWGUIDCOL` property, **covered by a single-column PRIMARY KEY or UNIQUE constraint**. The part that catches people out:
+
+| Covering the ROWGUIDCOL column with… | Accepted? |
+|---|---|
+| `"PrimaryKey": true` | yes |
+| `"UniqueConstraint": true` | yes |
+| `"Unique": true` (a unique *index*) | **no** |
+| nothing | no |
+
+A unique index looks equivalent and is not. Declare the covering index entry with `"UniqueConstraint": true`, and declare the ROWGUIDCOL column itself as part of its `DataType` — `"DataType": "UNIQUEIDENTIFIER ROWGUIDCOL"` — the same way `IDENTITY` is declared.
+
+SchemaSmith does not invent the ROWGUIDCOL column for you. A column it added by itself would appear in no package and vanish on the next extract-and-redeploy round trip. Declaring FILESTREAM without a usable one fails with a message naming the exact package change to make, rather than SQL Server's error 5505, which mentions ROWGUIDCOL but never the constraint-versus-index distinction.
+
+```json
+{
+  "Schema": "[dbo]",
+  "Name": "[Document]",
+  "Columns": [
+    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+    { "Name": "[RowGuid]", "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL", "Nullable": false, "Default": "NEWID()" },
+    { "Name": "[Content]", "DataType": "VARBINARY(MAX)", "Nullable": true, "FileStream": true }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Document]", "IndexColumns": "[Id]", "PrimaryKey": true, "Unique": true },
+    { "Name": "[UQ_Document_RowGuid]", "IndexColumns": "[RowGuid]", "UniqueConstraint": true }
+  ]
+}
+```
+
+### Choosing the filegroup
+
+`FileStreamFileGroup` names the table's `FILESTREAM_ON` filegroup. Leave it unset and the table uses the database's default FILESTREAM filegroup. It is effectively immutable: SQL Server refuses to reassign a table that already has one, so a declared name that differs from the deployed one fails rather than being quietly ignored — the same posture [`FileGroup`](#sql-server-sqlservertable) takes.
+
+Note that dropping the last FILESTREAM column does **not** release the table's FILESTREAM filegroup assignment; the binding outlives the columns.
 
 ---
 
