@@ -557,6 +557,12 @@
     "FileGroup": {
       "type": "string"
     },
+    "EnableChangeTracking": {
+      "type": "boolean"
+    },
+    "TrackColumnsUpdated": {
+      "type": "boolean"
+    },
     "Extensions": {}
   },
   "additionalProperties": false,
