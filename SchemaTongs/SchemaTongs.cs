@@ -3090,6 +3090,18 @@ SELECT TABLE_SCHEMA, TABLE_NAME
     AND TABLE_NAME NOT LIKE 'MSPub[_]%'
     AND TABLE_NAME NOT IN ('dtproperties', 'sysdiagrams')
     AND TABLE_SCHEMA <> 'SchemaSmith'
+    -- A temporal history table is created BY the versioned table's declaration (IsTemporal plus the
+    -- HistoryTable* properties), so extracting it separately puts a second table file in the package
+    -- that the next deploy then tries to create in its own right. OBJECTPROPERTY is used rather than
+    -- sys.tables.temporal_type on purpose: it takes the property as a STRING, so on a pre-2016 server
+    -- it returns NULL instead of failing to bind -- a static temporal_type reference would be a
+    -- CREATE-time invalid-column error there. 1 = HISTORY_TABLE.
+    AND ISNULL(OBJECTPROPERTY(so.[object_id], 'TableTemporalType'), 0) <> 1
+    -- An updatable ledger table (2022+) spawns MSSQL_LedgerHistoryFor_<object_id>, whose
+    -- temporal_type is NON_TEMPORAL_TABLE, so the filter above does not reach it. The name carries an
+    -- object id from the source server, so the extracted file could not be deployed anywhere. Matched
+    -- by its engine-reserved prefix, the same way the replication tables above are.
+    AND TABLE_NAME NOT LIKE 'MSSQL[_]LedgerHistoryFor[_]%'
   ORDER BY 1, 2
 ";
 
