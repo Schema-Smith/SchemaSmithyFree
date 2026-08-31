@@ -340,7 +340,7 @@ SELECT t.n.value('(Name)[1]', 'nvarchar(256)') AS TableName
 FROM @model.nodes('/Tables/Table') AS t(n);
 ```
 
-> **SQL Server:** the encoding cliff is SQL-Server-only — PostgreSQL has JSON functions since 9.2 and MySQL/MariaDB since 5.7, so their `{{TableSchema}}` shreds at every supported version. The XML twins are produced on every engine for one portable authoring surface, but only SQL Server *needs* them.
+> **SQL Server:** the encoding cliff is SQL-Server-only — PostgreSQL has JSON functions since 9.2, MySQL since 5.7, and MariaDB since 10.2, so their `{{TableSchema}}` shreds at every supported version. The XML twins are produced on every engine for one portable authoring surface, but only SQL Server *needs* them.
 
 ---
 
