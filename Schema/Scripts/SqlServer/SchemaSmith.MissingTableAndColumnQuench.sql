@@ -87,9 +87,25 @@ BEGIN TRY
                                   -- Sparse columns and a COLUMN_SET are incompatible with data compression, and SQL Server 2008
                                   -- REJECTS the clause outright on such a table -- even DATA_COMPRESSION=NONE. Modern servers
                                   -- accept the redundant NONE, so this only fails at the floor, where the XML ingest path runs.
-                                  CASE WHEN t.[HasSparseOrColumnSet] = 0 AND ISNULL(t.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE') THEN ' WITH (DATA_COMPRESSION=' + ISNULL(t.[CompressionType], 'NONE') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
+                                  -- One WITH clause, built from whatever applies. Ledger and
+                                  -- DATA_COMPRESSION are legal together but must share a single WITH,
+                                  -- so each part contributes ', <option>' and the leading comma is
+                                  -- stripped once. An empty list emits no WITH at all, which is what
+                                  -- keeps a table with neither exactly as it was before ledger existed.
+                                  CASE WHEN t.[WithOptions] <> '' THEN ' WITH (' + STUFF(t.[WithOptions], 1, 2, '') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + T.[Schema] + '.' + T.[Name] + ''', ''created'');' AS NVARCHAR(MAX))
                            FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[FileGroup], T.[VariantName], T.[GraphType],
+                                        WithOptions =
+                                            CASE T.[Ledger] WHEN 'AppendOnly' THEN ', LEDGER = ON (APPEND_ONLY = ON)'
+                                                            WHEN 'Updatable'  THEN ', SYSTEM_VERSIONING = ON, LEDGER = ON'
+                                                            ELSE '' END +
+                                            -- Sparse columns and a COLUMN_SET are incompatible with data compression, and SQL
+                                            -- Server 2008 REJECTS the clause outright on such a table -- even DATA_COMPRESSION=NONE.
+                                            CASE WHEN NOT EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
+                                                                   WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
+                                                                     AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1))
+                                                      AND ISNULL(T.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE')
+                                                 THEN ', DATA_COMPRESSION=' + ISNULL(T.[CompressionType], 'NONE') ELSE '' END,
                                         HasSparseOrColumnSet = CASE WHEN EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
                                                                                   WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
                                                                                     AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1)) THEN 1 ELSE 0 END,

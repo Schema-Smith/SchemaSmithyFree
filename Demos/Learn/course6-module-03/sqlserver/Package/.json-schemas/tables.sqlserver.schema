@@ -590,6 +590,10 @@
       "type": "string",
       "pattern": "None|Node|Edge"
     },
+    "Ledger": {
+      "type": "string",
+      "pattern": "Off|AppendOnly|Updatable"
+    },
     "Extensions": {
       "type": "object",
       "required": [

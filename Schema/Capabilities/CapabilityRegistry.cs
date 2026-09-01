@@ -39,6 +39,12 @@ namespace Schema.Capabilities
             // declared columns -- only the node/edge semantics are lost.
             rows.Add(new("graph-table", "Graph tables (NODE/EDGE)", Platform.SqlServer,
                 14, "SQL Server 2017", null, DegradeKind.Reduced, "graph table (SQL Server 2017)"));
+
+            // Reduced for the same reason as graph, and the direction matters more here: a ledger table
+            // cannot be converted or dropped afterwards, so NOT creating one is far easier to recover
+            // from than creating one by accident.
+            rows.Add(new("ledger-table", "Ledger tables", Platform.SqlServer,
+                16, "SQL Server 2022", null, DegradeKind.Reduced, "ledger table (SQL Server 2022)"));
             rows.Add(new("data-masking", "Dynamic data masking", Platform.SqlServer,
                 13, "SQL Server 2016", null, DegradeKind.Skip, "data masking (SQL Server 2016)"));
             rows.Add(new("always-encrypted", "Always Encrypted", Platform.SqlServer,

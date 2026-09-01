@@ -21,6 +21,21 @@ DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 
 -- SchemaSmith-internal extended properties to exclude from extraction (one-line change to add new names)
 DECLARE @InternalEPNames TABLE ([Name] NVARCHAR(128))
 INSERT @InternalEPNames VALUES (N'ProductName'), (N'PreventDrop')  -- PreventDrop is a SchemaSmith ownership marker, not a user extended property (#270)
+
+-- Ledger (#ledger) is SQL Server 2022, and this proc is a plain CREATE PROCEDURE -- every column it
+-- names is bound when the proc is created, so a static sys.tables.ledger_type_desc reference would fail
+-- to create the helper at all on a 2017 or 2019 target. Read it through a version-guarded dynamic
+-- statement instead, which stays NULL below 2022 where ledger tables cannot exist. Same pattern the XML
+-- twin already uses for its 2016/2017-only reads.
+DECLARE @v_Ledger NVARCHAR(12) = NULL
+IF SchemaSmith.fn_ServerMajorVersion() >= 16
+  EXEC sp_executesql N'
+    SELECT @p_Ledger = CASE ledger_type_desc WHEN ''APPEND_ONLY_LEDGER_TABLE'' THEN ''AppendOnly''
+                                             WHEN ''UPDATABLE_LEDGER_TABLE'' THEN ''Updatable'' END
+      FROM sys.tables WITH (NOLOCK)
+     WHERE [object_id] = OBJECT_ID(@p_Schema + ''.'' + @p_Table);',
+    N'@p_Schema NVARCHAR(128), @p_Table NVARCHAR(128), @p_Ledger NVARCHAR(12) OUTPUT',
+    @p_Schema = @p_Schema, @p_Table = @p_Table, @p_Ledger = @v_Ledger OUTPUT
 SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE(REPLACE(REPLACE((
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
@@ -55,6 +70,9 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        -- Graph tables (#graph). Emitted only when the table IS one, so no existing package gains a
        -- "GraphType": "None" on every table. is_node/is_edge are 2017+, which the JSON tier requires.
        CASE WHEN st.is_node = 1 THEN 'Node' WHEN st.is_edge = 1 THEN 'Edge' END AS [GraphType],
+       -- Ledger (#ledger, 2022+). Emitted only when the table IS one. ledger_type_desc is 2022, so
+       -- it is read through a version-gated helper rather than referenced here -- see @v_Ledger.
+       @v_Ledger AS [Ledger],
        -- Table-level Change Tracking round-trip. Emitted only when ON, like IsTemporal above: every
        -- extracted package would otherwise gain "EnableChangeTracking": false on every table.
        -- sys.change_tracking_tables shipped with Change Tracking in 2008, so it is safe to read

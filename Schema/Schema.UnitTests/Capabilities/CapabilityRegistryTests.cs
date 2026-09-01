@@ -21,6 +21,7 @@ namespace Schema.UnitTests.Capabilities
         {
             "temporal (SQL Server 2016)",
             "graph table (SQL Server 2017)",
+            "ledger table (SQL Server 2022)",
             "data masking (SQL Server 2016)",
             "Always Encrypted (SQL Server 2016)",
             "columnstore index (SQL Server 2012/2014)",

@@ -169,6 +169,36 @@ BEGIN TRY
     END
   END
 
+  RAISERROR('Validate declared Ledger matches deployed', 10, 100) WITH NOWAIT
+  -- Ledger tables are create-time only: ALTER TABLE ... SET (LEDGER = ON) is error 102, not syntax. And
+  -- unlike most refusals this one cannot be worked around by recreating the table, because DROP on a
+  -- ledger table is not a drop -- SQL Server retains it as MSSQL_DroppedLedgerTable_<name>_<guid>. So a
+  -- mismatch is reported rather than acted on, and the message says which side to change.
+  IF SchemaSmith.fn_ServerMajorVersion() >= 16
+  BEGIN
+    IF OBJECT_ID('tempdb..#DeployedLedger') IS NOT NULL DROP TABLE #DeployedLedger
+    CREATE TABLE #DeployedLedger (FullName NVARCHAR(1010), Declared NVARCHAR(12), Deployed NVARCHAR(12))
+    EXEC sp_executesql N'
+      INSERT INTO #DeployedLedger (FullName, Declared, Deployed)
+        SELECT t.[Schema] + ''.'' + t.[Name],
+               ISNULL(NULLIF(t.[Ledger], ''''), ''Off''),
+               CASE st.ledger_type_desc WHEN ''APPEND_ONLY_LEDGER_TABLE'' THEN ''AppendOnly''
+                                        WHEN ''UPDATABLE_LEDGER_TABLE'' THEN ''Updatable''
+                                        ELSE ''Off'' END
+          FROM #Tables t WITH (NOLOCK)
+          JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + ''.'' + t.[Name])
+         WHERE t.NewTable = 0'
+
+    IF EXISTS (SELECT 1 FROM #DeployedLedger WHERE Declared <> Deployed)
+    BEGIN
+      DECLARE @v_LedgerTable NVARCHAR(1010), @v_LedgerDeclared NVARCHAR(12), @v_LedgerLive NVARCHAR(12)
+      SELECT TOP 1 @v_LedgerTable = FullName, @v_LedgerDeclared = Declared, @v_LedgerLive = Deployed
+        FROM #DeployedLedger WHERE Declared <> Deployed
+      RAISERROR('Table %s declares Ledger %s, but is currently deployed as %s. SQL Server has no ALTER that converts a table to or from a ledger table, and DROP does not remove one (it is retained as MSSQL_DroppedLedgerTable_<name>_<guid>), so SchemaSmith will not attempt it -- correct the declared Ledger to match, or migrate the data to a new table.', 16, 1, @v_LedgerTable, @v_LedgerDeclared, @v_LedgerLive)
+    END
+  END
+
+
 
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropTablesRemovedFromProduct to 0 so the drop block below never runs. Record the tables that
@@ -217,6 +247,12 @@ BEGIN TRY
                           FROM #Tables t WITH (NOLOCK)
                           WHERE t.[Schema] = tp.[Schema]
                             AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+        -- A dropped ledger table is RETAINED as MSSQL_DroppedLedgerTable_<name>_<guid>, inheriting the
+        -- extended properties of the table it came from -- including the ProductName stamp this pass
+        -- selects on. Without this it reads as "a table removed from the product" on every later
+        -- deploy, and SQL Server refuses to drop it ("because it is a ledger dropped object"), so the
+        -- deploy fails permanently on an object the user cannot remove either.
+        AND tp.TableName NOT LIKE 'MSSQL[_]DroppedLedger%'
 
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
     BEGIN
@@ -493,7 +529,7 @@ BEGIN TRY
                                    AND c.[ColumnName] = cc.[ColumnName]
       WHERE NOT EXISTS (SELECT * FROM #ColumnChanges cc2 WITH (NOLOCK) WHERE cc2.[Schema] = cc.[Schema] AND cc2.[TableName] = cc.[TableName] AND cc2.[ColumnName] = cc.[ColumnName])
   
-  -- Graph pseudo-columns must never be considered for a drop. They exist because the table is a node or
+  -- Engine-owned columns must never be considered for a drop. They exist because the table is a node or
   -- edge table, not because anything declared them, so the drop-by-absence pass would otherwise try to
   -- remove every one on the SECOND deploy -- and SQL Server refuses with "Internal graph columns cannot
   -- be altered", which turns an unchanged package into a failing one.
@@ -501,15 +537,20 @@ BEGIN TRY
   -- sys.columns.graph_type is 2017+, so it is staged behind a version guard rather than referenced
   -- statically: this proc body is kindled for the XML tier too, which reaches older servers. Empty below
   -- 2017, where graph tables cannot exist.
-  IF OBJECT_ID('tempdb..#GraphColumns') IS NOT NULL DROP TABLE #GraphColumns
-  CREATE TABLE #GraphColumns (TableSchema NVARCHAR(256), TableName NVARCHAR(256), ColumnName NVARCHAR(256))
+  IF OBJECT_ID('tempdb..#EngineOwnedColumns') IS NOT NULL DROP TABLE #EngineOwnedColumns
+  CREATE TABLE #EngineOwnedColumns (TableSchema NVARCHAR(256), TableName NVARCHAR(256), ColumnName NVARCHAR(256))
   IF SchemaSmith.fn_ServerMajorVersion() >= 14
     EXEC sp_executesql N'
-      INSERT INTO #GraphColumns (TableSchema, TableName, ColumnName)
+      INSERT INTO #EngineOwnedColumns (TableSchema, TableName, ColumnName)
         SELECT SCHEMA_NAME(st.[schema_id]), st.[name], c.[name]
           FROM sys.columns c WITH (NOLOCK)
           JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = c.[object_id]
-         WHERE c.graph_type IS NOT NULL'
+         WHERE c.graph_type IS NOT NULL
+            -- Ledger''s generated columns (AS_TRANSACTION_ID_START/END, AS_SEQUENCE_NUMBER_START/END)
+            -- are engine-owned in the same way and hit the same failure: SQL Server refuses to drop
+            -- them, so an unchanged package fails on its second deploy. Identified by
+            -- generated_always_type rather than by name -- the type codes are what actually mean it.
+            OR c.generated_always_type IN (7, 8, 9, 10)'
 
   RAISERROR('Detect Column Drops', 10, 100) WITH NOWAIT
   INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, MustSwapColumn, [DropOnly])
@@ -523,7 +564,7 @@ BEGIN TRY
                             AND c.[TableName] = t.[Name]
                             AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = COLUMN_NAME)
         AND NOT (t.IsTemporal = 1 AND COLUMN_NAME IN ('ValidFrom', 'ValidTo'))
-        AND NOT EXISTS (SELECT 1 FROM #GraphColumns g WITH (NOLOCK)
+        AND NOT EXISTS (SELECT 1 FROM #EngineOwnedColumns g WITH (NOLOCK)
                          WHERE g.TableSchema = TABLE_SCHEMA AND g.TableName = TABLE_NAME
                            AND g.ColumnName = COLUMN_NAME)
 

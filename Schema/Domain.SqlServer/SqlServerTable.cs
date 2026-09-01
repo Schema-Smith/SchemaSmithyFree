@@ -140,6 +140,23 @@ namespace Schema.Domain.SqlServer
         [SchemaProperty(Pattern = "None|Node|Edge")]
         [JsonProperty(Order = 115, NullValueHandling = NullValueHandling.Ignore)]
         public string GraphType { get; set; }
+        // Ledger tables (#ledger, SQL Server 2022): "AppendOnly" or "Updatable". Null or "Off" is an
+        // ordinary table.
+        //
+        // Create-time only, like GraphType -- ALTER TABLE ... SET (LEDGER = ON) is error 102, not syntax --
+        // so a change on a deployed table is refused rather than attempted.
+        //
+        // Cannot be combined with IsTemporal: an updatable ledger table is created WITH
+        // (SYSTEM_VERSIONING = ON, LEDGER = ON), which overlaps what IsTemporal turns on, and sys.tables
+        // then reports the table as NON_TEMPORAL_TABLE -- so both declarations together leave the package
+        // permanently disagreeing with the target.
+        //
+        // Note that DROP on a ledger table is not a drop: SQL Server retains it as
+        // MSSQL_DroppedLedgerTable_<name>_<guid>. Those retained objects are excluded from extraction
+        // (#403).
+        [SchemaProperty(Pattern = "Off|AppendOnly|Updatable")]
+        [JsonProperty(Order = 116, NullValueHandling = NullValueHandling.Ignore)]
+        public string Ledger { get; set; }
 
     }
 }

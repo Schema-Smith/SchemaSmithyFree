@@ -126,6 +126,12 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 14
   EXEC sp_executesql N'SELECT @p_GraphType = CASE WHEN is_node = 1 THEN ''Node'' WHEN is_edge = 1 THEN ''Edge'' END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId',
     N'@p_ObjId INT, @p_GraphType NVARCHAR(10) OUTPUT', @p_ObjId = @v_ObjectId, @p_GraphType = @v_GraphType OUTPUT
 
+-- Ledger is 2022, staged the same way and simply NULL below it.
+DECLARE @v_Ledger NVARCHAR(12) = NULL
+IF SchemaSmith.fn_ServerMajorVersion() >= 16
+  EXEC sp_executesql N'SELECT @p_Ledger = CASE ledger_type_desc WHEN ''APPEND_ONLY_LEDGER_TABLE'' THEN ''AppendOnly'' WHEN ''UPDATABLE_LEDGER_TABLE'' THEN ''Updatable'' END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId',
+    N'@p_ObjId INT, @p_Ledger NVARCHAR(12) OUTPUT', @p_ObjId = @v_ObjectId, @p_Ledger = @v_Ledger OUTPUT
+
 CREATE TABLE #GraphCols ([column_id] INT NOT NULL)
 IF SchemaSmith.fn_ServerMajorVersion() >= 14
   EXEC sp_executesql N'INSERT INTO #GraphCols ([column_id]) SELECT column_id FROM sys.columns WITH (NOLOCK) WHERE graph_type IS NOT NULL AND [object_id] = @p_ObjId',
@@ -170,6 +176,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
          WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
        @v_GraphType AS [GraphType],
+       @v_Ledger AS [Ledger],
        -- Table-level Change Tracking round-trip -- emitted only when ON, like IsTemporal above.
        CASE WHEN ctt.[object_id] IS NOT NULL THEN 'true' END AS [EnableChangeTracking],
        CASE WHEN ctt.is_track_columns_updated_on = 1 THEN 'true' END AS [TrackColumnsUpdated],

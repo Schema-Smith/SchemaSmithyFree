@@ -43,6 +43,20 @@ BEGIN
     END
   END
 
+  -- Ledger and IsTemporal describe overlapping engine state and cannot both be declared. An updatable
+  -- ledger table is created WITH (SYSTEM_VERSIONING = ON, LEDGER = ON), while IsTemporal turns system
+  -- versioning on separately -- and sys.tables reports a ledger table as NON_TEMPORAL_TABLE, so the two
+  -- together leave the package permanently disagreeing with the target. Refused rather than degraded:
+  -- neither reading is more correct than the other, so guessing would be worse than stopping.
+  IF EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE ISNULL([Ledger], 'Off') <> 'Off' AND IsTemporal = 1)
+  BEGIN
+    SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK)
+                          WHERE ISNULL(T.[Ledger], 'Off') <> 'Off' AND T.IsTemporal = 1
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    SET @v_msg = 'Ledger and IsTemporal cannot both be declared on the same table -- a ledger table manages its own history, and SQL Server reports it as non-temporal; table(s): ' + LEFT(@v_list, 1700) + '.'
+    RAISERROR(@v_msg, 16, 1)
+  END
+
   -- Graph tables (AS NODE / AS EDGE) -- SQL Server 2017 (major 14). Below it the clause is not syntax at
   -- all, so an ungated emit fails with a bare parser error naming nothing useful. Clearing GraphType
   -- deploys the table as an ordinary one, which keeps its columns and data shape intact and loses only
@@ -66,6 +80,34 @@ BEGIN
       UPDATE #Tables SET [GraphType] = 'None' WHERE [GraphType] IN ('Node', 'Edge')
     END
   END
+
+  -- Ledger tables -- SQL Server 2022 (major 16). Below it the clause is not syntax, so an ungated emit
+  -- fails with a bare parser error. Clearing Ledger deploys an ordinary table, which keeps the columns
+  -- and data shape and loses only the tamper-evidence -- a Reduced degrade.
+  --
+  -- Worth knowing which way this one degrades: a ledger table cannot later be converted or dropped, so
+  -- accidentally CREATING one is much harder to undo than not creating one. Degrading down is the safe
+  -- direction here in a way it is not for most features.
+  IF @v_major < 16 AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE ISNULL([Ledger], 'Off') <> 'Off')
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE ISNULL(T.[Ledger], 'Off') <> 'Off'
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'Ledger tables require SQL Server 2022 (detected major ' +
+                   CONVERT(NVARCHAR(10), @v_major) + '); table(s): ' + LEFT(@v_list, 1800) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'ledger table (SQL Server 2022)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE ISNULL(T.[Ledger], 'Off') <> 'Off'
+      RAISERROR('  Ledger skipped: requires SQL Server 2022 - the table deploys as an ordinary table (downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET [Ledger] = 'Off' WHERE ISNULL([Ledger], 'Off') <> 'Off'
+    END
+  END
+
 
 
   -- Dynamic data masking (MASKED WITH) -- SQL Server 2016 (major 13).
