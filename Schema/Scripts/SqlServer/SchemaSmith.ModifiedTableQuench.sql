@@ -670,6 +670,41 @@ BEGIN TRY
     WHERE a.[DeclaredPos] < b.[DeclaredPos]
       AND a.[LivePos] > b.[LivePos]
 
+  RAISERROR('Check for SCHEMABINDING dependents blocking column changes', 10, 100) WITH NOWAIT
+  -- SQL Server refuses ALTER COLUMN while a SCHEMABINDING module references the column, with error 4922
+  -- ("one or more objects access this column") -- which names neither the module nor what to do about it.
+  -- The catalog knows both before the attempt, so say so instead of letting the engine's message through.
+  --
+  -- SchemaSmith does not drop these on its own initiative: a schemabound view or function is a SCRIPTED
+  -- object it does not own, so dropping one it cannot recreate would destroy something the package never
+  -- described. The supported answer is to move the module into a schema-bound object folder, which the
+  -- deploy drops before the table work and the after-tables object pass puts back in the same run.
+  --
+  -- sys.sql_modules.is_schema_bound and sys.sql_expression_dependencies both predate the 2008 floor, so
+  -- these are safe to reference statically.
+  IF EXISTS (SELECT 1 FROM #ColumnChanges WITH (NOLOCK))
+  BEGIN
+    DECLARE @v_SbBlocked NVARCHAR(MAX) =
+      STUFF((SELECT DISTINCT ', ' + OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id)
+                            + ' (blocks ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ')'
+               FROM #ColumnChanges cc WITH (NOLOCK)
+               JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
+                 ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
+               JOIN sys.sql_modules m WITH (NOLOCK)
+                 ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+              -- An indexed view is already handled by IndexedViewQuench, which drops and recreates it
+              -- around the change; naming it here would be a false alarm.
+              WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
+                                 WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
+                AND (d.referenced_minor_id = 0
+                     OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
+                            SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
+               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+
+    IF @v_SbBlocked IS NOT NULL
+      RAISERROR('Column change blocked by SCHEMABINDING: %s. SQL Server will not alter a column while a schema-bound module references it, and SchemaSmith will not drop a scripted object it cannot put back. Move the listed module(s) into a schema-bound object folder (QuenchSlot AfterTablesObjects) so the deploy can drop and recreate them around the table work, or remove SCHEMABINDING from them.', 16, 1, @v_SbBlocked)
+  END
+
   RAISERROR('Elect tables for rebuild', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#RebuildElection') IS NOT NULL DROP TABLE #RebuildElection
   SELECT p.[Schema], p.[TableName]
