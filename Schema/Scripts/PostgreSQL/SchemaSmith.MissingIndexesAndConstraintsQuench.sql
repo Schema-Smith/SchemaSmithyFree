@@ -286,6 +286,70 @@ BEGIN
                               AND con.conname = tc."Name");
   END IF;
 
+  -- Row-level security policies (#rls, gap item D1). Created when absent.
+  --
+  -- SCOPE, stated rather than implied: this converges the SET of policies -- a declared policy that does
+  -- not exist is created, and (in ModifiedTableQuench) one that exists but is no longer declared is
+  -- dropped. It does NOT detect a change to an existing policy's USING / WITH CHECK expression, because
+  -- PostgreSQL stores those normalised and comparing them against the declared text is the same
+  -- false-change problem the roadmap tracks separately. Rename the policy, or drop and re-add it, to
+  -- change an expression today.
+  RAISE NOTICE 'Add Missing Row Level Security Policies';
+  SELECT STRING_AGG('CREATE POLICY ' || QUOTE_IDENT(tp."Name") ||
+                    ' ON ' || QUOTE_IDENT(tp."TableSchema") || '.' || QUOTE_IDENT(tp."TableName") ||
+                    ' AS ' || tp."Permissive" ||
+                    ' FOR ' || tp."Command" ||
+                    ' TO ' || tp."Roles" ||
+                    CASE WHEN NULLIF(TRIM(tp."UsingExpression"), '') IS NOT NULL
+                         THEN ' USING (' || tp."UsingExpression" || ')' ELSE '' END ||
+                    CASE WHEN NULLIF(TRIM(tp."WithCheckExpression"), '') IS NOT NULL
+                         THEN ' WITH CHECK (' || tp."WithCheckExpression" || ')' ELSE '' END || ';' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''policy'', ''' || tp."TableSchema" || '.' || tp."TableName" || '.' || tp."Name" || ''', ''created'');', CHR(10))
+    INTO sql_script
+    FROM temp_policies tp
+    WHERE NOT EXISTS (SELECT 1 FROM pg_policies pol
+                       WHERE pol.schemaname = tp."TableSchema"
+                         AND pol.tablename = tp."TableName"
+                         AND pol.policyname = tp."Name");
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'policy', tp."TableSchema" || '.' || tp."TableName" || '.' || tp."Name", 'wouldCreate'
+        FROM temp_policies tp
+        WHERE NOT EXISTS (SELECT 1 FROM pg_policies pol
+                           WHERE pol.schemaname = tp."TableSchema"
+                             AND pol.tablename = tp."TableName"
+                             AND pol.policyname = tp."Name");
+  END IF;
+
+  -- A policy that is no longer declared is DROPPED, and deliberately without an opt-out flag: a stale
+  -- policy is a live access-control rule, so leaving one behind is a security posture nobody declared.
+  -- That is a stronger reason to drop than exists for an index or a statistic.
+  RAISE NOTICE 'Drop Removed Row Level Security Policies';
+  SELECT STRING_AGG('DROP POLICY ' || QUOTE_IDENT(pol.policyname) ||
+                    ' ON ' || QUOTE_IDENT(pol.schemaname) || '.' || QUOTE_IDENT(pol.tablename) || ';' || CHR(10) ||
+                    'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''policy'', ''' || pol.schemaname || '.' || pol.tablename || '.' || pol.policyname || ''', ''dropped'');', CHR(10))
+    INTO sql_script
+    FROM pg_policies pol
+    JOIN temp_tables tt ON tt."Schema" = pol.schemaname AND tt."Name" = pol.tablename
+    WHERE NOT EXISTS (SELECT 1 FROM temp_policies tp
+                       WHERE tp."TableSchema" = pol.schemaname
+                         AND tp."TableName" = pol.tablename
+                         AND tp."Name" = pol.policyname);
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, p_WhatIf);
+
+  IF p_WhatIf THEN
+    INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType")
+      SELECT pg_backend_pid(), 'policy', pol.schemaname || '.' || pol.tablename || '.' || pol.policyname, 'wouldDrop'
+        FROM pg_policies pol
+        JOIN temp_tables tt ON tt."Schema" = pol.schemaname AND tt."Name" = pol.tablename
+        WHERE NOT EXISTS (SELECT 1 FROM temp_policies tp
+                           WHERE tp."TableSchema" = pol.schemaname
+                             AND tp."TableName" = pol.tablename
+                             AND tp."Name" = pol.policyname);
+  END IF;
+
   RAISE NOTICE 'Add Missing Defaults';
   SELECT STRING_AGG('RAISE NOTICE ''  Add missing default for ' || tc."TableSchema" || '.' || tc."TableName" || '.' || tc."Name" || CASE WHEN COALESCE(tc."VariantName", '') <> '' THEN ' (variant: ' || REPLACE(tc."VariantName", '''', '''''') || ')' ELSE '' END || ''';' || CHR(10) ||
                     'ALTER TABLE  "' || tc."TableSchema" || '"."' || tc."TableName" || '" ALTER COLUMN "' || tc."Name" || '" SET DEFAULT ' || tc."Default" ||';' || CHR(10) ||

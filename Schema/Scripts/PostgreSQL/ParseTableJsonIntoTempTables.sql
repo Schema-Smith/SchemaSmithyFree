@@ -252,3 +252,27 @@
       FROM temp_excludes
       WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
     CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, false);
+
+    DROP TABLE IF EXISTS temp_policies;
+    CREATE TEMPORARY TABLE temp_policies AS
+    WITH my_tables(arr) AS (VALUES(table_json::JSON))
+    SELECT ROW_NUMBER() OVER () AS "_RowId",
+           elem ->> 'Schema' AS "TableSchema",
+           elem ->> 'Name' AS "TableName",
+           pelem ->> 'Name' AS "Name",
+           UPPER(COALESCE(pelem ->> 'Permissive', 'PERMISSIVE')) AS "Permissive",
+           UPPER(COALESCE(pelem ->> 'Command', 'ALL')) AS "Command",
+           COALESCE(NULLIF(pelem ->> 'Roles', ''), 'PUBLIC') AS "Roles",
+           COALESCE(pelem ->> 'UsingExpression', '') AS "UsingExpression",
+           COALESCE(pelem ->> 'WithCheckExpression', '') AS "WithCheckExpression",
+           COALESCE(pelem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
+           COALESCE(pelem ->> 'VariantName', '') AS "VariantName"
+      FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
+      CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Policies')::JSON) AS pelem(value);
+
+    SELECT STRING_AGG('DELETE FROM temp_policies WHERE "_RowId" = ' || "_RowId"::TEXT || ' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
+      INTO sql_script
+      FROM temp_policies
+      WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
+    CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, false);
+

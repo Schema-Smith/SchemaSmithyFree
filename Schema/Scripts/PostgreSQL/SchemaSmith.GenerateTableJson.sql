@@ -184,6 +184,19 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                           JOIN pg_catalog.pg_constraint con ON con.conrelid = idx.indrelid AND con.conname = i.relname AND con.contype = 'x'
                           WHERE idx.indrelid = ('"' || t.table_schema || '"."' || t.table_name || '"')::regclass
                           ORDER BY i.relname) sub) AS "ExcludeConstraints",
+               -- Row-level security policies (#rls). Emitted only when the table has any, so no existing
+               -- package gains an empty "Policies": [] on every table. pg_policies exposes the normalised
+               -- USING / WITH CHECK text, which is what a re-deploy compares against.
+               (SELECT JSON_AGG(sub ORDER BY sub."Name")
+                  FROM (SELECT pol.policyname AS "Name",
+                               pol.permissive AS "Permissive",
+                               pol.cmd AS "Command",
+                               ARRAY_TO_STRING(pol.roles, ',') AS "Roles",
+                               COALESCE(pol.qual, '') AS "UsingExpression",
+                               COALESCE(pol.with_check, '') AS "WithCheckExpression"
+                          FROM pg_policies pol
+                          WHERE pol.schemaname = t.table_schema
+                            AND pol.tablename = t.table_name) sub) AS "Policies",
                '' AS "ShouldApplyExpression",
                '' AS "OldName",
                rls.relrowsecurity AS "RowLevelSecurity",

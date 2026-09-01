@@ -489,7 +489,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `Schema` | string | `"public"` | Database schema. Use double-quote notation in extracted files (e.g., `"\"sales\""`). |
 | `Statistics` | array | `[]` | Extended statistics definitions. |
 | `ExcludeConstraints` | array | `[]` | Exclusion constraint definitions. See [Exclude Constraints (PostgreSQL)](#exclude-constraints-postgresql). |
-| `RowLevelSecurity` | bool | `false` | Enables row-level security on the table. |
+| `RowLevelSecurity` | bool | `false` | Enables row-level security on the table. **On its own this denies everything:** a table with row-level security enabled and no policy returns no rows to anyone but its owner, so pair it with `Policies`.
+| `Policies` | array | `[]` | Row-level security policy definitions. See [Row-Level Security Policies (PostgreSQL)](#row-level-security-policies-postgresql). |
 | `ForceRowLevelSecurity` | bool | `false` | When `true`, row-level security is enforced even for the table owner. |
 | `AccessMethod` | string | `null` | Storage access method (e.g., `"heap"`). |
 | `PersistenceType` | string | `null` | Persistence override (e.g., `"UNLOGGED"`, `"TEMPORARY"`). |
@@ -1213,6 +1214,62 @@ PostgreSQL exclusion constraints are declared in the `ExcludeConstraints` array.
   "ExcludeColumns": [
     { "Column": "room_id",        "Operator": "="  },
     { "Column": "reserved_period", "Operator": "&&" }
+  ]
+}
+```
+
+---
+
+## Row-Level Security Policies (PostgreSQL)
+
+Row-level security policies are declared in the `Policies` array on a PostgreSQL table.
+
+`RowLevelSecurity` and `Policies` are two halves of one feature. Enabling row-level security without
+declaring a policy denies everything: PostgreSQL returns no rows to any user except the table owner. If a
+table has `RowLevelSecurity` set, it needs at least one permissive policy to be readable.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | -- | Policy name. Required, and unique per table. |
+| `Permissive` | string | `"PERMISSIVE"` | `"PERMISSIVE"` policies are OR-ed together; `"RESTRICTIVE"` policies are AND-ed on top of them. A table with only restrictive policies still returns nothing, because none of them grant access in the first place. |
+| `Command` | string | `"ALL"` | Which statement the policy governs: `"ALL"`, `"SELECT"`, `"INSERT"`, `"UPDATE"`, or `"DELETE"`. |
+| `Roles` | string | `"PUBLIC"` | Comma-separated roles the policy applies to. Roles are not created by SchemaSmith -- naming one that does not exist fails with PostgreSQL's own error. |
+| `UsingExpression` | string | `null` | The `USING` expression: which existing rows are visible. Omit for an INSERT-only policy, where PostgreSQL does not accept one. |
+| `WithCheckExpression` | string | `null` | The `WITH CHECK` expression: which new or updated rows are allowed. When omitted on a policy that has `UsingExpression`, PostgreSQL applies the `USING` expression to writes as well. |
+| `ShouldApplyExpression` | string | `null` | Conditional inclusion. |
+| `VariantName` | string | `null` | Optional label for a conditional variant. Max 128 characters. |
+| `Extensions` | object | `{}` | Custom metadata. |
+
+**Policies are dropped when they leave the package**, and unlike indexes and statistics there is no opt-out
+flag. A policy left behind after it stops being declared is a live access-control rule that nobody
+declared -- a stronger reason to converge than exists for a performance object.
+
+**A changed expression is not detected.** PostgreSQL stores `USING` and `WITH CHECK` expressions
+normalised, so comparing them against the declared text reports a change on every deploy. SchemaQuench
+converges the *set* of policies -- creating declared policies that are missing and dropping ones that are
+no longer declared -- but editing an expression on an existing policy has no effect. Rename the policy, or
+remove it and add it back under a new name, to change an expression.
+
+### Example -- tenant isolation
+
+```json
+{
+  "Schema": "public",
+  "Name": "invoice",
+  "RowLevelSecurity": true,
+  "Policies": [
+    {
+      "Name": "tenant_read",
+      "Command": "SELECT",
+      "Roles": "app_reader",
+      "UsingExpression": "tenant_id = current_setting('app.tenant_id')::int"
+    },
+    {
+      "Name": "tenant_write",
+      "Command": "INSERT",
+      "Roles": "app_writer",
+      "WithCheckExpression": "tenant_id = current_setting('app.tenant_id')::int"
+    }
   ]
 }
 ```
