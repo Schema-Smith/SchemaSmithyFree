@@ -212,4 +212,30 @@ public class SchemaBoundDependentTests
         });
     }
 
+
+    [Test]
+    public void ANestedSchemaBoundChain_IsDroppedDeepestFirst()
+    {
+        // sys.sql_expression_dependencies reports only the DIRECT dependent of the table, so a flat drop
+        // list contains VA but not VB -- and "DROP VIEW VA" then fails with "because it is being
+        // referenced by object VB". Verified against a live server before writing this. The chain has to
+        // be walked transitively and dropped deepest-first, which is the ordering #323 asked for.
+        Deploy(Package("SbNest", "50"));
+        Exec("CREATE VIEW dbo.SbNestA WITH SCHEMABINDING AS SELECT Id, Label FROM dbo.SbNest");
+        Exec("CREATE VIEW dbo.SbNestB WITH SCHEMABINDING AS SELECT Id, Label FROM dbo.SbNestA");
+
+        DeployWithDrop(Package("SbNest", "100"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Scalar("SELECT CONVERT(INT, c.max_length) FROM sys.columns c "
+                               + "WHERE c.[object_id] = OBJECT_ID('dbo.SbNest') AND c.name = 'Label'"),
+                Is.EqualTo(100), "the column change has to land through a two-deep chain");
+            Assert.That(Scalar("SELECT COUNT(*) FROM sys.objects WHERE name IN ('SbNestA', 'SbNestB')"),
+                Is.Zero,
+                "both levels must be gone -- dropping only the direct dependent cannot succeed, and "
+                + "leaving the outer one would block the next deploy instead");
+        });
+    }
+
 }

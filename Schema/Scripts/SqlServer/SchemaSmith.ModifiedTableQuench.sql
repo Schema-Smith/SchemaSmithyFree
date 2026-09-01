@@ -685,40 +685,62 @@ BEGIN TRY
   -- these are safe to reference statically.
   IF EXISTS (SELECT 1 FROM #ColumnChanges WITH (NOLOCK))
   BEGIN
+    -- The chain is TRANSITIVE, and the catalog does not hand it over. sys.sql_expression_dependencies
+    -- reports only the module bound DIRECTLY to the table, so a flat list holds the inner view but not an
+    -- outer one bound to it -- and dropping the inner one then fails with "because it is being referenced
+    -- by object <outer>". Walk it, record how deep each module sits, and drop deepest-first. This is the
+    -- ordering #323 asked for.
+    IF OBJECT_ID('tempdb..#SbChain') IS NOT NULL DROP TABLE #SbChain
+    ;WITH SbWalk AS (
+      SELECT d.referencing_id AS ModuleId, 1 AS Depth,
+             CONVERT(NVARCHAR(600), cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName]) AS Blocks
+        FROM #ColumnChanges cc WITH (NOLOCK)
+        JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
+          ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
+        JOIN sys.sql_modules m WITH (NOLOCK)
+          ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+       WHERE d.referenced_minor_id = 0
+          OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
+                 SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId')
+      UNION ALL
+      -- A module bound to a module already in the chain must come out BEFORE it. The depth cap is a
+      -- cycle guard: SQL Server does not permit a schemabinding cycle, but a recursive CTE with no
+      -- ceiling turns any catalog oddity into a runaway query rather than an error.
+      SELECT d.referencing_id, w.Depth + 1, w.Blocks
+        FROM SbWalk w
+        JOIN sys.sql_expression_dependencies d WITH (NOLOCK) ON d.referenced_id = w.ModuleId
+        JOIN sys.sql_modules m WITH (NOLOCK)
+          ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+       WHERE w.Depth < 32
+    )
+    SELECT ModuleId, MAX(Depth) AS Depth, MIN(Blocks) AS Blocks
+      INTO #SbChain
+      FROM SbWalk
+     GROUP BY ModuleId
+    OPTION (MAXRECURSION 32)
+
+    -- An indexed view is dropped and recreated by IndexedViewQuench already, so it is not ours to name
+    -- or to drop. Removing it here keeps both the blocked list and the drop chain honest.
+    DELETE #SbChain
+      FROM #SbChain c
+     WHERE EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
+                    WHERE i.[object_id] = c.ModuleId AND i.index_id > 0)
     DECLARE @v_SbBlocked NVARCHAR(MAX) =
-      STUFF((SELECT DISTINCT ', ' + OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id)
-                            + ' (blocks ' + cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName] + ')'
-               FROM #ColumnChanges cc WITH (NOLOCK)
-               JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
-                 ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
-               JOIN sys.sql_modules m WITH (NOLOCK)
-                 ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
-              -- An indexed view is already handled by IndexedViewQuench, which drops and recreates it
-              -- around the change; naming it here would be a false alarm.
-              WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
-                                 WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
-                AND (d.referenced_minor_id = 0
-                     OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
-                            SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
-               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      STUFF((SELECT ', ' + OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId) + ' (blocks ' + c.Blocks + ')'
+               FROM #SbChain c
+              ORDER BY c.Depth, OBJECT_NAME(c.ModuleId)
+                FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
 
     -- WITH ENCRYPTION returns NULL from OBJECT_DEFINITION, so NOTHING can put such a module back --
-    -- not SchemaSmith, and not the package's own script, which cannot have been extracted from the
-    -- server either. Dropping one would be unrecoverable, so it is refused even when the option is on.
+    -- not SchemaSmith, and not the package's own script, which could not have been extracted from the
+    -- server either. Dropping one would be unrecoverable, so it is refused even when the option is on,
+    -- and refused BEFORE anything is dropped so a partial run cannot leave it destroyed.
     DECLARE @v_SbEncrypted NVARCHAR(MAX) =
-      STUFF((SELECT DISTINCT ', ' + OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id)
-               FROM #ColumnChanges cc WITH (NOLOCK)
-               JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
-                 ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
-               JOIN sys.sql_modules m WITH (NOLOCK)
-                 ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
-              WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
-                                 WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
-                AND OBJECT_DEFINITION(d.referencing_id) IS NULL
-                AND (d.referenced_minor_id = 0
-                     OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
-                            SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
-               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      STUFF((SELECT ', ' + OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId)
+               FROM #SbChain c
+              WHERE OBJECT_DEFINITION(c.ModuleId) IS NULL
+              ORDER BY OBJECT_NAME(c.ModuleId)
+                FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
 
     IF @v_SbEncrypted IS NOT NULL
       RAISERROR('Column change blocked by an ENCRYPTED schema-bound module: %s. Its definition cannot be read from the server, so nothing can recreate it once dropped -- DropSchemaBoundDependents deliberately does not extend to it. Remove SCHEMABINDING or the encryption from the listed module(s).', 16, 1, @v_SbEncrypted)
@@ -726,52 +748,28 @@ BEGIN TRY
     IF @v_SbBlocked IS NOT NULL AND @DropSchemaBoundDependents = 0
       RAISERROR('Column change blocked by SCHEMABINDING: %s. SQL Server will not alter a column while a schema-bound module references it, and SchemaSmith will not drop a scripted object it cannot put back. Move the listed module(s) into a schema-bound object folder (QuenchSlot AfterTablesObjects) and set DropSchemaBoundDependents so the deploy can drop them around the table work and the after-tables object pass recreates them, or remove SCHEMABINDING from them.', 16, 1, @v_SbBlocked)
 
-    -- Opt-in drop. The package has said it accepts responsibility for recreating these, which the
-    -- after-tables object pass does from the package's own scripts -- so SchemaSmith deliberately does
-    -- NOT capture and replay the server's definition here. The package is the authority on what the
-    -- module should be; the copy on the server is merely what happens to be deployed.
-    --
-    -- PERMISSIONS ARE NOT PRESERVED. Dropping a view or function discards every GRANT on it, and
-    -- SchemaSmith does not manage permissions on any object, so it cannot restore them. The recreating
-    -- script must re-grant, or a separate permissions process must.
     IF @v_SbBlocked IS NOT NULL AND @DropSchemaBoundDependents = 1
     BEGIN
       -- The audit is written set-based here rather than generated into the script below, so this proc
-      -- has two levels of quoting instead of three. The predicate is the same one the DROP uses.
+      -- has two levels of quoting instead of three.
       INSERT SchemaSmith.ChangeAudit ([SessionId], [ObjectType], [ObjectName], [ActionType])
-        SELECT DISTINCT @@SPID, 'schemaBoundModule',
-               OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id),
+        SELECT @@SPID, 'schemaBoundModule',
+               OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId),
                CASE WHEN @WhatIf = 1 THEN 'wouldDrop' ELSE 'dropped' END
-          FROM #ColumnChanges cc WITH (NOLOCK)
-          JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
-            ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
-          JOIN sys.sql_modules m WITH (NOLOCK)
-            ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
-         WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
-                            WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
-           AND (d.referenced_minor_id = 0
-                OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
-                       SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
+          FROM #SbChain c
 
+      -- Deepest first: an outer module bound to an inner one has to come out before it.
       DECLARE @v_SbDropSql NVARCHAR(MAX) =
-        (SELECT DISTINCT 'RAISERROR(''  Drop schema-bound module '
-                         + OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id)
-                         + ' - blocks a column change; the after-tables object pass recreates it'', 10, 100) WITH NOWAIT' + CHAR(13) + CHAR(10)
-                         + 'DROP ' + CASE WHEN so.type = 'V' THEN 'VIEW' ELSE 'FUNCTION' END + ' '
-                         + QUOTENAME(OBJECT_SCHEMA_NAME(d.referencing_id)) + '.'
-                         + QUOTENAME(OBJECT_NAME(d.referencing_id)) + CHAR(13) + CHAR(10)
-                   FROM #ColumnChanges cc WITH (NOLOCK)
-                   JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
-                     ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
-                   JOIN sys.sql_modules m WITH (NOLOCK)
-                     ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
-                   JOIN sys.objects so WITH (NOLOCK) ON so.[object_id] = d.referencing_id
-                  WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
-                                     WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
-                    AND (d.referenced_minor_id = 0
-                         OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
-                                SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
-                   FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)')
+        (SELECT 'RAISERROR(''  Drop schema-bound module '
+                + OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId)
+                + ' - blocks a column change; the after-tables object pass recreates it'', 10, 100) WITH NOWAIT' + CHAR(13) + CHAR(10)
+                + 'DROP ' + CASE WHEN so.type = 'V' THEN 'VIEW' ELSE 'FUNCTION' END + ' '
+                + QUOTENAME(OBJECT_SCHEMA_NAME(c.ModuleId)) + '.'
+                + QUOTENAME(OBJECT_NAME(c.ModuleId)) + CHAR(13) + CHAR(10)
+           FROM #SbChain c
+           JOIN sys.objects so WITH (NOLOCK) ON so.[object_id] = c.ModuleId
+          ORDER BY c.Depth DESC, OBJECT_NAME(c.ModuleId)
+            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)')
 
       IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SbDropSql ELSE EXEC(@v_SbDropSql)
     END
