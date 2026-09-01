@@ -13,6 +13,7 @@ CREATE PROCEDURE SchemaSmith.ModifiedTableQuench
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
   @DropTablesRemovedFromProduct BIT = 1,
+  @DropSchemaBoundDependents BIT = 0,
   @DropColumnsRemovedFromProduct BIT = 1,
   @DropForeignKeysRemovedFromProduct BIT = 1,
   @DropCheckConstraintsRemovedFromProduct BIT = 1,
@@ -701,8 +702,79 @@ BEGIN TRY
                             SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
                FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
 
-    IF @v_SbBlocked IS NOT NULL
-      RAISERROR('Column change blocked by SCHEMABINDING: %s. SQL Server will not alter a column while a schema-bound module references it, and SchemaSmith will not drop a scripted object it cannot put back. Move the listed module(s) into a schema-bound object folder (QuenchSlot AfterTablesObjects) so the deploy can drop and recreate them around the table work, or remove SCHEMABINDING from them.', 16, 1, @v_SbBlocked)
+    -- WITH ENCRYPTION returns NULL from OBJECT_DEFINITION, so NOTHING can put such a module back --
+    -- not SchemaSmith, and not the package's own script, which cannot have been extracted from the
+    -- server either. Dropping one would be unrecoverable, so it is refused even when the option is on.
+    DECLARE @v_SbEncrypted NVARCHAR(MAX) =
+      STUFF((SELECT DISTINCT ', ' + OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id)
+               FROM #ColumnChanges cc WITH (NOLOCK)
+               JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
+                 ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
+               JOIN sys.sql_modules m WITH (NOLOCK)
+                 ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+              WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
+                                 WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
+                AND OBJECT_DEFINITION(d.referencing_id) IS NULL
+                AND (d.referenced_minor_id = 0
+                     OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
+                            SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
+               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+
+    IF @v_SbEncrypted IS NOT NULL
+      RAISERROR('Column change blocked by an ENCRYPTED schema-bound module: %s. Its definition cannot be read from the server, so nothing can recreate it once dropped -- DropSchemaBoundDependents deliberately does not extend to it. Remove SCHEMABINDING or the encryption from the listed module(s).', 16, 1, @v_SbEncrypted)
+
+    IF @v_SbBlocked IS NOT NULL AND @DropSchemaBoundDependents = 0
+      RAISERROR('Column change blocked by SCHEMABINDING: %s. SQL Server will not alter a column while a schema-bound module references it, and SchemaSmith will not drop a scripted object it cannot put back. Move the listed module(s) into a schema-bound object folder (QuenchSlot AfterTablesObjects) and set DropSchemaBoundDependents so the deploy can drop them around the table work and the after-tables object pass recreates them, or remove SCHEMABINDING from them.', 16, 1, @v_SbBlocked)
+
+    -- Opt-in drop. The package has said it accepts responsibility for recreating these, which the
+    -- after-tables object pass does from the package's own scripts -- so SchemaSmith deliberately does
+    -- NOT capture and replay the server's definition here. The package is the authority on what the
+    -- module should be; the copy on the server is merely what happens to be deployed.
+    --
+    -- PERMISSIONS ARE NOT PRESERVED. Dropping a view or function discards every GRANT on it, and
+    -- SchemaSmith does not manage permissions on any object, so it cannot restore them. The recreating
+    -- script must re-grant, or a separate permissions process must.
+    IF @v_SbBlocked IS NOT NULL AND @DropSchemaBoundDependents = 1
+    BEGIN
+      -- The audit is written set-based here rather than generated into the script below, so this proc
+      -- has two levels of quoting instead of three. The predicate is the same one the DROP uses.
+      INSERT SchemaSmith.ChangeAudit ([SessionId], [ObjectType], [ObjectName], [ActionType])
+        SELECT DISTINCT @@SPID, 'schemaBoundModule',
+               OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id),
+               CASE WHEN @WhatIf = 1 THEN 'wouldDrop' ELSE 'dropped' END
+          FROM #ColumnChanges cc WITH (NOLOCK)
+          JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
+            ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
+          JOIN sys.sql_modules m WITH (NOLOCK)
+            ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+         WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
+                            WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
+           AND (d.referenced_minor_id = 0
+                OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
+                       SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
+
+      DECLARE @v_SbDropSql NVARCHAR(MAX) =
+        (SELECT DISTINCT 'RAISERROR(''  Drop schema-bound module '
+                         + OBJECT_SCHEMA_NAME(d.referencing_id) + '.' + OBJECT_NAME(d.referencing_id)
+                         + ' - blocks a column change; the after-tables object pass recreates it'', 10, 100) WITH NOWAIT' + CHAR(13) + CHAR(10)
+                         + 'DROP ' + CASE WHEN so.type = 'V' THEN 'VIEW' ELSE 'FUNCTION' END + ' '
+                         + QUOTENAME(OBJECT_SCHEMA_NAME(d.referencing_id)) + '.'
+                         + QUOTENAME(OBJECT_NAME(d.referencing_id)) + CHAR(13) + CHAR(10)
+                   FROM #ColumnChanges cc WITH (NOLOCK)
+                   JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
+                     ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
+                   JOIN sys.sql_modules m WITH (NOLOCK)
+                     ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+                   JOIN sys.objects so WITH (NOLOCK) ON so.[object_id] = d.referencing_id
+                  WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
+                                     WHERE i.[object_id] = d.referencing_id AND i.index_id > 0)
+                    AND (d.referenced_minor_id = 0
+                         OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
+                                SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId'))
+                   FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)')
+
+      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SbDropSql ELSE EXEC(@v_SbDropSql)
+    END
   END
 
   RAISERROR('Elect tables for rebuild', 10, 100) WITH NOWAIT

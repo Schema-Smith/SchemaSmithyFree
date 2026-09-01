@@ -146,4 +146,70 @@ public class SchemaBoundDependentTests
                 + "drop-and-recreate safe for it");
         });
     }
+
+    private void DeployWithDrop(string json)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = "EXEC SchemaSmith.TableQuench @ProductName = 'SchemaBoundTest', "
+                          + $"@TableDefinitions = N'{json.Replace("'", "''")}', "
+                          + "@DropTablesRemovedFromProduct = 0, @DropSchemaBoundDependents = 1";
+        cmd.ExecuteNonQuery();
+    }
+
+    [Test]
+    public void WithTheOptionOn_TheBlockingModuleIsDroppedAndTheColumnChangeApplies()
+    {
+        Deploy(Package("SbDrop", "50"));
+        Exec("CREATE VIEW dbo.SbDropView WITH SCHEMABINDING AS SELECT Id, Label FROM dbo.SbDrop");
+
+        DeployWithDrop(Package("SbDrop", "100"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Scalar("SELECT CONVERT(INT, c.max_length) FROM sys.columns c "
+                               + "WHERE c.[object_id] = OBJECT_ID('dbo.SbDrop') AND c.name = 'Label'"),
+                Is.EqualTo(100),
+                "the whole point of the option is that the column change actually lands");
+            Assert.That(Scalar("SELECT COUNT(*) FROM sys.objects WHERE name = 'SbDropView'"), Is.Zero,
+                "and the blocking module is gone -- the package's after-tables object pass is what puts "
+                + "it back, which is why it has to be declared there");
+        });
+    }
+
+    [Test]
+    public void WithTheOptionOff_TheModuleSurvivesAndTheChangeIsStillRefused()
+    {
+        // The negative half, and it matters: a drop that fired regardless of the flag would destroy a
+        // schema-bound module in every package that never opted in, and the user would have no script
+        // to recreate it from.
+        Deploy(Package("SbKeep", "50"));
+        Exec("CREATE VIEW dbo.SbKeepView WITH SCHEMABINDING AS SELECT Id, Label FROM dbo.SbKeep");
+
+        Assert.Catch(() => Deploy(Package("SbKeep", "100")));
+
+        Assert.That(Scalar("SELECT COUNT(*) FROM sys.objects WHERE name = 'SbKeepView'"), Is.EqualTo(1),
+            "opting out has to mean the module is left alone, not dropped and not recreated");
+    }
+
+    [Test]
+    public void AnEncryptedModule_IsRefusedEvenWithTheOptionOn()
+    {
+        // WITH ENCRYPTION returns NULL from OBJECT_DEFINITION, so nothing -- not SchemaSmith, not the
+        // user's own package -- can put it back from the server. Dropping it would be unrecoverable, so
+        // the option deliberately does not extend to it.
+        Deploy(Package("SbEnc", "50"));
+        Exec("CREATE VIEW dbo.SbEncView WITH SCHEMABINDING, ENCRYPTION AS SELECT Id, Label FROM dbo.SbEnc");
+
+        var ex = Assert.Catch(() => DeployWithDrop(Package("SbEnc", "100")));
+
+        Assert.That(ex, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ex.Message, Does.Contain("SbEncView"), "the message must name it. " + ex.Message);
+            Assert.That(Scalar("SELECT COUNT(*) FROM sys.objects WHERE name = 'SbEncView'"), Is.EqualTo(1),
+                "and it must still be there -- refusing after dropping would be the worst outcome");
+        });
+    }
+
 }
