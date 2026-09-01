@@ -173,6 +173,7 @@ public static class SettingsKeys
     public const string WhatIfOnly = "WhatIfONLY";
     public const string RunScriptsTwice = "RunScriptsTwice";
     public const string DropTablesRemovedFromProduct = "DropTablesRemovedFromProduct";
+    public const string DropSchemaBoundDependents = "DropSchemaBoundDependents";
     public const string DropUnknownIndexes = "DropUnknownIndexes";
     public const string DropColumnsRemovedFromProduct = "DropColumnsRemovedFromProduct";
     public const string DropForeignKeysRemovedFromProduct = "DropForeignKeysRemovedFromProduct";

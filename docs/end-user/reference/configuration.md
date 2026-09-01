@@ -534,6 +534,60 @@ SchemaQuench --ConnectionString:"Host=prod-db;Database=mydb;Username=deploy;Pass
 
 ---
 
+## DropSchemaBoundDependents
+
+**SQL Server only.** Controls whether SchemaQuench drops a `SCHEMABINDING` view or function that is
+blocking a column change, so the change can be applied and the module recreated afterwards. Three tiers
+compose to produce the effective value, resolved environment → product → template.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropSchemaBoundDependents` in `SchemaQuench.settings.json` (or `SmithySettings_DropSchemaBoundDependents` environment variable) | `false` |
+| Product | `DropSchemaBoundDependents` in `Product.json` | `false` |
+| Template | `DropSchemaBoundDependents` in `Template.json` | (inherit) |
+
+### The problem it solves
+
+SQL Server refuses to alter a column while a schema-bound module references it, failing with error 4922 —
+"one or more objects access this column" — which names neither the module nor what to do about it. Left
+off, SchemaQuench reports the same refusal but names the blocking module, the column it blocks, and the
+remedy. Turned on, it drops the module instead, applies the column change, and the after-tables object
+pass recreates the module **from your package**.
+
+### Your scripts must be in the after-tables slot
+
+SchemaSmith does not save and replay the definition it found on the server. Your package is the authority
+on what the module should be; the copy on the server is only whatever happens to be deployed. So the
+recreate comes from your own script, and that script has to run **after** the table work.
+
+Put schema-bound modules in a folder on the `AfterTablesObjects` slot. The default templates already
+include `SchemaBound Views/` and `SchemaBound Functions/` for this, and **SchemaTongs writes schema-bound
+views and functions into those folders automatically on extraction** — whether or not this setting is on
+— so an extracted package is already shaped correctly the day you turn it on. A module left in the
+ordinary `Views/` or `Functions/` folder is recreated before the table work rather than after it.
+
+### Dropping discards permissions
+
+**A dropped view or function loses every `GRANT` on it, and SchemaSmith does not put them back.**
+SchemaSmith does not manage permissions on any object, so it has nothing to restore them from. Re-grant
+in the recreating script itself, or from whatever process you already use to manage permissions — if you
+grant on these objects at all, you almost certainly have one.
+
+### What it will not do
+
+An **encrypted** module (`WITH ENCRYPTION`) is refused even with the setting on, and refused *before*
+anything is dropped. `OBJECT_DEFINITION` returns `NULL` for one, so it cannot be scripted from the server
+by SchemaSmith, by SchemaTongs, or by you — dropping it would be unrecoverable. Remove the encryption or
+the `SCHEMABINDING` to proceed.
+
+Indexed views are unaffected either way. Those are already dropped and recreated around column changes.
+
+```json
+// Template.json — this template's schema-bound modules are safe to cycle
+{ "DropSchemaBoundDependents": true }
+```
+---
+
 ## DropTablesRemovedFromProduct
 
 Controls whether SchemaQuench drops tables that exist in the database but no longer appear in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.

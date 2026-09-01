@@ -261,6 +261,8 @@ When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills
 | `Procedures/` | Objects | Procedures |
 | `Triggers/` | AfterTablesObjects | Triggers |
 | `DDLTriggers/` | AfterTablesObjects | DDLTriggers |
+| `SchemaBound Views/` | AfterTablesObjects | SchemaBoundViews |
+| `SchemaBound Functions/` | AfterTablesObjects | SchemaBoundFunctions |
 | `Table Data/` | TableData | — |
 | `After Scripts/` | After | — |
 

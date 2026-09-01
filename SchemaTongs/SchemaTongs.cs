@@ -937,6 +937,10 @@ public class SchemaTongs
         switch (_platform.GetBasePlatform())
         {
             case Platform.SqlServer:
+                // #323: only SQL Server has SCHEMABINDING, so these two folders are declared here
+                // rather than alongside the cross-platform Views entry above.
+                if (_includeViews) folders.Add(ResolveFolderName("SchemaBound Views", ScriptObjectType.SchemaBoundViews));
+                if (_includeUserDefinedFunctions) folders.Add(ResolveFolderName("SchemaBound Functions", ScriptObjectType.SchemaBoundFunctions));
                 if (_includeSchemas) folders.Add(ResolveFolderName("Schemas", ScriptObjectType.Schemas));
                 if (_includeUserDefinedTypes) folders.Add(ResolveFolderName("DataTypes", ScriptObjectType.DataTypes));
                 if (_includeUserDefinedFunctions) folders.Add(ResolveFolderName("Functions", ScriptObjectType.Functions));
@@ -1482,10 +1486,13 @@ SELECT s.name AS SchemaName, sy.name AS SynonymName, sy.base_object_name
     {
         _progressLog.Info("Casting Function Scripts");
         var castPath = GetCastPath(ScriptObjectType.Functions, "Functions");
+        // #323: a SCHEMABINDING module goes to its own folder on the AfterTablesObjects slot,
+        // so a column change it blocks can drop it and this pass can put it back afterwards.
+        var sbCastPath = GetCastPath(ScriptObjectType.SchemaBoundFunctions, "SchemaBound Functions");
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
 
         command.CommandText = @"
-SELECT s.name AS SchemaName, o.name AS ObjectName
+SELECT s.name AS SchemaName, o.name AS ObjectName, CONVERT(BIT, ISNULL(sm.is_schema_bound, 0)) AS IsSchemaBound
   FROM sys.objects o
   JOIN sys.schemas s ON o.schema_id = s.schema_id
   LEFT JOIN sys.sql_modules sm ON o.object_id = sm.object_id
@@ -1494,7 +1501,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
    AND s.name <> 'SchemaSmith'
  ORDER BY s.name, o.name";
 
-        var functions = new List<(string Schema, string Name)>();
+        var functions = new List<(string Schema, string Name, bool SchemaBound)>();
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
@@ -1503,11 +1510,11 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 var name = reader.GetString(1);
                 if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
-                functions.Add((schema, name));
+                functions.Add((schema, name, reader.GetBoolean(2)));
             }
         }
 
-        foreach (var (schema, name) in functions)
+        foreach (var (schema, name, schemaBound) in functions)
         {
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "FUNCTION");
             if (sql == null) continue;
@@ -1565,12 +1572,13 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 sql = sql.Substring(0, firstGoEnd) + dependencyBlock + sql.Substring(firstGoEnd);
             }
 
-            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            if (schemaBound) DirectoryWrapper.GetFromFactory().CreateDirectory(sbCastPath);
+            var fileName = ResolveOutputPath(schemaBound ? sbCastPath : castPath, EncodeObjectFileName(schema, name, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Functions++; continue; }
             sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-            ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Functions);
+            ValidateAndHandleScript(command.Connection, fileName, sql, schemaBound ? ScriptObjectType.SchemaBoundFunctions : ScriptObjectType.Functions);
             _stats.Functions++;
         }
     }
@@ -1579,10 +1587,13 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
     {
         _progressLog.Info("Casting View Scripts");
         var castPath = GetCastPath(ScriptObjectType.Views, "Views");
+        // #323: a SCHEMABINDING module goes to its own folder on the AfterTablesObjects slot,
+        // so a column change it blocks can drop it and this pass can put it back afterwards.
+        var sbCastPath = GetCastPath(ScriptObjectType.SchemaBoundViews, "SchemaBound Views");
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
 
         command.CommandText = @"
-SELECT s.name AS SchemaName, o.name AS ObjectName
+SELECT s.name AS SchemaName, o.name AS ObjectName, CONVERT(BIT, ISNULL(sm.is_schema_bound, 0)) AS IsSchemaBound
   FROM sys.objects o
   JOIN sys.schemas s ON o.schema_id = s.schema_id
   LEFT JOIN sys.sql_modules sm ON o.object_id = sm.object_id
@@ -1592,7 +1603,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
    AND o.name NOT LIKE 'MSSQL[_]DroppedLedgerView[_]%'" + LedgerViewFilter() + @"
  ORDER BY s.name, o.name";
 
-        var views = new List<(string Schema, string Name)>();
+        var views = new List<(string Schema, string Name, bool SchemaBound)>();
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
@@ -1601,21 +1612,22 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 var name = reader.GetString(1);
                 if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
-                views.Add((schema, name));
+                views.Add((schema, name, reader.GetBoolean(2)));
             }
         }
 
-        foreach (var (schema, name) in views)
+        foreach (var (schema, name, schemaBound) in views)
         {
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "VIEW");
             if (sql == null) continue;
 
-            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            if (schemaBound) DirectoryWrapper.GetFromFactory().CreateDirectory(sbCastPath);
+            var fileName = ResolveOutputPath(schemaBound ? sbCastPath : castPath, EncodeObjectFileName(schema, name, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Views++; continue; }
             sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-            ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Views);
+            ValidateAndHandleScript(command.Connection, fileName, sql, schemaBound ? ScriptObjectType.SchemaBoundViews : ScriptObjectType.Views);
             _stats.Views++;
         }
     }

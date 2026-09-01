@@ -153,6 +153,13 @@ namespace Schema.Domain
         [JsonProperty(Order = 17)]
         public bool? DropUnknownIndexes { get; set; }
 
+        // #323. Opt-in: a column change blocked by a SCHEMABINDING module drops the module and lets
+        // the after-tables object pass recreate it from this package. Requires those modules to live
+        // in a folder on the AfterTablesObjects slot, which SchemaTongs arranges on extraction.
+        // DROPPING DISCARDS PERMISSIONS -- SchemaSmith manages none, so the script must re-grant.
+        [JsonProperty(Order = 25)]
+        public bool? DropSchemaBoundDependents { get; set; }
+
         [JsonProperty(Order = 18)]
         public bool? DropColumnsRemovedFromProduct { get; set; }
 
@@ -610,6 +617,11 @@ namespace Schema.Domain
                     new TemplateFolder { FolderPath = "Synonyms", QuenchSlot = TemplateQuenchSlot.Objects, ObjectType = ScriptObjectType.Synonyms },
                     new TemplateFolder { FolderPath = "Triggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.Triggers },
                     new TemplateFolder { FolderPath = "DDLTriggers", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.DDLTriggers },
+                    // #323. SCHEMABINDING modules live here rather than in Views/Functions above,
+                    // because a column change they block is resolved by dropping them and letting
+                    // this pass recreate them -- which only works after the table work has run.
+                    new TemplateFolder { FolderPath = "SchemaBound Views", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.SchemaBoundViews },
+                    new TemplateFolder { FolderPath = "SchemaBound Functions", QuenchSlot = TemplateQuenchSlot.AfterTablesObjects, ObjectType = ScriptObjectType.SchemaBoundFunctions },
                     new TemplateFolder { FolderPath = "Table Data", QuenchSlot = TemplateQuenchSlot.TableData },
                     new TemplateFolder { FolderPath = "After Scripts", QuenchSlot = TemplateQuenchSlot.After },
                 ],

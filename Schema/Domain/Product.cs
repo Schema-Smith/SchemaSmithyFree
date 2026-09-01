@@ -88,6 +88,8 @@ namespace Schema.Domain
         [JsonProperty(Order = 21)]
         public bool? DropIndexesRemovedFromProduct { get; set; }
 
+        public bool? DropSchemaBoundDependents { get; set; }
+
         /// <summary>
         /// Product tier of the rebuild-policy cascade. Null inherits from the environment. Unlike the
         /// <c>Drop*RemovedFromProduct</c> flags above it, the levels do not combine — the nearest

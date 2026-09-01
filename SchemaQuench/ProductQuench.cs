@@ -1927,7 +1927,10 @@ public class ProductQuench
             ChangeAudit = _changeAudit,
             CaptureWouldDrop = _protectedMode,
             CascadedRebuildPolicy = rebuildPolicy,
-            DropPeriodsRemovedFromProduct = dropRemovedPeriods
+            DropPeriodsRemovedFromProduct = dropRemovedPeriods,
+            DropSchemaBoundDependents = ResolveCascadedFlag(
+                ConfigBool(_config, SettingsKeys.DropSchemaBoundDependents), _product.DropSchemaBoundDependents,
+                template.DropSchemaBoundDependents, defaultValue: false)
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();
