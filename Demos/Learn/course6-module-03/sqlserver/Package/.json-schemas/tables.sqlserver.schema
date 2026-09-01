@@ -150,6 +150,12 @@
           "FileGroup": {
             "type": "string"
           },
+          "IgnoreDuplicateKey": {
+            "type": "boolean"
+          },
+          "PadIndex": {
+            "type": "boolean"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
