@@ -63,6 +63,24 @@ BEGIN TRY
   IF @v_Missing IS NOT NULL
     RAISERROR('FILESTREAM column(s) declared on table(s) with no usable ROWGUIDCOL: %s. SQL Server requires a NOT NULL UNIQUEIDENTIFIER column with ROWGUIDCOL that is covered by a single-column PRIMARY KEY or UNIQUE CONSTRAINT. A unique INDEX does NOT satisfy this - declare the index entry with "UniqueConstraint": true (or "PrimaryKey": true) rather than "Unique": true. Declare the ROWGUIDCOL column itself as part of its DataType - "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL" - the same way IDENTITY is declared. SchemaSmith does not add the column for you: one it invented would appear in no package and vanish on the next extract-redeploy round trip.', 16, 1, @v_Missing)
 
+  -- Bind the table to its declared FILESTREAM filegroup BEFORE the column is added. Verified on a live
+  -- server: ALTER TABLE ... SET (FILESTREAM_ON = <fg>) is accepted while the table still has no
+  -- FILESTREAM column, and the column added afterwards lands on that filegroup. Doing it the other way
+  -- round is not available -- once a table has a filestream data space the ALTER fails 1726 -- which is
+  -- also why a CHANGED declaration is refused in ModifiedTableQuench rather than applied.
+  DECLARE @v_FsOn NVARCHAR(MAX) =
+    (SELECT 'RAISERROR(''  Binding ' + t.[Schema] + '.' + t.[Name] + ' to FILESTREAM filegroup ' + t.[FileStreamFileGroup] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+            'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' SET (FILESTREAM_ON = ' + t.[FileStreamFileGroup] + ');' + CHAR(13) + CHAR(10)
+       FROM #Tables t WITH (NOLOCK)
+       JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+      WHERE t.[FileStreamFileGroup] IS NOT NULL
+        AND st.filestream_data_space_id IS NULL
+        AND EXISTS (SELECT 1 FROM #Columns c WITH (NOLOCK)
+                     WHERE c.[Schema] = t.[Schema] AND c.[TableName] = t.[Name] AND ISNULL(c.[FileStream], 0) = 1)
+        FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)')
+  IF @v_FsOn IS NOT NULL
+    IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_FsOn ELSE EXEC(@v_FsOn)
+
   SELECT @v_SQL = @v_SQL +
     'RAISERROR(''  Adding FILESTREAM column ' + c.[Schema] + '.' + c.[TableName] + '.' + c.[ColumnName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
     'ALTER TABLE ' + c.[Schema] + '.' + c.[TableName] + ' ADD ' + CAST(c.[ColumnScript] AS NVARCHAR(MAX)) + ';' + CHAR(13) + CHAR(10)

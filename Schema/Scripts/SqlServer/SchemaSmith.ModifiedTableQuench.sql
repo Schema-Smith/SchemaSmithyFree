@@ -127,6 +127,39 @@ BEGIN TRY
     RAISERROR('Table %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing table to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_MoveTable, @v_MoveDeclared, @v_MoveLive)
   END
 
+  -- The other two placement clauses. Same posture as FileGroup above: neither TEXTIMAGE_ON nor
+  -- FILESTREAM_ON has an ALTER, so a declared name that differs from the live one is refused rather
+  -- than silently ignored. Read from the table's own lob/filestream data spaces, which is why this
+  -- cannot reuse the index-based lookup the FileGroup check uses.
+  IF OBJECT_ID('tempdb..#DeployedLobPlacement') IS NOT NULL DROP TABLE #DeployedLobPlacement
+  SELECT t.[Schema] + '.' + t.[Name] AS FullName,
+         [Clause] = CONVERT(NVARCHAR(20), 'TextImageFileGroup'),
+         SchemaSmith.fn_StripBracketWrapping(t.[TextImageFileGroup]) AS Declared,
+         lds.[name] AS DeployedSpace
+    INTO #DeployedLobPlacement
+    FROM #Tables t WITH (NOLOCK)
+    JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+    LEFT JOIN sys.data_spaces lds WITH (NOLOCK) ON lds.data_space_id = st.lob_data_space_id
+   WHERE t.NewTable = 0 AND t.[TextImageFileGroup] IS NOT NULL
+  UNION ALL
+  SELECT t.[Schema] + '.' + t.[Name],
+         'FileStreamFileGroup',
+         SchemaSmith.fn_StripBracketWrapping(t.[FileStreamFileGroup]),
+         fds.[name]
+    FROM #Tables t WITH (NOLOCK)
+    JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+    LEFT JOIN sys.data_spaces fds WITH (NOLOCK) ON fds.data_space_id = st.filestream_data_space_id
+   WHERE t.NewTable = 0 AND t.[FileStreamFileGroup] IS NOT NULL
+
+  IF EXISTS (SELECT 1 FROM #DeployedLobPlacement WHERE DeployedSpace IS NOT NULL AND Declared <> DeployedSpace)
+  BEGIN
+    DECLARE @v_LobTable NVARCHAR(1010), @v_LobClause NVARCHAR(20), @v_LobDeclared NVARCHAR(500), @v_LobLive NVARCHAR(500)
+    SELECT TOP 1 @v_LobTable = FullName, @v_LobClause = Clause, @v_LobDeclared = Declared, @v_LobLive = DeployedSpace
+      FROM #DeployedLobPlacement
+     WHERE DeployedSpace IS NOT NULL AND Declared <> DeployedSpace
+    RAISERROR('Table %s declares %s %s, but its data is currently on filegroup %s. SchemaSmith does not move an existing table''s large-object or FILESTREAM data to a different filegroup -- there is no ALTER for it. Migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_LobTable, @v_LobClause, @v_LobDeclared, @v_LobLive)
+  END
+
   -- An explicit FileGroup on a table living on a partition scheme is a placement we cannot honour, so it is
   -- refused rather than silently ignored. Leaving FileGroup unset on such a table stays supported untouched.
   IF EXISTS (SELECT 1 FROM #DeployedTablePlacement

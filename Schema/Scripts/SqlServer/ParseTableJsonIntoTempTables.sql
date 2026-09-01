@@ -47,6 +47,8 @@
          -- HistoryTableSchema/Name above, so the apply side can tell "unset -> SQL Server's own default
          -- filegroup" apart from an explicit declaration.
          [FileGroup] = SchemaSmith.fn_SafeBracketWrap([FileGroup]),
+         [FileStreamFileGroup] = SchemaSmith.fn_SafeBracketWrap([FileStreamFileGroup]),
+         [TextImageFileGroup] = SchemaSmith.fn_SafeBracketWrap([TextImageFileGroup]),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
          [ShouldApplyExpression], [VariantName], [GraphType] = RTRIM(ISNULL([GraphType], 'None')), [Ledger] = RTRIM(ISNULL([Ledger], 'Off')), [EnableCDC] = ISNULL([EnableCDC], 0), [EnableChangeTracking] = ISNULL([EnableChangeTracking], 0), [TrackColumnsUpdated] = ISNULL([TrackColumnsUpdated], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
@@ -70,6 +72,8 @@
       [HistoryTableName] NVARCHAR(500) '$.HistoryTableName',
       [HistoryRetentionPeriod] NVARCHAR(50) '$.HistoryRetentionPeriod',
       [FileGroup] NVARCHAR(500) '$.FileGroup',
+      [FileStreamFileGroup] NVARCHAR(500) '$.FileStreamFileGroup',
+      [TextImageFileGroup] NVARCHAR(500) '$.TextImageFileGroup',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
       [OldName] NVARCHAR(500) '$.OldName',
 	  [Indexes] NVARCHAR(MAX) '$.Indexes' AS JSON,
@@ -109,7 +113,7 @@
   EXEC(@v_SQL)
 
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [FileStreamFileGroup], [TextImageFileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch], [RebuildPolicySpecified],

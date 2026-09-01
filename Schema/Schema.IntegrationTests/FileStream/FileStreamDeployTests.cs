@@ -50,8 +50,14 @@ public class FileStreamDeployTests
         // Its own database, because a FILESTREAM filegroup is a create-time property.
         _db = $"SchemaFs_{Guid.NewGuid():N}"[..30];
         var dataPath = ScalarString("SELECT CONVERT(NVARCHAR(400), SERVERPROPERTY('InstanceDefaultDataPath'))");
+        // Three filegroups, not one. Placement cannot be proved with a single filestream filegroup and
+        // no LOB filegroup: SQL Server binds the default automatically, so an assertion that "a filegroup
+        // is bound" passes whether or not the DECLARED name was honoured -- which is exactly how the
+        // original assertion in this fixture passed over a property that did nothing at all.
         Exec($"CREATE DATABASE [{_db}] ON PRIMARY (NAME = {_db}_d, FILENAME = '{dataPath}{_db}.mdf'), "
-             + $"FILEGROUP FsFg CONTAINS FILESTREAM (NAME = {_db}_fs, FILENAME = '{dataPath}{_db}Fs') "
+             + $"FILEGROUP FsFg CONTAINS FILESTREAM (NAME = {_db}_fs, FILENAME = '{dataPath}{_db}Fs'), "
+             + $"FILEGROUP FsFg2 CONTAINS FILESTREAM (NAME = {_db}_fs2, FILENAME = '{dataPath}{_db}Fs2'), "
+             + $"FILEGROUP LobFg (NAME = {_db}_lob, FILENAME = '{dataPath}{_db}Lob.ndf') "
              + $"LOG ON (NAME = {_db}_l, FILENAME = '{dataPath}{_db}.ldf')");
         _connection.ChangeDatabase(_db);
 
@@ -154,9 +160,11 @@ public class FileStreamDeployTests
                                + "WHERE [object_id] = OBJECT_ID('dbo.FsOk') AND name = 'Doc'"),
                 Is.EqualTo(1), "the column has to actually be FILESTREAM, not merely present");
 
-            Assert.That(Scalar("SELECT COUNT(*) FROM sys.tables WHERE name = 'FsOk' "
-                               + "AND filestream_data_space_id IS NOT NULL"),
-                Is.EqualTo(1), "and the table is bound to a FILESTREAM filegroup");
+            Assert.That(ScalarString("SELECT ds.name FROM sys.tables t "
+                               + "JOIN sys.data_spaces ds ON ds.data_space_id = t.filestream_data_space_id "
+                               + "WHERE t.name = 'FsOk'"),
+                Is.EqualTo("FsFg"),
+                "and the table is bound to a FILESTREAM filegroup BY NAME. Asserting only that the id is non-null passes automatically -- SQL Server binds the default whenever a FILESTREAM column exists.");
         });
     }
 
@@ -213,4 +221,121 @@ public class FileStreamDeployTests
                 + "drops it produces a package that cannot satisfy 5505 on re-deploy");
         });
     }
+
+    [Test]
+    public void ADeclaredFileStreamFileGroup_IsHonoured()
+    {
+        // FsFg2 is deliberately NOT the default: the database declares FsFg first, so a package that is
+        // ignored lands on FsFg and this fails. That is what makes the test worth having -- the previous
+        // assertion in this fixture could not tell the two apart.
+        Deploy(PackageOn("FsPlaced", "\"UniqueConstraint\": true", ", \"FileStreamFileGroup\": \"[FsFg2]\""));
+
+        Assert.That(ScalarString("SELECT ds.name FROM sys.tables t "
+                                 + "JOIN sys.data_spaces ds ON ds.data_space_id = t.filestream_data_space_id "
+                                 + "WHERE t.name = 'FsPlaced'"),
+            Is.EqualTo("FsFg2"),
+            "a declared FILESTREAM filegroup has to reach the CREATE TABLE. Extracting it while never "
+            + "deploying it tells the reader SchemaSmith manages placement when it does not.");
+    }
+
+    [Test]
+    public void ADeclaredTextImageFileGroup_IsHonoured()
+    {
+        // A genuine non-FILESTREAM LOB column. A FILESTREAM varbinary(max) does NOT satisfy
+        // TEXTIMAGE_ON -- error 1709 names "non-FILESTREAM varbinary(max)" explicitly -- so the LOB
+        // guard has to exclude FILESTREAM columns, and this fixture has to prove it does.
+        Deploy(PackageOn("LobPlaced", "\"UniqueConstraint\": true", ", \"TextImageFileGroup\": \"[LobFg]\"",
+            ", { \"Name\": \"[Notes]\", \"DataType\": \"NVARCHAR(MAX)\", \"Nullable\": true }"));
+
+        Assert.That(ScalarString("SELECT ds.name FROM sys.tables t "
+                                 + "JOIN sys.data_spaces ds ON ds.data_space_id = t.lob_data_space_id "
+                                 + "WHERE t.name = 'LobPlaced'"),
+            Is.EqualTo("LobFg"),
+            "TEXTIMAGE_ON is the third filegroup clause alongside ON and FILESTREAM_ON, both of which are "
+            + "already honoured");
+    }
+
+    [Test]
+    public void TextImageFileGroup_OnATableWithNoLargeObjectColumn_IsRefusedByName()
+    {
+        // SQL Server rejects TEXTIMAGE_ON with error 1709 on a table that has no LOB column, and that
+        // message names neither the table nor the property. Emitting it unconditionally would break every
+        // non-LOB table in a package that set it at the template level.
+        var json = "[{ \"Schema\": \"[dbo]\", \"Name\": \"[NoLob]\", \"TextImageFileGroup\": \"[LobFg]\", \"Columns\": ["
+                   + " { \"Name\": \"[Id]\", \"DataType\": \"INT\", \"Nullable\": false } ], \"Indexes\": ["
+                   + " { \"Name\": \"[PK_NoLob]\", \"IndexColumns\": \"[Id]\", \"PrimaryKey\": true, \"Unique\": true } ] }]";
+
+        var ex = Assert.Catch(() => Deploy(json));
+
+        Assert.That(ex, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ex.Message, Does.Contain("NoLob"), "the message must name the table. " + ex.Message);
+            Assert.That(ex.Message, Does.Contain("TextImageFileGroup"), "and the property");
+        });
+    }
+
+    [Test]
+    public void ChangingAPlacementFileGroup_OnADeployedTable_IsRefused()
+    {
+        // Neither clause has an ALTER -- placement is fixed at CREATE -- so a changed declaration is
+        // refused by name rather than silently ignored, the same posture FileGroup takes.
+        Deploy(PackageOn("FsMove", "\"UniqueConstraint\": true", ", \"FileStreamFileGroup\": \"[FsFg]\""));
+
+        var ex = Assert.Catch(() => Deploy(PackageOn("FsMove", "\"UniqueConstraint\": true",
+            ", \"FileStreamFileGroup\": \"[FsFg2]\"")));
+
+        Assert.That(ex, Is.Not.Null, "silently leaving the table where it is would be the worse outcome");
+        Assert.That(ex.Message, Does.Contain("FsMove"), ex.Message);
+    }
+
+    [Test]
+    public void BothPlacementFileGroups_RoundTripThroughExtraction()
+    {
+        // The round trip is the assertion that matters most here: FileStreamFileGroup was EXTRACT-ONLY --
+        // read back faithfully while doing nothing on deploy -- which is worse than not supporting it,
+        // because the package reads as though placement is managed. Extraction alone proves nothing.
+        Deploy(PackageOn("FsRound", "\"UniqueConstraint\": true",
+            ", \"FileStreamFileGroup\": \"[FsFg2]\", \"TextImageFileGroup\": \"[LobFg]\"",
+            ", { \"Name\": \"[Notes]\", \"DataType\": \"NVARCHAR(MAX)\", \"Nullable\": true }"));
+
+        var json = ExtractTable("FsRound");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(json, Does.Contain("FsFg2"),
+                "an extracted package that drops the FILESTREAM filegroup re-deploys the table onto the "
+                + "default one. " + json);
+            Assert.That(json, Does.Contain("LobFg"),
+                "and the same for large-object placement. " + json);
+        });
+    }
+
+    /// <summary>
+    /// Extraction goes through whichever encoding this server uses -- the newest Windows instance
+    /// available here is 2016, so in practice that is the XML tier, which is exactly the half a
+    /// modern-container test cannot reach.
+    /// </summary>
+    private string ExtractTable(string table)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandTimeout = 300;
+        cmd.CommandText = _encoding == IngestEncoding.Xml
+            ? $"EXEC SchemaSmith.GenerateTableXml @p_Schema = 'dbo', @p_Table = '{table}'"
+            : $"EXEC SchemaSmith.GenerateTableJson @p_Schema = 'dbo', @p_Table = '{table}'";
+        using var reader = cmd.ExecuteReader();
+        var sb = new System.Text.StringBuilder();
+        while (reader.Read())
+            if (!reader.IsDBNull(0)) sb.Append(reader.GetString(0));
+        return sb.ToString();
+    }
+
+    private static string PackageOn(string table, string guidIndexKind, string placement, string extraColumn = "") =>
+        "[{ \"Schema\": \"[dbo]\", \"Name\": \"[" + table + "]\"" + placement + ", \"Columns\": ["
+        + " { \"Name\": \"[Id]\", \"DataType\": \"INT\", \"Nullable\": false },"
+        + " { \"Name\": \"[G]\", \"DataType\": \"UNIQUEIDENTIFIER ROWGUIDCOL\", \"Nullable\": false, \"Default\": \"NEWID()\" },"
+        + " { \"Name\": \"[Doc]\", \"DataType\": \"VARBINARY(MAX)\", \"Nullable\": true, \"FileStream\": true }" + extraColumn + " ], \"Indexes\": ["
+        + " { \"Name\": \"[PK_" + table + "]\", \"IndexColumns\": \"[Id]\", \"PrimaryKey\": true, \"Unique\": true },"
+        + " { \"Name\": \"[UQ_" + table + "_G]\", \"IndexColumns\": \"[G]\", " + guidIndexKind + " } ] }]";
+
 }

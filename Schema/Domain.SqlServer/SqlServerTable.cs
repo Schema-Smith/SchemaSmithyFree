@@ -128,6 +128,18 @@ namespace Schema.Domain.SqlServer
         // rather than silently ignored, the same posture FileGroup takes.
         [JsonProperty(Order = 114, NullValueHandling = NullValueHandling.Ignore)]
         public string FileStreamFileGroup { get; set; }
+
+        // TEXTIMAGE_ON <filegroup>: which filegroup this table's large-object data lands on -- text,
+        // ntext, image, xml, and the (MAX) types. The third placement clause alongside FileGroup (ON) and
+        // FileStreamFileGroup (FILESTREAM_ON); supporting two of the three was an accident of what got
+        // built rather than a decision.
+        //
+        // Create-time only, like both siblings: there is no ALTER for LOB placement, so a declared name
+        // that differs from the live one is refused rather than silently ignored. SQL Server also REJECTS
+        // the clause outright (error 1709) on a table with no large-object column, so it is emitted only
+        // when one is declared and refused by name otherwise.
+        [JsonProperty(Order = 117, NullValueHandling = NullValueHandling.Ignore)]
+        public string TextImageFileGroup { get; set; }
         // Graph tables (#graph): "Node" or "Edge" appends AS NODE / AS EDGE to the CREATE TABLE.
         // Null or "None" is an ordinary table.
         //

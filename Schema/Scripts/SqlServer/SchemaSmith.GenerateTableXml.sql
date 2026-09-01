@@ -174,6 +174,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        -- FILESTREAM_ON -- not implied by having FILESTREAM columns; the assignment outlives them.
        (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
          WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
+       -- TEXTIMAGE_ON. Like FILESTREAM_ON above, read from the table's own data space rather than
+       -- inferred from its columns -- dropping the last large-object column leaves the assignment.
+       -- Only emitted when it is NOT the default filegroup, so an ordinary table gains no key.
+       (SELECT lds.[name] FROM sys.data_spaces lds WITH (NOLOCK)
+         JOIN sys.filegroups lfg WITH (NOLOCK) ON lfg.data_space_id = lds.data_space_id AND lfg.is_default = 0
+        WHERE lds.data_space_id = st.lob_data_space_id) AS [TextImageFileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
        @v_GraphType AS [GraphType],
        @v_Ledger AS [Ledger],

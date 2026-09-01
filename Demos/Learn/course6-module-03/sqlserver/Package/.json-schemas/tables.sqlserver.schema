@@ -600,6 +600,9 @@
       "type": "string",
       "pattern": "Off|AppendOnly|Updatable"
     },
+    "TextImageFileGroup": {
+      "type": "string"
+    },
     "Extensions": {
       "type": "object",
       "required": [

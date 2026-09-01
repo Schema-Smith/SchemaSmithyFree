@@ -66,6 +66,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        -- FILESTREAM columns: dropping the last one leaves the assignment behind.
        (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
          WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
+       -- TEXTIMAGE_ON. Like FILESTREAM_ON above, read from the table's own data space rather than
+       -- inferred from its columns -- dropping the last large-object column leaves the assignment.
+       -- Only emitted when it is NOT the default filegroup, so an ordinary table gains no key.
+       (SELECT lds.[name] FROM sys.data_spaces lds WITH (NOLOCK)
+         JOIN sys.filegroups lfg WITH (NOLOCK) ON lfg.data_space_id = lds.data_space_id AND lfg.is_default = 0
+        WHERE lds.data_space_id = st.lob_data_space_id) AS [TextImageFileGroup],
        st.is_tracked_by_cdc AS [EnableCDC],
        -- Graph tables (#graph). Emitted only when the table IS one, so no existing package gains a
        -- "GraphType": "None" on every table. is_node/is_edge are 2017+, which the JSON tier requires.
