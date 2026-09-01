@@ -44,7 +44,8 @@
       "type": "object"
     },
     "UpdateFillFactor": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "SQL Server and PostgreSQL only."
     },
     "BaselineValidationScript": {
       "type": "string"
@@ -88,11 +89,9 @@
     "DropCheckConstraintsRemovedFromProduct": {
       "type": "boolean"
     },
-    "DropExcludeConstraintsRemovedFromProduct": {
-      "type": "boolean"
-    },
     "DropStatisticsRemovedFromProduct": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "SQL Server and PostgreSQL only."
     },
     "DropIndexesRemovedFromProduct": {
       "type": "boolean"
@@ -118,7 +117,8 @@
       "additionalProperties": false
     },
     "DropSchemaBoundDependents": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "SQL Server only."
     },
     "ServerToQuench": {
       "type": "integer"

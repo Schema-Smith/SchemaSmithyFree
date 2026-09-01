@@ -48,6 +48,20 @@ namespace Schema.Domain
 
         public static string ToCanonicalString(this Platform platform) => platform.ToString();
 
+        /// <summary>
+        /// The engine name as a person writes it, for text a human reads -- schema descriptions, docs,
+        /// messages. Distinct from <see cref="ToCanonicalString"/>, which is the identifier form used in
+        /// file names and configuration. ParsePlatform already accepts these spellings as input aliases.
+        /// </summary>
+        public static string ToDisplayName(this Platform platform) => platform switch
+        {
+            Platform.SqlServer => "SQL Server",
+            Platform.PostgreSQL => "PostgreSQL",
+            Platform.MySQL => "MySQL",
+            Platform.MariaDb => "MariaDB",
+            _ => platform.ToString()
+        };
+
         public static string GetDefaultSchema(this Platform platform) => platform switch
         {
             Platform.SqlServer => "dbo",

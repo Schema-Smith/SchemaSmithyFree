@@ -13,20 +13,20 @@ namespace Schema.Utility;
 
 public static class SchemaGenerator
 {
-    public static JObject GenerateSchema(Type rootType)
+    public static JObject GenerateSchema(Type rootType, Platform? platform = null)
     {
         // Identity resolver preserves the historical behavior exactly: list element types are
         // built as their declared (base) type. Existing callers/tests rely on this.
-        return GenerateSchema(rootType, t => t);
+        return GenerateSchema(rootType, t => t, platform);
     }
 
     /// <summary>
     /// Generates a JSON schema, mapping list element types through <paramref name="elementTypeResolver"/>
     /// so platform subclass properties appear in generated collection element schemas.
     /// </summary>
-    public static JObject GenerateSchema(Type rootType, Func<Type, Type> elementTypeResolver)
+    public static JObject GenerateSchema(Type rootType, Func<Type, Type> elementTypeResolver, Platform? platform = null)
     {
-        return BuildObjectSchema(rootType, elementTypeResolver);
+        return BuildObjectSchema(rootType, elementTypeResolver, platform);
     }
 
     public static JObject MergeExtensionsDefinition(JObject generated, JObject existing)
@@ -69,7 +69,7 @@ public static class SchemaGenerator
                 MergeExtensionsNode(genOneOf[i], exOneOf[i]);
     }
 
-    private static JObject BuildObjectSchema(Type type, Func<Type, Type> elementTypeResolver)
+    private static JObject BuildObjectSchema(Type type, Func<Type, Type> elementTypeResolver, Platform? platform)
     {
         var schema = new JObject { ["type"] = "object" };
         var properties = new JObject();
@@ -78,8 +78,14 @@ public static class SchemaGenerator
 
         foreach (var prop in GetSortedProperties(type))
         {
-            var propSchema = MapType(prop.PropertyType, elementTypeResolver);
+            // Platform scoping (see SchemaPropertyAttribute.Platforms). Keyed on the EXACT platform, not
+            // GetBasePlatform(): MariaDB shares MySqlTemplate, so folding it here would make a MariaDB-only
+            // setting unexpressible. Undecorated properties are emitted everywhere -- scoping is opt-in.
+            if (!AppliesToPlatform(prop, platform)) continue;
+
+            var propSchema = MapType(prop.PropertyType, elementTypeResolver, platform);
             ApplyConstraints(prop, propSchema);
+            DocumentPlatforms(prop, propSchema);
 
             var schemaAttr = prop.GetCustomAttribute<SchemaPropertyAttribute>();
             if (schemaAttr is { SingleOrArray: true } && propSchema["items"] is JObject itemSchema)
@@ -127,7 +133,7 @@ public static class SchemaGenerator
         return schema;
     }
 
-    private static JObject MapType(Type type, Func<Type, Type> elementTypeResolver)
+    private static JObject MapType(Type type, Func<Type, Type> elementTypeResolver, Platform? platform)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
 
@@ -150,14 +156,14 @@ public static class SchemaGenerator
             // Resolve only list element types — this is the precise gap the overload closes.
             elementType = elementTypeResolver(elementType);
             var items = elementType == typeof(string) || IsIntegerType(elementType) || IsNumberType(elementType) || elementType == typeof(bool)
-                ? MapType(elementType, elementTypeResolver)
-                : BuildObjectSchema(elementType, elementTypeResolver);
+                ? MapType(elementType, elementTypeResolver, platform)
+                : BuildObjectSchema(elementType, elementTypeResolver, platform);
             return new JObject { ["type"] = "array", ["items"] = items };
         }
         if (IsDictionaryType(type)) return new JObject { ["type"] = "object" };
         if (typeof(JToken).IsAssignableFrom(type)) return new JObject();
 
-        return BuildObjectSchema(type, elementTypeResolver);
+        return BuildObjectSchema(type, elementTypeResolver, platform);
     }
 
     private static void ApplyConstraints(PropertyInfo prop, JObject propSchema)
@@ -170,6 +176,33 @@ public static class SchemaGenerator
         if (attr.MaxLength >= 0) propSchema["maxLength"] = attr.MaxLength;
         if (!string.IsNullOrEmpty(attr.Description)) propSchema["description"] = attr.Description;
     }
+    private static bool AppliesToPlatform(PropertyInfo prop, Platform? platform)
+    {
+        if (platform == null) return true;
+        var scoped = prop.GetCustomAttribute<SchemaPropertyAttribute>()?.Platforms;
+        return scoped == null || scoped.Length == 0 || scoped.Contains(platform.Value);
+    }
+
+    /// <summary>
+    /// Says in the schema file itself which engines a scoped property applies to. Filtering alone leaves a
+    /// reader of one platform's file unable to tell whether a property is universal or merely happens to
+    /// apply here -- which matters most for the two-engine settings, where the answer is neither.
+    /// </summary>
+    private static void DocumentPlatforms(PropertyInfo prop, JObject propSchema)
+    {
+        var scoped = prop.GetCustomAttribute<SchemaPropertyAttribute>()?.Platforms;
+        if (scoped == null || scoped.Length == 0) return;
+
+        var names = scoped.Select(p => p.ToDisplayName()).ToArray();
+        var list = names.Length == 1
+            ? names[0]
+            : string.Join(", ", names[..^1]) + " and " + names[^1];
+        var note = $"{list} only.";
+
+        var existing = propSchema["description"]?.Value<string>();
+        propSchema["description"] = string.IsNullOrWhiteSpace(existing) ? note : $"{existing} {note}";
+    }
+
 
     private static IEnumerable<PropertyInfo> GetSortedProperties(Type type)
     {

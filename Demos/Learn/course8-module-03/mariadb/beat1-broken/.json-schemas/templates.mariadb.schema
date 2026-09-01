@@ -43,9 +43,6 @@
     "ScriptTokens": {
       "type": "object"
     },
-    "UpdateFillFactor": {
-      "type": "boolean"
-    },
     "BaselineValidationScript": {
       "type": "string"
     },
@@ -88,12 +85,6 @@
     "DropCheckConstraintsRemovedFromProduct": {
       "type": "boolean"
     },
-    "DropExcludeConstraintsRemovedFromProduct": {
-      "type": "boolean"
-    },
-    "DropStatisticsRemovedFromProduct": {
-      "type": "boolean"
-    },
     "DropIndexesRemovedFromProduct": {
       "type": "boolean"
     },
@@ -116,9 +107,6 @@
         }
       },
       "additionalProperties": false
-    },
-    "DropSchemaBoundDependents": {
-      "type": "boolean"
     }
   },
   "additionalProperties": false,

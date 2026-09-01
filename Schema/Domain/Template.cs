@@ -83,6 +83,7 @@ namespace Schema.Domain
 
         [JsonProperty(Order = 7)]
         [DefaultValue(true)]
+        [SchemaProperty(Platforms = [Platform.SqlServer, Platform.PostgreSQL])]
         public bool UpdateFillFactor { get; set; } = true;
 
         [JsonProperty(Order = 8)]
@@ -158,6 +159,7 @@ namespace Schema.Domain
         // in a folder on the AfterTablesObjects slot, which SchemaTongs arranges on extraction.
         // DROPPING DISCARDS PERMISSIONS -- SchemaSmith manages none, so the script must re-grant.
         [JsonProperty(Order = 25)]
+        [SchemaProperty(Platforms = [Platform.SqlServer])]
         public bool? DropSchemaBoundDependents { get; set; }
 
         [JsonProperty(Order = 18)]
@@ -170,9 +172,11 @@ namespace Schema.Domain
         public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
 
         [JsonProperty(Order = 21)]
+        [SchemaProperty(Platforms = [Platform.PostgreSQL])]
         public bool? DropExcludeConstraintsRemovedFromProduct { get; set; }
 
         [JsonProperty(Order = 22)]
+        [SchemaProperty(Platforms = [Platform.SqlServer, Platform.PostgreSQL])]
         public bool? DropStatisticsRemovedFromProduct { get; set; }
 
         [JsonProperty(Order = 23)]

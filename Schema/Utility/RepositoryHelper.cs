@@ -107,7 +107,7 @@ public static class RepositoryHelper
             var schemaFile = Path.Combine(schemaPath, fileName);
             if (file.Exists(schemaFile)) continue;
 
-            var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform), PlatformElementResolver(platform));
+            var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform), PlatformElementResolver(platform), platform);
             file.WriteAllText(schemaFile, generated.ToString(Formatting.Indented));
         }
     }
@@ -236,7 +236,7 @@ public static class RepositoryHelper
     {
         var file = FileWrapper.GetFromFactory();
         var schemaFile = Path.Combine(schemaPath, fileName);
-        var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform), PlatformElementResolver(platform));
+        var generated = SchemaGenerator.GenerateSchema(GetTypeForSchemaFile(fileName, platform), PlatformElementResolver(platform), platform);
 
         if (!file.Exists(schemaFile))
         {
