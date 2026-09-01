@@ -719,9 +719,17 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ### SQL Server index extras
 
-`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`, `FileGroup`.
+`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`,
+`FileGroup`, `IgnoreDuplicateKey`, `PadIndex`.
 
 `FileGroup` follows the same name-only, unset-means-unmanaged contract as the table property above. Worth knowing when declaring one on a table but not its indexes: an index created with no filegroup of its own follows **its table**, not the database default. An index is declared independently of its table's filegroup, which is what lets you keep a large table's data and its indexes on separate storage.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `IgnoreDuplicateKey` | bool | `false` | `IGNORE_DUP_KEY`. **This changes what your application sees, not how fast it runs.** With it off (the default), inserting a duplicate into a unique index fails the whole statement with error 2601 and nothing is written. With it on, the duplicate row is discarded with a warning and **the rest of the statement succeeds** — so a multi-row `INSERT` containing one duplicate lands the other rows instead of rolling back. Only valid on a unique index or unique constraint. |
+| `PadIndex` | bool | `false` | `PAD_INDEX` — applies `FillFactor` to the intermediate index pages as well as the leaf pages. Has no effect without a `FillFactor`, which is why it is declared alongside it rather than on its own. |
+
+**On indexed views:** SQL Server rejects `IGNORE_DUP_KEY` on a view index outright ("Cannot define an index on a view with ignore_dup_key index option"), so there is nothing to declare there. `PadIndex` **is** supported on an index inside an `Indexed Views/` definition.
 
 ### PostgreSQL index extras
 

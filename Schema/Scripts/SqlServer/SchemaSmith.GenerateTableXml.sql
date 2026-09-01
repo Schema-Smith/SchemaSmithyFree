@@ -267,6 +267,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                CASE WHEN [type] IN (1, 5) THEN 'true' ELSE 'false' END AS [Clustered],
                CASE WHEN [type] IN (5, 6) THEN 'true' ELSE 'false' END AS [ColumnStore],
                CASE WHEN fill_factor = 100 THEN 0 ELSE fill_factor END AS [FillFactor],
+               CASE WHEN ignore_dup_key = 1 THEN 'true' ELSE 'false' END AS [IgnoreDuplicateKey],
+               CASE WHEN is_padded = 1 THEN 'true' ELSE 'false' END AS [PadIndex],
                STUFF((SELECT ',' + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
                   FROM sys.index_columns ic WITH (NOLOCK)
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0

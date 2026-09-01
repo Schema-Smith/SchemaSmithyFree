@@ -287,11 +287,12 @@ BEGIN
                     IndexColumns NVARCHAR(MAX),
                     IncludeColumns NVARCHAR(MAX),
                     CompressionType NVARCHAR(200),
-                    [FillFactor] INT
+                    [FillFactor] INT,
+                    PadIndex BIT
                 );
 
                 DELETE FROM @ExistingIdx;
-                INSERT INTO @ExistingIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor])
+                INSERT INTO @ExistingIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor], PadIndex)
                 SELECT
                     i.name,
                     i.is_unique,
@@ -306,13 +307,14 @@ BEGIN
                       INNER JOIN sys.columns c2 ON ic2.object_id = c2.object_id AND ic2.column_id = c2.column_id
                       WHERE ic2.object_id = i.object_id AND ic2.index_id = i.index_id AND ic2.is_included_column = 1),
                     ISNULL(p.data_compression_desc, 'NONE'),
-                    i.fill_factor
+                    i.fill_factor,
+                    i.is_padded
                 FROM sys.indexes i
                 INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
                 INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
                 LEFT JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id AND p.partition_number = 1
                 WHERE i.object_id = @existingObjectId AND i.type > 0
-                GROUP BY i.name, i.index_id, i.is_unique, i.type, i.fill_factor, p.data_compression_desc, i.object_id;
+                GROUP BY i.name, i.index_id, i.is_unique, i.type, i.fill_factor, i.is_padded, p.data_compression_desc, i.object_id;
 
                 -- Parse desired indexes from JSON
                 DECLARE @DesiredIdx TABLE (
@@ -322,11 +324,12 @@ BEGIN
                     IndexColumns NVARCHAR(MAX),
                     IncludeColumns NVARCHAR(MAX),
                     CompressionType NVARCHAR(200),
-                    [FillFactor] INT
+                    [FillFactor] INT,
+                    PadIndex BIT
                 );
 
                 DELETE FROM @DesiredIdx;
-                INSERT INTO @DesiredIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor])
+                INSERT INTO @DesiredIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor], PadIndex)
                 SELECT
                     [SchemaSmith].[fn_StripBracketWrapping](JSON_VALUE(idx.value, '$.Name')),
                     CAST(ISNULL(JSON_VALUE(idx.value, '$.Unique'), 'false') AS BIT),
@@ -334,7 +337,8 @@ BEGIN
                     REPLACE(JSON_VALUE(idx.value, '$.IndexColumns'), ', ', ','),
                     REPLACE(ISNULL(JSON_VALUE(idx.value, '$.IncludeColumns'), ''), ', ', ','),
                     ISNULL(JSON_VALUE(idx.value, '$.CompressionType'), 'NONE'),
-                    CAST(ISNULL(JSON_VALUE(idx.value, '$.FillFactor'), '0') AS INT)
+                    CAST(ISNULL(JSON_VALUE(idx.value, '$.FillFactor'), '0') AS INT),
+                    CAST(ISNULL(JSON_VALUE(idx.value, '$.PadIndex'), 'false') AS BIT)
                 FROM OPENJSON(@indexJson) idx;
 
                 -- Determine if the clustered index needs changing
@@ -350,7 +354,8 @@ BEGIN
                                     AND (d.IsUnique != e.IsUnique OR d.IndexColumns != e.IndexColumns
                                          OR ISNULL(d.IncludeColumns, '') != ISNULL(e.IncludeColumns, '')
                                          OR d.CompressionType != e.CompressionType
-                                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]))))
+                                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor])
+                                         OR ISNULL(d.PadIndex, 0) != ISNULL(e.PadIndex, 0))))
                 )
                     SET @clusteredNeedsChange = 1;
 
@@ -391,7 +396,8 @@ BEGIN
                          OR d.IndexColumns != e.IndexColumns
                          OR ISNULL(d.IncludeColumns, '') != ISNULL(e.IncludeColumns, '')
                          OR d.CompressionType != e.CompressionType
-                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]));
+                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor])
+                                         OR ISNULL(d.PadIndex, 0) != ISNULL(e.PadIndex, 0));
                     IF @dropSql IS NOT NULL
                     BEGIN
                         SET @msg = N'Dropping changed nonclustered indexes on ' + @ivSchema + N'.' + @ivName;
@@ -430,7 +436,7 @@ BEGIN
                     + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
                     + ' (' + v.IdxColumns + ')'
                     + CASE WHEN v.IdxInclude IS NOT NULL THEN ' INCLUDE (' + v.IdxInclude + ')' ELSE '' END
-                    + CASE WHEN w.WithInner <> '' THEN ' WITH (' + w.WithInner + ')' ELSE '' END
+                    + CASE WHEN w.WithOptions <> '' THEN ' WITH (' + STUFF(w.WithOptions, 1, 2, '') + ')' ELSE '' END
                   AS NVARCHAR(MAX)), '; ' + CHAR(13) + CHAR(10))
                   WITHIN GROUP (ORDER BY CASE WHEN v.IsClustered = 1 THEN 0 ELSE 1 END)
             FROM OPENJSON(@indexJson) idx
@@ -441,17 +447,16 @@ BEGIN
                 JSON_VALUE(idx.value, '$.IndexColumns'),
                 JSON_VALUE(idx.value, '$.IncludeColumns'),
                 ISNULL(JSON_VALUE(idx.value, '$.CompressionType'), 'NONE'),
-                CAST(ISNULL(JSON_VALUE(idx.value, '$.FillFactor'), '0') AS INT)
-            )) AS v(IdxName, IsUnique, IsClustered, IdxColumns, IdxInclude, Compression, FillFactorV)
+                CAST(ISNULL(JSON_VALUE(idx.value, '$.FillFactor'), '0') AS INT),
+                    CAST(ISNULL(JSON_VALUE(idx.value, '$.PadIndex'), 'false') AS BIT)
+            )) AS v(IdxName, IsUnique, IsClustered, IdxColumns, IdxInclude, Compression, FillFactorV, PadIndexV)
             CROSS APPLY (VALUES (
-                CASE WHEN v.Compression <> 'NONE' AND v.FillFactorV > 0
-                        THEN 'DATA_COMPRESSION = ' + v.Compression + ', FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10))
-                     WHEN v.Compression <> 'NONE'
-                        THEN 'DATA_COMPRESSION = ' + v.Compression
-                     WHEN v.FillFactorV > 0
-                        THEN 'FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10))
-                     ELSE '' END
-            )) AS w(WithInner)
+                -- One WITH clause from an option list rather than a branch per combination:
+                -- three options would need eight branches, and the next one sixteen.
+                CASE WHEN v.Compression <> 'NONE' THEN ', DATA_COMPRESSION = ' + v.Compression ELSE '' END
+              + CASE WHEN v.FillFactorV > 0 THEN ', FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10)) ELSE '' END
+              + CASE WHEN v.PadIndexV = 1 THEN ', PAD_INDEX = ON' ELSE '' END
+            )) AS w(WithOptions)
             WHERE NOT EXISTS (
                 SELECT 1 FROM sys.indexes si
                 WHERE si.object_id = OBJECT_ID(QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName))

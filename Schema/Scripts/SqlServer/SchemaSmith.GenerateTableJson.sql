@@ -211,6 +211,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                CAST(CASE WHEN [type] IN (1, 5) THEN 1 ELSE 0 END AS BIT) AS [Clustered], 
                CAST(CASE WHEN [type] IN (5, 6) THEN 1 ELSE 0 END AS BIT) AS [ColumnStore], 
                CASE WHEN fill_factor = 100 THEN 0 ELSE fill_factor END AS [FillFactor],
+               CONVERT(BIT, ignore_dup_key) AS [IgnoreDuplicateKey],
+               CONVERT(BIT, is_padded) AS [PadIndex],
                (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY key_ordinal)
                   FROM sys.index_columns ic WITH (NOLOCK)
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) AS [IndexColumns],

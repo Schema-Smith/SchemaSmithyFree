@@ -292,11 +292,12 @@ BEGIN
                     IndexColumns NVARCHAR(MAX),
                     IncludeColumns NVARCHAR(MAX),
                     CompressionType NVARCHAR(200),
-                    [FillFactor] INT
+                    [FillFactor] INT,
+                    PadIndex BIT
                 );
 
                 DELETE FROM @ExistingIdx;
-                INSERT INTO @ExistingIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor])
+                INSERT INTO @ExistingIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor], PadIndex)
                 SELECT
                     i.name,
                     i.is_unique,
@@ -314,7 +315,8 @@ BEGIN
                       WHERE ic2.object_id = i.object_id AND ic2.index_id = i.index_id AND ic2.is_included_column = 1
                       ORDER BY ic2.index_column_id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
                     ISNULL(p.data_compression_desc, 'NONE'),
-                    i.fill_factor
+                    i.fill_factor,
+                    i.is_padded
                 FROM sys.indexes i
                 LEFT JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id AND p.partition_number = 1
                 WHERE i.object_id = @existingObjectId AND i.type > 0;
@@ -327,11 +329,12 @@ BEGIN
                     IndexColumns NVARCHAR(MAX),
                     IncludeColumns NVARCHAR(MAX),
                     CompressionType NVARCHAR(200),
-                    [FillFactor] INT
+                    [FillFactor] INT,
+                    PadIndex BIT
                 );
 
                 DELETE FROM @DesiredIdx;
-                INSERT INTO @DesiredIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor])
+                INSERT INTO @DesiredIdx (Name, IsUnique, IsClustered, IndexColumns, IncludeColumns, CompressionType, [FillFactor], PadIndex)
                 SELECT
                     [SchemaSmith].[fn_StripBracketWrapping](idx.value('(Name/text())[1]', 'NVARCHAR(500)')),
                     CAST(ISNULL(idx.value('(Unique/text())[1]', 'VARCHAR(8)'), 'false') AS BIT),
@@ -339,7 +342,8 @@ BEGIN
                     REPLACE(idx.value('(IndexColumns/text())[1]', 'NVARCHAR(MAX)'), ', ', ','),
                     REPLACE(ISNULL(idx.value('(IncludeColumns/text())[1]', 'NVARCHAR(MAX)'), ''), ', ', ','),
                     ISNULL(idx.value('(CompressionType/text())[1]', 'NVARCHAR(200)'), 'NONE'),
-                    CAST(ISNULL(idx.value('(FillFactor/text())[1]', 'NVARCHAR(20)'), '0') AS INT)
+                    CAST(ISNULL(idx.value('(FillFactor/text())[1]', 'NVARCHAR(20)'), '0') AS INT),
+                    CAST(ISNULL(idx.value('(PadIndex/text())[1]', 'VARCHAR(8)'), 'false') AS BIT)
                 FROM @indexXml.nodes('Indexes') AS Y(idx);
 
                 -- Determine if the clustered index needs changing
@@ -355,7 +359,8 @@ BEGIN
                                     AND (d.IsUnique != e.IsUnique OR d.IndexColumns != e.IndexColumns
                                          OR ISNULL(d.IncludeColumns, '') != ISNULL(e.IncludeColumns, '')
                                          OR d.CompressionType != e.CompressionType
-                                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]))))
+                                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor])
+                                         OR ISNULL(d.PadIndex, 0) != ISNULL(e.PadIndex, 0))))
                 )
                     SET @clusteredNeedsChange = 1;
 
@@ -396,7 +401,8 @@ BEGIN
                          OR d.IndexColumns != e.IndexColumns
                          OR ISNULL(d.IncludeColumns, '') != ISNULL(e.IncludeColumns, '')
                          OR d.CompressionType != e.CompressionType
-                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor]))
+                         OR (@UpdateFillFactor = 1 AND d.[FillFactor] != e.[FillFactor])
+                                         OR ISNULL(d.PadIndex, 0) != ISNULL(e.PadIndex, 0))
                     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '');
                     IF @dropSql IS NOT NULL
                     BEGIN
@@ -436,7 +442,7 @@ BEGIN
                     + ' ON ' + QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName)
                     + ' (' + v.IdxColumns + ')'
                     + CASE WHEN v.IdxInclude IS NOT NULL THEN ' INCLUDE (' + v.IdxInclude + ')' ELSE '' END
-                    + CASE WHEN w.WithInner <> '' THEN ' WITH (' + w.WithInner + ')' ELSE '' END
+                    + CASE WHEN w.WithOptions <> '' THEN ' WITH (' + STUFF(w.WithOptions, 1, 2, '') + ')' ELSE '' END
             FROM @indexXml.nodes('Indexes') AS Y(idx)
             CROSS APPLY (VALUES (
                 [SchemaSmith].[fn_StripBracketWrapping](idx.value('(Name/text())[1]', 'NVARCHAR(500)')),
@@ -445,17 +451,16 @@ BEGIN
                 idx.value('(IndexColumns/text())[1]', 'NVARCHAR(MAX)'),
                 idx.value('(IncludeColumns/text())[1]', 'NVARCHAR(MAX)'),
                 ISNULL(idx.value('(CompressionType/text())[1]', 'NVARCHAR(200)'), 'NONE'),
-                CAST(ISNULL(idx.value('(FillFactor/text())[1]', 'NVARCHAR(20)'), '0') AS INT)
-            )) AS v(IdxName, IsUnique, IsClustered, IdxColumns, IdxInclude, Compression, FillFactorV)
+                CAST(ISNULL(idx.value('(FillFactor/text())[1]', 'NVARCHAR(20)'), '0') AS INT),
+                CAST(ISNULL(idx.value('(PadIndex/text())[1]', 'VARCHAR(8)'), 'false') AS BIT)
+            )) AS v(IdxName, IsUnique, IsClustered, IdxColumns, IdxInclude, Compression, FillFactorV, PadIndexV)
             CROSS APPLY (VALUES (
-                CASE WHEN v.Compression <> 'NONE' AND v.FillFactorV > 0
-                        THEN 'DATA_COMPRESSION = ' + v.Compression + ', FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10))
-                     WHEN v.Compression <> 'NONE'
-                        THEN 'DATA_COMPRESSION = ' + v.Compression
-                     WHEN v.FillFactorV > 0
-                        THEN 'FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10))
-                     ELSE '' END
-            )) AS w(WithInner)
+                -- One WITH clause from an option list rather than a branch per combination:
+                -- three options would need eight branches, and the next one sixteen.
+                CASE WHEN v.Compression <> 'NONE' THEN ', DATA_COMPRESSION = ' + v.Compression ELSE '' END
+              + CASE WHEN v.FillFactorV > 0 THEN ', FILLFACTOR = ' + CAST(v.FillFactorV AS NVARCHAR(10)) ELSE '' END
+              + CASE WHEN v.PadIndexV = 1 THEN ', PAD_INDEX = ON' ELSE '' END
+            )) AS w(WithOptions)
             WHERE NOT EXISTS (
                 SELECT 1 FROM sys.indexes si
                 WHERE si.object_id = OBJECT_ID(QUOTENAME(@ivSchema) + '.' + QUOTENAME(@ivName))

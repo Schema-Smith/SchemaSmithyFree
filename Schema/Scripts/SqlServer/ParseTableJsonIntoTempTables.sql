@@ -225,6 +225,7 @@
          [IncludeColumns] = (SELECT STRING_AGG(SchemaSmith.fn_SafeBracketWrap([value]), ',') WITHIN GROUP (ORDER BY SchemaSmith.fn_SafeBracketWrap([value]))
                                FROM STRING_SPLIT(i.[IncludeColumns], ',') 
                                WHERE SchemaSmith.fn_StripBracketWrapping(RTRIM(LTRIM([Value]))) <> ''),
+         [IgnoreDuplicateKey] = ISNULL(i.[IgnoreDuplicateKey], 0), [PadIndex] = ISNULL(i.[PadIndex], 0),
          i.[ShouldApplyExpression], i.[VariantName]
     INTO #Indexes
     FROM #TableDefinitions t WITH (NOLOCK)
@@ -236,6 +237,8 @@
 	  [UniqueConstraint] BIT '$.UniqueConstraint',
       [Clustered] BIT '$.Clustered',
       [ColumnStore] BIT '$.ColumnStore',
+      [IgnoreDuplicateKey] BIT '$.IgnoreDuplicateKey',
+      [PadIndex] BIT '$.PadIndex',
       [FillFactor] TINYINT '$.FillFactor',
       [FilterExpression] NVARCHAR(MAX) '$.FilterExpression',
       [IndexColumns] NVARCHAR(MAX) '$.IndexColumns',
