@@ -5,7 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
-using Schema.Domain.MariaDb;
+using Schema.Domain.MariaDb;
+using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Index = Schema.Domain.Index;
@@ -35,6 +36,8 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string ReplicaIdentityIndexNotUniqueCode = "SS-RI-003";
     private const string ReplicaIdentityIndexIgnoredCode = "SS-RI-004";
     private const string VersioningExclusionInertCode = "SS-SV-001";
+    private const string CompressionConflictCode = "SS-CO-001";
+    private const string CompressionLevelInertCode = "SS-CO-002";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -63,6 +66,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             findings.AddRange(CheckRowLevelSecurity(table, location));
             findings.AddRange(CheckReplicaIdentity(table, location));
             findings.AddRange(CheckSystemVersioningExclusions(table, location));
+            findings.AddRange(CheckCompressionOptions(table, location));
         }
 
         return findings;
@@ -376,6 +380,40 @@ public sealed class CoherenceCheck : ISchemaCheck
                 $"Column '{column.Name}' on table '{table.Name}' sets WithoutSystemVersioning, but the table " +
                 "does not set IsSystemVersioned. MariaDB accepts the clause here and silently discards it, so " +
                 "the exclusion does nothing — set IsSystemVersioned, or drop WithoutSystemVersioning.");
+    }
+
+    /// <summary>
+    /// MySQL/MariaDB compression table options that cannot be combined.
+    /// <para><b>Both engines REFUSE the combination, and neither error names what is wrong.</b> Verified
+    /// live: MySQL 8.0 rejects <c>COMPRESSION</c> alongside <c>ROW_FORMAT=COMPRESSED</c> with 1031
+    /// ("Table storage engine ... doesn't have this option"); MariaDB 11.4 rejects <c>PAGE_COMPRESSED</c>
+    /// with the same row format as errno 140 ("Wrong create options"). Both name the table and neither
+    /// names the option, so without this the author gets an error that could mean almost anything.</para>
+    /// <para>Error rather than Warning: the deploy cannot succeed, so there is nothing to weigh.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckCompressionOptions(Table table, string tableLocation)
+    {
+        if (table is not MySqlTable mySqlTable) yield break;
+
+        var rowFormatCompressed = string.Equals(mySqlTable.RowFormat?.Trim(), "COMPRESSED",
+            StringComparison.OrdinalIgnoreCase);
+        var mariaTable = table as MariaDbTable;
+
+        if (rowFormatCompressed && !string.IsNullOrWhiteSpace(mySqlTable.Compression))
+            yield return new Finding(Severity.Error, CompressionConflictCode, Category, tableLocation,
+                $"Table '{table.Name}' sets Compression to '{mySqlTable.Compression}' and RowFormat to " +
+                "COMPRESSED. MySQL refuses that combination (error 1031) — transparent page compression " +
+                "needs an uncompressed row format. Drop one of the two.");
+
+        if (rowFormatCompressed && mariaTable is { PageCompressed: true })
+            yield return new Finding(Severity.Error, CompressionConflictCode, Category, tableLocation,
+                $"Table '{table.Name}' sets PageCompressed and RowFormat to COMPRESSED. MariaDB refuses " +
+                "that combination (errno 140, \"Wrong create options\"). Drop one of the two.");
+
+        if (mariaTable is { PageCompressed: false, PageCompressionLevel: not null })
+            yield return new Finding(Severity.Warning, CompressionLevelInertCode, Category, tableLocation,
+                $"Table '{table.Name}' sets PageCompressionLevel but not PageCompressed, so the level is " +
+                "ignored — set PageCompressed, or drop the level.");
     }
 
     // Mirrors SchemaSmith_NormalizeIndexColumns.sql's DESC/ASC suffix handling (source of truth —

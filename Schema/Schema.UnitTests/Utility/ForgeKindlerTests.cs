@@ -381,7 +381,10 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_SupportsSystemVersioning (#408 -- gates the per-column
         //   WITHOUT SYSTEM VERSIONING clause. MariaDB 10.3.4+; an unconditional 0 on MySQL, which has no
         //   system versioning at any version, the same shape as SupportsApplicationTimePeriods).
-        Assert.That(mysql.Length, Is.EqualTo(53));
+        // +1 = SchemaSmith_CreateOption (the CREATE_OPTIONS parser -- COMPRESSION, KEY_BLOCK_SIZE and
+        //   MariaDB PAGE_COMPRESSED/_LEVEL all surface only in that one free-text column, so they share
+        //   one reader. LOCATE-based, not regex: REGEXP_SUBSTR does not exist on the MySQL 5.7 floor.
+        Assert.That(mysql.Length, Is.EqualTo(54));
     }
 
     [Test]

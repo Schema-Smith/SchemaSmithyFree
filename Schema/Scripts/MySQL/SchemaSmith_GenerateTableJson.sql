@@ -37,6 +37,16 @@ BEGIN
         'Collation', t.TABLE_COLLATION,
         'Comment', CASE WHEN t.TABLE_COMMENT = '' THEN NULL ELSE t.TABLE_COMMENT END,
         'AutoIncrementValue', t.AUTO_INCREMENT,
+        -- These four live ONLY in CREATE_OPTIONS, a single free-text blob, which is why they share one
+        -- parser and are read together. NULL (stripped by the JSON_REMOVE pass) when absent, so a table
+        -- declaring none extracts exactly as it did before this shipped. #scope-boundary
+        'Compression', CASE WHEN VERSION() LIKE '%MariaDB%' THEN NULL
+                            ELSE SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'COMPRESSION') END,
+        'KeyBlockSize', SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'KEY_BLOCK_SIZE'),
+        -- MariaDB only, like IsSystemVersioned below.
+        'PageCompressed', CASE WHEN SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'PAGE_COMPRESSED') = '1'
+                               THEN TRUE ELSE NULL END,
+        'PageCompressionLevel', SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'PAGE_COMPRESSION_LEVEL'),
         -- MariaDB only, and NULL (stripped by the JSON_REMOVE pass) everywhere else, so a MySQL package
         -- never carries a property its schema does not declare.
         'IsSystemVersioned', CASE WHEN t.TABLE_TYPE = 'SYSTEM VERSIONED' THEN TRUE ELSE NULL END,
@@ -364,6 +374,12 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         -- Same treatment as PreventDrop: a bool the package only carries when true. Without this the
         -- property serialises as null and deserialisation of the non-nullable bool fails outright.
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.IsSystemVersioned')), 'NULL') = 'NULL' THEN '$.IsSystemVersioned' ELSE '$.___dummy___' END,
+        -- The CREATE_OPTIONS four, same treatment: absent means the table declares none, and a MySQL
+        -- package must not carry PageCompressed* (nor a MariaDB one Compression) at all.
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Compression')), 'NULL') = 'NULL' THEN '$.Compression' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.KeyBlockSize')), 'NULL') = 'NULL' THEN '$.KeyBlockSize' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PageCompressed')), 'NULL') = 'NULL' THEN '$.PageCompressed' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PageCompressionLevel')), 'NULL') = 'NULL' THEN '$.PageCompressionLevel' ELSE '$.___dummy___' END,
         -- Empty array, not null: the function returns '[]' for a table with no periods, and an
         -- ordinary table's package must not carry the key at all -- nor must any MySQL package,
         -- whose schema does not declare this property.

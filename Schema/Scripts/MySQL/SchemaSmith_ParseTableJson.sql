@@ -71,6 +71,10 @@ BEGIN
         Collation VARCHAR(100) DEFAULT NULL,
         OldName VARCHAR(128) DEFAULT NULL,
         RowFormat VARCHAR(20) DEFAULT NULL,
+        Compression VARCHAR(20) DEFAULT NULL,
+        KeyBlockSize INT DEFAULT NULL,
+        PageCompressed TINYINT DEFAULT 0,
+        PageCompressionLevel INT DEFAULT NULL,
         AutoIncrementValue BIGINT UNSIGNED DEFAULT NULL,
         -- MySQL's table comment ceiling is 2048 characters (COLUMN_COMMENT/COLUMN varies -- see the
         -- Columns/Indexes temp tables below). No pre-validation against that limit: an over-long
@@ -107,7 +111,7 @@ BEGIN
     SET v_TblIdx = 0;
     WHILE v_TblIdx < v_TblCnt DO
         IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name'))) IS NOT NULL THEN
-            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropPeriodsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
+            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, Compression, KeyBlockSize, PageCompressed, PageCompressionLevel, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropPeriodsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
             SELECT
                 SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name')))) AS TableName,
                 COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Engine')))), ''), 'InnoDB') AS Engine,
@@ -117,6 +121,10 @@ BEGIN
                 -- _SchemaSmith_TableRenames.PRIMARY (OldTableName = '') on the second deploy.
                 SchemaSmith_SafeBacktickWrap(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].OldName')))), '')) AS OldName,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RowFormat')))), '') AS RowFormat,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Compression')))), '') AS Compression,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].KeyBlockSize'))) AS KeyBlockSize,
+                COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PageCompressed'))), 0) AS PageCompressed,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PageCompressionLevel'))) AS PageCompressionLevel,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].AutoIncrementValue'))) AS AutoIncrementValue,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Comment')))), '') AS Comment,
                 0 AS NewTable,

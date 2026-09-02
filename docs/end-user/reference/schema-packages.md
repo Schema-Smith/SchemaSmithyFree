@@ -521,6 +521,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `Comment` | string | `null` | Table comment. |
 | `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MySQL clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MySQL supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
+| `Compression` | string | `null` | **MySQL only.** InnoDB transparent page compression: `"zlib"`, `"lz4"` or `"none"`. Cannot be combined with `RowFormat: "COMPRESSED"` — MySQL refuses that with error 1031, and `--Validate` reports `SS-CO-001` first. MariaDB spells this `PageCompressed`. |
+| `KeyBlockSize` | int | `null` | InnoDB compressed-page size in KB (1, 2, 4, 8, 16). Only meaningful with `RowFormat: "COMPRESSED"`. |
 
 ### MariaDB (`MariaDbTable`)
 
@@ -538,6 +540,8 @@ MariaDB tables carry every MySQL property above, plus the ones below for feature
 | `IsSystemVersioned` | bool | `false` | The table keeps its own row history (`WITH SYSTEM VERSIONING`, MariaDB 10.3+). **Read on extraction, not applied on deploy** — a package declaring it deploys an ordinary table, so system versioning has to be established on the server. Detected from `INFORMATION_SCHEMA.TABLES.TABLE_TYPE`, which answers for both authoring forms. |
 | `Periods` | array | `[]` | Application-time period definitions (`PERIOD FOR`). See the MariaDB period notes. |
 | `DropPeriodsRemovedFromProduct` | bool | `null` | Overrides the environment-level flag for this table. Defaults **off**, unlike the other drop-by-absence flags. |
+| `PageCompressed` | bool | `false` | **MariaDB only.** InnoDB page compression — MariaDB's equivalent of MySQL's `Compression`, which it does not support. Cannot be combined with `RowFormat: "COMPRESSED"` (errno 140); `--Validate` reports `SS-CO-001`. |
+| `PageCompressionLevel` | int | `null` | **MariaDB only.** Compression level 1–9. Ignored unless `PageCompressed` is set, which `--Validate` reports as `SS-CO-002`. |
 
 #### MariaDB columns (`MariaDbColumn`)
 

@@ -62,6 +62,22 @@ BEGIN
                 CASE WHEN t.RowFormat IS NOT NULL AND t.RowFormat != ''
                      THEN CONCAT(' ROW_FORMAT=', t.RowFormat)
                      ELSE '' END,
+                -- The CREATE_OPTIONS four. Engine-gated in SQL as well as by the domain's Platforms scoping,
+                -- because a hand-authored package can still name a property its schema does not declare, and
+                -- each of these is a hard syntax error on the other engine. Option names sit inside string
+                -- literals, so nothing here resolves at CREATE PROCEDURE time.
+                CASE WHEN t.Compression IS NOT NULL AND t.Compression != '' AND VERSION() NOT LIKE '%MariaDB%'
+                     THEN CONCAT(' COMPRESSION=''', t.Compression, '''')
+                     ELSE '' END,
+                CASE WHEN t.KeyBlockSize IS NOT NULL
+                     THEN CONCAT(' KEY_BLOCK_SIZE=', t.KeyBlockSize)
+                     ELSE '' END,
+                CASE WHEN t.PageCompressed = 1 AND VERSION() LIKE '%MariaDB%'
+                     THEN ' PAGE_COMPRESSED=1'
+                     ELSE '' END,
+                CASE WHEN t.PageCompressed = 1 AND t.PageCompressionLevel IS NOT NULL AND VERSION() LIKE '%MariaDB%'
+                     THEN CONCAT(' PAGE_COMPRESSION_LEVEL=', t.PageCompressionLevel)
+                     ELSE '' END,
                 CASE WHEN t.AutoIncrementValue IS NOT NULL
                      THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
                      ELSE '' END,
@@ -76,7 +92,8 @@ BEGIN
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
+                 t.PageCompressed, t.PageCompressionLevel, t.AutoIncrementValue, t.Comment;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
 
@@ -361,6 +378,22 @@ BEGIN
                       CASE WHEN t.RowFormat IS NOT NULL AND t.RowFormat != ''
                            THEN CONCAT(' ROW_FORMAT=', t.RowFormat)
                            ELSE '' END,
+                      -- The CREATE_OPTIONS four. Engine-gated in SQL as well as by the domain's Platforms scoping,
+                      -- because a hand-authored package can still name a property its schema does not declare, and
+                      -- each of these is a hard syntax error on the other engine. Option names sit inside string
+                      -- literals, so nothing here resolves at CREATE PROCEDURE time.
+                      CASE WHEN t.Compression IS NOT NULL AND t.Compression != '' AND VERSION() NOT LIKE '%MariaDB%'
+                           THEN CONCAT(' COMPRESSION=''', t.Compression, '''')
+                           ELSE '' END,
+                      CASE WHEN t.KeyBlockSize IS NOT NULL
+                           THEN CONCAT(' KEY_BLOCK_SIZE=', t.KeyBlockSize)
+                           ELSE '' END,
+                      CASE WHEN t.PageCompressed = 1 AND VERSION() LIKE '%MariaDB%'
+                           THEN ' PAGE_COMPRESSED=1'
+                           ELSE '' END,
+                      CASE WHEN t.PageCompressed = 1 AND t.PageCompressionLevel IS NOT NULL AND VERSION() LIKE '%MariaDB%'
+                           THEN CONCAT(' PAGE_COMPRESSION_LEVEL=', t.PageCompressionLevel)
+                           ELSE '' END,
                       CASE WHEN t.AutoIncrementValue IS NOT NULL
                            THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
                            ELSE '' END,
@@ -372,7 +405,8 @@ BEGIN
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
+                 t.PageCompressed, t.PageCompressionLevel, t.AutoIncrementValue, t.Comment;
 
         -- Step 2: Show ALTER TABLE ADD COLUMN for new columns on existing tables (set-based;
         -- one row per column, matching the per-column statement the ELSE branch would issue

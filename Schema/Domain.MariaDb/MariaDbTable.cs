@@ -46,6 +46,17 @@ namespace Schema.Domain.MariaDb
         /// declared period to such a server still works; it is only the read that is blind.
         /// </para>
         /// </summary>
+        // MariaDB's own page compression, distinct from MySQL's COMPRESSION option (see MySqlTable).
+        [SchemaProperty(Description = "MariaDB only. InnoDB page compression for the table. MariaDB's equivalent of MySQL's COMPRESSION option, which it does not support.")]
+        [JsonProperty(Order = 113)]
+        public bool PageCompressed { get; set; }
+
+        // Meaningless without PageCompressed, so --Validate reports a level declared without it.
+        [SchemaProperty(Minimum = 1, Maximum = 9,
+            Description = "MariaDB only. Compression level 1-9 for PageCompressed. Ignored unless PageCompressed is set.")]
+        [JsonProperty(Order = 114, NullValueHandling = NullValueHandling.Ignore)]
+        public int? PageCompressionLevel { get; set; }
+
         [JsonProperty(Order = 111)]
         public List<TablePeriod> Periods { get; set; } = [];
 

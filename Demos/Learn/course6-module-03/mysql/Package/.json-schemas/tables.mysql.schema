@@ -412,6 +412,17 @@
         ]
       }
     },
+    "Compression": {
+      "type": "string",
+      "pattern": "zlib|lz4|none",
+      "description": "MySQL only. InnoDB transparent page compression for the table's tablespace file. MariaDB spells this PAGE_COMPRESSED instead. MySQL only."
+    },
+    "KeyBlockSize": {
+      "type": "integer",
+      "minimum": 1.0,
+      "maximum": 16.0,
+      "description": "InnoDB compressed-page size in KB (1, 2, 4, 8 or 16). Only meaningful with RowFormat = COMPRESSED."
+    },
     "Extensions": {
       "type": "object",
       "required": [

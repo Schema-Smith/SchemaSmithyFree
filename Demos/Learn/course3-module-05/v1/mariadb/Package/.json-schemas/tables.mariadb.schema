@@ -399,6 +399,12 @@
         ]
       }
     },
+    "KeyBlockSize": {
+      "type": "integer",
+      "minimum": 1.0,
+      "maximum": 16.0,
+      "description": "InnoDB compressed-page size in KB (1, 2, 4, 8 or 16). Only meaningful with RowFormat = COMPRESSED."
+    },
     "IsSystemVersioned": {
       "type": "boolean"
     },
@@ -423,6 +429,16 @@
     "DropPeriodsRemovedFromProduct": {
       "type": "boolean",
       "description": "MariaDB only. When set, overrides the environment-level DropPeriodsRemovedFromProduct for this table. Defaults to off, unlike the other drop-by-absence flags, because a package that predates periods or was extracted below MariaDB 11.4 cannot declare the periods its table actually has."
+    },
+    "PageCompressed": {
+      "type": "boolean",
+      "description": "MariaDB only. InnoDB page compression for the table. MariaDB's equivalent of MySQL's COMPRESSION option, which it does not support."
+    },
+    "PageCompressionLevel": {
+      "type": "integer",
+      "minimum": 1.0,
+      "maximum": 9.0,
+      "description": "MariaDB only. Compression level 1-9 for PageCompressed. Ignored unless PageCompressed is set."
     },
     "Extensions": {}
   },

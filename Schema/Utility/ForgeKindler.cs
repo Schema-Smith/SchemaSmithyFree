@@ -373,6 +373,10 @@ public static class ForgeKindler
                 new("SchemaSmith_SupportsDefaultExpression.sql"),
                 new("SchemaSmith_SupportsInvisibleColumn.sql"),
                 new("SchemaSmith_SupportsColumnSrid.sql"),
+                // Parses one option out of INFORMATION_SCHEMA.TABLES.CREATE_OPTIONS -- the single blob
+                // COMPRESSION, KEY_BLOCK_SIZE and MariaDB's PAGE_COMPRESSED family all live in. LOCATE
+                // based rather than regex: REGEXP_SUBSTR does not exist on the MySQL 5.7 floor.
+                new("SchemaSmith_CreateOption.sql"),
                 new("SchemaSmith_SupportsApplicationTimePeriods.sql"),
                 // Gates the per-column WITHOUT SYSTEM VERSIONING clause (#408). MariaDB-only, like the
                 // period gate above it; calls SchemaSmith_ServerVersionNum, kindled earlier.

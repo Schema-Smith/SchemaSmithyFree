@@ -4,6 +4,7 @@ using System.Linq;
 using NUnit.Framework;
 using Schema.Domain;
 using Schema.Domain.MariaDb;
+using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Validation;
@@ -952,6 +953,69 @@ public class CoherenceCheckTests
     {
         Assert.That(RunMaria(tableVersioned: false, columnExcluded: false).Where(f => f.Code == "SS-SV-001"), Is.Empty);
     }
+
+    // Compression options that cannot be combined. Both engines REFUSE these and neither error names the
+    // option: MySQL 8.0 gives 1031 "Table storage engine ... doesn't have this option", MariaDB 11.4
+    // gives errno 140 "Wrong create options". Verified live on both.
+
+    [Test]
+    public void MySqlCompressionWithCompressedRowFormat_IsAnError()
+    {
+        var table = new MySqlTable { Name = "invoice", RowFormat = "COMPRESSED", Compression = "zlib" };
+        table.Columns.Add(new MySqlColumn { Name = "id", DataType = "INT" });
+        var finding = RunFor(table, Platform.MySQL).Single(f => f.Code == "SS-CO-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error), "the deploy cannot succeed");
+            Assert.That(finding.Message, Does.Contain("1031"),
+                "quoting the engine error number is what lets someone match this to what they saw. "
+                + finding.Message);
+        });
+    }
+
+    [Test]
+    public void MariaDbPageCompressedWithCompressedRowFormat_IsAnError()
+    {
+        var table = new MariaDbTable { Name = "invoice", RowFormat = "COMPRESSED", PageCompressed = true };
+        table.Columns.Add(new MariaDbColumn { Name = "id", DataType = "INT" });
+        var finding = RunFor(table, Platform.MariaDb).Single(f => f.Code == "SS-CO-001");
+
+        Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+    }
+
+    [Test]
+    public void PageCompressionLevelWithoutPageCompressed_IsAWarning()
+    {
+        var table = new MariaDbTable { Name = "invoice", PageCompressed = false, PageCompressionLevel = 6 };
+        table.Columns.Add(new MariaDbColumn { Name = "id", DataType = "INT" });
+        var finding = RunFor(table, Platform.MariaDb).Single(f => f.Code == "SS-CO-002");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning), "legal, just inert");
+            Assert.That(finding.Message, Does.Contain("ignored"), finding.Message);
+        });
+    }
+
+    [Test]
+    public void CompressionOnAnUncompressedRowFormat_IsSilent()
+    {
+        // The negative half -- the combination that IS valid must not be flagged.
+        var table = new MySqlTable { Name = "invoice", RowFormat = "DYNAMIC", Compression = "zlib" };
+        table.Columns.Add(new MySqlColumn { Name = "id", DataType = "INT" });
+
+        Assert.That(RunFor(table, Platform.MySQL).Where(f => f.Code.StartsWith("SS-CO-")), Is.Empty);
+    }
+
+    private static System.Collections.Generic.List<Finding> RunFor(Table table, Platform platform)
+    {
+        var template = new Template { Name = "Main" };
+        template.Tables.Add(table);
+        var product = new Product { Name = "Acme", Platform = platform, TemplateOrder = new System.Collections.Generic.List<string>() };
+        return new CoherenceCheck().Run(new ValidationContext(product, [template], "pkg")).ToList();
+    }
+
 
 
 }

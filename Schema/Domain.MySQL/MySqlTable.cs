@@ -50,5 +50,21 @@ namespace Schema.Domain.MySQL
 
         [JsonProperty(Order = 106)]
         public List<FullTextIndex> FullTextIndexes { get; set; } = [];
+
+        // InnoDB transparent page compression. MariaDB has no COMPRESSION table option at all -- it spells
+        // the same idea PAGE_COMPRESSED, on MariaDbTable -- so this is scoped to MySQL rather than left to
+        // advertise a setting MariaDB would reject.
+        [SchemaProperty(Pattern = "zlib|lz4|none", Platforms = [Platform.MySQL],
+            Description = "MySQL only. InnoDB transparent page compression for the table's tablespace file. MariaDB spells this PAGE_COMPRESSED instead.")]
+        [JsonProperty(Order = 107, NullValueHandling = NullValueHandling.Ignore)]
+        public string Compression { get; set; }
+
+        // The compression page size OF RowFormat = COMPRESSED, which is why it lives beside it rather than
+        // as a row of its own -- it is meaningless without it, the same relationship PadIndex has to
+        // FillFactor on SQL Server. Both engines report it identically (verified on 5.7, 8.0 and 10.2).
+        [SchemaProperty(Minimum = 1, Maximum = 16,
+            Description = "InnoDB compressed-page size in KB (1, 2, 4, 8 or 16). Only meaningful with RowFormat = COMPRESSED.")]
+        [JsonProperty(Order = 108, NullValueHandling = NullValueHandling.Ignore)]
+        public int? KeyBlockSize { get; set; }
     }
 }

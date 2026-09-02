@@ -87,6 +87,8 @@ The JSON schema can enforce shape, but it can't confirm that a foreign key actua
 | `SS-RI-003` | Error | PostgreSQL — a table's `ReplicaIdentityIndex` names an index that is not unique. PostgreSQL requires a unique, non-partial index over `NOT NULL` columns. |
 | `SS-RI-004` | Warning | PostgreSQL — a table names a `ReplicaIdentityIndex` while its `ReplicaIdentity` is not `INDEX`, so the index name is ignored. |
 | `SS-SV-001` | Warning | MariaDB — a column sets `WithoutSystemVersioning` on a table that does not set `IsSystemVersioned`. MariaDB accepts the clause there and silently discards it, so the exclusion does nothing and nothing at deploy time reports it. |
+| `SS-CO-001` | Error | MySQL/MariaDB — a table sets `Compression` (MySQL) or `PageCompressed` (MariaDB) together with `RowFormat: "COMPRESSED"`. Both engines refuse that combination (MySQL error 1031, MariaDB errno 140) and neither error names the option. |
+| `SS-CO-002` | Warning | MariaDB — a table sets `PageCompressionLevel` without `PageCompressed`, so the level is ignored. |
 
 Related-table resolution honors the same schema defaulting a real deployment uses -- an explicit `RelatedTableSchema`, a `schema.table` prefix on `RelatedTable`, or (falling back) the owning table's own schema. Because every foreign key target resolves to a concrete schema one way or another, there's no such thing as an "ambiguous target" here -- a `RelatedTable` either resolves to a real table or it doesn't.
 
