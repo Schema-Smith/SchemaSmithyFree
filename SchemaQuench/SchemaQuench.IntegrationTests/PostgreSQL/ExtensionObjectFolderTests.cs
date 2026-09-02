@@ -10,6 +10,7 @@ using Schema.Isolators;
 using Schema.Utility;
 using System;
 using System.Data;
+using System.Data.Common;
 using System.IO;
 
 namespace SchemaQuench.IntegrationTests.PostgreSQL;
@@ -93,7 +94,7 @@ public class ExtensionObjectFolderTests
             }
             finally
             {
-                try { DropExtension(cmd); } catch { /* teardown must not mask the assertions */ }
+                try { DropExtension(cmd); } catch (DbException) { /* teardown must not mask the assertions */ }
                 if (Directory.Exists(temp)) Directory.Delete(temp, true);
             }
         }

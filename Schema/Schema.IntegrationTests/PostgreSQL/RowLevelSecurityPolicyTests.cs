@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using NUnit.Framework;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -63,7 +64,7 @@ public class RowLevelSecurityPolicyTests
             Exec(maint, $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{_db}' AND pid <> pg_backend_pid()");
             Exec(maint, $"DROP DATABASE IF EXISTS \"{_db}\"");
         }
-        catch { /* teardown must not mask an assertion */ }
+        catch (DbException) { /* teardown must not mask an assertion */ }
     }
 
     private IDbConnection Open(string database)

@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.IO;
 using log4net;
 using Microsoft.Extensions.Configuration;
@@ -69,11 +70,11 @@ public class SchemaBoundExtractionTests
             Master($"ALTER DATABASE [{_db}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE");
             Master($"DROP DATABASE IF EXISTS [{_db}]");
         }
-        catch { /* teardown must not mask an assertion */ }
+        catch (DbException) { /* teardown must not mask an assertion */ }
 
         if (!string.IsNullOrEmpty(_tempProductPath) && Directory.Exists(_tempProductPath))
         {
-            try { Directory.Delete(_tempProductPath, recursive: true); } catch { /* best effort */ }
+            try { Directory.Delete(_tempProductPath, recursive: true); } catch (IOException) { /* best effort */ }
         }
         FactoryContainer.Clear();
         LogFactory.Clear();
@@ -106,7 +107,7 @@ public class SchemaBoundExtractionTests
 
     private void Extract()
     {
-        _tempProductPath = Path.Combine(Path.GetTempPath(), $"TongsSb_{Guid.NewGuid():N}");
+        _tempProductPath = Path.Join(Path.GetTempPath(), $"TongsSb_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempProductPath);
 
         lock (FactoryContainer.SharedLockObject)
@@ -123,7 +124,7 @@ public class SchemaBoundExtractionTests
     }
 
     private string TemplateDir(string folder) =>
-        Path.Combine(_tempProductPath, "Templates", TemplateName, folder);
+        Path.Join(_tempProductPath, "Templates", TemplateName, folder);
 
     private static string FilesIn(string dir) =>
         Directory.Exists(dir) ? string.Join(";", Directory.GetFiles(dir, "*.sql")) : "<folder absent>";

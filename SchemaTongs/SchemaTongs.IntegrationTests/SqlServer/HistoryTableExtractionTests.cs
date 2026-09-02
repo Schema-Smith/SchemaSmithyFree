@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.IO;
 using System.Linq;
 using log4net;
@@ -96,16 +97,16 @@ public class HistoryTableExtractionTests
         {
             OnDb(cmd =>
             {
-                try { Run(cmd, "ALTER TABLE dbo.Versioned SET (SYSTEM_VERSIONING = OFF)"); } catch { /* best effort */ }
+                try { Run(cmd, "ALTER TABLE dbo.Versioned SET (SYSTEM_VERSIONING = OFF)"); } catch (DbException) { /* best effort */ }
             });
             Master($"ALTER DATABASE [{_db}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE");
             Master($"DROP DATABASE IF EXISTS [{_db}]");
         }
-        catch { /* teardown must not mask an assertion */ }
+        catch (DbException) { /* teardown must not mask an assertion */ }
 
         if (!string.IsNullOrEmpty(_tempProductPath) && Directory.Exists(_tempProductPath))
         {
-            try { Directory.Delete(_tempProductPath, recursive: true); } catch { /* best effort */ }
+            try { Directory.Delete(_tempProductPath, recursive: true); } catch (IOException) { /* best effort */ }
         }
         FactoryContainer.Clear();
         LogFactory.Clear();
@@ -139,7 +140,7 @@ public class HistoryTableExtractionTests
     [Test]
     public void ARealExtraction_WritesNoHistoryTableFile()
     {
-        _tempProductPath = Path.Combine(Path.GetTempPath(), $"TongsHist_{Guid.NewGuid():N}");
+        _tempProductPath = Path.Join(Path.GetTempPath(), $"TongsHist_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempProductPath);
 
         var errorLog = Substitute.For<ILog>();
@@ -158,7 +159,7 @@ public class HistoryTableExtractionTests
             new global::SchemaTongs.SchemaTongs(Platform.SqlServer).CastTemplate();
         }
 
-        var tablesDir = Path.Combine(_tempProductPath, "Templates", TemplateName, "Tables");
+        var tablesDir = Path.Join(_tempProductPath, "Templates", TemplateName, "Tables");
         Assert.That(Directory.Exists(tablesDir), Is.True, "extraction must have produced a Tables folder");
         var files = string.Join(";", Directory.GetFiles(tablesDir, "*.json"));
 
@@ -196,7 +197,7 @@ public class HistoryTableExtractionTests
         if (!_ledgerSupported)
             Assert.Ignore("Ledger tables need SQL Server 2022 (major 16); nothing here applies below it.");
 
-        _tempProductPath = Path.Combine(Path.GetTempPath(), $"TongsLedger_{Guid.NewGuid():N}");
+        _tempProductPath = Path.Join(Path.GetTempPath(), $"TongsLedger_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempProductPath);
 
         // Drop the ledger table so the retained artefacts exist alongside the live ones.
@@ -214,7 +215,7 @@ public class HistoryTableExtractionTests
             new global::SchemaTongs.SchemaTongs(Platform.SqlServer).CastTemplate();
         }
 
-        var templateDir = Path.Combine(_tempProductPath, "Templates", TemplateName);
+        var templateDir = Path.Join(_tempProductPath, "Templates", TemplateName);
         var written = string.Join(";", Directory.Exists(templateDir)
             ? Directory.GetFiles(templateDir, "*.*", SearchOption.AllDirectories).Select(Path.GetFileName)
             : []);
