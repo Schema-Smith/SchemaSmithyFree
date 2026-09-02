@@ -90,6 +90,7 @@ Per-table options, column attributes, and table-scoped behavior beyond the basic
 | Persistence type (UNLOGGED / TEMPORARY) | n/a | ✓ | n/a | n/a | `PersistenceType` |
 | Row-level security | n/a | ✓ | n/a | n/a | `RowLevelSecurity`, `ForceRowLevelSecurity` |
 | Replica identity (logical replication) | n/a | ✓ | n/a | n/a | `ReplicaIdentity`, `ReplicaIdentityIndex` |
+| Per-column history exclusion | n/a | n/a | n/a | ✓ | `WithoutSystemVersioning` on a system-versioned table |
 | Table fill factor | n/a | ✓ | n/a | n/a | `FillFactor` 0–100 on table |
 | Per-table `UpdateFillFactor` | ✓ | ✓ | n/a | n/a | OR'd with template + index level |
 | Temporal tables (system-versioning marker) | ✓ | n/a | n/a | n/a | `IsTemporal` flag |

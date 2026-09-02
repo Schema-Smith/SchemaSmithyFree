@@ -3,6 +3,7 @@
 using System.Linq;
 using NUnit.Framework;
 using Schema.Domain;
+using Schema.Domain.MariaDb;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Validation;
@@ -905,5 +906,52 @@ public class CoherenceCheckTests
     {
         Assert.That(RunPg(RiTable(null, null)).Where(f => f.Code.StartsWith("SS-RI-")), Is.Empty);
     }
+
+    // MariaDB per-column WITHOUT SYSTEM VERSIONING (#408). Verified on 11.4: MariaDB ACCEPTS the clause
+    // on a non-versioned table and silently discards it, so nothing at deploy time can tell the author
+    // the declaration is inert. --Validate is the only place this can surface.
+
+    private static System.Collections.Generic.List<Finding> RunMaria(bool tableVersioned, bool columnExcluded)
+    {
+        var table = new MariaDbTable
+        {
+            Name = "invoice",
+            IsSystemVersioned = tableVersioned,
+            Columns = { new MariaDbColumn { Name = "payload", DataType = "int(11)", WithoutSystemVersioning = columnExcluded } }
+        };
+        var template = new Template { Name = "Main" };
+        template.Tables.Add(table);
+        var product = new Product { Name = "Acme", Platform = Platform.MariaDb, TemplateOrder = new System.Collections.Generic.List<string>() };
+        return new CoherenceCheck().Run(new ValidationContext(product, [template], "pkg")).ToList();
+    }
+
+    [Test]
+    public void VersioningExclusionOnANonVersionedTable_IsReported()
+    {
+        var finding = RunMaria(tableVersioned: false, columnExcluded: true).Single(f => f.Code == "SS-SV-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(finding.Message, Does.Contain("payload"), "name the column " + finding.Message);
+            Assert.That(finding.Message, Does.Contain("silently discards"),
+                "the message has to say WHY nothing complained -- a reader who does not know MariaDB "
+                + "swallows the clause will assume it worked. " + finding.Message);
+        });
+    }
+
+    [Test]
+    public void VersioningExclusionOnAVersionedTable_IsSilent()
+    {
+        Assert.That(RunMaria(tableVersioned: true, columnExcluded: true).Where(f => f.Code == "SS-SV-001"), Is.Empty,
+            "the correct declaration must not be flagged");
+    }
+
+    [Test]
+    public void ANonVersionedTableWithNoExclusion_IsSilent()
+    {
+        Assert.That(RunMaria(tableVersioned: false, columnExcluded: false).Where(f => f.Code == "SS-SV-001"), Is.Empty);
+    }
+
 
 }

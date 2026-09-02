@@ -521,9 +521,9 @@ Each platform's table definition extends the shared properties with engine-speci
 | `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MySQL clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MySQL supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
 
-### MariaDB (`MySqlTable`)
+### MariaDB (`MariaDbTable`)
 
-MariaDB tables carry the same property set as MySQL and are deserialized through the same `MySqlTable` wrapper -- there is no separate MariaDB table type.
+MariaDB tables carry every MySQL property above, plus the ones below for features MySQL has no equivalent for.
 
 | Property | Type | Default | Description |
 |---|---|---|---|
@@ -534,6 +534,17 @@ MariaDB tables carry the same property set as MySQL and are deserialized through
 | `Comment` | string | `null` | Table comment. |
 | `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MariaDB clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MariaDB supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
+| `IsSystemVersioned` | bool | `false` | The table keeps its own row history (`WITH SYSTEM VERSIONING`, MariaDB 10.3+). **Read on extraction, not applied on deploy** — a package declaring it deploys an ordinary table, so system versioning has to be established on the server. Detected from `INFORMATION_SCHEMA.TABLES.TABLE_TYPE`, which answers for both authoring forms. |
+| `Periods` | array | `[]` | Application-time period definitions (`PERIOD FOR`). See the MariaDB period notes. |
+| `DropPeriodsRemovedFromProduct` | bool | `null` | Overrides the environment-level flag for this table. Defaults **off**, unlike the other drop-by-absence flags. |
+
+#### MariaDB columns (`MariaDbColumn`)
+
+MariaDB columns carry every MySQL column property, plus:
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `WithoutSystemVersioning` | bool | `false` | Excludes this column from the row history of a system-versioned table: an `UPDATE` touching only this column writes no history row. Typically used for a large or high-churn column whose history is not worth keeping. **Meaningless unless the table is system-versioned** — MariaDB accepts the clause on an ordinary table and silently discards it, so `--Validate` reports `SS-SV-001` rather than letting it look applied. Changing it on a deployed column is an `ALTER`, so it needs `SystemVersioningAlterHistory: "KEEP"`. Requires MariaDB 10.3.4+; below that the clause is suppressed and the column deploys ordinarily. |
 
 ### Minimal example (PostgreSQL)
 

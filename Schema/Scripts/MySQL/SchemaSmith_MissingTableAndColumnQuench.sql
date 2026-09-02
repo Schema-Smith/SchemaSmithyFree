@@ -270,6 +270,47 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- Degrade per-column history exclusion below MariaDB 10.3.4 / on MySQL at any version (#408).
+    -- Mirrors the application-time-period guard directly above, and for the same reason: ParseTableJson
+    -- suppresses the WITHOUT SYSTEM VERSIONING clause when the gate is 0 (below the floor the keyword is
+    -- a hard syntax error), so the column is created WITHOUT the exclusion -- meaning it silently starts
+    -- keeping history the package said not to keep. Suppressing that silently is the failure this guard
+    -- exists to prevent. Reduced, not Skipped: the column is still created, only its exclusion is lost.
+    -- =========================================================================
+    IF SchemaSmith_SupportsSystemVersioning() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+                     AND c.IsWithoutSystemVersioning = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Per-column history exclusion requires MariaDB 10.3.4 (MySQL unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsWithoutSystemVersioning = 1;
+            SET @ss_msg = 'Per-column history exclusion needs MariaDB 10.3.4 (UnsupportedFeaturePolicy=fail). See the run log.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column history exclusion not applied (requires MariaDB 10.3.4, MySQL unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsWithoutSystemVersioning = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column without its WITHOUT SYSTEM VERSIONING clause',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsWithoutSystemVersioning = 1;
+        END IF;
+    END IF;
+
 
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed

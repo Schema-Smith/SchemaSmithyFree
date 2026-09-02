@@ -411,6 +411,12 @@ BEGIN
               AND (isc.GENERATION_EXPRESSION IS NULL OR BINARY TRIM(isc.GENERATION_EXPRESSION) != BINARY TRIM(c.GeneratedExpression)))
           OR ((isc.EXTRA LIKE '%auto_increment%') <> (c.IsAutoIncrement = 1))
           OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+          OR (SchemaSmith_SupportsSystemVersioning() = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES vt
+                           WHERE vt.TABLE_SCHEMA = p_DatabaseName
+                             AND vt.TABLE_NAME = SchemaSmith_StripBacktickWrapping(c.TableName)
+                             AND vt.TABLE_TYPE = 'SYSTEM VERSIONED')
+              AND (isc.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%') <> (c.IsWithoutSystemVersioning = 1))
           OR (SchemaSmith_SupportsColumnSrid() = 1
               AND NOT (SchemaSmith_ColumnSrid(p_DatabaseName, SchemaSmith_StripBacktickWrapping(c.TableName), SchemaSmith_StripBacktickWrapping(c.ColumnName)) <=> c.Srid))
           OR (BINARY COALESCE(isc.COLUMN_COMMENT, '') != BINARY COALESCE(c.Comment, ''))
@@ -749,6 +755,12 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+          OR (SchemaSmith_SupportsSystemVersioning() = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES vt
+                           WHERE vt.TABLE_SCHEMA = p_DatabaseName
+                             AND vt.TABLE_NAME = SchemaSmith_StripBacktickWrapping(c.TableName)
+                             AND vt.TABLE_TYPE = 'SYSTEM VERSIONED')
+              AND (isc.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%') <> (c.IsWithoutSystemVersioning = 1))
               -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
               -- never -- the degrade guard above already reports it there), so ignore the difference below
               -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
@@ -815,6 +827,12 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+          OR (SchemaSmith_SupportsSystemVersioning() = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES vt
+                           WHERE vt.TABLE_SCHEMA = p_DatabaseName
+                             AND vt.TABLE_NAME = SchemaSmith_StripBacktickWrapping(c.TableName)
+                             AND vt.TABLE_TYPE = 'SYSTEM VERSIONED')
+              AND (isc.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%') <> (c.IsWithoutSystemVersioning = 1))
               -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
               -- never -- the degrade guard above already reports it there), so ignore the difference below
               -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
@@ -900,6 +918,12 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+          OR (SchemaSmith_SupportsSystemVersioning() = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES vt
+                           WHERE vt.TABLE_SCHEMA = p_DatabaseName
+                             AND vt.TABLE_NAME = SchemaSmith_StripBacktickWrapping(c.TableName)
+                             AND vt.TABLE_TYPE = 'SYSTEM VERSIONED')
+              AND (isc.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%') <> (c.IsWithoutSystemVersioning = 1))
               -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
               -- never -- the degrade guard above already reports it there), so ignore the difference below
               -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
@@ -969,6 +993,12 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+          OR (SchemaSmith_SupportsSystemVersioning() = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES vt
+                           WHERE vt.TABLE_SCHEMA = p_DatabaseName
+                             AND vt.TABLE_NAME = SchemaSmith_StripBacktickWrapping(c.TableName)
+                             AND vt.TABLE_TYPE = 'SYSTEM VERSIONED')
+              AND (isc.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%') <> (c.IsWithoutSystemVersioning = 1))
               -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
               -- never -- the degrade guard above already reports it there), so ignore the difference below
               -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on
@@ -1039,6 +1069,12 @@ BEGIN
               -- Symmetric in both directions -- a declared column newly marked invisible (visible -> invisible)
               -- and one whose Invisible flag was removed (invisible -> visible) both trip this <> compare.
               OR (SchemaSmith_SupportsInvisibleColumn() = 1 AND (isc.EXTRA LIKE '%INVISIBLE%') <> (c.IsInvisible = 1))
+          OR (SchemaSmith_SupportsSystemVersioning() = 1
+              AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES vt
+                           WHERE vt.TABLE_SCHEMA = p_DatabaseName
+                             AND vt.TABLE_NAME = SchemaSmith_StripBacktickWrapping(c.TableName)
+                             AND vt.TABLE_TYPE = 'SYSTEM VERSIONED')
+              AND (isc.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%') <> (c.IsWithoutSystemVersioning = 1))
               -- Column SRID differs. Gated behind SchemaSmith_SupportsColumnSrid() (MySQL 8.0.3+; MariaDB
               -- never -- the degrade guard above already reports it there), so ignore the difference below
               -- the floor or it churns every run. isc.SRS_ID cannot be read directly here (absent on

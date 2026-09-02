@@ -374,6 +374,9 @@ public static class ForgeKindler
                 new("SchemaSmith_SupportsInvisibleColumn.sql"),
                 new("SchemaSmith_SupportsColumnSrid.sql"),
                 new("SchemaSmith_SupportsApplicationTimePeriods.sql"),
+                // Gates the per-column WITHOUT SYSTEM VERSIONING clause (#408). MariaDB-only, like the
+                // period gate above it; calls SchemaSmith_ServerVersionNum, kindled earlier.
+                new("SchemaSmith_SupportsSystemVersioning.sql"),
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_IndexHasFunctionalKeyPart.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),

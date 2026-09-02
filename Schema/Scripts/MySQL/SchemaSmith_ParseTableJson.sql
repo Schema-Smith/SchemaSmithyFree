@@ -199,6 +199,7 @@ BEGIN
         Collation VARCHAR(100) DEFAULT NULL,
         CheckExpression TEXT DEFAULT NULL,
         IsInvisible TINYINT DEFAULT 0,
+        IsWithoutSystemVersioning TINYINT DEFAULT 0,
         Srid INT DEFAULT NULL,
         -- MySQL's column comment ceiling is 1024 characters. No pre-validation -- see the Tables
         -- temp table Comment column above for the same convention.
@@ -224,7 +225,7 @@ BEGIN
                 INSERT INTO _SchemaSmith_Columns (
                     TableName, ColumnName, OrdinalPosition, DataType, IsNullable, DefaultValue, OnUpdateCurrentTimestamp,
                     IsAutoIncrement, GeneratedExpression, GeneratedType,
-                    CharacterSet, Collation, CheckExpression, IsInvisible, Srid, Comment, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
+                    CharacterSet, Collation, CheckExpression, IsInvisible, IsWithoutSystemVersioning, Srid, Comment, OldName, NewColumn, ShouldApply, ShouldApplyExpression, VariantName
                 )
                 SELECT
                     SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Name')))) AS TableName,
@@ -243,6 +244,7 @@ BEGIN
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Collation'))) AS Collation,
                     SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].CheckExpression'))) AS CheckExpression,
                     COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Invisible'))), 0) AS IsInvisible,
+                    COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].WithoutSystemVersioning'))), 0) AS IsWithoutSystemVersioning,
                     SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Srid'))) AS Srid,
                     NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_ColOuterIdx, '].Columns[', v_ColInnerIdx, '].Comment')))), '') AS Comment,
                     -- #375: blank/whitespace OldName -> NULL (no rename), same as the table-level OldName above.
@@ -344,7 +346,14 @@ BEGIN
         -- Escaping (double the embedded single quotes) mirrors that same established form -- see
         -- _SchemaSmith_FullTextIndexes.Comment's CREATE/ADD FULLTEXT INDEX emit in
         -- SchemaSmith_IndexOnlyQuench.sql.
-        CASE WHEN Comment IS NOT NULL AND Comment != '' THEN CONCAT(' COMMENT ''', REPLACE(Comment, '''', ''''''), '''') ELSE '' END
+        CASE WHEN Comment IS NOT NULL AND Comment != '' THEN CONCAT(' COMMENT ''', REPLACE(Comment, '''', ''''''), '''') ELSE '' END,
+        -- Truly last: MariaDB accepts this clause either side of COMMENT (verified on 11.4), so it goes
+        -- where the grammar documents it rather than interleaved. Gated the same way SRID and INVISIBLE
+        -- are -- below MariaDB 10.3, and on MySQL at any version, the keyword is a hard syntax error, so
+        -- suppressing it at this single build point degrades a declared column safely everywhere rather
+        -- than failing the statement. #408
+        CASE WHEN IsWithoutSystemVersioning = 1 AND SchemaSmith_SupportsSystemVersioning() = 1
+             THEN ' WITHOUT SYSTEM VERSIONING' ELSE '' END
     );
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Calculate generated column dependencies');

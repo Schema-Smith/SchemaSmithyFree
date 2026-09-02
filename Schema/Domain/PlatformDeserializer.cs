@@ -131,7 +131,7 @@ namespace Schema.Domain
                 Platform.SqlServer => typeof(SqlServerColumn),
                 Platform.PostgreSQL => typeof(PostgreSqlColumn),
                 Platform.MySQL => typeof(MySqlColumn),
-                Platform.MariaDb => typeof(MySqlColumn),
+                Platform.MariaDb => typeof(MariaDbColumn),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }

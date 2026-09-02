@@ -378,7 +378,10 @@ public class ForgeKindlerTests
         // /*M!110400 */ version comment, because that catalog is 11.4+ and an unknown TABLE is rejected
         // when the routine is CREATED -- so the reference must be invisible to the parser, not merely
         // unreached).
-        Assert.That(mysql.Length, Is.EqualTo(52));
+        // +1 = SchemaSmith_SupportsSystemVersioning (#408 -- gates the per-column
+        //   WITHOUT SYSTEM VERSIONING clause. MariaDB 10.3.4+; an unconditional 0 on MySQL, which has no
+        //   system versioning at any version, the same shape as SupportsApplicationTimePeriods).
+        Assert.That(mysql.Length, Is.EqualTo(53));
     }
 
     [Test]

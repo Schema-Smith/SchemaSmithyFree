@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
+using Schema.Domain.MariaDb;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Index = Schema.Domain.Index;
@@ -33,6 +34,7 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string ReplicaIdentityIndexUnknownCode = "SS-RI-002";
     private const string ReplicaIdentityIndexNotUniqueCode = "SS-RI-003";
     private const string ReplicaIdentityIndexIgnoredCode = "SS-RI-004";
+    private const string VersioningExclusionInertCode = "SS-SV-001";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -60,6 +62,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             findings.AddRange(CheckRebuildPolicy(table, location));
             findings.AddRange(CheckRowLevelSecurity(table, location));
             findings.AddRange(CheckReplicaIdentity(table, location));
+            findings.AddRange(CheckSystemVersioningExclusions(table, location));
         }
 
         return findings;
@@ -355,6 +358,24 @@ public sealed class CoherenceCheck : ISchemaCheck
             yield return new Finding(Severity.Error, ReplicaIdentityIndexNotUniqueCode, Category, tableLocation,
                 $"Table '{table.Name}' names ReplicaIdentityIndex '{indexName}', which is not unique. " +
                 "PostgreSQL requires a unique, non-partial index over NOT NULL columns.");
+    }
+
+    /// <summary>
+    /// MariaDB per-column <c>WITHOUT SYSTEM VERSIONING</c> coherence — issue #408.
+    /// <para>Verified on 11.4: MariaDB <b>accepts the clause on a table that is not system-versioned and
+    /// silently discards it</b> — no error, and <c>EXTRA</c> comes back empty. So the declaration is inert,
+    /// and nothing at deploy time can tell the author, because nothing failed.</para>
+    /// <para>Warning rather than Error: it is legal and deployable, and a table may gain versioning later.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckSystemVersioningExclusions(Table table, string tableLocation)
+    {
+        if (table is not MariaDbTable mariaTable || mariaTable.IsSystemVersioned) yield break;
+
+        foreach (var column in table.Columns.OfType<MariaDbColumn>().Where(c => c.WithoutSystemVersioning))
+            yield return new Finding(Severity.Warning, VersioningExclusionInertCode, Category, tableLocation,
+                $"Column '{column.Name}' on table '{table.Name}' sets WithoutSystemVersioning, but the table " +
+                "does not set IsSystemVersioned. MariaDB accepts the clause here and silently discards it, so " +
+                "the exclusion does nothing — set IsSystemVersioned, or drop WithoutSystemVersioning.");
     }
 
     // Mirrors SchemaSmith_NormalizeIndexColumns.sql's DESC/ASC suffix handling (source of truth —

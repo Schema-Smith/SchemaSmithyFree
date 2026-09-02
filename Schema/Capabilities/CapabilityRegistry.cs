@@ -130,6 +130,21 @@ namespace Schema.Capabilities
             rows.Add(new("application-time-period", "Application-time period", Platform.MariaDb,
                 1004, "MariaDB 10.4.3", null, DegradeKind.Reduced, "table without its PERIOD FOR clause"));
 
+            // Per-column history exclusion (MariaDB WITHOUT SYSTEM VERSIONING, #408). Same shape as the
+            // period row above: MySQL has no system versioning at any version, so
+            // SchemaSmith_SupportsSystemVersioning() is an unconditional 0 there and MySQL gets no row.
+            //
+            // Reduced, not Skipped: below the threshold the clause is suppressed and the column is still
+            // created -- what the user loses is the exclusion, not the column.
+            //
+            // Worth knowing for anything driving UI or AI off this row: the exclusion is only meaningful
+            // on a system-versioned table, and MariaDB ACCEPTS it on an ordinary one while silently
+            // discarding it -- so "applied without error" does not mean "in effect". --Validate reports
+            // SS-SV-001 for that case. Note also that the table-level IsSystemVersioned is read on
+            // extraction and NOT applied on deploy, so a versioned table reaches SchemaSmith by adoption.
+            rows.Add(new("column-history-exclusion", "Per-column history exclusion", Platform.MariaDb,
+                1003, "MariaDB 10.3.4", null, DegradeKind.Reduced, "column without its WITHOUT SYSTEM VERSIONING clause"));
+
             // Change Data Capture, gated by a DATABASE setting rather than an engine version -- the first
             // row of that kind, which is why Capability gained RequiredDatabaseSetting. IntroducedInComparable
             // is 0 and means "not version-gated": CDC is old enough that no supported server lacks it, and
