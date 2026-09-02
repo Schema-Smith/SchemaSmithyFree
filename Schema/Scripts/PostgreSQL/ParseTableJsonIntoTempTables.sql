@@ -19,6 +19,10 @@
            COALESCE((elem ->> 'RowLevelSecurity')::BOOLEAN, false) AS "RowLevelSecurity",
            COALESCE((elem ->> 'ForceRowLevelSecurity')::BOOLEAN, false) AS "ForceRowLevelSecurity",
            COALESCE(elem ->> 'AccessMethod', '') AS "AccessMethod",
+           -- Empty means "placement not managed here", NOT "the database default" -- the FileGroup
+           -- contract. Treating unset as the default fails every object a DBA placed elsewhere on its
+           -- SECOND deploy, in packages that never mentioned placement.
+           COALESCE(elem ->> 'Tablespace', '') AS "Tablespace",
            COALESCE(elem ->> 'PersistenceType', '') AS "PersistenceType",
            -- Empty string means "not declared, leave the server alone", the AccessMethod convention. #407
            COALESCE(UPPER(elem ->> 'ReplicaIdentity'), '') AS "ReplicaIdentity",
@@ -131,6 +135,7 @@
            REGEXP_REPLACE(COALESCE(celem ->> 'IndexColumns', ''), '\s*,\s*', ',', 'g') AS "IndexColumns",
            COALESCE(celem ->> 'IncludeColumns', '') AS "IncludeColumns",
            COALESCE(celem ->> 'AccessMethod', 'btree') AS "AccessMethod",
+           COALESCE(celem ->> 'Tablespace', '') AS "Tablespace",
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",

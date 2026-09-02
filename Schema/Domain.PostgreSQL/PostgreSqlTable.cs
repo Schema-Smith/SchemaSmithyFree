@@ -87,6 +87,23 @@ namespace Schema.Domain.PostgreSQL
         [JsonProperty(Order = 110)]
         public short FillFactor { get; set; }
 
+        // Which tablespace the table's data lives on. PostgreSqlMaterializedView has carried this since
+        // matviews shipped, so supporting it on one relation kind and not the other two was an accident of
+        // what got built rather than a decision.
+        //
+        // Unset means "SchemaSmith does not manage placement here" -- NOT a declaration of the database
+        // default. That is the FileGroup contract on SQL Server, and it exists because the alternative
+        // (treating unset as "the default") makes every object a DBA placed elsewhere fail its SECOND
+        // deploy, in packages that never mentioned placement at all.
+        //
+        // Create-time only, the same posture as FileGroup: ALTER TABLE ... SET TABLESPACE rewrites the
+        // table under an ACCESS EXCLUSIVE lock, so a declared name that differs from the live one is
+        // refused by name rather than silently moved.
+        [SchemaProperty(MaxLength = 128,
+            Description = "PostgreSQL only. The tablespace the table's data lives on. Omit to leave placement unmanaged — an omitted value does NOT mean the database default. Create-time only: moving an existing table rewrites it, so a declared tablespace that differs from where the table already lives is refused rather than moved.")]
+        [JsonProperty(Order = 113, NullValueHandling = NullValueHandling.Ignore)]
+        public string Tablespace { get; set; }
+
         // Unset means "not managed", matching AccessMethod and PersistenceType above. Extraction
         // emits this only for a table that is not at DEFAULT, so adding it churns no existing package.
         [SchemaProperty(Pattern = "DEFAULT|FULL|NOTHING|INDEX",

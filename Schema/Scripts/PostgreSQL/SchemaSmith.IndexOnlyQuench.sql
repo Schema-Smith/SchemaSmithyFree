@@ -49,6 +49,9 @@ BEGIN
            REGEXP_REPLACE(COALESCE(celem ->> 'IndexColumns', ''), '\s*,\s*', ',', 'g') AS "IndexColumns",
            COALESCE(celem ->> 'IncludeColumns', '') AS "IncludeColumns",
            COALESCE(celem ->> 'AccessMethod', 'btree') AS "AccessMethod",
+           -- IndexOnlyQuench builds its OWN temp_indexes rather than reusing the one
+           -- ParseTableJsonIntoTempTables makes, so every index column has to be declared in both.
+           COALESCE(celem ->> 'Tablespace', '') AS "Tablespace",
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
@@ -268,7 +271,11 @@ BEGIN
                                 CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                      THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
                                      ELSE '' END ||
-                                CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
+                                -- USING INDEX TABLESPACE precedes DEFERRABLE per the table-constraint grammar
+                              -- (verified live on 16). Emitted only when declared: unset means placement is
+                              -- not managed, so the backing index follows default_tablespace as before.
+                              CASE WHEN COALESCE(ti."Tablespace", '') <> '' THEN ' USING INDEX TABLESPACE "' || ti."Tablespace" || '"' ELSE '' END ||
+                              CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
                                 CASE WHEN ti."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';'
                            ELSE 'CREATE ' || CASE WHEN ti."Unique" THEN 'UNIQUE ' ELSE '' END || 'INDEX "' || ti."Name" || '" ON "' || ti."TableSchema" || '"."' || ti."TableName" || '" ' ||
                                 'USING ' || COALESCE(ti."AccessMethod", 'btree') || ' ' ||
@@ -279,7 +286,10 @@ BEGIN
                                 CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                      THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
                                      ELSE '' END ||
-                                CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'
+                                -- TABLESPACE follows WITH and precedes WHERE per the CREATE INDEX grammar
+                              -- (verified live on 16).
+                              CASE WHEN COALESCE(ti."Tablespace", '') <> '' THEN ' TABLESPACE "' || ti."Tablespace" || '"' ELSE '' END ||
+                              CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'
                            END, CHR(10))
       INTO sql_script
       FROM temp_indexes ti

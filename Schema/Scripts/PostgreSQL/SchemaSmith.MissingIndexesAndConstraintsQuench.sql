@@ -129,6 +129,10 @@ BEGIN
                               CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
                                    ELSE '' END ||
+                              -- USING INDEX TABLESPACE precedes DEFERRABLE per the table-constraint grammar
+                              -- (verified live on 16). Emitted only when declared: unset means placement is
+                              -- not managed, so the backing index follows default_tablespace as before.
+                              CASE WHEN COALESCE(ti."Tablespace", '') <> '' THEN ' USING INDEX TABLESPACE "' || ti."Tablespace" || '"' ELSE '' END ||
                               CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
                               CASE WHEN ti."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';'
                          ELSE 'CREATE ' || CASE WHEN ti."Unique" THEN 'UNIQUE ' ELSE '' END || 'INDEX "' || ti."Name" || '" ON "' || ti."TableSchema" || '"."' || ti."TableName" || '" ' ||
@@ -140,6 +144,9 @@ BEGIN
                               CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                    THEN ' WITH (fillfactor = ' || ti."FillFactor" || ') '
                                    ELSE ' ' END ||
+                              -- TABLESPACE follows WITH and precedes WHERE per the CREATE INDEX grammar
+                              -- (verified live on 16).
+                              CASE WHEN COALESCE(ti."Tablespace", '') <> '' THEN ' TABLESPACE "' || ti."Tablespace" || '"' ELSE '' END ||
                               CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'
                          END || CHR(10) ||
                     'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''' || CASE WHEN ti."UniqueConstraint" OR ti."PrimaryKey" THEN 'constraint' ELSE 'index' END || ''', ''' || ti."TableSchema" || '.' || ti."TableName" || '.' || ti."Name" || ''', ''created'');', CHR(10))

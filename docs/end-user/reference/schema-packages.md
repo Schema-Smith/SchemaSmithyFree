@@ -505,6 +505,7 @@ Each platform's table definition extends the shared properties with engine-speci
 | `AccessMethod` | string | `null` | Storage access method (e.g., `"heap"`). |
 | `PersistenceType` | string | `null` | Persistence override (e.g., `"UNLOGGED"`, `"TEMPORARY"`). |
 | `ReplicaIdentity` | string | `null` | `REPLICA IDENTITY` for logical replication: `"DEFAULT"`, `"FULL"`, `"NOTHING"` or `"INDEX"`. **On a table that belongs to a publication this decides whether `UPDATE` and `DELETE` are permitted at all** — PostgreSQL refuses both when there is no usable identity. Omit to leave the server's current setting alone; extraction emits it only for a table that is not at `DEFAULT`. |
+| `Tablespace` | string | `null` | The tablespace the table's data lives on. Omitting it means placement is **not managed** — it does **not** declare the database default, so a table a DBA placed by hand is left alone. Create-time only: moving an existing table rewrites it under an `ACCESS EXCLUSIVE` lock, so a declared tablespace that differs from where the table already lives is refused by name rather than performed. |
 | `ReplicaIdentityIndex` | string | `null` | Names the unique index backing `ReplicaIdentity: "INDEX"`. The index must be unique, non-partial and over `NOT NULL` columns. Applied after indexes are created, so it works on a table's first deploy. |
 | `UpdateFillFactor` | bool | `false` | Enables fill-factor reconciliation for this table. |
 | `FillFactor` | short (0--100) | `0` | Table fill factor. `0` means use the server default. |
@@ -756,7 +757,9 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ### PostgreSQL index extras
 
-`AccessMethod` (e.g., `btree`, `gin`, `gist`), `Tablespace`, `IncludeColumns` (PostgreSQL 11+ covering indexes).
+`AccessMethod` (e.g., `btree`, `gin`, `gist`), `IncludeColumns` (PostgreSQL 11+ covering indexes), and `Tablespace`.
+
+`Tablespace` places the index. An index does **not** follow its table's tablespace — created with no clause it lands wherever `default_tablespace` points, which is usually but not always the same place. Omitting it means placement is **not managed**, which is not the same as declaring the database default: an index a DBA placed by hand is left exactly where it is. Create-time only — moving an existing index rebuilds it, so a declared tablespace that differs from where the index already lives is refused by name rather than performed.
 
 ### MySQL index extras
 

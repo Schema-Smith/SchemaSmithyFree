@@ -101,7 +101,12 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                                     END AS "FillFactor",
                                "SchemaSmith"."IndexNullsNotDistinct"(idx.indexrelid) AS "NullsNotDistinct",
                                COALESCE(con.condeferrable, FALSE) AS "Deferrable",
-                               COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred"
+                               COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred",
+                               -- reltablespace 0 means "the database default", which is NOT a declared
+                               -- placement -- it yields NULL so FormatJson strips the key and an ordinary
+                               -- index extracts exactly as it did before this shipped. An index does not
+                               -- inherit its table's tablespace, so this is read per index.
+                               (SELECT ts.spcname FROM pg_tablespace ts WHERE ts.oid = i.reltablespace) AS "Tablespace"
                           FROM pg_index idx
                           JOIN pg_class i ON i.oid = idx.indexrelid
                           LEFT JOIN pg_catalog.pg_constraint con ON con.conrelid = idx.indrelid AND con.conname = i.relname AND con.contype IN ('p', 'u', 'x')
@@ -223,7 +228,10 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                             JOIN pg_class ic ON ic.oid = ix.indexrelid
                            WHERE ix.indrelid = rls.oid
                              AND ix.indisreplident)
-                    END AS "ReplicaIdentityIndex"
+                    END AS "ReplicaIdentityIndex",
+               -- Same 0-means-default rule as the index block above. Closes the asymmetry with
+               -- materialized views, which have carried Tablespace since they shipped.
+               (SELECT ts.spcname FROM pg_tablespace ts WHERE ts.oid = rls.reltablespace) AS "Tablespace"
           FROM information_schema.tables t
           JOIN pg_class rls ON rls.relname = t.table_name
                            AND rls.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = t.table_schema)

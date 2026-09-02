@@ -53,7 +53,12 @@ BEGIN
                          -- present at CREATE time, and inlining them here created a plain column then churned
                          -- it to generated via a drop-and-re-add. Identity columns are NOT deferred.
                          AND NOT (COALESCE(tc."Generated", 'NEVER') = 'ALWAYS' AND COALESCE(tc."GenerationExpression", '') <> '')) || ')' ||
-                    ' WITH (fillfactor = ' || tt."FillFactor" || ');' || CHR(10) ||
+                    ' WITH (fillfactor = ' || tt."FillFactor" || ')' ||
+                    -- TABLESPACE follows WITH in the CREATE TABLE grammar. Emitted only when declared:
+                    -- an unset Tablespace means placement is not managed, so the table lands wherever
+                    -- default_tablespace puts it, exactly as it did before this shipped.
+                    CASE WHEN COALESCE(tt."Tablespace", '') <> '' THEN ' TABLESPACE "' || tt."Tablespace" || '"' ELSE '' END ||
+                    ';' || CHR(10) ||
                     'INSERT INTO "SchemaSmith"."ChangeAudit" ("SessionId", "ObjectType", "ObjectName", "ActionType") VALUES (pg_backend_pid(), ''table'', ''' || tt."Schema" || '.' || tt."Name" || ''', ''created'');', CHR(10))
     INTO sql_script
     FROM temp_tables tt
