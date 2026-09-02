@@ -20,11 +20,16 @@ BEGIN
 
     IF v_type = 'object' THEN
         v_text := E'{\n';
+        -- Count only the keys that will actually be EMITTED. Counting every key and decrementing before
+        -- the null-skip below emits a separator after the last surviving key whenever the keys after it
+        -- are all null, producing `{ "a": 1, }` -- not JSON, and the cast at the end of this function
+        -- rejects it. Unreachable until a nullable property was added last; correct regardless.
         SELECT COUNT(*) INTO v_count
-        FROM JSON_OBJECT_KEYS(p_json);
+          FROM (SELECT JSON_OBJECT_KEYS(p_json) AS k) keys
+         WHERE (p_json->keys.k)::TEXT != 'null';
         FOR v_key IN (SELECT JSON_OBJECT_KEYS(p_json)) LOOP
-                v_count := v_count - 1;
                 CONTINUE WHEN ((p_json->v_key)::TEXT = 'null');
+                v_count := v_count - 1;
                 v_text := v_text || REPEAT(' ', v_indent * (p_step + 1))  || TO_JSON(v_key)::TEXT || ': ' || "SchemaSmith"."FormatJson"(p_json->v_key, p_indent_size, p_step + 1);
                 IF v_count > 0 THEN
                     v_text := v_text || ',';
