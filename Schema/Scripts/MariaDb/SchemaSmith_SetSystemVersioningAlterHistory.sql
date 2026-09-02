@@ -35,8 +35,18 @@ BEGIN
     -- The variable arrived with system versioning in 10.3 and the supported floor is 10.2. Unlike a
     -- missing column, an unknown system variable is an error wherever the statement is REACHED, so the
     -- version test guards the assignment rather than relying on deferred resolution.
+    -- The version test alone is NOT enough, and that is the whole reason for the dynamic SQL below.
+    -- MariaDB resolves a system variable at CREATE PROCEDURE time, exactly as MySQL does (see the
+    -- MySQL base definition), so a bare mention inside this branch fails to CREATE on 10.2 -- the
+    -- supported floor -- with ERROR 1193, taking the whole kindle down and every test with it. Verified
+    -- live on 10.2. Naming the variable only inside a string literal defers resolution to EXECUTE,
+    -- which the version guard then keeps unreachable below 10.3. Confirmed still effective on 11.4:
+    -- the session value moves ERROR -> KEEP.
     IF UPPER(COALESCE(p_Mode, '')) = 'KEEP' AND SchemaSmith_ServerVersionNum() >= 1003 THEN
-        SET SESSION system_versioning_alter_history = 1;  -- 1 = KEEP; the enum's other value is ERROR
+        SET @ss_avh_sql = 'SET SESSION system_versioning_alter_history = 1';  -- 1 = KEEP; the enum's other value is ERROR
+        PREPARE ss_avh_stmt FROM @ss_avh_sql;
+        EXECUTE ss_avh_stmt;
+        DEALLOCATE PREPARE ss_avh_stmt;
     END IF;
 END //
 

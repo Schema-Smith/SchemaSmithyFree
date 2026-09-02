@@ -30,11 +30,19 @@ BEGIN
     --                                                                   IS_SYSTEM_TIME_PERIOD_START/_END = 'YES'
     -- So the implicit form needs no exclusion and this simply returns 0 for it.
     --
-    -- Version-gated: the IS_SYSTEM_TIME_PERIOD_* columns arrive with system versioning in 10.3, and the
-    -- supported floor is 10.2. Column resolution is deferred to execution, so on 10.2 the early RETURN
-    -- leaves the read below unreached and therefore unbound -- the same mechanism the MySQL base
-    -- definition relies on, and the reason this is safe to ship to the floor.
-    IF SchemaSmith_ServerVersionNum() < 1003 THEN
+    -- Version-gated on 11.4, NOT 10.3. The IS_SYSTEM_TIME_PERIOD_* columns do NOT arrive with system
+    -- versioning -- verified against live servers: absent on 10.2 AND on 10.6, present on 11.4. They
+    -- ship with INFORMATION_SCHEMA.PERIODS in 11.4, the same release and the same read-gap the
+    -- application-time period support already documents. An earlier 10.3 guard here was asserted rather
+    -- than measured, and cost every MariaDB 10.3-11.3 target an 'Unknown column' failure.
+    --
+    -- Column resolution is deferred to execution, so below the gate the early RETURN leaves the read
+    -- unreached and therefore unbound -- the same mechanism the MySQL base definition relies on.
+    --
+    -- Returning 0 below 11.4 means an explicitly-declared ROW START/END column is not recognised as
+    -- engine-owned there. That is the honest answer for a catalog that cannot report it, and it matches
+    -- what the period reader does on the same versions: report nothing rather than guess.
+    IF SchemaSmith_ServerVersionNum() < 1104 THEN
         RETURN 0;
     END IF;
 

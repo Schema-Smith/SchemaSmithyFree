@@ -64,12 +64,15 @@ CREATE TABLE dbo.GatedTemporal (
     public void GenerateTableXml_GatesTemporalHistoryReadBelow2016_EmitsAtOrAbove()
     {
         // At/above 2016 the version-gated dynamic block runs, so a non-default history table name/schema
+        // 14, not 13: this test asserts TWO gates. The history table name is 2016, but the retention
+        // period columns are 2017 -- so 13 emits the name and not the retention, and the minimum that
+        // satisfies both is 14. Still below the 2022 ledger gate, which is the point.
         // and an explicit retention period are read and emitted (#depth-gap).
-        var gatedAt16 = GenerateWithBakedMajor(16, "GatedTemporal");
+        var gatedAt14 = GenerateWithBakedMajor(14, "GatedTemporal");
         Assert.Multiple(() =>
         {
-            Assert.That(gatedAt16, Does.Contain("GatedTemporal_Archive"), "at major 13+ the history table name must be emitted");
-            Assert.That(gatedAt16, Does.Contain("3 YEARS"), "at major 13+ the retention period must be emitted");
+            Assert.That(gatedAt14, Does.Contain("GatedTemporal_Archive"), "at major 13+ the history table name must be emitted");
+            Assert.That(gatedAt14, Does.Contain("3 YEARS"), "at major 13+ the retention period must be emitted");
         });
 
         // Below 2016 the guard skips the dynamic read entirely (as it must -- a pre-2016 target cannot be
@@ -87,8 +90,8 @@ CREATE TABLE dbo.GatedTemporal (
     public void GenerateTableXml_GatesMaskingReadBelow2016_EmitsAtOrAbove()
     {
         // At/above 2016 (major 13) the version-gated dynamic block runs, so the mask is read and emitted.
-        var maskedAt16 = GenerateWithBakedMajor(16, "Masked");
-        Assert.That(maskedAt16, Does.Contain("default()"),
+        var maskedAt13 = GenerateWithBakedMajor(13, "Masked");
+        Assert.That(maskedAt13, Does.Contain("default()"),
             "at major 13+ the masking read runs, so DataMaskFunction must be emitted");
 
         // Below 2016 the guard skips the dynamic read (as it must — a pre-2016 target cannot mask), so #ColMeta
@@ -98,6 +101,12 @@ CREATE TABLE dbo.GatedTemporal (
             "below major 13 the masking read is gated out, so DataMaskFunction must be dropped");
     }
 
+    // BAKE THE MINIMUM THAT SATISFIES THE GATE UNDER TEST, never a comfortably-high number. The baked
+    // value makes the proc believe the server is that version, so every gate at or below it opens --
+    // including gates for catalogs this server does not have. These two tests baked 16 for gates that
+    // are 13, which was harmless until a 2022 gate (ledger_type_desc) was added; it then read a column
+    // that does not exist on the CI server (2019) and failed with 'Invalid column name'.
+    // In production the baked value comes from detection against the live server, so it never lies.
     // Re-kindle fn_ServerMajorVersion with the baked major (the JSON kindle installs it on both encodings),
     // (re)create GenerateTableXml from its resource, and run it against the given table.
     private string GenerateWithBakedMajor(int major, string table)

@@ -3088,21 +3088,33 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
                 -- removing the only period leaves nothing to satisfy it. The FLAG is the safety here,
                 -- not a shape test: it is off by default, so a package that predates periods is
                 -- untouched, and turning it on is the operator saying the package is authoritative.
-                INSERT INTO _SchemaSmith_PeriodsToDrop (TableName, PeriodName)
-                SELECT t.TableName,
-                       SchemaSmith_SafeBacktickWrap(JSON_UNQUOTE(JSON_EXTRACT(live.PeriodJson, '$.Name')))
-                FROM _SchemaSmith_Tables t
-                JOIN JSON_TABLE(
-                        SchemaSmith_TablePeriodsJson(p_DatabaseName,
-                            SchemaSmith_StripBacktickWrapping(t.TableName)),
-                        '$[*]' COLUMNS (PeriodJson JSON PATH '$')) live
-                WHERE COALESCE(t.NewTable, 0) = 0
-                  AND COALESCE(t.DropPeriodsRemovedFromProduct, @ss_drop_periods_removed, 0) = 1
-                  AND NOT EXISTS (
-                      SELECT 1 FROM _SchemaSmith_Periods d
-                      WHERE d.TableName = t.TableName
-                        AND BINARY SchemaSmith_StripBacktickWrapping(d.PeriodName)
-                          = BINARY JSON_UNQUOTE(JSON_EXTRACT(live.PeriodJson, '$.Name')));
+                -- DYNAMIC, and not for style: JSON_TABLE is MySQL 8.0.4+ / MariaDB 10.6+, and a stored
+                -- procedure that so much as MENTIONS it fails to CREATE below those versions -- MySQL 5.7
+                -- and MariaDB 10.2 are both supported floors, and both took the whole kindle down with a
+                -- parser error before this was deferred. The runtime 11.4 gate above never gets a chance:
+                -- parsing happens at CREATE. Every other JSON_TABLE in this codebase was already replaced
+                -- with a version-agnostic aggregation for exactly this reason (see BootstrapTableQuench
+                -- and ParseTableJson); this one is gated to 11.4 anyway, so deferring the parse to EXECUTE
+                -- is enough and keeps the set-based shape.
+                SET @ss_pdd_sql = CONCAT(
+                    'INSERT INTO _SchemaSmith_PeriodsToDrop (TableName, PeriodName) ',
+                    'SELECT t.TableName, ',
+                    '       SchemaSmith_SafeBacktickWrap(JSON_UNQUOTE(JSON_EXTRACT(live.PeriodJson, ''$.Name''))) ',
+                    'FROM _SchemaSmith_Tables t ',
+                    'JOIN JSON_TABLE( ',
+                    '        SchemaSmith_TablePeriodsJson(', QUOTE(p_DatabaseName), ', ',
+                    '            SchemaSmith_StripBacktickWrapping(t.TableName)), ',
+                    '        ''$[*]'' COLUMNS (PeriodJson JSON PATH ''$'')) live ',
+                    'WHERE COALESCE(t.NewTable, 0) = 0 ',
+                    '  AND COALESCE(t.DropPeriodsRemovedFromProduct, @ss_drop_periods_removed, 0) = 1 ',
+                    '  AND NOT EXISTS ( ',
+                    '      SELECT 1 FROM _SchemaSmith_Periods d ',
+                    '      WHERE d.TableName = t.TableName ',
+                    '        AND BINARY SchemaSmith_StripBacktickWrapping(d.PeriodName) ',
+                    '          = BINARY JSON_UNQUOTE(JSON_EXTRACT(live.PeriodJson, ''$.Name'')))');
+                PREPARE ss_pdd_stmt FROM @ss_pdd_sql;
+                EXECUTE ss_pdd_stmt;
+                DEALLOCATE PREPARE ss_pdd_stmt;
 
                 SET @ss_pdd_id := (SELECT MIN(RowId) FROM _SchemaSmith_PeriodsToDrop);
                 WHILE @ss_pdd_id IS NOT NULL DO
