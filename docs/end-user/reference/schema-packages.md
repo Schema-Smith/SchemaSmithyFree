@@ -504,6 +504,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `ForceRowLevelSecurity` | bool | `false` | When `true`, row-level security is enforced even for the table owner. |
 | `AccessMethod` | string | `null` | Storage access method (e.g., `"heap"`). |
 | `PersistenceType` | string | `null` | Persistence override (e.g., `"UNLOGGED"`, `"TEMPORARY"`). |
+| `ReplicaIdentity` | string | `null` | `REPLICA IDENTITY` for logical replication: `"DEFAULT"`, `"FULL"`, `"NOTHING"` or `"INDEX"`. **On a table that belongs to a publication this decides whether `UPDATE` and `DELETE` are permitted at all** — PostgreSQL refuses both when there is no usable identity. Omit to leave the server's current setting alone; extraction emits it only for a table that is not at `DEFAULT`. |
+| `ReplicaIdentityIndex` | string | `null` | Names the unique index backing `ReplicaIdentity: "INDEX"`. The index must be unique, non-partial and over `NOT NULL` columns. Applied after indexes are created, so it works on a table's first deploy. |
 | `UpdateFillFactor` | bool | `false` | Enables fill-factor reconciliation for this table. |
 | `FillFactor` | short (0--100) | `0` | Table fill factor. `0` means use the server default. |
 

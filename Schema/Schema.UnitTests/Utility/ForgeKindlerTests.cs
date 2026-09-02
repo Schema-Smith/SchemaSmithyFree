@@ -301,7 +301,12 @@ public class ForgeKindlerTests
         //   the sequence position AND its name, drop inbound foreign keys, create the shadow in declared
         //   order, copy, restore the sequence, swap, drop, put the sequence name back. Kindled after
         //   RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
-        Assert.That(postgres.Length, Is.EqualTo(37));
+        // + SchemaSmith.ReplicaIdentityQuench (#407 -- applies a declared REPLICA IDENTITY. Its own procedure
+        //   rather than a clause in ModifiedTableQuench's attribute fixup because the USING INDEX form names an
+        //   index, and ModifiedTableQuench runs BEFORE MissingIndexesAndConstraintsQuench -- so on a table's
+        //   first deploy that index does not exist yet. Kindled after MissingIndexesAndConstraintsQuench, the
+        //   same dependency SQL Server's ChangeTrackingQuench has on a primary key).
+        Assert.That(postgres.Length, Is.EqualTo(38));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor

@@ -213,7 +213,17 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                CASE rls.relpersistence WHEN 'p' THEN 'Logged' WHEN 'u' THEN 'Unlogged' WHEN 't' THEN 'Temporary' END AS "PersistenceType",
                COALESCE((SELECT SPLIT_PART(opt, '=', 2)
                            FROM UNNEST(rls.reloptions) AS opts(opt)
-                           WHERE opt LIKE 'fillfactor=%'), '100')::INT2 AS "FillFactor"
+                           WHERE opt LIKE 'fillfactor=%'), '100')::INT2 AS "FillFactor",
+               -- 'd' (the default) deliberately yields NULL so FormatJson strips the key: a table that
+               -- never touched replica identity extracts exactly as it did before this shipped. #407
+               CASE rls.relreplident WHEN 'f' THEN 'FULL' WHEN 'n' THEN 'NOTHING' WHEN 'i' THEN 'INDEX' END AS "ReplicaIdentity",
+               CASE WHEN rls.relreplident = 'i'
+                    THEN (SELECT ic.relname
+                            FROM pg_index ix
+                            JOIN pg_class ic ON ic.oid = ix.indexrelid
+                           WHERE ix.indrelid = rls.oid
+                             AND ix.indisreplident)
+                    END AS "ReplicaIdentityIndex"
           FROM information_schema.tables t
           JOIN pg_class rls ON rls.relname = t.table_name
                            AND rls.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = t.table_schema)

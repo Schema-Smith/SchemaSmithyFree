@@ -20,6 +20,9 @@
            COALESCE((elem ->> 'ForceRowLevelSecurity')::BOOLEAN, false) AS "ForceRowLevelSecurity",
            COALESCE(elem ->> 'AccessMethod', '') AS "AccessMethod",
            COALESCE(elem ->> 'PersistenceType', '') AS "PersistenceType",
+           -- Empty string means "not declared, leave the server alone", the AccessMethod convention. #407
+           COALESCE(UPPER(elem ->> 'ReplicaIdentity'), '') AS "ReplicaIdentity",
+           COALESCE(elem ->> 'ReplicaIdentityIndex', '') AS "ReplicaIdentityIndex",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((elem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
            COALESCE(NULLIF((elem ->> 'FillFactor')::INT2, 0), 100) AS "FillFactor",
            COALESCE((elem ->> 'PreventDrop')::BOOLEAN, FALSE) AS "PreventDrop",

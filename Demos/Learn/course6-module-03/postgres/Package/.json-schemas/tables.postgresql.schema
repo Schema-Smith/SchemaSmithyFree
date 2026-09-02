@@ -534,6 +534,16 @@
       "minimum": 0.0,
       "maximum": 100.0
     },
+    "ReplicaIdentity": {
+      "type": "string",
+      "pattern": "DEFAULT|FULL|NOTHING|INDEX",
+      "description": "PostgreSQL only. The table's REPLICA IDENTITY, which determines what a logical-replication publication sends for an UPDATE or DELETE — and whether either is permitted at all on a published table. INDEX requires ReplicaIdentityIndex. Omit to leave the server's current setting alone."
+    },
+    "ReplicaIdentityIndex": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "PostgreSQL only. Names the unique index backing ReplicaIdentity = INDEX. The index must be unique, non-partial and over NOT NULL columns; PostgreSQL rejects anything else."
+    },
     "Extensions": {
       "type": "object",
       "required": [

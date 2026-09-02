@@ -331,6 +331,9 @@ public static class ForgeKindler
                 new("SchemaSmith.BuildExistingIndexesSnapshot.sql"),
                 new("SchemaSmith.ModifiedTableQuench.sql"),
                 new("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"),
+                // Must follow MissingIndexesAndConstraintsQuench: REPLICA IDENTITY USING INDEX names an
+                // index, which a table created in the same run does not have until that pass.
+                new("SchemaSmith.ReplicaIdentityQuench.sql"),
                 new("SchemaSmith.ForeignKeyQuench.sql"),
                 new("SchemaSmith.TableQuench.sql", ReplaceParseJson: true),
                 new("SchemaSmith.IndexOnlyQuench.sql"),

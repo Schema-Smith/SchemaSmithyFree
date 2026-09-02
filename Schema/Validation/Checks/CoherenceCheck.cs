@@ -29,6 +29,10 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string RebuildThresholdCode = "SS-TBL-001";
     private const string RlsWithoutPoliciesCode = "SS-RLS-001";
     private const string PoliciesWithoutRlsCode = "SS-RLS-002";
+    private const string ReplicaIdentityIndexMissingCode = "SS-RI-001";
+    private const string ReplicaIdentityIndexUnknownCode = "SS-RI-002";
+    private const string ReplicaIdentityIndexNotUniqueCode = "SS-RI-003";
+    private const string ReplicaIdentityIndexIgnoredCode = "SS-RI-004";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -55,6 +59,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             findings.AddRange(CheckBackfill(table, location));
             findings.AddRange(CheckRebuildPolicy(table, location));
             findings.AddRange(CheckRowLevelSecurity(table, location));
+            findings.AddRange(CheckReplicaIdentity(table, location));
         }
 
         return findings;
@@ -297,6 +302,59 @@ public sealed class CoherenceCheck : ISchemaCheck
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// PostgreSQL REPLICA IDENTITY coherence — issue #407.
+    /// <para>The deploy raises on a declaration it cannot honour, but a mid-deploy failure is a worse
+    /// place to learn about a typo than <c>--Validate</c>. These catch the same mistakes statically, and
+    /// two of them (unknown index, non-unique index) the deploy could only report as PostgreSQL's own
+    /// error against generated DDL.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckReplicaIdentity(Table table, string tableLocation)
+    {
+        if (table is not PostgreSqlTable pgTable) yield break;
+
+        var mode = pgTable.ReplicaIdentity?.Trim();
+        var indexName = pgTable.ReplicaIdentityIndex?.Trim();
+        var wantsIndex = string.Equals(mode, "INDEX", StringComparison.OrdinalIgnoreCase);
+
+        if (!wantsIndex)
+        {
+            if (!string.IsNullOrEmpty(indexName))
+                yield return new Finding(Severity.Warning, ReplicaIdentityIndexIgnoredCode, Category, tableLocation,
+                    $"Table '{table.Name}' names ReplicaIdentityIndex '{indexName}' but its ReplicaIdentity is " +
+                    $"'{(string.IsNullOrEmpty(mode) ? "unset" : mode)}', so the index is ignored — set ReplicaIdentity " +
+                    "to INDEX, or drop ReplicaIdentityIndex.");
+            yield break;
+        }
+
+        if (string.IsNullOrEmpty(indexName))
+        {
+            yield return new Finding(Severity.Error, ReplicaIdentityIndexMissingCode, Category, tableLocation,
+                $"Table '{table.Name}' sets ReplicaIdentity to INDEX but declares no ReplicaIdentityIndex. " +
+                "PostgreSQL needs the name of the unique index that carries the identity.");
+            yield break;
+        }
+
+        var named = table.Indexes.FirstOrDefault(i =>
+            string.Equals(i.Name, indexName, StringComparison.OrdinalIgnoreCase));
+
+        if (named == null)
+        {
+            // Only flag when the table declares indexes at all: an index-less table may legitimately
+            // carry one created by a script rather than by the package.
+            if (table.Indexes.Count > 0)
+                yield return new Finding(Severity.Error, ReplicaIdentityIndexUnknownCode, Category, tableLocation,
+                    $"Table '{table.Name}' names ReplicaIdentityIndex '{indexName}', which is not one of its " +
+                    "declared Indexes. A replica identity pointing at an index that is never created fails the deploy.");
+            yield break;
+        }
+
+        if (!named.Unique && !named.PrimaryKey && !named.UniqueConstraint)
+            yield return new Finding(Severity.Error, ReplicaIdentityIndexNotUniqueCode, Category, tableLocation,
+                $"Table '{table.Name}' names ReplicaIdentityIndex '{indexName}', which is not unique. " +
+                "PostgreSQL requires a unique, non-partial index over NOT NULL columns.");
     }
 
     // Mirrors SchemaSmith_NormalizeIndexColumns.sql's DESC/ASC suffix handling (source of truth —

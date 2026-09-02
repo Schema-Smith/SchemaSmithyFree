@@ -826,4 +826,84 @@ public class CoherenceCheckTests
         // every PostgreSQL package.
         Assert.That(RunPg(PgTable(rls: false)).Any(f => f.Code.StartsWith("SS-RLS-")), Is.False);
     }
+
+    // REPLICA IDENTITY coherence (#407). The deploy raises on the unhonourable cases, but --Validate is
+    // where an author should learn about a typo -- and the unknown/non-unique index cases could only ever
+    // surface at deploy time as PostgreSQL complaining about generated DDL.
+
+    private static PostgreSqlTable RiTable(string mode, string indexName, bool indexUnique = true, bool declareIndex = true)
+    {
+        var table = new PostgreSqlTable
+        {
+            Name = "invoice",
+            Schema = "public",
+            ReplicaIdentity = mode,
+            ReplicaIdentityIndex = indexName,
+            Columns = { new PostgreSqlColumn { Name = "id", DataType = "integer" } }
+        };
+        if (declareIndex)
+            table.Indexes.Add(new PostgreSqlIndex { Name = "uq_invoice", IndexColumns = "id", Unique = indexUnique });
+        return table;
+    }
+
+    [Test]
+    public void ReplicaIdentityIndexMode_WithNoIndexNamed_IsAnError()
+    {
+        var finding = RunPg(RiTable("INDEX", null)).Single(f => f.Code == "SS-RI-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error), "this cannot be deployed at all");
+            Assert.That(finding.Message, Does.Contain("ReplicaIdentityIndex"), finding.Message);
+        });
+    }
+
+    [Test]
+    public void ReplicaIdentityNamingAnUndeclaredIndex_IsAnError()
+    {
+        var finding = RunPg(RiTable("INDEX", "uq_typo")).Single(f => f.Code == "SS-RI-002");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+            Assert.That(finding.Message, Does.Contain("uq_typo"),
+                "naming the offending index is the whole point -- a reader cannot act on a message that "
+                + "only says the package is wrong. " + finding.Message);
+        });
+    }
+
+    [Test]
+    public void ReplicaIdentityNamingANonUniqueIndex_IsAnError()
+    {
+        var finding = RunPg(RiTable("INDEX", "uq_invoice", indexUnique: false)).Single(f => f.Code == "SS-RI-003");
+
+        Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+    }
+
+    [Test]
+    public void ReplicaIdentityIndexNamedWithoutIndexMode_IsAWarning()
+    {
+        // Legal and deployable -- PostgreSQL just ignores the name -- but almost certainly not intended.
+        var finding = RunPg(RiTable("FULL", "uq_invoice")).Single(f => f.Code == "SS-RI-004");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(finding.Message, Does.Contain("ignored"), finding.Message);
+        });
+    }
+
+    [Test]
+    public void AValidReplicaIdentityDeclaration_IsSilent()
+    {
+        // The negative half: a rule that fires on correct packages is worse than no rule.
+        Assert.That(RunPg(RiTable("INDEX", "uq_invoice")).Where(f => f.Code.StartsWith("SS-RI-")), Is.Empty);
+    }
+
+    [Test]
+    public void ATableWithNoReplicaIdentity_IsSilent()
+    {
+        Assert.That(RunPg(RiTable(null, null)).Where(f => f.Code.StartsWith("SS-RI-")), Is.Empty);
+    }
+
 }

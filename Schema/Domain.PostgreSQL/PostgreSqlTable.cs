@@ -86,5 +86,17 @@ namespace Schema.Domain.PostgreSQL
         [SchemaProperty(Minimum = 0, Maximum = 100)]
         [JsonProperty(Order = 110)]
         public short FillFactor { get; set; }
+
+        // Unset means "not managed", matching AccessMethod and PersistenceType above. Extraction
+        // emits this only for a table that is not at DEFAULT, so adding it churns no existing package.
+        [SchemaProperty(Pattern = "DEFAULT|FULL|NOTHING|INDEX",
+            Description = "PostgreSQL only. The table's REPLICA IDENTITY, which determines what a logical-replication publication sends for an UPDATE or DELETE — and whether either is permitted at all on a published table. INDEX requires ReplicaIdentityIndex. Omit to leave the server's current setting alone.")]
+        [JsonProperty(Order = 111, NullValueHandling = NullValueHandling.Ignore)]
+        public string ReplicaIdentity { get; set; }
+
+        [SchemaProperty(MaxLength = 128,
+            Description = "PostgreSQL only. Names the unique index backing ReplicaIdentity = INDEX. The index must be unique, non-partial and over NOT NULL columns; PostgreSQL rejects anything else.")]
+        [JsonProperty(Order = 112, NullValueHandling = NullValueHandling.Ignore)]
+        public string ReplicaIdentityIndex { get; set; }
     }
 }
