@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
-using Schema.Domain.MariaDb;
+using Schema.Domain.MariaDb;
 using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
