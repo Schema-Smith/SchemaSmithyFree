@@ -86,6 +86,7 @@ Per-table options, column attributes, and table-scoped behavior beyond the basic
 | Row format | n/a | n/a | ✓ | ✓ | `RowFormat`: DYNAMIC / COMPACT / COMPRESSED / REDUNDANT |
 | Initial auto-increment value | n/a | n/a | ✓ | ✓ | `AutoIncrementValue` |
 | Data compression | ✓ | n/a | n/a | n/a | `CompressionType`: NONE / ROW / PAGE |
+| XML compression | ✓ | n/a | n/a | n/a | `XmlCompression` on table and index; deploy 2022+, extract 2025+ |
 | Table-level access method | n/a | ✓ | n/a | n/a | `AccessMethod` |
 | Persistence type (UNLOGGED / TEMPORARY) | n/a | ✓ | n/a | n/a | `PersistenceType` |
 | Row-level security | n/a | ✓ | n/a | n/a | `RowLevelSecurity`, `ForceRowLevelSecurity` |

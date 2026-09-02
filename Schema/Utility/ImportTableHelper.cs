@@ -26,7 +26,16 @@ public static class ImportTableHelper
     /// on this database). Drives gate-aware attribution of an extracted component to its variant set.
     /// May throw — the caller lets it propagate so a broken gate fails extraction (fail-closed).
     /// </param>
-    public static void PreserveDataDeliveryAndCustomProperties(Table tableObj, Table original, Func<string, bool> isVariantActive)
+    /// <param name="sourceCanReportXmlCompression">
+    /// False when the SOURCE server cannot report XML_COMPRESSION — every SQL Server below 2025, and any
+    /// server read through the legacy XML ingest path. Those servers can DEPLOY the setting and have no
+    /// catalog that reports it, so extraction there returns nothing for it. Without this, refreshing a
+    /// package from a 2022 server would silently strip a property the package legitimately declares and
+    /// the server is legitimately honouring. Defaults true so a caller that has not thought about it
+    /// trusts extraction rather than resurrecting stale values.
+    /// </param>
+    public static void PreserveDataDeliveryAndCustomProperties(Table tableObj, Table original, Func<string, bool> isVariantActive,
+        bool sourceCanReportXmlCompression = true)
     {
         // A null original means the file could not be read (the caller has already warned). There is
         // nothing to carry forward, and the extracted object is already complete -- return rather than
@@ -52,6 +61,21 @@ public static class ImportTableHelper
             tableObj.DataDelivery[0].MergeType = "None";
 
         tableObj.OldName = original.OldName;
+
+        // XML_COMPRESSION is deployable from SQL Server 2022 but only READABLE from 2025, so on
+        // 2022-2024 extraction cannot see it and the package is the only record of it. Carry it forward
+        // there -- and ONLY there: on 2025 the server is authoritative, so someone turning compression
+        // off out of band must show up as a change rather than being quietly reverted by this.
+        if (!sourceCanReportXmlCompression && original is SqlServerTable xcOriginal && tableObj is SqlServerTable xcNew)
+        {
+            xcNew.XmlCompression = xcOriginal.XmlCompression;
+            foreach (var newIndex in xcNew.Indexes.OfType<SqlServerIndex>())
+            {
+                var origIndex = xcOriginal.Indexes.OfType<SqlServerIndex>()
+                    .FirstOrDefault(i => string.Equals(i.Name, newIndex.Name, StringComparison.OrdinalIgnoreCase));
+                if (origIndex != null) newIndex.XmlCompression = origIndex.XmlCompression;
+            }
+        }
 
         // Copy dynamic (custom) properties at table level
         CopyDynamicProperties(original, tableObj, true);

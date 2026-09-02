@@ -1071,6 +1071,51 @@ BEGIN TRY
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
+  -- Handle XML compression changes (table, then index).
+  --
+  -- ONLY WHERE THE CATALOG CAN ACTUALLY REPORT THE SETTING, and the guard is the SAME kindle-time
+  -- decision that composed the column reference -- not a runtime version test, which can disagree with it. sys.partitions.xml_compression
+  -- does not exist below 2025, so {{XmlCompressionRead}} resolves to a NULL literal there -- and without
+  -- the guard the comparison below would read NULL as 'currently off' and REBUILD every declared-ON
+  -- table on every single deploy. A full rebuild per deploy is far worse than not converging.
+  --
+  -- So on 2022-2024 this property is applied at CREATE and never re-evaluated: the server cannot say
+  -- what the current setting is, so there is no drift to detect. Documented on SqlServerTable.
+  IF {{XmlCompressionCanRead}} = 1
+  BEGIN
+    RAISERROR('Fixup Table XML Compression', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Altering table XML compression for ' + t.[Schema] + '.' + t.[Name] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                    'ALTER TABLE ' + t.[Schema] + '.' + t.[Name] + ' REBUILD PARTITION=ALL WITH (XML_COMPRESSION=' + CASE WHEN t.[XmlCompression] = 1 THEN 'ON' ELSE 'OFF' END + ');' + CHAR(13) + CHAR(10) +
+                                    'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + t.[Schema] + '.' + t.[Name] + ''', ''modified'');' AS NVARCHAR(MAX))
+                             FROM #Tables t WITH (NOLOCK)
+                             LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+                                                                        AND p.index_id < 2
+                             WHERE t.NewTable = 0
+                               AND COALESCE(CONVERT(TINYINT, {{XmlCompressionRead}}), 0) <> ISNULL(t.[XmlCompression], 0)
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+    IF @WhatIf = 1
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'table', t.[Schema] + '.' + t.[Name], 'wouldModify'
+          FROM #Tables t WITH (NOLOCK)
+          LEFT JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name]) AND p.index_id < 2
+          WHERE t.NewTable = 0
+            AND COALESCE(CONVERT(TINYINT, {{XmlCompressionRead}}), 0) <> ISNULL(t.[XmlCompression], 0)
+
+    RAISERROR('Fixup Index XML Compression', 10, 100) WITH NOWAIT
+    SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Altering index XML compression for ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
+                                    'ALTER INDEX ' + i.[IndexName] + ' ON ' + i.[Schema] + '.' + i.[TableName] + ' REBUILD PARTITION=ALL WITH (XML_COMPRESSION=' + CASE WHEN i.[XmlCompression] = 1 THEN 'ON' ELSE 'OFF' END + ');' AS NVARCHAR(MAX))
+                             FROM #Indexes i WITH (NOLOCK)
+                             JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName])
+                                                              AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+                             LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
+                                                                     AND p.index_id = si.index_id
+                             WHERE COALESCE(CONVERT(TINYINT, {{XmlCompressionRead}}), 0) <> ISNULL(i.[XmlCompression], 0)
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+  END
+
   RAISERROR('Collect Existing Index Definitions', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#ExistingIndexes') IS NOT NULL DROP TABLE #ExistingIndexes
   SELECT xSchema = t.[Schema], [xTableName] = t.[Name], [xIndexName] = CAST(si.[Name] AS NVARCHAR(500)),

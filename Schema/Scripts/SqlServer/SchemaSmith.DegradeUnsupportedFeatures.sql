@@ -81,6 +81,38 @@ BEGIN
     END
   END
 
+  -- XML compression -- SQL Server 2022 (major 16). Below it the clause is a parser error, so the emit
+  -- sites gate on the same version and this block only reports what they suppressed. Clearing it
+  -- deploys the table or index uncompressed: the schema is identical and only the storage saving is
+  -- lost, which is the mildest Reduced degrade in this file -- nothing an application can observe.
+  --
+  -- Both #Tables and #Indexes carry the property, so both are reported; an index inherits nothing from
+  -- its table here.
+  IF @v_major < 16 AND (EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE ISNULL([XmlCompression], 0) = 1)
+                     OR EXISTS (SELECT 1 FROM #Indexes WITH (NOLOCK) WHERE ISNULL([XmlCompression], 0) = 1))
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE ISNULL(T.[XmlCompression], 0) = 1
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'XML_COMPRESSION requires SQL Server 2022 (detected major ' +
+                   CONVERT(NVARCHAR(10), @v_major) + '); object(s): ' + LEFT(ISNULL(@v_list, '(indexes only)'), 1800) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'XML compression (SQL Server 2022)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE ISNULL(T.[XmlCompression], 0) = 1
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'XML compression (SQL Server 2022)', I.[Schema] + '.' + I.[TableName] + '.' + I.[IndexName], 'downgraded'
+          FROM #Indexes I WITH (NOLOCK) WHERE ISNULL(I.[XmlCompression], 0) = 1
+      RAISERROR('  XML compression skipped: requires SQL Server 2022 - the object deploys uncompressed (downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET [XmlCompression] = 0 WHERE ISNULL([XmlCompression], 0) = 1
+      UPDATE #Indexes SET [XmlCompression] = 0 WHERE ISNULL([XmlCompression], 0) = 1
+    END
+  END
+
   -- Ledger tables -- SQL Server 2022 (major 16). Below it the clause is not syntax, so an ungated emit
   -- fails with a bare parser error. Clearing Ledger deploys an ordinary table, which keeps the columns
   -- and data shape and loses only the tamper-evidence -- a Reduced degrade.

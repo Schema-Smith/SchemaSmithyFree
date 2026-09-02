@@ -83,7 +83,14 @@ public class FixtureSetup
         cmd.ExecuteNonQuery();
 
         conn.ChangeDatabase(_integrationMainDb);
-        ForgeKindler.KindleTheForge(cmd, Platform.SqlServer);
+        // Pass the DETECTED major version, as SchemaQuench and SchemaTongs both do. Kindling without it
+        // bakes 0 into every version-gated helper, which makes them fall back to SERVERPROPERTY at
+        // runtime -- so anything resolved at KINDLE time (a catalog column composed in or out) silently
+        // disagrees with anything resolved at RUN time. That mismatch is not hypothetical: it made the
+        // XML_COMPRESSION comparison read a NULL column as "off" and rebuild on every deploy.
+        cmd.CommandText = "SELECT CONVERT(INT, SERVERPROPERTY('ProductMajorVersion'))";
+        var serverMajor = Convert.ToInt32(cmd.ExecuteScalar());
+        ForgeKindler.KindleTheForge(cmd, Platform.SqlServer, serverMajorVersion: serverMajor);
 
         conn.Close();
     }

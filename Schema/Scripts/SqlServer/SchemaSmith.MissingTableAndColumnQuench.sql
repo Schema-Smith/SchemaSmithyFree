@@ -161,7 +161,7 @@ BEGIN TRY
                                   -- keeps a table with neither exactly as it was before ledger existed.
                                   CASE WHEN t.[WithOptions] <> '' THEN ' WITH (' + STUFF(t.[WithOptions], 1, 2, '') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + T.[Schema] + '.' + T.[Name] + ''', ''created'');' AS NVARCHAR(MAX))
-                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[FileGroup], t.[FileStreamFileGroup], t.[TextImageFileGroup], T.[VariantName], T.[GraphType],
+                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[XmlCompression], t.[FileGroup], t.[FileStreamFileGroup], t.[TextImageFileGroup], T.[VariantName], T.[GraphType],
                                         WithOptions =
                                             CASE T.[Ledger] WHEN 'AppendOnly' THEN ', LEDGER = ON (APPEND_ONLY = ON)'
                                                             WHEN 'Updatable'  THEN ', SYSTEM_VERSIONING = ON, LEDGER = ON'
@@ -172,7 +172,15 @@ BEGIN TRY
                                                                    WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
                                                                      AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1))
                                                       AND ISNULL(T.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE')
-                                                 THEN ', DATA_COMPRESSION=' + ISNULL(T.[CompressionType], 'NONE') ELSE '' END,
+                                                 THEN ', DATA_COMPRESSION=' + ISNULL(T.[CompressionType], 'NONE') ELSE '' END +
+                                            -- XML_COMPRESSION joins the same WITH list. Independent of
+                                            -- DATA_COMPRESSION -- a table can carry both -- and unaffected by
+                                            -- the sparse/COLUMN_SET restriction above, which is specific to data
+                                            -- compression. Gated on 2022 by VALUE (fn_ServerMajorVersion), which
+                                            -- is safe anywhere; only the CATALOG READ in extraction needs
+                                            -- kindle-time composition, because that names a column.
+                                            CASE WHEN ISNULL(T.[XmlCompression], 0) = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16
+                                                 THEN ', XML_COMPRESSION = ON' ELSE '' END,
                                         HasSparseOrColumnSet = CASE WHEN EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
                                                                                   WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
                                                                                     AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1)) THEN 1 ELSE 0 END,

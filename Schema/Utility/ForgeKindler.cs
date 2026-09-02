@@ -150,6 +150,31 @@ public static class ForgeKindler
         // the two SQL Server helper functions, so these replaces are a no-op on every other script.
         script = script.Replace("{{ServerMajorVersion}}", serverMajorVersion.ToString(CultureInfo.InvariantCulture))
                        .Replace("{{UnsupportedPolicy}}", policy);
+
+        // {{XmlCompressionRead}} is a COLUMN REFERENCE, not a value, and that is why it is resolved here
+        // rather than guarded at runtime. sys.partitions.xml_compression does not exist before SQL Server
+        // 2025 -- verified on 2022 CU25, where the column lives only on sys.internal_partitions -- and a
+        // procedure naming a column the server does not have fails to CREATE, taking the whole kindle
+        // down. A runtime IF cannot save it because binding happens first. Composing the reference out at
+        // kindle time is the same move LedgerViewFilter() makes in C# for sys.tables.ledger_view_id, and
+        // it is why this needs no sp_executesql staging.
+        //
+        // 0 means "version not detected", which happens on paths that never probed. Treat that as OLD:
+        // emitting NULL loses a value, emitting an unbindable column loses the entire kindle.
+        // TWO tokens, and they MUST be resolved together. {{XmlCompressionCanRead}} is the guard that
+        // decides whether the comparison runs at all, and it is baked here rather than tested at runtime
+        // with fn_ServerMajorVersion() -- because those two can DISAGREE. fn_ServerMajorVersion falls
+        // back to SERVERPROPERTY when no version was baked, so on a caller that kindles without passing
+        // one, a runtime guard says "2025, compare away" while the token above resolved to NULL. The
+        // comparison then reads NULL as "currently off" and REBUILDS every declared-ON table on every
+        // deploy, while a declared-OFF table never converges. Both were observed on a real 2025 server
+        // before this was split into two tokens. Deriving both from the same value makes that
+        // disagreement impossible by construction.
+        var xmlCompressionReadable = serverMajorVersion >= 17;
+        script = script.Replace("{{XmlCompressionRead}}",
+                            xmlCompressionReadable ? "p.xml_compression" : "CONVERT(BIT, NULL)")
+                       .Replace("{{XmlCompressionCanRead}}", xmlCompressionReadable ? "1" : "0");
+
         return script;
     }
 

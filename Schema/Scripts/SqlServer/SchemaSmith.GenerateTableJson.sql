@@ -52,6 +52,15 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
+       -- {{XmlCompressionRead}} resolves to p.xml_compression on SQL Server 2025+ and to a NULL literal
+       -- below it, because the COLUMN DOES NOT EXIST before 2025 and naming it would stop this procedure
+       -- being created at all. Resolved at kindle time by ForgeKindler, which knows the server version
+       -- before it creates anything; see the comment there. NULL means "this server cannot report it",
+       -- which SchemaTongs turns into "keep what the package already said" rather than a silent drop.
+       (SELECT CASE WHEN MAX(CONVERT(TINYINT, {{XmlCompressionRead}})) = 1 THEN CONVERT(BIT, 1) END
+          FROM sys.partitions AS p WITH (NOLOCK)
+          WHERE p.[object_id] = st.[object_id]
+            AND p.index_id < 2) AS [XmlCompression],
        -- Filegroup placement (#filegroups): emit only when the table's data (heap/clustered index,
        -- index_id 0/1) lives on a non-default filegroup, so an ordinary table on PRIMARY (or whatever
        -- the target's default filegroup is) stays exactly as minimal as before this change. Filegroups
@@ -204,6 +213,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
+               -- Same kindle-time resolution as the table-level [XmlCompression] above.
+               (SELECT CASE WHEN MAX(CONVERT(TINYINT, {{XmlCompressionRead}})) = 1 THEN CONVERT(BIT, 1) END
+                  FROM sys.partitions AS p WITH (NOLOCK)
+                  WHERE p.[object_id] = si.[object_id]
+                    AND p.index_id = si.index_id) AS [XmlCompression],
                -- Same emit-only-when-non-default rule as the table-level [FileGroup] above -- a table and
                -- its indexes are commonly split across filegroups on purpose, so this reads si's own
                -- data_space_id independently of the table's.

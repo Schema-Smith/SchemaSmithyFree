@@ -45,6 +45,19 @@ namespace Schema.Capabilities
             // from than creating one by accident.
             rows.Add(new("ledger-table", "Ledger tables", Platform.SqlServer,
                 16, "SQL Server 2022", null, DegradeKind.Reduced, "ledger table (SQL Server 2022)"));
+
+            // XML compression. Reduced, not Skipped: below 2022 the clause is composed out and the table
+            // or index still deploys -- only the storage saving is lost, which changes nothing an
+            // application can observe.
+            //
+            // WORTH KNOWING for anything driving UI or AI off this row, because the two thresholds are
+            // NOT the same one: the version that can DEPLOY this (2022) is not the version that can READ
+            // it back. sys.partitions.xml_compression arrives in 2025, so 2022-2024 honour the setting
+            // and cannot report it -- exactly the asymmetry application-time-period documents for
+            // MariaDB. The row encodes the DEPLOY threshold, because that is what the gate compares
+            // against; SchemaTongs covers the read gap by preserving the value from the package.
+            rows.Add(new("xml-compression", "XML compression", Platform.SqlServer,
+                16, "SQL Server 2022", null, DegradeKind.Reduced, "XML compression (SQL Server 2022)"));
             rows.Add(new("data-masking", "Dynamic data masking", Platform.SqlServer,
                 13, "SQL Server 2016", null, DegradeKind.Skip, "data masking (SQL Server 2016)"));
             rows.Add(new("always-encrypted", "Always Encrypted", Platform.SqlServer,

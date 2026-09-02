@@ -35,7 +35,7 @@
   -- applied here — strict-fail wins on schema-templates because [Schema] is guaranteed
   -- non-blank by the time we reach this SELECT.
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
-         [Schema] = SchemaSmith.fn_SafeBracketWrap([Schema]), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'),
+         [Schema] = SchemaSmith.fn_SafeBracketWrap([Schema]), [Name] = SchemaSmith.fn_SafeBracketWrap([Name]), [CompressionType] = ISNULL(NULLIF(RTRIM([CompressionType]), ''), 'NONE'), [XmlCompression] = ISNULL([XmlCompression], 0),
          [IsTemporal] = ISNULL([IsTemporal], 0), [UpdateFillFactor] = ISNULL([UpdateFillFactor], 0),
          -- History table identity/retention (#depth-gap): schema/name left NULL (not defaulted here) so
          -- the apply-side quench can tell "unset -> use SchemaSmith's own <Table>_Hist default" apart from
@@ -67,6 +67,7 @@
       [Schema] NVARCHAR(500) '$.Schema',
       [Name] NVARCHAR(500) '$.Name',
       [CompressionType] NVARCHAR(100) '$.CompressionType',
+      [XmlCompression] BIT '$.XmlCompression',
       [IsTemporal] BIT '$.IsTemporal',
       [HistoryTableSchema] NVARCHAR(500) '$.HistoryTableSchema',
       [HistoryTableName] NVARCHAR(500) '$.HistoryTableName',
@@ -113,7 +114,7 @@
   EXEC(@v_SQL)
 
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [FileStreamFileGroup], [TextImageFileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [XmlCompression], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [FileStreamFileGroup], [TextImageFileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch], [RebuildPolicySpecified],
@@ -216,7 +217,7 @@
   RAISERROR('Parse Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Indexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
-         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
+         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(NULLIF(RTRIM(i.[CompressionType]), ''), 'NONE'), [XmlCompression] = ISNULL(i.[XmlCompression], 0), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
@@ -236,6 +237,7 @@
     CROSS APPLY OPENJSON(Indexes) WITH (
       [IndexName] NVARCHAR(500) '$.Name',
       [CompressionType] NVARCHAR(100) '$.CompressionType',
+      [XmlCompression] BIT '$.XmlCompression',
       [PrimaryKey] BIT '$.PrimaryKey',
       [Unique] BIT '$.Unique',
 	  [UniqueConstraint] BIT '$.UniqueConstraint',

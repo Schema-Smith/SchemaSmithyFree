@@ -57,6 +57,22 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 101)]
         public string CompressionType { get; set; } = "NONE";
 
+        // XML_COMPRESSION, the sibling of DATA_COMPRESSION above and independent of it -- a table can be
+        // PAGE compressed and XML compressed at once.
+        //
+        // THE VERSION STORY IS ASYMMETRIC, and verified live rather than read. The clause deploys from
+        // SQL Server 2022, but sys.partitions.xml_compression does NOT exist there: on 2022 CU25 the
+        // column is only on sys.internal_partitions, which reports NULL for an ordinary table. It appears
+        // on sys.partitions in 2025. So 2022-2024 can deploy this and can never read it back, the same
+        // shape as MariaDB application-time periods (declarable 10.4.3, readable 11.4). Extraction on
+        // those versions therefore PRESERVES whatever the package already declared instead of emitting
+        // nothing, which would silently drop it -- see ImportTableHelper.
+        //
+        // Unlike TextImageFileGroup this is not create-time only: ALTER TABLE ... REBUILD WITH changes it.
+        [SchemaProperty(Description = "SQL Server 2022+. Compresses XML column data in place. Sibling of CompressionType (DATA_COMPRESSION), and independent of it. **Deployable from 2022, but only EXTRACTABLE from 2025** — sys.partitions.xml_compression does not exist before then, so on 2022-2024 SchemaTongs carries the value forward from the package it is refreshing rather than dropping it.")]
+        [JsonProperty(Order = 118)]
+        public bool XmlCompression { get; set; }
+
         [JsonProperty(Order = 102)]
         public bool IsTemporal { get; set; }
 

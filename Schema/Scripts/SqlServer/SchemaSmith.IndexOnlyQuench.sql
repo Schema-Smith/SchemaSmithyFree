@@ -59,7 +59,7 @@ BEGIN TRY
   RAISERROR('Parse Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Indexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
-         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
+         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [XmlCompression] = ISNULL(i.[XmlCompression], 0), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
@@ -79,6 +79,7 @@ BEGIN TRY
     CROSS APPLY OPENJSON(Indexes) WITH (
       [IndexName] NVARCHAR(500) '$.Name',
       [CompressionType] NVARCHAR(100) '$.CompressionType',
+      [XmlCompression] BIT '$.XmlCompression',
       [PrimaryKey] BIT '$.PrimaryKey',
       [Unique] BIT '$.Unique',
 	  [UniqueConstraint] BIT '$.UniqueConstraint',
@@ -729,7 +730,12 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20))
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
-                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
+                                                      -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
+                                                      -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the
+                                                      -- catalog READ needs kindle-time composition, because that names a column.
+                                                      CASE WHEN i.[XmlCompression] = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16 THEN ', XML_COMPRESSION=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH
@@ -760,7 +766,12 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20))
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
-                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
+                                                      -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
+                                                      -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the
+                                                      -- catalog READ needs kindle-time composition, because that names a column.
+                                                      CASE WHEN i.[XmlCompression] = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16 THEN ', XML_COMPRESSION=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH

@@ -89,7 +89,12 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
-                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
+                                                      -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
+                                                      -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the
+                                                      -- catalog READ needs kindle-time composition, because that names a column.
+                                                      CASE WHEN i.[XmlCompression] = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16 THEN ', XML_COMPRESSION=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH
@@ -120,7 +125,12 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
-                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
+                                                      -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
+                                                      -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the
+                                                      -- catalog READ needs kindle-time composition, because that names a column.
+                                                      CASE WHEN i.[XmlCompression] = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16 THEN ', XML_COMPRESSION=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH

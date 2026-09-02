@@ -281,6 +281,16 @@ public class SchemaTongs
     /// it. That column is 2022+, so the clause is added only when the source is new enough to have it;
     /// referencing it statically would fail to bind on an older server.
     /// </summary>
+    /// <summary>
+    /// Whether the SOURCE server can report XML_COMPRESSION. It DEPLOYS from SQL Server 2022 but only
+    /// READS from 2025 -- sys.partitions.xml_compression does not exist before then -- and the legacy XML
+    /// ingest path cannot read it at any version. Where this is false the package being refreshed is the
+    /// only record of the setting, so ImportTableHelper carries it forward instead of letting an
+    /// extraction that structurally cannot see it strip a property the server is honouring.
+    /// </summary>
+    private bool SourceCanReportXmlCompression =>
+        _platform == Platform.SqlServer && _sourceMajor >= 17 && _ingestEncoding != IngestEncoding.Xml;
+
     private string LedgerViewFilter() =>
         _sourceMajor >= 16
             ? Environment.NewLine + "   AND NOT EXISTS (SELECT 1 FROM sys.tables lt WITH (NOLOCK) WHERE lt.ledger_view_id = o.object_id)"
@@ -2305,7 +2315,7 @@ SELECT con.conname AS ""Name"",
                 if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
                 {
                     var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile);
-                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive, SourceCanReportXmlCompression);
                         if (_preserveExistingOrder)
                             ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                 }
@@ -3032,7 +3042,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     {
                         var originalPath = FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile;
                         var original = LoadOriginalForPreservation(originalPath);
-                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive, SourceCanReportXmlCompression);
                         if (_preserveExistingOrder)
                             ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                     }
@@ -3202,7 +3212,7 @@ SELECT cc.name AS [Name],
                     if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                     {
                         var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile);
-                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive, SourceCanReportXmlCompression);
                         if (_preserveExistingOrder)
                             ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                     }
