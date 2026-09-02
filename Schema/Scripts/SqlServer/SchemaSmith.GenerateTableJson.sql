@@ -7,13 +7,35 @@ GO
 CREATE PROCEDURE SchemaSmith.GenerateTableJSON 
   @p_Schema SYSNAME = 'dbo',
   @p_Table SYSNAME,
-  @p_ObjectOrder SYSNAME = 'Name' -- 'Name' (default) or 'Physical' (the table's own column order)
+  @p_ObjectOrder SYSNAME = 'Name'
+  -- 'Name' (default, alphabetical) or 'Physical' (the table's own column order).
+  --
+  -- COLUMNS ONLY at this layer, which is why the parameter is broader than what it does here.
+  -- It carries SchemaTongs' Product:ObjectOrder setting, and that setting also orders indexes,
+  -- foreign keys, check constraints, statistics and XML indexes -- but those are sequenced by the
+  -- caller after this proc returns, not here. Called by hand, this argument reorders the Columns
+  -- array and nothing else.
 AS
 SET NOCOUNT ON
 DECLARE @v_DatabaseCollation NVARCHAR(200) = CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS NVARCHAR(200))
 -- SchemaSmith-internal extended properties to exclude from extraction (one-line change to add new names)
 DECLARE @InternalEPNames TABLE ([Name] NVARCHAR(128))
 INSERT @InternalEPNames VALUES (N'ProductName'), (N'PreventDrop')  -- PreventDrop is a SchemaSmith ownership marker, not a user extended property (#270)
+
+-- Ledger (#ledger) is SQL Server 2022, and this proc is a plain CREATE PROCEDURE -- every column it
+-- names is bound when the proc is created, so a static sys.tables.ledger_type_desc reference would fail
+-- to create the helper at all on a 2017 or 2019 target. Read it through a version-guarded dynamic
+-- statement instead, which stays NULL below 2022 where ledger tables cannot exist. Same pattern the XML
+-- twin already uses for its 2016/2017-only reads.
+DECLARE @v_Ledger NVARCHAR(12) = NULL
+IF SchemaSmith.fn_ServerMajorVersion() >= 16
+  EXEC sp_executesql N'
+    SELECT @p_Ledger = CASE ledger_type_desc WHEN ''APPEND_ONLY_LEDGER_TABLE'' THEN ''AppendOnly''
+                                             WHEN ''UPDATABLE_LEDGER_TABLE'' THEN ''Updatable'' END
+      FROM sys.tables WITH (NOLOCK)
+     WHERE [object_id] = OBJECT_ID(@p_Schema + ''.'' + @p_Table);',
+    N'@p_Schema NVARCHAR(128), @p_Table NVARCHAR(128), @p_Ledger NVARCHAR(12) OUTPUT',
+    @p_Schema = @p_Schema, @p_Table = @p_Table, @p_Ledger = @v_Ledger OUTPUT
 SELECT [Line] FROM SchemaSmith.fn_FormatJson(REPLACE(REPLACE(REPLACE((
 SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        '[' + TABLE_NAME + ']' AS [Name],
@@ -40,7 +62,29 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
          WHERE tfg.[object_id] = st.[object_id]
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
+       -- FILESTREAM_ON. Read from the table's filestream data space, which is NOT implied by having
+       -- FILESTREAM columns: dropping the last one leaves the assignment behind.
+       (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
+         WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
+       -- TEXTIMAGE_ON. Like FILESTREAM_ON above, read from the table's own data space rather than
+       -- inferred from its columns -- dropping the last large-object column leaves the assignment.
+       -- Only emitted when it is NOT the default filegroup, so an ordinary table gains no key.
+       (SELECT lds.[name] FROM sys.data_spaces lds WITH (NOLOCK)
+         JOIN sys.filegroups lfg WITH (NOLOCK) ON lfg.data_space_id = lds.data_space_id AND lfg.is_default = 0
+        WHERE lds.data_space_id = st.lob_data_space_id) AS [TextImageFileGroup],
        st.is_tracked_by_cdc AS [EnableCDC],
+       -- Graph tables (#graph). Emitted only when the table IS one, so no existing package gains a
+       -- "GraphType": "None" on every table. is_node/is_edge are 2017+, which the JSON tier requires.
+       CASE WHEN st.is_node = 1 THEN 'Node' WHEN st.is_edge = 1 THEN 'Edge' END AS [GraphType],
+       -- Ledger (#ledger, 2022+). Emitted only when the table IS one. ledger_type_desc is 2022, so
+       -- it is read through a version-gated helper rather than referenced here -- see @v_Ledger.
+       @v_Ledger AS [Ledger],
+       -- Table-level Change Tracking round-trip. Emitted only when ON, like IsTemporal above: every
+       -- extracted package would otherwise gain "EnableChangeTracking": false on every table.
+       -- sys.change_tracking_tables shipped with Change Tracking in 2008, so it is safe to read
+       -- statically at the floor -- SchemaSmith.fn_RebuildBlockedReason already does.
+       CASE WHEN ctt.[object_id] IS NOT NULL THEN CAST(1 AS BIT) END AS [EnableChangeTracking],
+       CASE WHEN ctt.is_track_columns_updated_on = 1 THEN CAST(1 AS BIT) END AS [TrackColumnsUpdated],
        -- System-versioning round-trip (#369): emit IsTemporal so an extracted temporal table re-deploys
        -- as temporal (previously omitted -> silently lost on round-trip). Only when true, to keep non-
        -- temporal tables minimal. sys.tables.temporal_type is 2016+ (safe at the current 2017 floor;
@@ -101,6 +145,9 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        ISNULL(cc.is_persisted, CAST(0 AS BIT)) AS [Persisted],
                        sc.is_sparse AS [Sparse],
+                       -- FILESTREAM round-trip. Emitted only when set, so no existing package gains
+                       -- a false on every column. Both catalog columns predate the 2008 floor.
+                       CASE WHEN sc.is_filestream = 1 THEN CAST(1 AS BIT) END AS [FileStream],
                        sc.is_column_set AS [IsColumnSet],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(mc.masking_function, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
@@ -127,7 +174,17 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     -- Exclude the temporal period columns (GENERATED ALWAYS AS ROW START/END). SchemaSmith
                     -- regenerates ValidFrom/ValidTo from IsTemporal by convention on apply, so emitting them
                     -- as user columns would double-declare them on re-deploy (#369).
-                    AND sc.generated_always_type = 0) x
+                    AND sc.generated_always_type = 0
+                    -- Exclude SQL Server graph pseudo-columns. A node or edge table carries
+                    -- system-generated columns ($node_id, $edge_id, $from_id, $to_id, graph_id and
+                    -- the *_obj_id pair) whose names end in a per-table GUID, so emitting them
+                    -- produces a package that cannot be deployed anywhere -- not even back to the
+                    -- database it came from. generated_always_type does NOT catch them (they all
+                    -- report 0/NOT_APPLICABLE) and neither does is_hidden (the four $-prefixed ones
+                    -- are is_hidden = 0). sys.columns.graph_type is the discriminator: non-null for
+                    -- exactly these, null for every user column -- including one merely NAMED like
+                    -- them. 2017+, which the JSON ingest tier already requires (STRING_AGG).
+                    AND sc.graph_type IS NULL) x
           -- Column sequence: 'Name' (default) or 'Physical', the table's own order. The ordinal is looked up
           -- rather than projected: this is SELECT * over the derived table, so adding ORDINAL_POSITION to it
           -- would write the ordinal into the package file. The lookup only runs when Physical is asked for.
@@ -160,6 +217,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                CAST(CASE WHEN [type] IN (1, 5) THEN 1 ELSE 0 END AS BIT) AS [Clustered], 
                CAST(CASE WHEN [type] IN (5, 6) THEN 1 ELSE 0 END AS BIT) AS [ColumnStore], 
                CASE WHEN fill_factor = 100 THEN 0 ELSE fill_factor END AS [FillFactor],
+               CONVERT(BIT, ignore_dup_key) AS [IgnoreDuplicateKey],
+               CONVERT(BIT, is_padded) AS [PadIndex],
                (SELECT STRING_AGG(CAST('[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY key_ordinal)
                   FROM sys.index_columns ic WITH (NOLOCK)
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0) AS [IndexColumns],
@@ -179,6 +238,15 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
             AND is_hypothetical = 0
             AND is_disabled = 0
             AND index_id > 0
+            -- A graph table also gets a system-generated GRAPH_UNIQUE_INDEX_<guid> over its
+            -- graph_id column. Both names carry a per-table GUID, so emitting the index is the
+            -- same undeployable-package problem as emitting the column, and excluding the columns
+            -- alone leaves an index pointing at one that is no longer declared.
+            AND NOT EXISTS (SELECT 1 FROM sys.index_columns gic WITH (NOLOCK)
+                            JOIN sys.columns gc WITH (NOLOCK)
+                              ON gc.[object_id] = gic.[object_id] AND gc.column_id = gic.column_id
+                           WHERE gic.[object_id] = si.[object_id] AND gic.index_id = si.index_id
+                             AND gc.graph_type IS NOT NULL)
           ORDER BY [Name]
           FOR JSON AUTO) AS [Indexes],
        (SELECT '[' + i.[name] COLLATE DATABASE_DEFAULT + ']' AS [Name],
@@ -267,6 +335,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
 	   JSON_QUERY('{"ExtendedProperties": {' + (SELECT STRING_AGG(CAST('"' + [Name] + '": "' + CONVERT(NVARCHAR(MAX), [Value]) + '"' AS NVARCHAR(MAX)), ',') FROM fn_listextendedproperty(default, 'Schema', @p_Schema, 'Table', @p_Table, default, default) x WHERE x.[Name] COLLATE DATABASE_DEFAULT NOT IN (SELECT [Name] FROM @InternalEPNames)) + '}}') AS [Extensions]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+  LEFT JOIN sys.change_tracking_tables ctt WITH (NOLOCK) ON ctt.[object_id] = st.[object_id]
   LEFT JOIN sys.tables h WITH (NOLOCK) ON h.[object_id] = st.history_table_id
   LEFT JOIN sys.schemas hs WITH (NOLOCK) ON hs.[schema_id] = h.[schema_id]
   WHERE TABLE_NAME = @p_Table

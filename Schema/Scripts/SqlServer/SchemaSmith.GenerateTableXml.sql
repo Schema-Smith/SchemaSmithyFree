@@ -113,6 +113,30 @@ IF SchemaSmith.fn_ServerMajorVersion() >= 14
 -- pre-2012 binary. Stage the temporary-stat keys via a fn_ServerMajorVersion()>=11 guarded dynamic INSERT (empty
 -- below 2012, where temporary statistics cannot exist) and exclude them from the extracted stats list below,
 -- matching the JSON twin's `is_temporary = 0` filter (temporary stats appear on Always On readable secondaries).
+-- sys.columns.graph_type is 2017+, so a STATIC reference is a CREATE-time "invalid column" error on an
+-- older binary. Stage the graph pseudo-column ids behind a fn_ServerMajorVersion()>=14 guard -- empty
+-- below 2017, where graph tables cannot exist. graph_type is the only reliable discriminator: these
+-- columns report generated_always_type = 0 like any user column, and the four $-prefixed ones are
+-- is_hidden = 0. Their names end in a per-table GUID, so emitting them yields a package that cannot be
+-- deployed anywhere. Mirrors the JSON twin's `sc.graph_type IS NULL` filter.
+-- sys.tables.is_node / is_edge are 2017+, staged behind the same guard as #GraphCols and simply
+-- 'None' below 2017, where graph tables cannot exist.
+DECLARE @v_GraphType NVARCHAR(10) = NULL
+IF SchemaSmith.fn_ServerMajorVersion() >= 14
+  EXEC sp_executesql N'SELECT @p_GraphType = CASE WHEN is_node = 1 THEN ''Node'' WHEN is_edge = 1 THEN ''Edge'' END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId',
+    N'@p_ObjId INT, @p_GraphType NVARCHAR(10) OUTPUT', @p_ObjId = @v_ObjectId, @p_GraphType = @v_GraphType OUTPUT
+
+-- Ledger is 2022, staged the same way and simply NULL below it.
+DECLARE @v_Ledger NVARCHAR(12) = NULL
+IF SchemaSmith.fn_ServerMajorVersion() >= 16
+  EXEC sp_executesql N'SELECT @p_Ledger = CASE ledger_type_desc WHEN ''APPEND_ONLY_LEDGER_TABLE'' THEN ''AppendOnly'' WHEN ''UPDATABLE_LEDGER_TABLE'' THEN ''Updatable'' END FROM sys.tables WITH (NOLOCK) WHERE [object_id] = @p_ObjId',
+    N'@p_ObjId INT, @p_Ledger NVARCHAR(12) OUTPUT', @p_ObjId = @v_ObjectId, @p_Ledger = @v_Ledger OUTPUT
+
+CREATE TABLE #GraphCols ([column_id] INT NOT NULL)
+IF SchemaSmith.fn_ServerMajorVersion() >= 14
+  EXEC sp_executesql N'INSERT INTO #GraphCols ([column_id]) SELECT column_id FROM sys.columns WITH (NOLOCK) WHERE graph_type IS NOT NULL AND [object_id] = @p_ObjId',
+    N'@p_ObjId INT', @p_ObjId = @v_ObjectId
+
 CREATE TABLE #TempStats ([object_id] INT NOT NULL, stats_id INT NOT NULL)
 IF SchemaSmith.fn_ServerMajorVersion() >= 11
   EXEC sp_executesql N'INSERT INTO #TempStats ([object_id], stats_id) SELECT [object_id], stats_id FROM sys.stats WITH (NOLOCK) WHERE is_temporary = 1 AND [object_id] = @p_ObjId',
@@ -147,7 +171,21 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
          WHERE tfg.[object_id] = st.[object_id]
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
+       -- FILESTREAM_ON -- not implied by having FILESTREAM columns; the assignment outlives them.
+       (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
+         WHERE ds.data_space_id = st.filestream_data_space_id) AS [FileStreamFileGroup],
+       -- TEXTIMAGE_ON. Like FILESTREAM_ON above, read from the table's own data space rather than
+       -- inferred from its columns -- dropping the last large-object column leaves the assignment.
+       -- Only emitted when it is NOT the default filegroup, so an ordinary table gains no key.
+       (SELECT lds.[name] FROM sys.data_spaces lds WITH (NOLOCK)
+         JOIN sys.filegroups lfg WITH (NOLOCK) ON lfg.data_space_id = lds.data_space_id AND lfg.is_default = 0
+        WHERE lds.data_space_id = st.lob_data_space_id) AS [TextImageFileGroup],
        CASE WHEN st.is_tracked_by_cdc = 1 THEN 'true' ELSE 'false' END AS [EnableCDC],
+       @v_GraphType AS [GraphType],
+       @v_Ledger AS [Ledger],
+       -- Table-level Change Tracking round-trip -- emitted only when ON, like IsTemporal above.
+       CASE WHEN ctt.[object_id] IS NOT NULL THEN 'true' END AS [EnableChangeTracking],
+       CASE WHEN ctt.is_track_columns_updated_on = 1 THEN 'true' END AS [TrackColumnsUpdated],
        -- System-versioning round-trip (#369): emit IsTemporal only when true. sys.tables.temporal_type is
        -- 2016+, so it is read into @v_IsTemporal via the version-gated dynamic pre-stage above (0 below 2016).
        CASE WHEN @v_IsTemporal = 1 THEN 'true' END AS [IsTemporal],
@@ -180,6 +218,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                        SchemaSmith.fn_StripParenWrapping(cc.[definition]) AS ComputedExpression,
                        CASE WHEN ISNULL(cc.is_persisted, 0) = 1 THEN 'true' ELSE 'false' END AS [Persisted],
                        CASE WHEN sc.is_sparse = 1 THEN 'true' ELSE 'false' END AS [Sparse],
+                       -- FILESTREAM round-trip -- emitted only when set.
+                       CASE WHEN sc.is_filestream = 1 THEN 'true' END AS [FileStream],
                        CASE WHEN sc.is_column_set = 1 THEN 'true' ELSE 'false' END AS [IsColumnSet],
                        ISNULL(NULLIF(ic.COLLATION_NAME, @v_DatabaseCollation), '') AS [Collation],
                        ISNULL(cm.MaskingFunction, '') COLLATE DATABASE_DEFAULT AS DataMaskFunction,
@@ -207,6 +247,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                     -- from IsTemporal on apply (#369). generated_always_type is 2016+ -> staged into #ColMeta
                     -- (0 below 2016, where no period columns exist).
                     AND ISNULL(cm.GeneratedAlwaysType, 0) = 0
+                    -- and the graph pseudo-columns staged above (empty below 2017).
+                    AND NOT EXISTS (SELECT 1 FROM #GraphCols g WITH (NOLOCK) WHERE g.[column_id] = sc.column_id)
                   ORDER BY c.COLUMN_NAME
                   FOR XML PATH('Columns'), TYPE),
        (SELECT 'true' AS [@json:Array],
@@ -231,6 +273,8 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                CASE WHEN [type] IN (1, 5) THEN 'true' ELSE 'false' END AS [Clustered],
                CASE WHEN [type] IN (5, 6) THEN 'true' ELSE 'false' END AS [ColumnStore],
                CASE WHEN fill_factor = 100 THEN 0 ELSE fill_factor END AS [FillFactor],
+               CASE WHEN ignore_dup_key = 1 THEN 'true' ELSE 'false' END AS [IgnoreDuplicateKey],
+               CASE WHEN is_padded = 1 THEN 'true' ELSE 'false' END AS [PadIndex],
                STUFF((SELECT ',' + '[' + COL_NAME(ic.[object_id], ic.column_id) + ']' + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE '' END
                   FROM sys.index_columns ic WITH (NOLOCK)
                   WHERE si.[object_id] = ic.[object_id] AND si.index_id = ic.index_id AND is_included_column = 0
@@ -252,6 +296,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
             AND is_hypothetical = 0
             AND is_disabled = 0
             AND index_id > 0
+            -- GRAPH_UNIQUE_INDEX_<guid> over the graph_id column: excluding the columns alone
+            -- would leave an index pointing at one that is no longer declared.
+            AND NOT EXISTS (SELECT 1 FROM sys.index_columns gic WITH (NOLOCK)
+                            JOIN #GraphCols g WITH (NOLOCK) ON g.[column_id] = gic.column_id
+                           WHERE gic.[object_id] = si.[object_id] AND gic.index_id = si.index_id)
           ORDER BY [Name]
           FOR XML PATH('Indexes'), TYPE),
        (SELECT 'true' AS [@json:Array],
@@ -357,6 +406,7 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
           FOR XML PATH('p'), ROOT('ExtendedProperties'), TYPE) AS [Extensions]
   FROM INFORMATION_SCHEMA.TABLES t WITH (NOLOCK)
   JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(@p_Schema + '.' + @p_Table)
+  LEFT JOIN sys.change_tracking_tables ctt WITH (NOLOCK) ON ctt.[object_id] = st.[object_id]
   WHERE TABLE_NAME = @p_Table
     AND TABLE_SCHEMA = @p_Schema
   FOR XML PATH('Table')

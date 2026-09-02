@@ -80,13 +80,18 @@ namespace Schema.Domain
         public bool? DropCheckConstraintsRemovedFromProduct { get; set; }
 
         [JsonProperty(Order = 19)]
+        [SchemaProperty(Platforms = [Platform.PostgreSQL])]
         public bool? DropExcludeConstraintsRemovedFromProduct { get; set; }
 
         [JsonProperty(Order = 20)]
+        [SchemaProperty(Platforms = [Platform.SqlServer, Platform.PostgreSQL])]
         public bool? DropStatisticsRemovedFromProduct { get; set; }
 
         [JsonProperty(Order = 21)]
         public bool? DropIndexesRemovedFromProduct { get; set; }
+
+        [SchemaProperty(Platforms = [Platform.SqlServer])]
+        public bool? DropSchemaBoundDependents { get; set; }
 
         /// <summary>
         /// Product tier of the rebuild-policy cascade. Null inherits from the environment. Unlike the

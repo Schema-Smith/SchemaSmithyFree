@@ -88,6 +88,8 @@ BEGIN TRY
                                                            THEN CASE WHEN RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE') THEN ', ' ELSE '' END +
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
+                                                      CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH
@@ -117,6 +119,8 @@ BEGIN TRY
                                                                      THEN ', ' ELSE '' END +
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
+                                                      CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH

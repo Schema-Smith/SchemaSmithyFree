@@ -13,6 +13,13 @@ namespace Schema.Domain
     /// table's physical column order match the package is a table rebuild, not an ordering preference, and
     /// is a separate opt-in.
     /// </para>
+    /// <para>
+    /// Scope differs by layer, which is worth knowing before reading the SQL. This setting orders
+    /// <c>Columns</c>, <c>Indexes</c>, <c>ForeignKeys</c>, <c>CheckConstraints</c> and, on SQL Server,
+    /// <c>Statistics</c> and <c>XmlIndexes</c>. The stored-procedure parameter that carries it
+    /// (<c>@p_ObjectOrder</c>, or <c>@SchemaSmith_ObjectOrder</c> on MySQL/MariaDB) sorts
+    /// <b>columns only</b> — the remaining lists are sequenced here, after extraction returns.
+    /// </para>
     /// </summary>
     [JsonConverter(typeof(StringEnumConverter))]
     public enum ObjectOrder

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Schema.Domain.MariaDb;
 using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
@@ -118,7 +119,7 @@ namespace Schema.Domain
                 Platform.SqlServer => typeof(SqlServerTable),
                 Platform.PostgreSQL => typeof(PostgreSqlTable),
                 Platform.MySQL => typeof(MySqlTable),
-                Platform.MariaDb => typeof(MySqlTable),
+                Platform.MariaDb => typeof(MariaDbTable),
                 _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, $"Unsupported platform: {platform}")
             };
         }

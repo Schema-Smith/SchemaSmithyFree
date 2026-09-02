@@ -286,7 +286,7 @@ public class ForgeKindlerTests
         // + SchemaSmith.RebuildTable (the shadow-copy-and-swap engine: refuse-if-blocked, capture the identity
         //   counter, drop inbound foreign keys, create the shadow in declared order, copy, reseed, swap, drop.
         //   Kindled after fn_RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
-        Assert.That(sqlServer.Length, Is.EqualTo(32));
+        Assert.That(sqlServer.Length, Is.EqualTo(34));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
@@ -359,7 +359,21 @@ public class ForgeKindlerTests
         // SchemaSmith_RebuildBlockedReason, which it calls to refuse, and before the quench procedures.
         // Unlike its two siblings it gets no transaction -- MySQL DDL is not transactional -- so the
         // reversible work runs first and the destructive step follows the atomic swap).
-        Assert.That(mysql.Length, Is.EqualTo(48));
+        // +1 = SchemaSmith_IsSystemTimePeriodColumn (answers whether a column is a system-versioned
+        // table's engine-owned row-start/row-end column, so extraction can exclude it. Isolated in a
+        // function with an always-0 MySQL definition and a real MariaDb override, because the catalog
+        // columns behind it do not exist on MySQL and column resolution inside a routine is deferred to
+        // execution -- a static reference would CREATE cleanly on MySQL and fail at every CALL).
+        // +1 = SchemaSmith_SetSystemVersioningAlterHistory (applies the operator opt-in for altering a
+        // system-versioned table. A procedure with a MySQL no-op and a MariaDb override, because MySQL
+        // refuses to CREATE a routine that merely mentions @@system_versioning_alter_history -- ERROR
+        // 1193 at create time, even inside an unreachable branch).
+        // +1 = SchemaSmith_TablePeriodsJson (reads a MariaDB table's application-time periods. MySQL
+        // stub returns '[]'; the MariaDb override wraps the INFORMATION_SCHEMA.PERIODS read in a
+        // /*M!110400 */ version comment, because that catalog is 11.4+ and an unknown TABLE is rejected
+        // when the routine is CREATED -- so the reference must be invisible to the parser, not merely
+        // unreached).
+        Assert.That(mysql.Length, Is.EqualTo(52));
     }
 
     [Test]

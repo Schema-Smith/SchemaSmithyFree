@@ -27,7 +27,7 @@
           },
           "ObjectType": {
             "type": "string",
-            "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|Synonyms|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Collations|Publications|Events"
+            "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|Synonyms|SchemaBoundViews|SchemaBoundFunctions|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Collations|Publications|Events"
           },
           "ShouldApplyExpression": {
             "type": "string",
@@ -44,7 +44,8 @@
       "type": "object"
     },
     "UpdateFillFactor": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "SQL Server and PostgreSQL only."
     },
     "BaselineValidationScript": {
       "type": "string"
@@ -88,11 +89,9 @@
     "DropCheckConstraintsRemovedFromProduct": {
       "type": "boolean"
     },
-    "DropExcludeConstraintsRemovedFromProduct": {
-      "type": "boolean"
-    },
     "DropStatisticsRemovedFromProduct": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "SQL Server and PostgreSQL only."
     },
     "DropIndexesRemovedFromProduct": {
       "type": "boolean"
@@ -116,6 +115,10 @@
         }
       },
       "additionalProperties": false
+    },
+    "DropSchemaBoundDependents": {
+      "type": "boolean",
+      "description": "SQL Server only."
     },
     "ServerToQuench": {
       "type": "integer"

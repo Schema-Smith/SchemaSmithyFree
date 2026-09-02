@@ -500,6 +500,110 @@ WHERE s.name = 'Test' AND v.name = 'vTestSummary2'";
     {
         RunIndexedViewQuench(cmd, ViewDefinitionWithTwoIndexes());
     }
+    // PAD_INDEX on an indexed view index. SQL Server accepts it here (verified on 2022 with the correct
+    // SET options -- an earlier probe reported a false rejection that was actually a QUOTED_IDENTIFIER
+    // complaint). IGNORE_DUP_KEY is deliberately absent: the engine rejects it on a view index outright,
+    // so there is nothing to manage.
+    //
+    // Without this, PadIndex would appear in the indexed-view JSON schema -- it rides the shared
+    // SqlServerIndex type -- and silently do nothing, which is the same "editor offers a setting that
+    // does nothing" defect the platform-scoping work exists to prevent.
+
+    [Test]
+    public void PadIndex_OnAnIndexedViewIndex_IsDeployed()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+        RunIndexedViewQuench(cmd, ViewDefinitionWithPadIndex(true));
+
+        cmd.CommandText = @"
+SELECT CONVERT(INT, i.is_padded) FROM sys.indexes i
+INNER JOIN sys.views v ON v.object_id = i.object_id
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary' AND i.name = 'IX_vTestSummary_Id'";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.EqualTo(1),
+            "declaring PadIndex on an indexed view index has to actually reach the engine -- otherwise the "
+            + "schema offers a setting that does nothing");
+    }
+
+    [Test]
+    public void PadIndex_OnAnIndexedViewIndex_IsIdempotent()
+    {
+        // The churn guard, same as for table indexes: if the existing-vs-desired comparison does not
+        // carry PadIndex, the second deploy either drops and recreates the index or misses a change.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+        RunIndexedViewQuench(cmd, ViewDefinitionWithPadIndex(true));
+        RunIndexedViewQuench(cmd, ViewDefinitionWithPadIndex(true));
+
+        cmd.CommandText = @"
+SELECT CONVERT(INT, i.is_padded) FROM sys.indexes i
+INNER JOIN sys.views v ON v.object_id = i.object_id
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary' AND i.name = 'IX_vTestSummary_Id'";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.EqualTo(1), "still set after a re-deploy");
+    }
+
+    [Test]
+    public void NotDeclaringPadIndex_OnAnIndexedViewIndex_LeavesItOff()
+    {
+        // The negative half: an emit that added PAD_INDEX unconditionally would pass the assertions above
+        // while changing every indexed view index in every package.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+        RunIndexedViewQuench(cmd, ViewDefinitionWithPadIndex(false));
+
+        cmd.CommandText = @"
+SELECT CONVERT(INT, i.is_padded) FROM sys.indexes i
+INNER JOIN sys.views v ON v.object_id = i.object_id
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary' AND i.name = 'IX_vTestSummary_Id'";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.Zero);
+    }
+
+    [Test]
+    public void ChangingPadIndex_OnAnExistingIndexedViewIndex_IsApplied()
+    {
+        // Idempotence and create-from-scratch both pass happily while the existing-vs-desired comparison
+        // ignores PadIndex entirely -- proven by mutation: breaking that comparison left all three of the
+        // other tests green. This is the one that exercises it.
+        using var conn = DbConnectionFactory.ForPlatform(Platform.SqlServer).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_ivTestDb);
+        using var cmd = conn.CreateCommand();
+
+        EnsureViewDropped(cmd);
+        RunIndexedViewQuench(cmd, ViewDefinitionWithPadIndex(false));
+
+        RunIndexedViewQuench(cmd, ViewDefinitionWithPadIndex(true));
+
+        cmd.CommandText = @"
+SELECT CONVERT(INT, i.is_padded) FROM sys.indexes i
+INNER JOIN sys.views v ON v.object_id = i.object_id
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name = 'Test' AND v.name = 'vTestSummary' AND i.name = 'IX_vTestSummary_Id'";
+        Assert.That((int)cmd.ExecuteScalar()!, Is.EqualTo(1),
+            "turning PadIndex on in the package has to reach an index that already exists, not only a "
+            + "freshly created one");
+    }
+
+    private static string ViewDefinitionWithPadIndex(bool padIndex) =>
+        @"[{""Schema"":""[Test]"",""Name"":""[vTestSummary]"",""Definition"":""SELECT Id, Name, COUNT_BIG(*) AS Cnt, SUM(Amount) AS TotalAmount FROM Test.SourceTable GROUP BY Id, Name"",""Indexes"":[{""Name"":""[IX_vTestSummary_Id]"",""Unique"":true,""Clustered"":true,""IndexColumns"":""[Id]"",""FillFactor"":70,""PadIndex"":"
+        + (padIndex ? "true" : "false") + @"}]}]";
+
+
 
     /// <summary>
     /// Drops vTestSummary (and any other views) by quenching with an empty array.

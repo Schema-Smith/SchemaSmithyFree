@@ -296,6 +296,8 @@ When you toggle `IsTemporal` back to `false`, SchemaSmith emits `SET (SYSTEM_VER
 
 **CDC -- brief note.** Set `"EnableCDC": true` on any table to enable Change Data Capture. When you later change that table's columns, SchemaSmith adds a *second* capture instance covering the new column set and leaves the original one in place, holding everything it has captured so far. That is SQL Server's own pattern for changing the shape of a tracked table without losing history.
 
+**Change tracking -- brief note.** Set `"EnableChangeTracking": true` to have SQL Server record *which rows* changed since a given version -- lighter than CDC, and enough when a reader just needs to re-fetch what moved. Add `"TrackColumnsUpdated": true` to record which columns changed too. Both CDC and change tracking have to be switched on at the database level first; SchemaSmith tells you when a table asked for one and the database has not got it, rather than deploying green and leaving it off. See [Change Tracking](../reference/schema-packages.md#change-tracking-sql-server).
+
 > **Action required:** The old capture instance is yours to retire, because only you know when your readers have finished with it. Once they have, drop it with `EXEC sys.sp_cdc_disable_table @source_schema = N'dbo', @source_name = N'YourTable', @capture_instance = N'<name>'` -- the deploy log names the instance for you. SQL Server allows only two capture instances per table, so until you drop it the next column change on that table will be refused, with a message telling you which tables are affected. The deploy stops before touching any column, so nothing is half-applied.
 
 ### PostgreSQL
@@ -325,7 +327,7 @@ Declare these in the `ExcludeConstraints` array on the table. This is something 
 
 The engine keeps the value current on every insert and update. No triggers, no application-layer logic.
 
-> **Note:** PostgreSQL also supports `"RowLevelSecurity": true` and `"ForceRowLevelSecurity": true` on the table to enable row-level security. SchemaSmith manages the table-level RLS flag. The policies themselves are defined in your scripts -- SchemaSmith does not manage individual row policies.
+> **Note:** PostgreSQL also supports `"RowLevelSecurity": true` and `"ForceRowLevelSecurity": true` on the table, together with a `"Policies"` array declaring the policies themselves. **Both halves matter:** a table with row-level security enabled and no policy returns no rows to anyone but its owner, so enabling the flag without declaring a policy locks the table. SchemaSmith creates declared policies that are missing and drops ones the package no longer declares; editing an expression on an existing policy is not detected, because PostgreSQL stores those normalised. See [Row-Level Security Policies](../reference/schema-packages.md#row-level-security-policies-postgresql).
 
 > **PostgreSQL:** Advanced index methods -- GIN for JSONB and arrays, GiST for ranges and geometry, BRIN for append-only time-series -- are available via `"AccessMethod"` on any index definition (e.g., `"AccessMethod": "gin"`). SchemaSmith emits the appropriate `USING` clause.
 

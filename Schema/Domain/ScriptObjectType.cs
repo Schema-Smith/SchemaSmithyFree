@@ -22,6 +22,11 @@ namespace Schema.Domain
         DDLTriggers,
         IndexedViews,
         Synonyms,
+        // #323. Split out from Views/Functions so they can sit in their own folder on the
+        // AfterTablesObjects slot: a SCHEMABINDING module has to be recreated AFTER the table work
+        // that required dropping it, and the ordinary Views folder runs before tables on SQL Server.
+        SchemaBoundViews,
+        SchemaBoundFunctions,
         // PostgreSQL
         DomainTypes,
         EnumTypes,

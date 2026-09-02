@@ -534,6 +534,60 @@ SchemaQuench --ConnectionString:"Host=prod-db;Database=mydb;Username=deploy;Pass
 
 ---
 
+## DropSchemaBoundDependents
+
+**SQL Server only.** Controls whether SchemaQuench drops a `SCHEMABINDING` view or function that is
+blocking a column change, so the change can be applied and the module recreated afterwards. Three tiers
+compose to produce the effective value, resolved environment → product → template.
+
+| Scope | Where to set | Default |
+|---|---|---|
+| Environment | `DropSchemaBoundDependents` in `SchemaQuench.settings.json` (or `SmithySettings_DropSchemaBoundDependents` environment variable) | `false` |
+| Product | `DropSchemaBoundDependents` in `Product.json` | `false` |
+| Template | `DropSchemaBoundDependents` in `Template.json` | (inherit) |
+
+### The problem it solves
+
+SQL Server refuses to alter a column while a schema-bound module references it, failing with error 4922 —
+"one or more objects access this column" — which names neither the module nor what to do about it. Left
+off, SchemaQuench reports the same refusal but names the blocking module, the column it blocks, and the
+remedy. Turned on, it drops the module instead, applies the column change, and the after-tables object
+pass recreates the module **from your package**.
+
+### Your scripts must be in the after-tables slot
+
+SchemaSmith does not save and replay the definition it found on the server. Your package is the authority
+on what the module should be; the copy on the server is only whatever happens to be deployed. So the
+recreate comes from your own script, and that script has to run **after** the table work.
+
+Put schema-bound modules in a folder on the `AfterTablesObjects` slot. The default templates already
+include `SchemaBound Views/` and `SchemaBound Functions/` for this, and **SchemaTongs writes schema-bound
+views and functions into those folders automatically on extraction** — whether or not this setting is on
+— so an extracted package is already shaped correctly the day you turn it on. A module left in the
+ordinary `Views/` or `Functions/` folder is recreated before the table work rather than after it.
+
+### Dropping discards permissions
+
+**A dropped view or function loses every `GRANT` on it, and SchemaSmith does not put them back.**
+SchemaSmith does not manage permissions on any object, so it has nothing to restore them from. Re-grant
+in the recreating script itself, or from whatever process you already use to manage permissions — if you
+grant on these objects at all, you almost certainly have one.
+
+### What it will not do
+
+An **encrypted** module (`WITH ENCRYPTION`) is refused even with the setting on, and refused *before*
+anything is dropped. `OBJECT_DEFINITION` returns `NULL` for one, so it cannot be scripted from the server
+by SchemaSmith, by SchemaTongs, or by you — dropping it would be unrecoverable. Remove the encryption or
+the `SCHEMABINDING` to proceed.
+
+Indexed views are unaffected either way. Those are already dropped and recreated around column changes.
+
+```json
+// Template.json — this template's schema-bound modules are safe to cycle
+{ "DropSchemaBoundDependents": true }
+```
+---
+
 ## DropTablesRemovedFromProduct
 
 Controls whether SchemaQuench drops tables that exist in the database but no longer appear in the schema package. Three tiers compose to produce the effective value, resolved environment → product → template.
@@ -687,6 +741,107 @@ to keep.
 
 `--Validate` reports `SS-TBL-001` when a policy sets `Mode: "THRESHOLD"` without a `Threshold` — that
 policy cannot be evaluated, so it is an error rather than a setting that quietly does nothing.
+
+---
+
+## System-versioned tables (MariaDB)
+
+MariaDB can keep a table's own history: every update leaves the superseded row behind, queryable
+through `FOR SYSTEM_TIME`. SchemaSmith reads that state and round-trips it.
+
+```json
+{
+  "Name": "`Account`",
+  "IsSystemVersioned": true,
+  "Columns": [ ... ]
+}
+```
+
+`IsSystemVersioned` is detected from the table's catalog type, which is the only signal that answers
+for **both** ways of writing one — whether you declare the period columns yourself or let the engine
+keep them hidden. Those engine-owned row-start and row-end columns are deliberately left out of the
+extracted package: the engine maintains them, and a package that listed them would have SchemaSmith
+trying to manage columns that are not yours to manage.
+
+> **MariaDB only, and not an omission elsewhere.** MySQL has no system versioning at any version, so
+> the property does not exist in a MySQL package or its editor schema. SQL Server's equivalent is its
+> temporal-table support, which is configured separately.
+
+### SystemVersioningAlterHistory
+
+Changing a column on a system-versioned table is not an ordinary alter. MariaDB refuses it outright
+unless `@@system_versioning_alter_history` is `KEEP` — and `KEEP` does not simply permit the change,
+it applies the change to **the stored history as well**. Rows that were recorded years ago are
+rewritten into the new shape, so the history stops being a record of what the table actually looked
+like at the time.
+
+That is a decision about your data retention, not a detail of syntax, so SchemaSmith will not make it
+for you.
+
+| Setting | Effect |
+|---|---|
+| _unset_ (default) | The engine refuses the column change, exactly as it does today. |
+| `KEEP` | The change proceeds and the stored history is rewritten to match. |
+
+```json
+{
+  "SystemVersioningAlterHistory": "KEEP"
+}
+```
+
+Leaving it unset costs nothing on a healthy deploy: the refusal only fires when a change genuinely
+requires rewriting history, never on a re-deploy where the table already matches its definition. If
+you do not want the history rewritten, the alternative is to drop system versioning, make the change,
+and re-enable it — accepting the gap deliberately rather than discovering it later.
+
+
+
+### Application-time periods
+
+A period names a pair of columns that describe the interval a row is valid **for** — the dates a price
+applied, or an assignment ran. That is a different question from system versioning, which records when
+a row was *stored*. A table can declare both, and the values in an application-time period are the
+application's to set.
+
+```json
+{
+  "Name": "`Rate`",
+  "Periods": [
+    { "Name": "Validity", "StartColumn": "ValidFrom", "EndColumn": "ValidTo" }
+  ]
+}
+```
+
+> **Extraction has a version blind spot — and it is not the version you would expect.** Periods work
+> from MariaDB **10.4.3**, but the catalog that reports them only arrives in **11.4**. Extracting from
+> anything in between returns no periods even where the table plainly has them, so a package
+> round-tripped through such a server loses them. Deploying a declared period to those versions works
+> normally; only the read is blind. If you extract from MariaDB below 11.4, check your periods survived.
+
+The `SYSTEM_TIME` period is not listed here. MariaDB reports it alongside application periods, but the
+table already declares that state through `IsSystemVersioned` — carrying it in both places would let a
+package contradict itself.
+
+#### DropPeriodsRemovedFromProduct
+
+A period on the table that the package no longer declares is only removed if you ask for it.
+
+| Setting | Effect |
+|---|---|
+| _unset_ (default) | The period stays, even though the package does not mention it. |
+| `true` | The period is dropped. |
+
+**This is the only drop-by-absence setting that defaults to off, and the reason matters.** A package
+that has no `Periods` entry is not necessarily saying "this table has no period" — it may simply never
+have been able to say otherwise. Packages written before periods were supported have no such entry, and
+neither does one extracted from MariaDB 10.4.3–11.3, where the server cannot report periods at all.
+Defaulting to drop would delete a period on the strength of a silence that means nothing.
+
+Turn it on when your package is genuinely the authority on the table's periods. It can also be set on a
+single table, which overrides the environment setting for that table alone.
+
+> **Dropping a period does not touch your data.** The columns it spanned, and everything in them,
+> remain. What is removed is the period itself and the check constraint MariaDB uses to enforce it.
 
 ---
 

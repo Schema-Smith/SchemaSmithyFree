@@ -129,7 +129,30 @@ public class DatabaseQuench
     /// </summary>
     public RebuildPolicy CascadedRebuildPolicy { get; init; }
 
+    /// <summary>
+    /// Whether an application-time period present on the table but absent from the package is dropped
+    /// (MariaDB). Defaults to FALSE unlike every sibling drop flag, because a package that predates
+    /// periods -- or was extracted below 11.4, where the catalog cannot report them -- carries none even
+    /// when the table has one, and dropping on that absence removes a declaration the package never had
+    /// the chance to make.
+    /// </summary>
+    public bool DropPeriodsRemovedFromProduct { get; init; }
+
+    // #323 opt-in. SQL Server only -- SCHEMABINDING has no equivalent on the other engines, so the
+    // parameter is appended to the SQL Server call alone rather than added to every proc signature.
+    public bool DropSchemaBoundDependents { get; init; }
+
     /// <summary>NEVER when no tier declared a policy — the domain object's own default.</summary>
+    /// <summary>
+    /// MariaDB only. <c>KEEP</c> opts into altering a system-versioned table; the engine then applies the
+    /// DDL to the stored history as well, rewriting it to a shape it never had. Anything else (including
+    /// unset) leaves the engine default, which refuses such a change -- so the conservative answer needs
+    /// no configuration and the destructive one has to be asked for.
+    /// </summary>
+    private string SystemVersioningAlterHistory =>
+        EscapeSqlLiteral((FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.SystemVersioningAlterHistory]
+                          ?? "").Trim().ToUpperInvariant());
+
     private string RebuildPolicyMode =>
         EscapeSqlLiteral((CascadedRebuildPolicy?.Mode ?? "NEVER").Trim().ToUpperInvariant());
 
@@ -1520,7 +1543,7 @@ CALL ""SchemaSmith"".""MissingTableAndColumnQuench""(p_WhatIf := {_whatIfOnly})"
         switch (_product.Platform.GetBasePlatform())
         {
             case Platform.SqlServer:
-                tableCommand.CommandText = $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}, @RebuildPolicyMode = '{RebuildPolicyMode}', @RebuildPolicyThreshold = {RebuildPolicyThreshold}, @RebuildPolicyOnOrderMismatch = {RebuildPolicyOnOrderMismatch}";
+                tableCommand.CommandText = $"EXEC [{Identifier.EscapeDelimited(_databaseName, _product.Platform)}].SchemaSmith.ModifiedTableQuench @ProductName = '{EscapeSqlLiteral(_product.Name)}', @DropUnknownIndexes = {_dropUnknownIndexes}, @WhatIf = {_whatIfOnly}, @DropTablesRemovedFromProduct = {_dropRemovedTables}, @DropColumnsRemovedFromProduct = {_dropRemovedColumns}, @DropForeignKeysRemovedFromProduct = {_dropRemovedForeignKeys}, @DropCheckConstraintsRemovedFromProduct = {_dropRemovedCheckConstraints}, @DropExcludeConstraintsRemovedFromProduct = {_dropRemovedExcludeConstraints}, @DropStatisticsRemovedFromProduct = {_dropRemovedStatistics}, @DropIndexesRemovedFromProduct = {_dropRemovedIndexes}, @CaptureWouldDrop = {FormatBooleanFlag(CaptureWouldDrop)}, @RebuildPolicyMode = '{RebuildPolicyMode}', @RebuildPolicyThreshold = {RebuildPolicyThreshold}, @RebuildPolicyOnOrderMismatch = {RebuildPolicyOnOrderMismatch}, @DropSchemaBoundDependents = {(DropSchemaBoundDependents ? 1 : 0)}";
                 break;
             case Platform.PostgreSQL:
                 tableCommand.CommandText = $@"
@@ -1634,7 +1657,9 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     {
         tableCommand.CommandText = $"SET @ss_rebuild_policy_mode = '{RebuildPolicyMode}', "
                                    + $"@ss_rebuild_policy_threshold = {RebuildPolicyThreshold}, "
-                                   + $"@ss_rebuild_policy_on_order_mismatch = {RebuildPolicyOnOrderMismatch}";
+                                   + $"@ss_rebuild_policy_on_order_mismatch = {RebuildPolicyOnOrderMismatch}, "
+                                   + $"@ss_system_versioning_alter_history = '{SystemVersioningAlterHistory}', "
+                                   + $"@ss_drop_periods_removed = {(DropPeriodsRemovedFromProduct ? 1 : 0)}";
         tableCommand.ExecuteNonQuery();
     }
 

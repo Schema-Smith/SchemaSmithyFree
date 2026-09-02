@@ -42,6 +42,16 @@ public class IndexOnlyQuench_FullTextVariantTests : BaseTableQuenchTests
         cmd.Parameters.Clear();
     }
 
+    /// <summary>
+    /// Whether this server can create a STATISTICAL_SEMANTICS full-text column at all, which requires a
+    /// Semantic Language Statistics Database to be attached AND registered.
+    /// </summary>
+    private static bool SemanticsAvailable(DbCommand cmd)
+    {
+        cmd.CommandText = "SELECT COUNT(*) FROM sys.fulltext_semantic_language_statistics_database";
+        return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+    }
+
     private static int DeployedSemanticColumns(DbCommand cmd, string tableName)
     {
         cmd.CommandText = $@"
@@ -62,6 +72,23 @@ SELECT COUNT(*) FROM sys.fulltext_index_columns fc WITH (NOLOCK)
         conn.Open();
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
+        // Guarded on the capability rather than the server version: this must still RUN anywhere the
+        // database is registered, and a version check would also skip a 2017 that had been provisioned
+        // by hand. On the 2017 container it cannot be provisioned at all -- Microsoft's mssql-server-fts
+        // package ships a semanticsdb.bak stamped 14.00.0700 (RTM) while the image runs 14.00.3540, and
+        // the restore is refused with Msg 3169 "backed up on a server running version ... incompatible".
+        // The backup that ships with the server cannot be restored into that server, so the feature is
+        // unreachable there through no fault of the code under test.
+        if (!SemanticsAvailable(cmd))
+            Assert.Ignore(
+                "No Semantic Language Statistics Database is registered on this server, so a "
+                + "STATISTICAL_SEMANTICS column cannot be created and this feature cannot be exercised. "
+                + "On the SQL Server 2017 container this is expected and unfixable locally: the bundled "
+                + "semanticsdb.bak is stamped 14.00.0700 while the engine is 14.00.3540, and SQL Server "
+                + "refuses the restore (Msg 3169). The feature IS covered on 2019/2022/2025, where "
+                + "scripts/provision-semantic-db.sh succeeds -- if this skips THERE, provisioning "
+                + "regressed and the skip is hiding a real failure.");
+
         CreateTestTable(cmd, tableName);
 
         // ChangeTracking is NOT optional here. The emitter concatenates it into the CREATE statement and

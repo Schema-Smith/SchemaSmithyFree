@@ -62,14 +62,16 @@ public class JsonSchemaCheckTests
         : t == typeof(ForeignKey) ? typeof(SqlServerForeignKey)
         : t; // CheckConstraint has no SqlServer subclass (PlatformDeserializer.GetCheckConstraintType)
 
+    // Platform-scoped, exactly as RepositoryHelper writes it: a committed schema is per-platform, so
+    // a stand-in generated without one carries properties the real file does not and reads as stale.
     private static JObject FreshTablesSchema() =>
-        SchemaGenerator.GenerateSchema(typeof(SqlServerTable), SqlServerElementResolver());
+        SchemaGenerator.GenerateSchema(typeof(SqlServerTable), SqlServerElementResolver(), Platform.SqlServer);
 
     // Product has no Column/Index/ForeignKey/CheckConstraint members needing platform-subclass
     // resolution, so the identity resolver mirrors what JsonSchemaCheck's own
     // PlatformElementResolver would do for it.
     private static JObject FreshProductsSchema() =>
-        SchemaGenerator.GenerateSchema(typeof(Product), t => t);
+        SchemaGenerator.GenerateSchema(typeof(Product), t => t, Platform.SqlServer);
 
     private static JObject ColumnItemsProperties(JObject tableSchema) =>
         (JObject)tableSchema["properties"]!["Columns"]!["items"]!["properties"]!;

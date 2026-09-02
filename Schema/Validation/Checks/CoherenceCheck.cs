@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
+using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Index = Schema.Domain.Index;
 
@@ -26,6 +27,8 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string IndexColumnCode = "SS-IDX-001";
     private const string BackfillWithoutDefaultCode = "SS-COL-001";
     private const string RebuildThresholdCode = "SS-TBL-001";
+    private const string RlsWithoutPoliciesCode = "SS-RLS-001";
+    private const string PoliciesWithoutRlsCode = "SS-RLS-002";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -51,6 +54,7 @@ public sealed class CoherenceCheck : ISchemaCheck
 
             findings.AddRange(CheckBackfill(table, location));
             findings.AddRange(CheckRebuildPolicy(table, location));
+            findings.AddRange(CheckRowLevelSecurity(table, location));
         }
 
         return findings;
@@ -132,6 +136,36 @@ public sealed class CoherenceCheck : ISchemaCheck
             "THRESHOLD needs a threshold to compare against, so the policy cannot be evaluated — set a " +
             "Threshold, or choose Mode 'ALWAYS' or 'NEVER'.");
     }
+    /// <summary>
+    /// Row-level security and its policies are two halves of one feature, and each half on its own
+    /// fails silently in an opposite direction.
+    /// <para><b>RLS with no policies denies everything.</b> PostgreSQL returns no rows to any user but
+    /// the table owner, so a package that enables the flag and declares nothing else locks the table.</para>
+    /// <para><b>Policies with no RLS enforce nothing.</b> The policies are created, so the package reads
+    /// as secured, but PostgreSQL applies none of them until row-level security is on.</para>
+    /// <para>Warning rather than Error: both are legal, deployable configurations, and policies may
+    /// genuinely be managed outside the package. Refusing to deploy either would be worse than saying so.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckRowLevelSecurity(Table table, string tableLocation)
+    {
+        if (table is not PostgreSqlTable pgTable) yield break;
+
+        var hasPolicies = pgTable.Policies.Count > 0;
+
+        if (pgTable.RowLevelSecurity && !hasPolicies)
+            yield return new Finding(Severity.Warning, RlsWithoutPoliciesCode, Category, tableLocation,
+                $"Table '{table.Name}' sets RowLevelSecurity but declares no Policies. PostgreSQL returns " +
+                "no rows to anyone except the table owner until at least one permissive policy exists, so " +
+                "this locks the table rather than merely restricting it — declare a Policies entry, or " +
+                "turn RowLevelSecurity off.");
+
+        if (!pgTable.RowLevelSecurity && hasPolicies)
+            yield return new Finding(Severity.Warning, PoliciesWithoutRlsCode, Category, tableLocation,
+                $"Table '{table.Name}' declares Policies but does not set RowLevelSecurity. The policies " +
+                "are created and then enforced against nothing, so the table is readable by anyone with " +
+                "table privileges — set RowLevelSecurity to true to enforce them.");
+    }
+
 
     private static IEnumerable<Finding> CheckIndex(Table table, Index index, string tableLocation)
     {

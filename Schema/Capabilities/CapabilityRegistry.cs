@@ -34,6 +34,17 @@ namespace Schema.Capabilities
             // ---- SQL Server (binary/major-version gated via fn_ServerMajorVersion; all skipped) -------------
             rows.Add(new("temporal", "Temporal tables (system-versioning)", Platform.SqlServer,
                 13, "SQL Server 2016", null, DegradeKind.Skip, "temporal (SQL Server 2016)"));
+
+            // Reduced, not Skipped: without the graph clause the table still deploys with all its
+            // declared columns -- only the node/edge semantics are lost.
+            rows.Add(new("graph-table", "Graph tables (NODE/EDGE)", Platform.SqlServer,
+                14, "SQL Server 2017", null, DegradeKind.Reduced, "graph table (SQL Server 2017)"));
+
+            // Reduced for the same reason as graph, and the direction matters more here: a ledger table
+            // cannot be converted or dropped afterwards, so NOT creating one is far easier to recover
+            // from than creating one by accident.
+            rows.Add(new("ledger-table", "Ledger tables", Platform.SqlServer,
+                16, "SQL Server 2022", null, DegradeKind.Reduced, "ledger table (SQL Server 2022)"));
             rows.Add(new("data-masking", "Dynamic data masking", Platform.SqlServer,
                 13, "SQL Server 2016", null, DegradeKind.Skip, "data masking (SQL Server 2016)"));
             rows.Add(new("always-encrypted", "Always Encrypted", Platform.SqlServer,
@@ -102,6 +113,49 @@ namespace Schema.Capabilities
             // no row for this key, same as it gets no row for check-constraint (there, unconditionally 1).
             rows.Add(new("column-srid", "Column SRID restriction", Platform.MySQL,
                 800, "MySQL 8.0.3", null, DegradeKind.Reduced, "column (SRID, MySQL 8.0.3)"));
+
+            // Application-time period (MariaDB PERIOD FOR <name>(start, end)): the mirror image of
+            // column-srid above. MySQL has NO equivalent at any version, so
+            // SchemaSmith_SupportsApplicationTimePeriods() returns 0 unconditionally there and MySQL gets
+            // no row -- the registry has no way to say "never" other than omission.
+            //
+            // Below the MariaDB threshold the period clause is dropped and the table is still created, so
+            // this is Reduced rather than Skipped: what the user loses is the period, not the table.
+            //
+            // Worth knowing for anything driving UI or AI off this row: the version that can DECLARE a
+            // period (10.4.3) is NOT the version that can report one back. INFORMATION_SCHEMA.PERIODS
+            // arrives in 11.4, so between those releases a period deploys correctly and cannot be read
+            // from the catalog at all. The row encodes the declare threshold, because that is what the
+            // gate compares against; the read gap is documented on MariaDbTable.Periods.
+            rows.Add(new("application-time-period", "Application-time period", Platform.MariaDb,
+                1004, "MariaDB 10.4.3", null, DegradeKind.Reduced, "table without its PERIOD FOR clause"));
+
+            // Change Data Capture, gated by a DATABASE setting rather than an engine version -- the first
+            // row of that kind, which is why Capability gained RequiredDatabaseSetting. IntroducedInComparable
+            // is 0 and means "not version-gated": CDC is old enough that no supported server lacks it, and
+            // the .sql guard compares is_cdc_enabled, not a version. Inventing a version here would break the
+            // promise that this column matches the literal the guard compares against.
+            //
+            // Reduced, not Skipped: the table still deploys, without its capture.
+            rows.Add(new("cdc-database-toggle", "Change Data Capture", Platform.SqlServer,
+                0, "any supported version (needs CDC enabled on the database)", null, DegradeKind.Reduced,
+                "CDC (database not enabled)", "CDC enabled on the database (sys.sp_cdc_enable_db)"));
+
+            // The second database-gated degrade. Its ObjectType must match the string
+            // SchemaSmith.DegradeUnsupportedFeatures writes, or the add-ons cannot join a manifest row
+            // back to the capability that produced it.
+            rows.Add(new("change-tracking-database-toggle", "Change Tracking", Platform.SqlServer,
+                0, "any supported version (needs Change Tracking enabled on the database)", null, DegradeKind.Reduced,
+                "Change Tracking (database not enabled)",
+                "Change Tracking enabled on the database (ALTER DATABASE ... SET CHANGE_TRACKING = ON)"));
+
+            // Reduced rather than Skip: without FILESTREAM the column still deploys as a plain
+            // VARBINARY(MAX), so the user keeps the column and loses only its storage location.
+            rows.Add(new("filestream-column", "FILESTREAM columns", Platform.SqlServer,
+                0, "any supported version (needs FILESTREAM on the server and a filegroup on the database)",
+                null, DegradeKind.Reduced,
+                "FILESTREAM (server or filegroup not available)",
+                "FILESTREAM enabled on the server and a FILESTREAM filegroup on the database"));
 
             // Functional/expression index (including a multi-valued index, CAST(... AS ... ARRAY) —
             // MySQL 8.0.17+, same NULL-COLUMN_NAME/EXPRESSION shape as a plain functional key part, so it

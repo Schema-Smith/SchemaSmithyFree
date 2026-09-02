@@ -13,6 +13,7 @@ CREATE PROCEDURE SchemaSmith.ModifiedTableQuench
   @WhatIf BIT = 0,
   @DropUnknownIndexes BIT = 0,
   @DropTablesRemovedFromProduct BIT = 1,
+  @DropSchemaBoundDependents BIT = 0,
   @DropColumnsRemovedFromProduct BIT = 1,
   @DropForeignKeysRemovedFromProduct BIT = 1,
   @DropCheckConstraintsRemovedFromProduct BIT = 1,
@@ -126,6 +127,39 @@ BEGIN TRY
     RAISERROR('Table %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing table to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_MoveTable, @v_MoveDeclared, @v_MoveLive)
   END
 
+  -- The other two placement clauses. Same posture as FileGroup above: neither TEXTIMAGE_ON nor
+  -- FILESTREAM_ON has an ALTER, so a declared name that differs from the live one is refused rather
+  -- than silently ignored. Read from the table's own lob/filestream data spaces, which is why this
+  -- cannot reuse the index-based lookup the FileGroup check uses.
+  IF OBJECT_ID('tempdb..#DeployedLobPlacement') IS NOT NULL DROP TABLE #DeployedLobPlacement
+  SELECT t.[Schema] + '.' + t.[Name] AS FullName,
+         [Clause] = CONVERT(NVARCHAR(20), 'TextImageFileGroup'),
+         SchemaSmith.fn_StripBracketWrapping(t.[TextImageFileGroup]) AS Declared,
+         lds.[name] AS DeployedSpace
+    INTO #DeployedLobPlacement
+    FROM #Tables t WITH (NOLOCK)
+    JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+    LEFT JOIN sys.data_spaces lds WITH (NOLOCK) ON lds.data_space_id = st.lob_data_space_id
+   WHERE t.NewTable = 0 AND t.[TextImageFileGroup] IS NOT NULL
+  UNION ALL
+  SELECT t.[Schema] + '.' + t.[Name],
+         'FileStreamFileGroup',
+         SchemaSmith.fn_StripBracketWrapping(t.[FileStreamFileGroup]),
+         fds.[name]
+    FROM #Tables t WITH (NOLOCK)
+    JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
+    LEFT JOIN sys.data_spaces fds WITH (NOLOCK) ON fds.data_space_id = st.filestream_data_space_id
+   WHERE t.NewTable = 0 AND t.[FileStreamFileGroup] IS NOT NULL
+
+  IF EXISTS (SELECT 1 FROM #DeployedLobPlacement WHERE DeployedSpace IS NOT NULL AND Declared <> DeployedSpace)
+  BEGIN
+    DECLARE @v_LobTable NVARCHAR(1010), @v_LobClause NVARCHAR(20), @v_LobDeclared NVARCHAR(500), @v_LobLive NVARCHAR(500)
+    SELECT TOP 1 @v_LobTable = FullName, @v_LobClause = Clause, @v_LobDeclared = Declared, @v_LobLive = DeployedSpace
+      FROM #DeployedLobPlacement
+     WHERE DeployedSpace IS NOT NULL AND Declared <> DeployedSpace
+    RAISERROR('Table %s declares %s %s, but its data is currently on filegroup %s. SchemaSmith does not move an existing table''s large-object or FILESTREAM data to a different filegroup -- there is no ALTER for it. Migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_LobTable, @v_LobClause, @v_LobDeclared, @v_LobLive)
+  END
+
   -- An explicit FileGroup on a table living on a partition scheme is a placement we cannot honour, so it is
   -- refused rather than silently ignored. Leaving FileGroup unset on such a table stays supported untouched.
   IF EXISTS (SELECT 1 FROM #DeployedTablePlacement
@@ -137,6 +171,68 @@ BEGIN TRY
      WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'FG'
     RAISERROR('Table %s declares filegroup %s, but is currently deployed on partition scheme %s. SchemaSmith cannot place a partitioned table on a single filegroup -- remove the declared FileGroup, or migrate the table manually.', 16, 1, @v_PsTable, @v_PsDeclared, @v_PsScheme)
   END
+
+  RAISERROR('Validate declared GraphType matches deployed', 10, 100) WITH NOWAIT
+  -- Graph tables are create-time only: SQL Server has no ALTER for them at all -- ALTER TABLE ... SET
+  -- (AS NODE) is error 156, not even syntax. So a declaration that disagrees with the deployed table
+  -- cannot be applied, and the choice is refuse or silently ignore. Refusing names the table and the
+  -- property; ignoring would leave a package permanently claiming something untrue about its target.
+  --
+  -- sys.tables.is_node / is_edge are 2017+ and this is the JSON tier (2017 floor), but the same proc
+  -- body is kindled for the XML tier, which reaches older servers -- hence the version guard around the
+  -- read rather than a static reference.
+  IF SchemaSmith.fn_ServerMajorVersion() >= 14
+  BEGIN
+    IF OBJECT_ID('tempdb..#DeployedGraphType') IS NOT NULL DROP TABLE #DeployedGraphType
+    CREATE TABLE #DeployedGraphType (FullName NVARCHAR(1010), Declared NVARCHAR(10), Deployed NVARCHAR(10))
+    EXEC sp_executesql N'
+      INSERT INTO #DeployedGraphType (FullName, Declared, Deployed)
+        SELECT t.[Schema] + ''.'' + t.[Name],
+               ISNULL(NULLIF(t.[GraphType], ''''), ''None''),
+               CASE WHEN st.is_node = 1 THEN ''Node'' WHEN st.is_edge = 1 THEN ''Edge'' ELSE ''None'' END
+          FROM #Tables t WITH (NOLOCK)
+          JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + ''.'' + t.[Name])
+         WHERE t.NewTable = 0'
+
+    IF EXISTS (SELECT 1 FROM #DeployedGraphType WHERE Declared <> Deployed)
+    BEGIN
+      DECLARE @v_GraphTable NVARCHAR(1010), @v_GraphDeclared NVARCHAR(10), @v_GraphLive NVARCHAR(10)
+      SELECT TOP 1 @v_GraphTable = FullName, @v_GraphDeclared = Declared, @v_GraphLive = Deployed
+        FROM #DeployedGraphType WHERE Declared <> Deployed
+      RAISERROR('Table %s declares GraphType %s, but is currently deployed as %s. SQL Server has no ALTER that converts a table to or from a graph node/edge table, so SchemaSmith will not attempt it -- recreate the table, or correct the declared GraphType to match.', 16, 1, @v_GraphTable, @v_GraphDeclared, @v_GraphLive)
+    END
+  END
+
+  RAISERROR('Validate declared Ledger matches deployed', 10, 100) WITH NOWAIT
+  -- Ledger tables are create-time only: ALTER TABLE ... SET (LEDGER = ON) is error 102, not syntax. And
+  -- unlike most refusals this one cannot be worked around by recreating the table, because DROP on a
+  -- ledger table is not a drop -- SQL Server retains it as MSSQL_DroppedLedgerTable_<name>_<guid>. So a
+  -- mismatch is reported rather than acted on, and the message says which side to change.
+  IF SchemaSmith.fn_ServerMajorVersion() >= 16
+  BEGIN
+    IF OBJECT_ID('tempdb..#DeployedLedger') IS NOT NULL DROP TABLE #DeployedLedger
+    CREATE TABLE #DeployedLedger (FullName NVARCHAR(1010), Declared NVARCHAR(12), Deployed NVARCHAR(12))
+    EXEC sp_executesql N'
+      INSERT INTO #DeployedLedger (FullName, Declared, Deployed)
+        SELECT t.[Schema] + ''.'' + t.[Name],
+               ISNULL(NULLIF(t.[Ledger], ''''), ''Off''),
+               CASE st.ledger_type_desc WHEN ''APPEND_ONLY_LEDGER_TABLE'' THEN ''AppendOnly''
+                                        WHEN ''UPDATABLE_LEDGER_TABLE'' THEN ''Updatable''
+                                        ELSE ''Off'' END
+          FROM #Tables t WITH (NOLOCK)
+          JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + ''.'' + t.[Name])
+         WHERE t.NewTable = 0'
+
+    IF EXISTS (SELECT 1 FROM #DeployedLedger WHERE Declared <> Deployed)
+    BEGIN
+      DECLARE @v_LedgerTable NVARCHAR(1010), @v_LedgerDeclared NVARCHAR(12), @v_LedgerLive NVARCHAR(12)
+      SELECT TOP 1 @v_LedgerTable = FullName, @v_LedgerDeclared = Declared, @v_LedgerLive = Deployed
+        FROM #DeployedLedger WHERE Declared <> Deployed
+      RAISERROR('Table %s declares Ledger %s, but is currently deployed as %s. SQL Server has no ALTER that converts a table to or from a ledger table, and DROP does not remove one (it is retained as MSSQL_DroppedLedgerTable_<name>_<guid>), so SchemaSmith will not attempt it -- correct the declared Ledger to match, or migrate the data to a new table.', 16, 1, @v_LedgerTable, @v_LedgerDeclared, @v_LedgerLive)
+    END
+  END
+
+
 
   -- No-drop protection tier (#270): when protected mode is active the caller forces
   -- @DropTablesRemovedFromProduct to 0 so the drop block below never runs. Record the tables that
@@ -185,6 +281,12 @@ BEGIN TRY
                           FROM #Tables t WITH (NOLOCK)
                           WHERE t.[Schema] = tp.[Schema]
                             AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName)
+        -- A dropped ledger table is RETAINED as MSSQL_DroppedLedgerTable_<name>_<guid>, inheriting the
+        -- extended properties of the table it came from -- including the ProductName stamp this pass
+        -- selects on. Without this it reads as "a table removed from the product" on every later
+        -- deploy, and SQL Server refuses to drop it ("because it is a ledger dropped object"), so the
+        -- deploy fails permanently on an object the user cannot remove either.
+        AND tp.TableName NOT LIKE 'MSSQL[_]DroppedLedger%'
 
     IF EXISTS (SELECT * FROM #TablesRemovedFromProduct WITH (NOLOCK))
     BEGIN
@@ -461,6 +563,29 @@ BEGIN TRY
                                    AND c.[ColumnName] = cc.[ColumnName]
       WHERE NOT EXISTS (SELECT * FROM #ColumnChanges cc2 WITH (NOLOCK) WHERE cc2.[Schema] = cc.[Schema] AND cc2.[TableName] = cc.[TableName] AND cc2.[ColumnName] = cc.[ColumnName])
   
+  -- Engine-owned columns must never be considered for a drop. They exist because the table is a node or
+  -- edge table, not because anything declared them, so the drop-by-absence pass would otherwise try to
+  -- remove every one on the SECOND deploy -- and SQL Server refuses with "Internal graph columns cannot
+  -- be altered", which turns an unchanged package into a failing one.
+  --
+  -- sys.columns.graph_type is 2017+, so it is staged behind a version guard rather than referenced
+  -- statically: this proc body is kindled for the XML tier too, which reaches older servers. Empty below
+  -- 2017, where graph tables cannot exist.
+  IF OBJECT_ID('tempdb..#EngineOwnedColumns') IS NOT NULL DROP TABLE #EngineOwnedColumns
+  CREATE TABLE #EngineOwnedColumns (TableSchema NVARCHAR(256), TableName NVARCHAR(256), ColumnName NVARCHAR(256))
+  IF SchemaSmith.fn_ServerMajorVersion() >= 14
+    EXEC sp_executesql N'
+      INSERT INTO #EngineOwnedColumns (TableSchema, TableName, ColumnName)
+        SELECT SCHEMA_NAME(st.[schema_id]), st.[name], c.[name]
+          FROM sys.columns c WITH (NOLOCK)
+          JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = c.[object_id]
+         WHERE c.graph_type IS NOT NULL
+            -- Ledger''s generated columns (AS_TRANSACTION_ID_START/END, AS_SEQUENCE_NUMBER_START/END)
+            -- are engine-owned in the same way and hit the same failure: SQL Server refuses to drop
+            -- them, so an unchanged package fails on its second deploy. Identified by
+            -- generated_always_type rather than by name -- the type codes are what actually mean it.
+            OR c.generated_always_type IN (7, 8, 9, 10)'
+
   RAISERROR('Detect Column Drops', 10, 100) WITH NOWAIT
   INSERT #ColumnChanges ([Schema], [TableName], [ColumnName], [ColumnScript], [SpecialColumnScript], MustDropAndRecreate, MustSwapColumn, [DropOnly])
     SELECT t.[Schema], [TableName] = t.[Name], [ColumnName] = '[' + COLUMN_NAME + ']', '', '', 0, 0, 1
@@ -473,6 +598,9 @@ BEGIN TRY
                             AND c.[TableName] = t.[Name]
                             AND SchemaSmith.fn_StripBracketWrapping(c.[ColumnName]) = COLUMN_NAME)
         AND NOT (t.IsTemporal = 1 AND COLUMN_NAME IN ('ValidFrom', 'ValidTo'))
+        AND NOT EXISTS (SELECT 1 FROM #EngineOwnedColumns g WITH (NOLOCK)
+                         WHERE g.TableSchema = TABLE_SCHEMA AND g.TableName = TABLE_NAME
+                           AND g.ColumnName = COLUMN_NAME)
 
   -- #358: A DropOnly column whose drop is SUPPRESSED (env PreventDrop forces
   -- @DropColumnsRemovedFromProduct = 0, or the per-table cascade opts out) survives -- so its
@@ -575,6 +703,110 @@ BEGIN TRY
                                              AND b.[TableName] = a.[TableName]
     WHERE a.[DeclaredPos] < b.[DeclaredPos]
       AND a.[LivePos] > b.[LivePos]
+
+  RAISERROR('Check for SCHEMABINDING dependents blocking column changes', 10, 100) WITH NOWAIT
+  -- SQL Server refuses ALTER COLUMN while a SCHEMABINDING module references the column, with error 4922
+  -- ("one or more objects access this column") -- which names neither the module nor what to do about it.
+  -- The catalog knows both before the attempt, so say so instead of letting the engine's message through.
+  --
+  -- SchemaSmith does not drop these on its own initiative: a schemabound view or function is a SCRIPTED
+  -- object it does not own, so dropping one it cannot recreate would destroy something the package never
+  -- described. The supported answer is to move the module into a schema-bound object folder, which the
+  -- deploy drops before the table work and the after-tables object pass puts back in the same run.
+  --
+  -- sys.sql_modules.is_schema_bound and sys.sql_expression_dependencies both predate the 2008 floor, so
+  -- these are safe to reference statically.
+  IF EXISTS (SELECT 1 FROM #ColumnChanges WITH (NOLOCK))
+  BEGIN
+    -- The chain is TRANSITIVE, and the catalog does not hand it over. sys.sql_expression_dependencies
+    -- reports only the module bound DIRECTLY to the table, so a flat list holds the inner view but not an
+    -- outer one bound to it -- and dropping the inner one then fails with "because it is being referenced
+    -- by object <outer>". Walk it, record how deep each module sits, and drop deepest-first. This is the
+    -- ordering #323 asked for.
+    IF OBJECT_ID('tempdb..#SbChain') IS NOT NULL DROP TABLE #SbChain
+    ;WITH SbWalk AS (
+      SELECT d.referencing_id AS ModuleId, 1 AS Depth,
+             CONVERT(NVARCHAR(600), cc.[Schema] + '.' + cc.[TableName] + '.' + cc.[ColumnName]) AS Blocks
+        FROM #ColumnChanges cc WITH (NOLOCK)
+        JOIN sys.sql_expression_dependencies d WITH (NOLOCK)
+          ON d.referenced_id = OBJECT_ID(cc.[Schema] + '.' + cc.[TableName])
+        JOIN sys.sql_modules m WITH (NOLOCK)
+          ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+       WHERE d.referenced_minor_id = 0
+          OR d.referenced_minor_id = COLUMNPROPERTY(d.referenced_id,
+                 SchemaSmith.fn_StripBracketWrapping(cc.[ColumnName]), 'ColumnId')
+      UNION ALL
+      -- A module bound to a module already in the chain must come out BEFORE it. The depth cap is a
+      -- cycle guard: SQL Server does not permit a schemabinding cycle, but a recursive CTE with no
+      -- ceiling turns any catalog oddity into a runaway query rather than an error.
+      SELECT d.referencing_id, w.Depth + 1, w.Blocks
+        FROM SbWalk w
+        JOIN sys.sql_expression_dependencies d WITH (NOLOCK) ON d.referenced_id = w.ModuleId
+        JOIN sys.sql_modules m WITH (NOLOCK)
+          ON m.[object_id] = d.referencing_id AND m.is_schema_bound = 1
+       WHERE w.Depth < 32
+    )
+    SELECT ModuleId, MAX(Depth) AS Depth, MIN(Blocks) AS Blocks
+      INTO #SbChain
+      FROM SbWalk
+     GROUP BY ModuleId
+    OPTION (MAXRECURSION 32)
+
+    -- An indexed view is dropped and recreated by IndexedViewQuench already, so it is not ours to name
+    -- or to drop. Removing it here keeps both the blocked list and the drop chain honest.
+    DELETE #SbChain
+      FROM #SbChain c
+     WHERE EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
+                    WHERE i.[object_id] = c.ModuleId AND i.index_id > 0)
+    DECLARE @v_SbBlocked NVARCHAR(MAX) =
+      STUFF((SELECT ', ' + OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId) + ' (blocks ' + c.Blocks + ')'
+               FROM #SbChain c
+              ORDER BY c.Depth, OBJECT_NAME(c.ModuleId)
+                FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+
+    -- WITH ENCRYPTION returns NULL from OBJECT_DEFINITION, so NOTHING can put such a module back --
+    -- not SchemaSmith, and not the package's own script, which could not have been extracted from the
+    -- server either. Dropping one would be unrecoverable, so it is refused even when the option is on,
+    -- and refused BEFORE anything is dropped so a partial run cannot leave it destroyed.
+    DECLARE @v_SbEncrypted NVARCHAR(MAX) =
+      STUFF((SELECT ', ' + OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId)
+               FROM #SbChain c
+              WHERE OBJECT_DEFINITION(c.ModuleId) IS NULL
+              ORDER BY OBJECT_NAME(c.ModuleId)
+                FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+
+    IF @v_SbEncrypted IS NOT NULL
+      RAISERROR('Column change blocked by an ENCRYPTED schema-bound module: %s. Its definition cannot be read from the server, so nothing can recreate it once dropped -- DropSchemaBoundDependents deliberately does not extend to it. Remove SCHEMABINDING or the encryption from the listed module(s).', 16, 1, @v_SbEncrypted)
+
+    IF @v_SbBlocked IS NOT NULL AND @DropSchemaBoundDependents = 0
+      RAISERROR('Column change blocked by SCHEMABINDING: %s. SQL Server will not alter a column while a schema-bound module references it, and SchemaSmith will not drop a scripted object it cannot put back. Move the listed module(s) into a schema-bound object folder (QuenchSlot AfterTablesObjects) and set DropSchemaBoundDependents so the deploy can drop them around the table work and the after-tables object pass recreates them, or remove SCHEMABINDING from them.', 16, 1, @v_SbBlocked)
+
+    IF @v_SbBlocked IS NOT NULL AND @DropSchemaBoundDependents = 1
+    BEGIN
+      -- The audit is written set-based here rather than generated into the script below, so this proc
+      -- has two levels of quoting instead of three.
+      INSERT SchemaSmith.ChangeAudit ([SessionId], [ObjectType], [ObjectName], [ActionType])
+        SELECT @@SPID, 'schemaBoundModule',
+               OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId),
+               CASE WHEN @WhatIf = 1 THEN 'wouldDrop' ELSE 'dropped' END
+          FROM #SbChain c
+
+      -- Deepest first: an outer module bound to an inner one has to come out before it.
+      DECLARE @v_SbDropSql NVARCHAR(MAX) =
+        (SELECT 'RAISERROR(''  Drop schema-bound module '
+                + OBJECT_SCHEMA_NAME(c.ModuleId) + '.' + OBJECT_NAME(c.ModuleId)
+                + ' - blocks a column change; the after-tables object pass recreates it'', 10, 100) WITH NOWAIT' + CHAR(13) + CHAR(10)
+                + 'DROP ' + CASE WHEN so.type = 'V' THEN 'VIEW' ELSE 'FUNCTION' END + ' '
+                + QUOTENAME(OBJECT_SCHEMA_NAME(c.ModuleId)) + '.'
+                + QUOTENAME(OBJECT_NAME(c.ModuleId)) + CHAR(13) + CHAR(10)
+           FROM #SbChain c
+           JOIN sys.objects so WITH (NOLOCK) ON so.[object_id] = c.ModuleId
+          ORDER BY c.Depth DESC, OBJECT_NAME(c.ModuleId)
+            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)')
+
+      IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SbDropSql ELSE EXEC(@v_SbDropSql)
+    END
+  END
 
   RAISERROR('Elect tables for rebuild', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#RebuildElection') IS NOT NULL DROP TABLE #RebuildElection
@@ -874,10 +1106,14 @@ BEGIN TRY
                                            ORDER BY COL_NAME(ic.[object_id], ic.column_id) FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '') + ')'
                             ELSE '' END +
                        CASE WHEN si.has_filter = 1 THEN ' WHERE ' + SchemaSmith.fn_StripParenWrapping(si.filter_definition) ELSE '' END +
-                       CASE WHEN (si.[type] NOT IN (5, 6) AND ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE'))
-                              OR (si.[type] IN (5, 6) AND ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
-                            THEN ' WITH (DATA_COMPRESSION=' + ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT + ')'
-                            ELSE '' END
+                       -- One WITH clause built from an option list. CRITICAL: this string and the
+                       -- #IndexChanges comparison string below must be byte-identical, or an index
+                       -- carrying one of these options is dropped and recreated on EVERY deploy. Each
+                       -- option is emitted only when set, so an index without them produces exactly the
+                       -- string it produced before they existed and deployed packages do not churn.
+                       -- FILLFACTOR is deliberately absent from both -- it has its own opt-in rebuild
+                       -- path (UpdateFillFactor), and folding it in here would rebuild on ordinary drift.
+                       CASE WHEN o.[WithOptions] <> '' THEN ' WITH (' + STUFF(o.[WithOptions], 1, 2, '') + ')' ELSE '' END
     INTO #ExistingIndexes
     FROM #Tables t WITH (NOLOCK)
     JOIN sys.indexes si WITH (NOLOCK) ON si.[object_id] = OBJECT_ID(t.[Schema] + '.' + t.[Name])
@@ -887,6 +1123,12 @@ BEGIN TRY
     LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
                                             AND p.index_id = si.index_id
     LEFT JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
+    CROSS APPLY (SELECT [WithOptions] =
+                   CASE WHEN (si.[type] NOT IN (5, 6) AND ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE'))
+                             OR (si.[type] IN (5, 6) AND ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
+                        THEN ', DATA_COMPRESSION=' + ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT ELSE '' END +
+                   CASE WHEN si.ignore_dup_key = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
+                   CASE WHEN si.is_padded = 1 THEN ', PAD_INDEX=ON' ELSE '' END) o
     WHERE t.NewTable = 0
       AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
 
@@ -924,6 +1166,12 @@ BEGIN TRY
     JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
                                  AND ei.[xTableName] = i.[TableName]
                                  AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+    CROSS APPLY (SELECT [WithOptions] =
+                   CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
+                             OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
+                        THEN ', DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) ELSE '' END +
+                   CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
+                   CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END) o
     WHERE EXISTS (SELECT * 
                     FROM sys.indexes si WITH (NOLOCK)
                     WHERE si.[object_id] = OBJECT_ID(ei.[xSchema] + '.' + ei.[xTableName]) 
@@ -937,10 +1185,7 @@ BEGIN TRY
                                  WHEN i.[ColumnStore] = 1 AND i.[Clustered] = 0 THEN ' (' + i.[IncludeColumns] + ')'
                                  ELSE '' END +
                             CASE WHEN RTRIM(ISNULL(i.[FilterExpression], '')) <> '' THEN ' WHERE ' + i.[FilterExpression] ELSE '' END +
-                            CASE WHEN (i.[ColumnStore] = 0 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('NONE', 'ROW', 'PAGE'))
-                                   OR (i.[ColumnStore] = 1 AND RTRIM(ISNULL(i.[CompressionType], '')) IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
-                                 THEN ' WITH (DATA_COMPRESSION=' + RTRIM(ISNULL(i.[CompressionType], '')) + ')'
-                                 ELSE '' END
+                            CASE WHEN o.[WithOptions] <> '' THEN ' WITH (' + STUFF(o.[WithOptions], 1, 2, '') + ')' ELSE '' END
   
   RAISERROR('Detect Index Renames', 10, 100) WITH NOWAIT
   IF OBJECT_ID('tempdb..#IndexRenames') IS NOT NULL DROP TABLE #IndexRenames

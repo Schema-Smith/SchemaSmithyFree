@@ -27,7 +27,7 @@
           },
           "ObjectType": {
             "type": "string",
-            "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|Synonyms|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Collations|Publications|Events"
+            "pattern": "None|Views|Functions|Procedures|Triggers|Schemas|DataTypes|FullTextCatalogs|FullTextStopLists|XMLSchemaCollections|DDLTriggers|IndexedViews|Synonyms|SchemaBoundViews|SchemaBoundFunctions|DomainTypes|EnumTypes|CompositeTypes|TriggerFunctions|WindowFunctions|Aggregates|Sequences|Rules|MaterializedViews|Collations|Publications|Events"
           },
           "ShouldApplyExpression": {
             "type": "string",
@@ -42,9 +42,6 @@
     },
     "ScriptTokens": {
       "type": "object"
-    },
-    "UpdateFillFactor": {
-      "type": "boolean"
     },
     "BaselineValidationScript": {
       "type": "string"
@@ -86,12 +83,6 @@
       "type": "boolean"
     },
     "DropCheckConstraintsRemovedFromProduct": {
-      "type": "boolean"
-    },
-    "DropExcludeConstraintsRemovedFromProduct": {
-      "type": "boolean"
-    },
-    "DropStatisticsRemovedFromProduct": {
       "type": "boolean"
     },
     "DropIndexesRemovedFromProduct": {

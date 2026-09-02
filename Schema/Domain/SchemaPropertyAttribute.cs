@@ -32,5 +32,22 @@ namespace Schema.Domain
         // Required applies -- an engine without the concept has no exception to make.
         public string RequiredUnless { get; set; }
         public bool SingleOrArray { get; set; }
+
+        /// <summary>
+        /// The engines this property applies to. Empty (the default) means every engine, so scoping is
+        /// opt-in and an undecorated property behaves exactly as it always has.
+        /// <para><b>Why an attribute rather than a platform subclass.</b> Template and Product are shared
+        /// types. Moving a single-engine setting onto SqlServerTemplate works, but a setting that applies
+        /// to <i>two</i> engines -- DropStatisticsRemovedFromProduct and UpdateFillFactor apply to SQL
+        /// Server and PostgreSQL but not MySQL/MariaDB -- would have to be declared in two subclasses,
+        /// with two JsonProperty Orders to keep in sync. Product has no subclasses at all, and MariaDB
+        /// shares MySqlTemplate, so a MariaDB-only setting would have nowhere to live. One attribute
+        /// expresses all of those.</para>
+        /// <para>This scopes what is EMITTED into the .json-schema files. The property still exists on the
+        /// class, so nothing at deploy time changes; because the generated schemas carry
+        /// additionalProperties:false, setting a property on the wrong platform becomes a schema
+        /// violation that --Validate already reports -- no separate rule is needed for it.</para>
+        /// </summary>
+        public Platform[] Platforms { get; set; } = [];
     }
 }

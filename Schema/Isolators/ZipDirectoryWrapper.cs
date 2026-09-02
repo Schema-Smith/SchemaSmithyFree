@@ -55,6 +55,10 @@ public class ZipDirectoryWrapper : IDirectory
     public string[] GetDirectories(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
     public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
     public IEnumerable<string> EnumerateFileSystemEntries(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
+    // Not implemented for the same reason as EnumerateFiles above: a zip-backed package is not walked
+    // this way. Kept in the same shape as its siblings rather than returning empty, so a caller that
+    // reaches it fails loudly instead of silently seeing no files.
+    public IEnumerable<TimestampedFile> EnumerateFilesWithTimestamps(string path, string searchPattern, SearchOption searchOption) => throw new NotImplementedException();
     public void Delete(string path, bool recursive = false) => throw new NotImplementedException();
     public void Move(string sourceDirName, string destDirName) => throw new NotImplementedException();
     public string GetCurrentDirectory() => throw new NotImplementedException();

@@ -207,6 +207,41 @@ Custom script folders are how you make the schema package fit *your* deployment 
 
 ---
 
+
+## PostgreSQL Extensions
+
+SchemaSmith has no `Extensions` property, and does not need one. An extension is database-scoped and is not part of any table, so it is deployed the same way schemas and collations are — as a **scripted object**, in a folder you declare.
+
+Add the folder to the template and put one file per extension in it:
+
+```json
+{
+  "Name": "Main",
+  "ScriptFolders": [
+    { "FolderPath": "Extensions", "QuenchSlot": "Objects" }
+  ]
+}
+```
+
+```sql
+-- Templates/Main/Extensions/vector.sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+`QuenchSlot: Objects` runs the folder **before** the tables, which is what you want when a column's type comes from the extension — `vector`, `citext`, `hstore`, `postgis` all need the extension in place before the table that uses them is created.
+
+> **Warning:** Object scripts run on **every** quench, so the script must be idempotent. `CREATE EXTENSION IF NOT EXISTS` is; a bare `CREATE EXTENSION` fails on the second deploy.
+
+### What SchemaSmith will and will not do
+
+- **Create it** when the script says so, on every target the template reaches.
+- **Never remove it.** Scripted objects are not dropped by absence — that applies only to tables, their components, and materialized views. Deleting the file stops SchemaSmith creating the extension; it does not uninstall one that is already there. That is deliberate: `DROP EXTENSION` cascades into every column, index, and constraint that depends on its types, which is not something a package edit should be able to do.
+- **Never upgrade it.** Pin a version with `CREATE EXTENSION … VERSION '1.2'` if you need one. `ALTER EXTENSION … UPDATE` runs migration scripts written by the extension's author, so it belongs in a migration script you control, not in a schema deploy.
+
+### Privileges
+
+`CREATE EXTENSION` usually needs superuser; PostgreSQL 13+ relaxes that to the database owner for *trusted* extensions. If the deploy user has neither, the script fails with PostgreSQL's own permission error — install the extension once as an administrator and the idempotent script becomes a no-op from then on.
+
 ## Default Folders
 
 When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills in a platform-specific default set. Each platform's defaults reflect the object types and lifecycle stages that platform actually supports.
@@ -228,6 +263,8 @@ When `Template.json` does not declare its own `ScriptFolders`, SchemaSmith fills
 | `Synonyms/` | Objects | Synonyms |
 | `Triggers/` | AfterTablesObjects | Triggers |
 | `DDLTriggers/` | AfterTablesObjects | DDLTriggers |
+| `SchemaBound Views/` | AfterTablesObjects | SchemaBoundViews |
+| `SchemaBound Functions/` | AfterTablesObjects | SchemaBoundFunctions |
 | `Table Data/` | TableData | — |
 | `After Scripts/` | After | — |
 
@@ -444,7 +481,13 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FullTextIndex` | object or array | `null` | Full-text index on the table -- a single definition, or an array of conditional variants. See [Full-Text Index (SQL Server)](#full-text-index-sql-server). |
 | `UpdateFillFactor` | bool | `false` | When `true`, index fill factors on this table are updated to match JSON definitions during quench. |
 | `EnableCDC` | bool | `false` | When `true`, the table is enabled for change data capture. Changing a tracked table's columns rotates to a new capture instance rather than discarding history -- see [Change Data Capture (SQL Server)](#change-data-capture-sql-server). |
+| `EnableChangeTracking` | bool | `false` | When `true`, the table is enabled for SQL Server change tracking. Requires Change Tracking enabled on the database -- see [Change Tracking (SQL Server)](#change-tracking-sql-server). Unrelated to the full-text index option also spelled `ChangeTracking`. |
+| `TrackColumnsUpdated` | bool | `false` | Only meaningful with `EnableChangeTracking`. When `true`, change tracking records **which columns** changed, not merely that the row did, at the cost of extra tracking storage. |
 | `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
+| `FileStreamFileGroup` | string | `null` | The table's `FILESTREAM_ON` filegroup, as a **name only**. `null` means the database's default FILESTREAM filegroup. Effectively immutable -- SQL Server refuses to reassign a table that already has one, so a declared name differing from the deployed one fails rather than being ignored. See [FILESTREAM (SQL Server)](#filestream-sql-server). |
+| `TextImageFileGroup` | string | `null` | The table's `TEXTIMAGE_ON` filegroup -- where large-object data lands -- as a **name only**. `null` means the default. Large-object columns are `text`, `ntext`, `image`, `xml`, and the `(MAX)` types; **a FILESTREAM column does not count**. Declaring it on a table with no large-object column is refused by name, because SQL Server rejects `TEXTIMAGE_ON` outright there (error 1709). Create-time only, like the other two placement clauses: a declared name that differs from the deployed one fails rather than being ignored. |
+| `GraphType` | string | `null` | `"Node"` or `"Edge"` creates the table `AS NODE` / `AS EDGE`. `null` or `"None"` is an ordinary table. **Create-time only** -- SQL Server has no `ALTER` that converts a table to or from a graph table, so changing this on a deployed table is refused rather than attempted. Requires SQL Server 2017; below that the table deploys as an ordinary one and the change is reported through `UnsupportedFeaturePolicy`. The graph pseudo-columns SQL Server adds are never extracted and never dropped. |
+| `Ledger` | string | `null` | `"AppendOnly"` or `"Updatable"` creates a tamper-evident ledger table. `null` or `"Off"` is an ordinary table. Cannot be combined with `IsTemporal` -- a ledger table manages its own history, and SQL Server reports it as non-temporal. Requires SQL Server 2022; below that the table deploys as an ordinary one and the change is reported through `UnsupportedFeaturePolicy`. **Close to permanent:** there is no `ALTER` to or from a ledger table, and `DROP` does not remove one -- SQL Server retains it under a generated name -- so changing this on a deployed table is refused. |
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
 | `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
 | `HistoryRetentionPeriod` | string | `null` | Retention for the temporal history table, as the SQL Server token (e.g. `"5 YEARS"`, `"90 DAYS"`, `"INFINITE"`). `null` leaves retention unmanaged. |
@@ -456,7 +499,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `Schema` | string | `"public"` | Database schema. Use double-quote notation in extracted files (e.g., `"\"sales\""`). |
 | `Statistics` | array | `[]` | Extended statistics definitions. |
 | `ExcludeConstraints` | array | `[]` | Exclusion constraint definitions. See [Exclude Constraints (PostgreSQL)](#exclude-constraints-postgresql). |
-| `RowLevelSecurity` | bool | `false` | Enables row-level security on the table. |
+| `RowLevelSecurity` | bool | `false` | Enables row-level security on the table. **On its own this denies everything:** a table with row-level security enabled and no policy returns no rows to anyone but its owner, so pair it with `Policies`.
+| `Policies` | array | `[]` | Row-level security policy definitions. See [Row-Level Security Policies (PostgreSQL)](#row-level-security-policies-postgresql). |
 | `ForceRowLevelSecurity` | bool | `false` | When `true`, row-level security is enforced even for the table owner. |
 | `AccessMethod` | string | `null` | Storage access method (e.g., `"heap"`). |
 | `PersistenceType` | string | `null` | Persistence override (e.g., `"UNLOGGED"`, `"TEMPORARY"`). |
@@ -550,9 +594,22 @@ Every entry in the `Columns` array defines one column. The shared shape is small
 | `OldName` | string | `""` | Previous column name for rename detection. Clear after the rename has deployed everywhere. |
 | `Extensions` | object | `null` | Custom metadata for this column. See [Custom Properties](custom-properties.md). |
 
+
+### `DataType` is passed through, not validated
+
+`DataType` is free text. SchemaSmith does not keep a list of type names — it hands what you wrote to the engine, which is what lets you use any type the engine accepts, including ones newer than your copy of SchemaSmith. `IDENTITY` and `ROWGUIDCOL` ride the same string for the same reason.
+
+The trade is worth knowing before it surprises you:
+
+> **Warning:** A type that the target's engine version does not have fails with the **engine's own error**, not a SchemaSmith message. Declaring `UUID` against MariaDB 10.6 gets you `Unknown data type: 'UUID'`. Version-*gated features* degrade politely through [`UnsupportedFeaturePolicy`](schemaquench.md); types do not, because SchemaSmith has no list to check them against.
+
+Types this affects in practice: MariaDB `UUID` (10.7+), MySQL `VECTOR` (9.0+), SQL Server native `json` (2025+), and vector types generally.
+
+**If your fleet straddles the version**, gate the declaration rather than hoping: put the newer form behind a [`ShouldApplyExpression`](#conditional-application) so only targets that can take it receive it. That is the supported answer, and it works for any type, including ones added after this page was written.
+
 ### SQL Server column extras
 
-`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`. Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
+`CheckExpression`, `ComputedExpression`, `Persisted`, `Sparse`, `IsColumnSet`, `Collation`, `DataMaskFunction`, `FileStream` (see [FILESTREAM (SQL Server)](#filestream-sql-server)). Identity is part of the `DataType` string (`INT IDENTITY(1,1)`); `ROWGUIDCOL` likewise (`UNIQUEIDENTIFIER ROWGUIDCOL`).
 
 `IsColumnSet: true` declares `COLUMN_SET FOR ALL_SPARSE_COLUMNS` -- an XML column that aggregates the table's sparse columns. Available at the SQL Server 2008 floor, alongside `Sparse`. Adding a column set and the sparse columns it aggregates together in one deploy always works, whether the table is new or already exists. **Known limitation:** converting an *already-deployed* plain column into a column set in the same deploy that also introduces a brand-new sparse column is not supported -- the new sparse column commits before the conversion runs, and SQL Server refuses a column set on a table that already has a sparse column. The conversion works on its own (no new sparse columns in the same deploy, and none pre-existing on the table); combined with a new sparse column, it fails with SQL Server's own error.
 
@@ -672,9 +729,17 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ### SQL Server index extras
 
-`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`, `FileGroup`.
+`CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`,
+`FileGroup`, `IgnoreDuplicateKey`, `PadIndex`.
 
 `FileGroup` follows the same name-only, unset-means-unmanaged contract as the table property above. Worth knowing when declaring one on a table but not its indexes: an index created with no filegroup of its own follows **its table**, not the database default. An index is declared independently of its table's filegroup, which is what lets you keep a large table's data and its indexes on separate storage.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `IgnoreDuplicateKey` | bool | `false` | `IGNORE_DUP_KEY`. **This changes what your application sees, not how fast it runs.** With it off (the default), inserting a duplicate into a unique index fails the whole statement with error 2601 and nothing is written. With it on, the duplicate row is discarded with a warning and **the rest of the statement succeeds** — so a multi-row `INSERT` containing one duplicate lands the other rows instead of rolling back. Only valid on a unique index or unique constraint. |
+| `PadIndex` | bool | `false` | `PAD_INDEX` — applies `FillFactor` to the intermediate index pages as well as the leaf pages. Has no effect without a `FillFactor`, which is why it is declared alongside it rather than on its own. |
+
+**On indexed views:** SQL Server rejects `IGNORE_DUP_KEY` on a view index outright ("Cannot define an index on a view with ignore_dup_key index option"), so there is nothing to declare there. `PadIndex` **is** supported on an index inside an `Indexed Views/` definition.
 
 ### PostgreSQL index extras
 
@@ -999,6 +1064,8 @@ Custom statistics definitions in the `Statistics` array. SQL Server uses traditi
 
 Change Data Capture records inserts, updates, and deletes into a *change table* managed by SQL Server, so downstream readers can consume what happened rather than poll for differences. A table opts in with `"EnableCDC": true`. The tracked column set is fixed at the moment CDC is enabled, which is what makes schema change interesting: a capture instance created against three columns keeps capturing those three, whatever you do to the table afterwards.
 
+> **Before you start:** CDC must be enabled on the *database* first (`EXEC sys.sp_cdc_enable_db`). SchemaSmith does not do that for you -- it changes retention, cleanup jobs, and storage for every table in the database, which is not a decision one table's package should make. Declare `EnableCDC` without it and the table still deploys, but capture is reported as downgraded and named in the deploy log rather than skipped in silence.
+
 SQL Server's answer is to allow **two capture instances per table** so a new one can be stood up beside the old, and SchemaSmith uses exactly that. When a deploy changes the columns of a tracked table it:
 
 1. Leaves CDC running throughout -- the column work does not interrupt capture.
@@ -1010,6 +1077,75 @@ SQL Server's answer is to allow **two capture instances per table** so a new one
 > **Warning:** Because the old instance occupies one of the two slots, a **second** column change before you drop it has nowhere to rotate to. SchemaSmith refuses that deploy **before touching any column**, naming the tables at the limit and the command to clear them, so nothing is left half-applied. Drop the drained instance and re-run.
 
 Setting `EnableCDC` back to `false` disables capture on the table outright, which drops its capture instances and their history. That is a deliberate opt-out rather than a side effect of a schema change.
+
+---
+
+## Change Tracking (SQL Server)
+
+Change tracking answers a narrower question than [Change Data Capture](#change-data-capture-sql-server): *which rows changed since the version you last saw*, rather than a full history of what each change was. It is lighter, and it is the right tool when a downstream reader only needs to re-fetch the rows that moved. A table opts in with `"EnableChangeTracking": true`.
+
+> **Before you start:** Change Tracking must be enabled on the *database* first (`ALTER DATABASE <db> SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)`). SchemaSmith does not do that for you -- it sets retention and auto-cleanup for every table in the database. Declare `EnableChangeTracking` without it and the table still deploys, but tracking is reported as downgraded and named in the deploy log rather than skipped in silence.
+
+The table also needs a **primary key** -- SQL Server refuses to enable change tracking without one. SchemaSmith enables tracking after it creates the table's indexes and constraints, so a primary key declared in the same package is already in place.
+
+### Tracking which columns changed
+
+`"TrackColumnsUpdated": true` records *which columns* changed rather than only that the row did, which lets a reader skip rows whose relevant columns are untouched. It costs extra tracking storage, so it is off by default.
+
+> **Warning:** SQL Server has no in-place alter for this option -- changing it requires disabling and re-enabling change tracking, which **discards the tracking baseline**. Every consumer of that table must then re-synchronize in full, and `CHANGE_TRACKING_MIN_VALID_VERSION` reports the new baseline. SchemaSmith performs the change because you asked for it, and names the table and the consequence in the deploy log so the resynchronization is not a surprise.
+
+Removing `EnableChangeTracking` (or setting it to `false`) disables tracking on the table, which likewise discards its tracking information.
+
+### Not the full-text option
+
+Full-text indexes carry an unrelated option also spelled `ChangeTracking`, with values `AUTO`, `MANUAL`, and `OFF` -- it governs how a full-text index refreshes, and has nothing to do with table change tracking. See [Full-Text Index (SQL Server)](#full-text-index-sql-server).
+
+---
+
+## FILESTREAM (SQL Server)
+
+FILESTREAM stores a `VARBINARY(MAX)` column's value as a file on an NTFS filegroup instead of in the row, which suits large blobs — documents, images, media — that you want in the database's transactional and backup story without paying for them in every row read. Declare it with `"FileStream": true` on the column.
+
+> **Before you start:** FILESTREAM must be enabled on the *server* (a Windows-level setting plus `sp_configure 'filestream access level'`) and the *database* must have a FILESTREAM filegroup. SchemaSmith creates neither — the server setting is not reachable from T-SQL at all, and creating the filegroup means choosing a filesystem path on the target, which belongs to whoever owns the database. Without them the column still deploys, as a plain `VARBINARY(MAX)`, and the storage change is reported as downgraded rather than applied in silence.
+
+FILESTREAM is a Windows-only SQL Server feature — it is not supported on SQL Server on Linux at any version.
+
+### The ROWGUIDCOL requirement is stricter than it looks
+
+SQL Server requires the table to carry a non-null `UNIQUEIDENTIFIER` column with the `ROWGUIDCOL` property, **covered by a single-column PRIMARY KEY or UNIQUE constraint**. The part that catches people out:
+
+| Covering the ROWGUIDCOL column with… | Accepted? |
+|---|---|
+| `"PrimaryKey": true` | yes |
+| `"UniqueConstraint": true` | yes |
+| `"Unique": true` (a unique *index*) | **no** |
+| nothing | no |
+
+A unique index looks equivalent and is not. Declare the covering index entry with `"UniqueConstraint": true`, and declare the ROWGUIDCOL column itself as part of its `DataType` — `"DataType": "UNIQUEIDENTIFIER ROWGUIDCOL"` — the same way `IDENTITY` is declared.
+
+SchemaSmith does not invent the ROWGUIDCOL column for you. A column it added by itself would appear in no package and vanish on the next extract-and-redeploy round trip. Declaring FILESTREAM without a usable one fails with a message naming the exact package change to make, rather than SQL Server's error 5505, which mentions ROWGUIDCOL but never the constraint-versus-index distinction.
+
+```json
+{
+  "Schema": "[dbo]",
+  "Name": "[Document]",
+  "Columns": [
+    { "Name": "[Id]", "DataType": "INT", "Nullable": false },
+    { "Name": "[RowGuid]", "DataType": "UNIQUEIDENTIFIER ROWGUIDCOL", "Nullable": false, "Default": "NEWID()" },
+    { "Name": "[Content]", "DataType": "VARBINARY(MAX)", "Nullable": true, "FileStream": true }
+  ],
+  "Indexes": [
+    { "Name": "[PK_Document]", "IndexColumns": "[Id]", "PrimaryKey": true, "Unique": true },
+    { "Name": "[UQ_Document_RowGuid]", "IndexColumns": "[RowGuid]", "UniqueConstraint": true }
+  ]
+}
+```
+
+### Choosing the filegroup
+
+`FileStreamFileGroup` names the table's `FILESTREAM_ON` filegroup. Leave it unset and the table uses the database's default FILESTREAM filegroup. It is effectively immutable: SQL Server refuses to reassign a table that already has one, so a declared name that differs from the deployed one fails rather than being quietly ignored — the same posture [`FileGroup`](#sql-server-sqlservertable) takes.
+
+Note that dropping the last FILESTREAM column does **not** release the table's FILESTREAM filegroup assignment; the binding outlives the columns.
 
 ---
 
@@ -1098,6 +1234,62 @@ PostgreSQL exclusion constraints are declared in the `ExcludeConstraints` array.
   "ExcludeColumns": [
     { "Column": "room_id",        "Operator": "="  },
     { "Column": "reserved_period", "Operator": "&&" }
+  ]
+}
+```
+
+---
+
+## Row-Level Security Policies (PostgreSQL)
+
+Row-level security policies are declared in the `Policies` array on a PostgreSQL table.
+
+`RowLevelSecurity` and `Policies` are two halves of one feature. Enabling row-level security without
+declaring a policy denies everything: PostgreSQL returns no rows to any user except the table owner. If a
+table has `RowLevelSecurity` set, it needs at least one permissive policy to be readable.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | -- | Policy name. Required, and unique per table. |
+| `Permissive` | string | `"PERMISSIVE"` | `"PERMISSIVE"` policies are OR-ed together; `"RESTRICTIVE"` policies are AND-ed on top of them. A table with only restrictive policies still returns nothing, because none of them grant access in the first place. |
+| `Command` | string | `"ALL"` | Which statement the policy governs: `"ALL"`, `"SELECT"`, `"INSERT"`, `"UPDATE"`, or `"DELETE"`. |
+| `Roles` | string | `"PUBLIC"` | Comma-separated roles the policy applies to. Roles are not created by SchemaSmith -- naming one that does not exist fails with PostgreSQL's own error. |
+| `UsingExpression` | string | `null` | The `USING` expression: which existing rows are visible. Omit for an INSERT-only policy, where PostgreSQL does not accept one. |
+| `WithCheckExpression` | string | `null` | The `WITH CHECK` expression: which new or updated rows are allowed. When omitted on a policy that has `UsingExpression`, PostgreSQL applies the `USING` expression to writes as well. |
+| `ShouldApplyExpression` | string | `null` | Conditional inclusion. |
+| `VariantName` | string | `null` | Optional label for a conditional variant. Max 128 characters. |
+| `Extensions` | object | `{}` | Custom metadata. |
+
+**Policies are dropped when they leave the package**, and unlike indexes and statistics there is no opt-out
+flag. A policy left behind after it stops being declared is a live access-control rule that nobody
+declared -- a stronger reason to converge than exists for a performance object.
+
+**A changed expression is not detected.** PostgreSQL stores `USING` and `WITH CHECK` expressions
+normalised, so comparing them against the declared text reports a change on every deploy. SchemaQuench
+converges the *set* of policies -- creating declared policies that are missing and dropping ones that are
+no longer declared -- but editing an expression on an existing policy has no effect. Rename the policy, or
+remove it and add it back under a new name, to change an expression.
+
+### Example -- tenant isolation
+
+```json
+{
+  "Schema": "public",
+  "Name": "invoice",
+  "RowLevelSecurity": true,
+  "Policies": [
+    {
+      "Name": "tenant_read",
+      "Command": "SELECT",
+      "Roles": "app_reader",
+      "UsingExpression": "tenant_id = current_setting('app.tenant_id')::int"
+    },
+    {
+      "Name": "tenant_write",
+      "Command": "INSERT",
+      "Roles": "app_writer",
+      "WithCheckExpression": "tenant_id = current_setting('app.tenant_id')::int"
+    }
   ]
 }
 ```

@@ -246,49 +246,88 @@ EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCAddCol
         conn.ChangeDatabase(_mainDb);
         using var cmd = conn.CreateCommand();
 
-        // Create table with 3 columns and enable CDC
-        cmd.CommandText = @"
+        try
+        {
+            // IDEMPOTENT SETUP, and it is load-bearing: this batch runs under ExecuteWithDeadlockRetry, and
+            // sp_cdc_enable_table is deadlock-prone against the CDC scan job. A retry after the CREATE has
+            // already succeeded re-runs the whole batch and fails with "There is already an object named
+            // 'CDCDropColTest'" -- which is what this test did in CI, intermittently and for years, and it
+            // reads like a product failure rather than a retried batch.
+            DropCdcTestTable(cmd);
+
+            cmd.CommandText = @"
 CREATE TABLE dbo.CDCDropColTest (Id INT NOT NULL, Val NVARCHAR(100) NULL, Extra INT NULL)
 EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'CDCDropColTest', @role_name = NULL";
-        ExecuteWithDeadlockRetry(cmd);
+            ExecuteWithDeadlockRetry(cmd);
 
-        // Verify initial captured column count
-        cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')";
-        Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(3), "Should capture 3 columns initially");
+            // Verify initial captured column count
+            cmd.CommandText = "SELECT COUNT(*) FROM cdc.captured_columns cc JOIN cdc.change_tables ct ON cc.object_id = ct.object_id WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')";
+            Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(3), "Should capture 3 columns initially");
 
-        // Quench: remove the Extra column
-        var json = """
-            {
-                "Schema": "[dbo]",
-                "Name": "[CDCDropColTest]",
-                "EnableCDC": true,
-                "Columns": [
-                    {"Name": "[Id]", "DataType": "INT", "Nullable": false},
-                    {"Name": "[Val]", "DataType": "NVARCHAR(100)", "Nullable": true}
-                ]
-            }
-            """;
-        RunTableQuenchProc(cmd, json);
+            // Quench: remove the Extra column
+            var json = """
+                {
+                    "Schema": "[dbo]",
+                    "Name": "[CDCDropColTest]",
+                    "EnableCDC": true,
+                    "Columns": [
+                        {"Name": "[Id]", "DataType": "INT", "Nullable": false},
+                        {"Name": "[Val]", "DataType": "NVARCHAR(100)", "Nullable": true}
+                    ]
+                }
+                """;
+            RunTableQuenchProc(cmd, json);
 
-        // Assert CDC is still enabled
-        cmd.CommandText = "SELECT is_tracked_by_cdc FROM sys.tables WHERE object_id = OBJECT_ID('dbo.CDCDropColTest')";
-        Assert.That(cmd.ExecuteScalar(), Is.EqualTo(true), "CDC should remain enabled");
+            // Assert CDC is still enabled
+            cmd.CommandText = "SELECT is_tracked_by_cdc FROM sys.tables WHERE object_id = OBJECT_ID('dbo.CDCDropColTest')";
+            Assert.That(cmd.ExecuteScalar(), Is.EqualTo(true), "CDC should remain enabled");
 
-        // Assert the capture instance now tracks 2 columns (Extra is gone)
-        // Rotation leaves BOTH instances in place, so scope this to the one this deploy created --
-        // an unscoped count sums the old and new column sets and means nothing.
-        cmd.CommandText = @"SELECT COUNT(*) FROM cdc.captured_columns cc
-                            WHERE cc.object_id = (SELECT TOP 1 ct.object_id FROM cdc.change_tables ct
-                                                   WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')
-                                                   ORDER BY ct.create_date DESC, ct.object_id DESC)";
-        Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(2), "Refreshed capture instance should track only 2 columns");
+            // Assert the capture instance now tracks 2 columns (Extra is gone)
+            // Rotation leaves BOTH instances in place, so scope this to the one this deploy created --
+            // an unscoped count sums the old and new column sets and means nothing.
+            cmd.CommandText = @"SELECT COUNT(*) FROM cdc.captured_columns cc
+                                WHERE cc.object_id = (SELECT TOP 1 ct.object_id FROM cdc.change_tables ct
+                                                       WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')
+                                                       ORDER BY ct.create_date DESC, ct.object_id DESC)";
+            Assert.That((int)cmd.ExecuteScalar(), Is.EqualTo(2), "Refreshed capture instance should track only 2 columns");
+        }
+        finally
+        {
+            // In a finally, because a failed assertion above otherwise leaks the table AND its capture
+            // instances into every later test in this fixture.
+            DropCdcTestTable(cmd);
+        }
+    }
 
-        // Cleanup
-        cmd.CommandText = "EXEC sys.sp_cdc_disable_table @source_schema = N'dbo', @source_name = N'CDCDropColTest', @capture_instance = N'dbo_CDCDropColTest'";
+    /// <summary>
+    /// Removes dbo.CDCDropColTest and EVERY capture instance on it.
+    /// <para>Every instance, not just <c>dbo_CDCDropColTest</c>: the rotation this test exercises
+    /// deliberately leaves the original instance in place alongside the new one, so naming a single
+    /// instance leaves the other behind — and SQL Server permits only two per table, so the leftover
+    /// eventually makes <c>sp_cdc_enable_table</c> fail for reasons that have nothing to do with the test
+    /// that trips over it.</para>
+    /// </summary>
+    private static void DropCdcTestTable(IDbCommand cmd)
+    {
+        cmd.CommandText = @"
+IF OBJECT_ID('dbo.CDCDropColTest') IS NOT NULL
+BEGIN
+    DECLARE @ci SYSNAME
+    DECLARE ci_cur CURSOR LOCAL FAST_FORWARD FOR
+        SELECT ct.capture_instance FROM cdc.change_tables ct
+         WHERE ct.source_object_id = OBJECT_ID('dbo.CDCDropColTest')
+    OPEN ci_cur
+    FETCH NEXT FROM ci_cur INTO @ci
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        EXEC sys.sp_cdc_disable_table @source_schema = N'dbo', @source_name = N'CDCDropColTest', @capture_instance = @ci
+        FETCH NEXT FROM ci_cur INTO @ci
+    END
+    CLOSE ci_cur
+    DEALLOCATE ci_cur
+    DROP TABLE dbo.CDCDropColTest
+END";
         cmd.ExecuteNonQuery();
-        cmd.CommandText = "DROP TABLE dbo.CDCDropColTest";
-        cmd.ExecuteNonQuery();
-        conn.Close();
     }
 
     [Test]

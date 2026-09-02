@@ -43,6 +43,73 @@ BEGIN
     END
   END
 
+  -- Ledger and IsTemporal describe overlapping engine state and cannot both be declared. An updatable
+  -- ledger table is created WITH (SYSTEM_VERSIONING = ON, LEDGER = ON), while IsTemporal turns system
+  -- versioning on separately -- and sys.tables reports a ledger table as NON_TEMPORAL_TABLE, so the two
+  -- together leave the package permanently disagreeing with the target. Refused rather than degraded:
+  -- neither reading is more correct than the other, so guessing would be worse than stopping.
+  IF EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE ISNULL([Ledger], 'Off') <> 'Off' AND IsTemporal = 1)
+  BEGIN
+    SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK)
+                          WHERE ISNULL(T.[Ledger], 'Off') <> 'Off' AND T.IsTemporal = 1
+                           FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    SET @v_msg = 'Ledger and IsTemporal cannot both be declared on the same table -- a ledger table manages its own history, and SQL Server reports it as non-temporal; table(s): ' + LEFT(@v_list, 1700) + '.'
+    RAISERROR(@v_msg, 16, 1)
+  END
+
+  -- Graph tables (AS NODE / AS EDGE) -- SQL Server 2017 (major 14). Below it the clause is not syntax at
+  -- all, so an ungated emit fails with a bare parser error naming nothing useful. Clearing GraphType
+  -- deploys the table as an ordinary one, which keeps its columns and data shape intact and loses only
+  -- the graph semantics -- a Reduced degrade rather than a skipped table.
+  IF @v_major < 14 AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE [GraphType] IN ('Node', 'Edge'))
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE T.[GraphType] IN ('Node', 'Edge')
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'Graph tables (AS NODE / AS EDGE) require SQL Server 2017 (detected major ' +
+                   CONVERT(NVARCHAR(10), @v_major) + '); table(s): ' + LEFT(@v_list, 1800) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'graph table (SQL Server 2017)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE T.[GraphType] IN ('Node', 'Edge')
+      RAISERROR('  Graph node/edge skipped: requires SQL Server 2017 - the table deploys as an ordinary table (downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET [GraphType] = 'None' WHERE [GraphType] IN ('Node', 'Edge')
+    END
+  END
+
+  -- Ledger tables -- SQL Server 2022 (major 16). Below it the clause is not syntax, so an ungated emit
+  -- fails with a bare parser error. Clearing Ledger deploys an ordinary table, which keeps the columns
+  -- and data shape and loses only the tamper-evidence -- a Reduced degrade.
+  --
+  -- Worth knowing which way this one degrades: a ledger table cannot later be converted or dropped, so
+  -- accidentally CREATING one is much harder to undo than not creating one. Degrading down is the safe
+  -- direction here in a way it is not for most features.
+  IF @v_major < 16 AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE ISNULL([Ledger], 'Off') <> 'Off')
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE ISNULL(T.[Ledger], 'Off') <> 'Off'
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'Ledger tables require SQL Server 2022 (detected major ' +
+                   CONVERT(NVARCHAR(10), @v_major) + '); table(s): ' + LEFT(@v_list, 1800) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'ledger table (SQL Server 2022)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE ISNULL(T.[Ledger], 'Off') <> 'Off'
+      RAISERROR('  Ledger skipped: requires SQL Server 2022 - the table deploys as an ordinary table (downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET [Ledger] = 'Off' WHERE ISNULL([Ledger], 'Off') <> 'Off'
+    END
+  END
+
+
+
   -- Dynamic data masking (MASKED WITH) -- SQL Server 2016 (major 13).
   IF @v_major < 13 AND EXISTS (SELECT 1 FROM #Columns WITH (NOLOCK) WHERE RTRIM(ISNULL([DataMaskFunction], '')) <> '')
   BEGIN
@@ -90,4 +157,113 @@ BEGIN
   -- Columnstore (nonclustered 2012 / clustered 2014) -- drops the unsupported index rows from #Indexes.
   -- Shared with the --IndexOnly path, which calls this proc directly (it has only #Indexes).
   EXEC SchemaSmith.DegradeUnsupportedColumnStore
+
+  -- Change Data Capture -- gated by a DATABASE-scoped toggle rather than a server version, which is why
+  -- it sits apart from the version blocks above.
+  --
+  -- THIS BLOCK EXISTS BECAUSE ITS ABSENCE WAS A SILENT NO-OP. ModifiedTableQuench wraps its whole
+  -- enable/disable pass in IF EXISTS (... is_cdc_enabled = 1) with no ELSE, so a package declaring
+  -- "EnableCDC": true against a database where CDC is off deployed green, left the table untracked, and
+  -- said nothing anywhere. The user found out when someone asked where the change history went.
+  --
+  -- SchemaSmith deliberately does NOT run sp_cdc_enable_db to fix it up. That call changes retention,
+  -- cleanup jobs and storage for the entire database; enabling it because one table asked would trade a
+  -- silent no-op for a silent side effect on every other table in it. Refusing loudly is the safe half
+  -- of that trade, and it is only safe because this block makes the refusal visible.
+  --
+  -- Clearing EnableCDC afterwards is what makes the later pass's behaviour deliberate rather than
+  -- incidental: it then finds nothing to do because the declaration was withdrawn here and recorded,
+  -- not because a guard happened to skip it.
+  IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE database_id = DB_ID() AND is_cdc_enabled = 1)
+     AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE EnableCDC = 1)
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE T.EnableCDC = 1
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'Change Data Capture requires CDC enabled on the database (EXEC sys.sp_cdc_enable_db), ' +
+                   'which SchemaSmith does not do for you because it is database-wide; table(s): ' +
+                   LEFT(@v_list, 1700) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'CDC (database not enabled)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE T.EnableCDC = 1
+      RAISERROR('  CDC skipped: not enabled on this database (EXEC sys.sp_cdc_enable_db to allow it - downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET EnableCDC = 0 WHERE EnableCDC = 1
+    END
+  END
+
+
+  -- Table-level Change Tracking -- the second feature gated by a DATABASE-scoped toggle, and written
+  -- this way from the start precisely because the CDC block above had to be retrofitted after shipping
+  -- the silent version of it. Not the full-text CHANGE_TRACKING option, which is unrelated.
+  --
+  -- Same refusal for the same reason: ALTER DATABASE ... SET CHANGE_TRACKING = ON sets retention and
+  -- auto-cleanup for the whole database, so SchemaSmith names the tables that asked instead of
+  -- reconfiguring the database around one declaration.
+  IF NOT EXISTS (SELECT 1 FROM sys.change_tracking_databases WHERE database_id = DB_ID())
+     AND EXISTS (SELECT 1 FROM #Tables WITH (NOLOCK) WHERE EnableChangeTracking = 1)
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + T.[Schema] + '.' + T.[Name] FROM #Tables T WITH (NOLOCK) WHERE T.EnableChangeTracking = 1
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'Change Tracking requires it enabled on the database (ALTER DATABASE ... SET CHANGE_TRACKING = ON), ' +
+                   'which SchemaSmith does not do for you because it is database-wide; table(s): ' +
+                   LEFT(@v_list, 1700) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'Change Tracking (database not enabled)', T.[Schema] + '.' + T.[Name], 'downgraded'
+          FROM #Tables T WITH (NOLOCK) WHERE T.EnableChangeTracking = 1
+      RAISERROR('  Change Tracking skipped: not enabled on this database (ALTER DATABASE ... SET CHANGE_TRACKING = ON to allow it - downgraded)', 10, 100) WITH NOWAIT
+      UPDATE #Tables SET EnableChangeTracking = 0 WHERE EnableChangeTracking = 1
+    END
+  END
+
+
+  -- FILESTREAM columns -- the third database-scoped prerequisite, and the only one that degrades to a
+  -- still-usable column rather than to a missing capability. Dropping FILESTREAM leaves a plain
+  -- VARBINARY(MAX): the data still stores and reads, it just lives in-row instead of on the filegroup.
+  -- That is a storage difference, not a correctness one, so the column is kept and the change reported.
+  --
+  -- Two prerequisites, neither of which SchemaSmith creates: FILESTREAM enabled on the SERVER
+  -- (sp_configure + a Windows-level setting, which is not even reachable from T-SQL) and a FILESTREAM
+  -- filegroup on the DATABASE. Creating the filegroup would mean choosing a filesystem path on the
+  -- target, which belongs to whoever owns the database.
+  --
+  -- Clearing [FileStream] is what re-routes these columns: MissingTableAndColumnQuench withholds
+  -- FileStream = 1 columns from the create/add pass, so zeroing the flag puts them back on the normal
+  -- path. ColumnScript is rewritten to match, because it was assembled at parse time.
+  IF EXISTS (SELECT 1 FROM #Columns WITH (NOLOCK) WHERE [FileStream] = 1)
+     AND (CONVERT(INT, ISNULL(SERVERPROPERTY('FilestreamEffectiveLevel'), 0)) = 0
+          OR NOT EXISTS (SELECT 1 FROM sys.filegroups WHERE [type] = 'FD'))
+  BEGIN
+    IF @v_policy = 'fail'
+    BEGIN
+      SET @v_list = STUFF((SELECT ', ' + C.[Schema] + '.' + C.[TableName] + '.' + C.[ColumnName]
+                             FROM #Columns C WITH (NOLOCK) WHERE C.[FileStream] = 1
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+      SET @v_msg = 'FILESTREAM requires it enabled on the server and a FILESTREAM filegroup on the database, ' +
+                   'neither of which SchemaSmith creates for you; column(s): ' + LEFT(@v_list, 1700) + '.'
+      RAISERROR(@v_msg, 16, 1)
+    END
+    ELSE
+    BEGIN
+      INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+        SELECT @@SPID, 'FILESTREAM (server or filegroup not available)',
+               C.[Schema] + '.' + C.[TableName] + '.' + C.[ColumnName], 'downgraded'
+          FROM #Columns C WITH (NOLOCK) WHERE C.[FileStream] = 1
+      RAISERROR('  FILESTREAM skipped: not enabled on this server, or the database has no FILESTREAM filegroup. The column(s) deploy as plain VARBINARY(MAX) - downgraded', 10, 100) WITH NOWAIT
+      UPDATE #Columns
+        SET [ColumnScript] = REPLACE([ColumnScript], ' FILESTREAM', ''), [FileStream] = 0
+        WHERE [FileStream] = 1
+    END
+  END
+
 END

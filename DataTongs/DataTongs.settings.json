@@ -7,18 +7,27 @@
         "Schema": "", // SQL Server / PostgreSQL only. When set AND the target template has a SchemaIdentificationScript, DataTongs runs in schema-template mode: merge scripts use unqualified filenames and {{SchemaName}} destination refs. Mirrors SchemaTongs Source.Schema for round-trip symmetry.
         "Port": "", // Optional for all platforms — overrides default port
         "Platform": "", // SqlServer, PostgreSQL, MySQL, or MariaDb
+        // "IntegratedSecurity": true, // SQL Server: use Windows Authentication and IGNORE any
+                                       // User/Password above — for when a credential is present
+                                       // but should not be used.
+        // "CompatEncoding": "", // Override the payload encoding chosen for the source server
+                                 // (Json | Xml). Blank = choose automatically.
         "ConnectionProperties": {
             "TrustServerCertificate": "True" // Trust self-signed certificates (recommended for development)
         }
     },
     "ScriptPath": "", // Output path for generated merge scripts
     "ContentPath": "", // Output path for raw data content files
+    "TemplatePath": "", // Template directory the generated scripts belong to. Blank = alongside ScriptPath.
     "Tables": [
         // { "Name": "", "KeyColumns": "", "SelectColumns": "", "Filter": "", "MergeType": "" }
     ],
     "ShouldCast": {
         "OutputContentFiles": false, // Write raw data to content files
         "OutputScripts": true, // Generate merge scripts
+        // "DeliveryEncoding": "Json", // Json (default) | Xml — how the content payload is encoded.
+                                       // Xml is what makes data delivery work on the legacy SQL Server
+                                       // tier, where the JSON functions do not exist.
         "TokenizeScripts": false, // SQL Server only — replace database name with script tokens in output
         "DisableTriggers": false, // Wrap data delivery in trigger disable/enable
         "MergeUpdate": true, // Include UPDATE clause in merge scripts
@@ -28,5 +37,6 @@
         // PostgreSQL only
         "DisableRules": false, // Disable rules during data delivery
         "UpdateDescendents": true // Update child/dependent tables
-    }
+    },
+    "ScriptTokens": {} // Token values substituted into generated scripts, e.g. { "MainDB": "AppDb" }.
 }

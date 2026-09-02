@@ -99,6 +99,20 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 107)]
         public bool EnableCDC { get; set; }
 
+        // Table-level Change Tracking (#change-tracking). Distinct from the FullTextIndex option spelled
+        // WITH CHANGE_TRACKING = AUTO|MANUAL|OFF, which is unrelated and already implemented.
+        // Requires Change Tracking enabled on the DATABASE (sys.change_tracking_databases). SchemaSmith
+        // does not turn that on -- ALTER DATABASE ... SET CHANGE_TRACKING = ON changes retention and
+        // cleanup for every table in the database. Declaring it without the database toggle is reported
+        // through UnsupportedFeaturePolicy rather than silently skipped.
+        [JsonProperty(Order = 112)]
+        public bool EnableChangeTracking { get; set; }
+
+        // Only meaningful when EnableChangeTracking is true; ignored otherwise. Records WHICH columns
+        // changed, not merely that the row did, at the cost of extra tracking storage.
+        [JsonProperty(Order = 113)]
+        public bool TrackColumnsUpdated { get; set; }
+
         // Filegroup placement (#filegroups): a NAME only -- never a physical file path, which would make
         // the package non-portable across environments. Null means "SQL Server's own default filegroup",
         // preserving today's behavior for every existing package. SchemaSmith does not create filegroups
@@ -107,6 +121,54 @@ namespace Schema.Domain.SqlServer
         // item) -- it errors if the declared name differs from where the table already lives.
         [JsonProperty(Order = 111, NullValueHandling = NullValueHandling.Ignore)]
         public string FileGroup { get; set; }
+        // FILESTREAM_ON <filegroup>: which FILESTREAM filegroup this table's FILESTREAM data lands on.
+        // Name only, like FileGroup, and null means "the database's default FILESTREAM filegroup".
+        // Effectively immutable once assigned -- ALTER TABLE ... SET (FILESTREAM_ON = ...) fails 1726 on a
+        // table that already has one -- so a declared name that differs from the live one is refused
+        // rather than silently ignored, the same posture FileGroup takes.
+        [JsonProperty(Order = 114, NullValueHandling = NullValueHandling.Ignore)]
+        public string FileStreamFileGroup { get; set; }
+
+        // TEXTIMAGE_ON <filegroup>: which filegroup this table's large-object data lands on -- text,
+        // ntext, image, xml, and the (MAX) types. The third placement clause alongside FileGroup (ON) and
+        // FileStreamFileGroup (FILESTREAM_ON); supporting two of the three was an accident of what got
+        // built rather than a decision.
+        //
+        // Create-time only, like both siblings: there is no ALTER for LOB placement, so a declared name
+        // that differs from the live one is refused rather than silently ignored. SQL Server also REJECTS
+        // the clause outright (error 1709) on a table with no large-object column, so it is emitted only
+        // when one is declared and refused by name otherwise.
+        [JsonProperty(Order = 117, NullValueHandling = NullValueHandling.Ignore)]
+        public string TextImageFileGroup { get; set; }
+        // Graph tables (#graph): "Node" or "Edge" appends AS NODE / AS EDGE to the CREATE TABLE.
+        // Null or "None" is an ordinary table.
+        //
+        // Create-time only, and that is the whole design constraint: SQL Server has no ALTER for it --
+        // ALTER TABLE ... SET (AS NODE) is not syntax at all (error 156) -- so changing this on a table
+        // that already exists is refused by name rather than attempted.
+        //
+        // The system-generated pseudo-columns SQL Server adds ($node_id, $edge_id, graph_id and the edge
+        // *_id pair) are excluded from extraction via sys.columns.graph_type; see #402.
+        [SchemaProperty(Pattern = "None|Node|Edge")]
+        [JsonProperty(Order = 115, NullValueHandling = NullValueHandling.Ignore)]
+        public string GraphType { get; set; }
+        // Ledger tables (#ledger, SQL Server 2022): "AppendOnly" or "Updatable". Null or "Off" is an
+        // ordinary table.
+        //
+        // Create-time only, like GraphType -- ALTER TABLE ... SET (LEDGER = ON) is error 102, not syntax --
+        // so a change on a deployed table is refused rather than attempted.
+        //
+        // Cannot be combined with IsTemporal: an updatable ledger table is created WITH
+        // (SYSTEM_VERSIONING = ON, LEDGER = ON), which overlaps what IsTemporal turns on, and sys.tables
+        // then reports the table as NON_TEMPORAL_TABLE -- so both declarations together leave the package
+        // permanently disagreeing with the target.
+        //
+        // Note that DROP on a ledger table is not a drop: SQL Server retains it as
+        // MSSQL_DroppedLedgerTable_<name>_<guid>. Those retained objects are excluded from extraction
+        // (#403).
+        [SchemaProperty(Pattern = "Off|AppendOnly|Updatable")]
+        [JsonProperty(Order = 116, NullValueHandling = NullValueHandling.Ignore)]
+        public string Ledger { get; set; }
 
     }
 }

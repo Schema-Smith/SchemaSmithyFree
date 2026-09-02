@@ -271,6 +271,21 @@ public class SchemaTongs
         PreFlightVersionGuard.CheckOrThrow(info, server, targetDb);
     }
 
+    // Detected SOURCE server major, kept so extraction queries can gate a filter on a catalog column
+    // that does not exist on older servers. 0 until version detection has run.
+    private int _sourceMajor;
+
+    /// <summary>
+    /// Excludes a LIVE ledger view (<c>&lt;table&gt;_Ledger</c>), which a ledger table generates and
+    /// which carries no engine-reserved name prefix — only <c>sys.tables.ledger_view_id</c> identifies
+    /// it. That column is 2022+, so the clause is added only when the source is new enough to have it;
+    /// referencing it statically would fail to bind on an older server.
+    /// </summary>
+    private string LedgerViewFilter() =>
+        _sourceMajor >= 16
+            ? Environment.NewLine + "   AND NOT EXISTS (SELECT 1 FROM sys.tables lt WITH (NOLOCK) WHERE lt.ledger_view_id = o.object_id)"
+            : "";
+
     public void CastTemplate()
     {
         _stopwatch.Start();
@@ -922,6 +937,10 @@ public class SchemaTongs
         switch (_platform.GetBasePlatform())
         {
             case Platform.SqlServer:
+                // #323: only SQL Server has SCHEMABINDING, so these two folders are declared here
+                // rather than alongside the cross-platform Views entry above.
+                if (_includeViews) folders.Add(ResolveFolderName("SchemaBound Views", ScriptObjectType.SchemaBoundViews));
+                if (_includeUserDefinedFunctions) folders.Add(ResolveFolderName("SchemaBound Functions", ScriptObjectType.SchemaBoundFunctions));
                 if (_includeSchemas) folders.Add(ResolveFolderName("Schemas", ScriptObjectType.Schemas));
                 if (_includeUserDefinedTypes) folders.Add(ResolveFolderName("DataTypes", ScriptObjectType.DataTypes));
                 if (_includeUserDefinedFunctions) folders.Add(ResolveFolderName("Functions", ScriptObjectType.Functions));
@@ -1030,13 +1049,15 @@ public class SchemaTongs
                         FactoryContainer.ResolveOrCreate<IConfigurationRoot>()[SettingsKeys.SourceCompatEncoding],
                         info.CompatibilityLevel, info.ServerComparable);
                 sourceMajor = info?.ServerComparable ?? 0;
+                _sourceMajor = sourceMajor;
             }
 
             _progressLog.Info("Kindling The Forge");
             // Bake the detected SOURCE major version into SchemaSmith.fn_ServerMajorVersion so the version-gated
             // compare/extraction helpers resolve the source version on a genuine pre-2016 binary (where the
             // former SESSION_CONTEXT transport is unavailable); 0 falls back to the server property on modern.
-            ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding, serverMajorVersion: sourceMajor);
+            ForgeKindler.KindleTheForge(command, _platform, encoding: _ingestEncoding, serverMajorVersion: sourceMajor,
+                                        allowReadOnlyTarget: true);
 
             if (_includeTables) ExtractTableDefinitions(command, targetDb);
             if (_includeSchemas) ScriptSqlServerSchemas(command);
@@ -1465,10 +1486,13 @@ SELECT s.name AS SchemaName, sy.name AS SynonymName, sy.base_object_name
     {
         _progressLog.Info("Casting Function Scripts");
         var castPath = GetCastPath(ScriptObjectType.Functions, "Functions");
+        // #323: a SCHEMABINDING module goes to its own folder on the AfterTablesObjects slot,
+        // so a column change it blocks can drop it and this pass can put it back afterwards.
+        var sbCastPath = GetCastPath(ScriptObjectType.SchemaBoundFunctions, "SchemaBound Functions");
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
 
         command.CommandText = @"
-SELECT s.name AS SchemaName, o.name AS ObjectName
+SELECT s.name AS SchemaName, o.name AS ObjectName, CONVERT(BIT, ISNULL(sm.is_schema_bound, 0)) AS IsSchemaBound
   FROM sys.objects o
   JOIN sys.schemas s ON o.schema_id = s.schema_id
   LEFT JOIN sys.sql_modules sm ON o.object_id = sm.object_id
@@ -1477,7 +1501,7 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
    AND s.name <> 'SchemaSmith'
  ORDER BY s.name, o.name";
 
-        var functions = new List<(string Schema, string Name)>();
+        var functions = new List<(string Schema, string Name, bool SchemaBound)>();
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
@@ -1486,11 +1510,11 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 var name = reader.GetString(1);
                 if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
-                functions.Add((schema, name));
+                functions.Add((schema, name, reader.GetBoolean(2)));
             }
         }
 
-        foreach (var (schema, name) in functions)
+        foreach (var (schema, name, schemaBound) in functions)
         {
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "FUNCTION");
             if (sql == null) continue;
@@ -1548,12 +1572,13 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 sql = sql.Substring(0, firstGoEnd) + dependencyBlock + sql.Substring(firstGoEnd);
             }
 
-            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            if (schemaBound) DirectoryWrapper.GetFromFactory().CreateDirectory(sbCastPath);
+            var fileName = ResolveOutputPath(schemaBound ? sbCastPath : castPath, EncodeObjectFileName(schema, name, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Functions++; continue; }
             sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-            ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Functions);
+            ValidateAndHandleScript(command.Connection, fileName, sql, schemaBound ? ScriptObjectType.SchemaBoundFunctions : ScriptObjectType.Functions);
             _stats.Functions++;
         }
     }
@@ -1562,19 +1587,23 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
     {
         _progressLog.Info("Casting View Scripts");
         var castPath = GetCastPath(ScriptObjectType.Views, "Views");
+        // #323: a SCHEMABINDING module goes to its own folder on the AfterTablesObjects slot,
+        // so a column change it blocks can drop it and this pass can put it back afterwards.
+        var sbCastPath = GetCastPath(ScriptObjectType.SchemaBoundViews, "SchemaBound Views");
         DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
 
         command.CommandText = @"
-SELECT s.name AS SchemaName, o.name AS ObjectName
+SELECT s.name AS SchemaName, o.name AS ObjectName, CONVERT(BIT, ISNULL(sm.is_schema_bound, 0)) AS IsSchemaBound
   FROM sys.objects o
   JOIN sys.schemas s ON o.schema_id = s.schema_id
   LEFT JOIN sys.sql_modules sm ON o.object_id = sm.object_id
  WHERE o.type = 'V'
    AND o.is_ms_shipped = 0
    AND s.name <> 'SchemaSmith'
+   AND o.name NOT LIKE 'MSSQL[_]DroppedLedgerView[_]%'" + LedgerViewFilter() + @"
  ORDER BY s.name, o.name";
 
-        var views = new List<(string Schema, string Name)>();
+        var views = new List<(string Schema, string Name, bool SchemaBound)>();
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
@@ -1583,21 +1612,22 @@ SELECT s.name AS SchemaName, o.name AS ObjectName
                 var name = reader.GetString(1);
                 if (!ShouldExtractFromSchema(schema)) continue;
                 if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower()) && !_objectsToCast.Contains($"{schema}.{name}".ToLower())) continue;
-                views.Add((schema, name));
+                views.Add((schema, name, reader.GetBoolean(2)));
             }
         }
 
-        foreach (var (schema, name) in views)
+        foreach (var (schema, name, schemaBound) in views)
         {
             var sql = ScriptSqlServerProgrammableObject(command, schema, name, "VIEW");
             if (sql == null) continue;
 
-            var fileName = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".sql"));
+            if (schemaBound) DirectoryWrapper.GetFromFactory().CreateDirectory(sbCastPath);
+            var fileName = ResolveOutputPath(schemaBound ? sbCastPath : castPath, EncodeObjectFileName(schema, name, ".sql"));
             if (ShouldSkipKnownBadScript(fileName)) { _stats.Views++; continue; }
             sql = RewriteSqlBodyForSchemaTemplate(sql, fileName);
             _progressLog.Info($"  Casting {fileName}");
             FileWrapper.GetFromFactory().WriteAllText(fileName, sql);
-            ValidateAndHandleScript(command.Connection, fileName, sql, ScriptObjectType.Views);
+            ValidateAndHandleScript(command.Connection, fileName, sql, schemaBound ? ScriptObjectType.SchemaBoundViews : ScriptObjectType.Views);
             _stats.Views++;
         }
     }
@@ -2127,7 +2157,7 @@ SELECT s.name AS SchemaName, v.name AS ViewName
             using var command = connection.CreateCommand();
 
             _progressLog.Info("Kindling The Forge");
-            ForgeKindler.KindleTheForge(command, _platform);
+            ForgeKindler.KindleTheForge(command, _platform, allowReadOnlyTarget: true);
 
             if (_includeTables) CastPostgreSqlTableDefinitions(command, targetDb);
             if (_includeSchemas) CastPostgreSqlSchemas(command);
@@ -2708,7 +2738,7 @@ SELECT mv.schemaname, mv.matviewname
                 command.ExecuteNonQuery();
 
                 _progressLog.Info("Kindling The Forge");
-                ForgeKindler.KindleTheForge(command, _platform);
+                ForgeKindler.KindleTheForge(command, _platform, allowReadOnlyTarget: true);
 
                 if (_includeTables) ExtractMySqlTableDefinitions(command, targetSchema);
                 if (_includeUserDefinedFunctions) ScriptMySqlFunctions(command, targetSchema);
@@ -2917,7 +2947,7 @@ SELECT TABLE_NAME
             command.CommandText = $@"
 SELECT TABLE_SCHEMA, TABLE_NAME
   FROM INFORMATION_SCHEMA.TABLES t
-  WHERE TABLE_TYPE = 'BASE TABLE'
+  WHERE TABLE_TYPE IN ('BASE TABLE', 'SYSTEM VERSIONED')
     AND TABLE_SCHEMA = '{EscapeSql(targetSchema)}'
     AND TABLE_SCHEMA <> 'SchemaSmith'
     AND TABLE_NAME NOT LIKE 'SchemaSmith\_%'
@@ -3089,6 +3119,23 @@ SELECT TABLE_SCHEMA, TABLE_NAME
     AND TABLE_NAME NOT LIKE 'MSPub[_]%'
     AND TABLE_NAME NOT IN ('dtproperties', 'sysdiagrams')
     AND TABLE_SCHEMA <> 'SchemaSmith'
+    -- A temporal history table is created BY the versioned table's declaration (IsTemporal plus the
+    -- HistoryTable* properties), so extracting it separately puts a second table file in the package
+    -- that the next deploy then tries to create in its own right. OBJECTPROPERTY is used rather than
+    -- sys.tables.temporal_type on purpose: it takes the property as a STRING, so on a pre-2016 server
+    -- it returns NULL instead of failing to bind -- a static temporal_type reference would be a
+    -- CREATE-time invalid-column error there. 1 = HISTORY_TABLE.
+    AND ISNULL(OBJECTPROPERTY(so.[object_id], 'TableTemporalType'), 0) <> 1
+    -- An updatable ledger table (2022+) spawns MSSQL_LedgerHistoryFor_<object_id>, whose
+    -- temporal_type is NON_TEMPORAL_TABLE, so the filter above does not reach it. The name carries an
+    -- object id from the source server, so the extracted file could not be deployed anywhere. Matched
+    -- by its engine-reserved prefix, the same way the replication tables above are.
+    AND TABLE_NAME NOT LIKE 'MSSQL[_]LedgerHistoryFor[_]%'
+    -- Dropping a ledger table does NOT remove it: SQL Server renames it to
+    -- MSSQL_DroppedLedgerTable_<name>_<guid> and leaves MSSQL_DroppedLedgerHistory_* beside it.
+    -- Both report is_ms_shipped = 0, and the History one has is_dropped_ledger_table = 0, so the
+    -- obvious flag misses it -- the engine-reserved name prefix is the reliable discriminator.
+    AND TABLE_NAME NOT LIKE 'MSSQL[_]DroppedLedger%'
   ORDER BY 1, 2
 ";
 

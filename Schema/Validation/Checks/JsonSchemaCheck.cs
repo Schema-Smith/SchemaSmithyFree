@@ -73,7 +73,7 @@ public sealed class JsonSchemaCheck : ISchemaCheck
         {
             var typeName = fileName.Split('.')[0];
             var domainType = GetTypeForSchemaFile(fileName, ctx.Platform);
-            var freshGenerated = SchemaGenerator.GenerateSchema(domainType, PlatformElementResolver(ctx.Platform));
+            var freshGenerated = SchemaGenerator.GenerateSchema(domainType, PlatformElementResolver(ctx.Platform), ctx.Platform);
 
             var schemaPath = Path.Combine(schemaDir, fileName);
             var committed = ReadCommittedSchema(file, schemaPath, findings);

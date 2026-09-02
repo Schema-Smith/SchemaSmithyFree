@@ -1,11 +1,26 @@
 {
+    // ---------------------------------------------------------------------------------------------
+    // COMMON — what almost every deployment sets.
+    // ---------------------------------------------------------------------------------------------
     "Target": {
         "Server": "",
         "User": "", // SQL Server: leave User and Password blank for Windows authentication
         "Password": "",
         "Port": "", // Optional for all platforms — overrides default port
+        "Platform": "", // SqlServer, PostgreSQL, MySQL, or MariaDb. Blank = inferred from the package.
+        // "IntegratedSecurity": true, // SQL Server: use Windows Authentication and IGNORE any User/Password
+                                       // left in this file — the opt-in for when a credential is present but
+                                       // should not be used. Absent = credential-based when one is supplied.
         "SecondaryServers": "", // SQL Server only — comma-separated list of secondary servers for Availability Groups
-        "ConnectionProperties": {},
+        // "UnsupportedFeaturePolicy": "warn", // warn (default) | fail — what to do when the target server
+                                              // is too old for a declared feature. warn degrades it and records
+                                              // a 'downgraded' audit row; fail refuses the deploy rather than
+                                              // shipping something quietly weaker.
+        // "CompatEncoding": "", // Override the model-payload encoding chosen for the target's compatibility
+                                 // level (Json | Xml). Blank = choose automatically. Diagnostic escape hatch.
+        "ConnectionProperties": {}, // Driver-level properties passed through verbatim, e.g.
+                                    // { "TrustServerCertificate": "True", "Encrypt": "True" }.
+                                    // The --Encrypt / --NoEncrypt switches write the right one of these per platform.
         "Templates": [], // When non-empty, only these templates run. Empty = all.
         "Databases": [], // When non-empty, only these databases are touched. Empty = all.
         "Schemas":   []  // When non-empty, only these schemas are touched (in schema templates). Empty = all.
@@ -14,10 +29,20 @@
         // run instead of its DatabaseIdentificationScript / SchemaIdentificationScript. Validated at
         // pre-flight against the loaded package. Absent = every template discovers its own targets.
     },
+    "SchemaPackagePath": "",
     "MaxThreads": 10,
     "WhatIfONLY": false, // Log all changes without executing them
-    "SchemaPackagePath": "",
-    "RunScriptsTwice": false, // Run object/[ALWAYS] scripts twice; both passes must succeed — an idempotency check, NOT dependency resolution (the retry loop handles dependencies)
+    "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
+    "DeliverData": true, // Execute data delivery (Table Data scripts and merge scripts)
+    "VerboseLogging": false, // Include PRINT messages and other informational messages in the logged output from the table updates and other scripts
+    "ScriptTokens": {},
+
+    // ---------------------------------------------------------------------------------------------
+    // ADVANCED — everything else SchemaQuench accepts. Commented entries show the default; uncomment
+    // to change it. Grouped rather than hidden: the power is discoverable without burying the basics.
+    // ---------------------------------------------------------------------------------------------
+
+    // --- Drop control -----------------------------------------------------------------------------
     "DropTablesRemovedFromProduct": true, // Drop tables not defined in the product
     // "DropUnknownIndexes": false, // Drop indexes not defined in the product — absent = inherit the product/template value (product default: don't drop unknown indexes)
     // "DropColumnsRemovedFromProduct": false, // Drop columns removed from the product definition — absent = inherit the product/template/table value (default: drop)
@@ -27,13 +52,45 @@
     // "DropStatisticsRemovedFromProduct": false, // Drop statistics removed from the product definition (SQL Server + PostgreSQL) — absent = inherit the product/template/table value (default: drop)
     // "DropIndexesRemovedFromProduct": false, // Drop product-owned indexes removed from the product definition (distinct from DropUnknownIndexes, which targets out-of-band indexes) — absent = inherit the product/template/table value (default: drop)
     // "PreventDrop": true, // No-drop protection tier: this environment never drops an object for being absent from the product (every Drop…RemovedFromProduct pass + DropUnknownIndexes is suppressed); each skipped drop is logged and reported in a PreventDropSummary manifest, and the run completes normally. Transient drop-then-recreate that applies a declared change is unaffected. Default off.
-    "UpdateTables": true, // Apply table structure changes (columns, indexes, constraints)
+    // "DropPeriodsRemovedFromProduct": true, // MariaDB. Drop an application-time period that is on the
+    //     table but not in the package. THE ONE DROP FLAG THAT DEFAULTS TO OFF: extraction omits the
+    //     Periods key when a table has none, so a package written before periods were supported -- or
+    //     extracted from MariaDB 10.4.3-11.3, where the catalog cannot report them -- carries no periods
+    //     even when the table has one. Turning this on says the package is genuinely the authority.
+
+    // --- Table rebuild policy ---------------------------------------------------------------------
+    // Rebuild a table (shadow copy → swap) instead of altering it column by column. Opt-in: with no
+    // policy declared anywhere, no table is ever rebuilt. The nearest level that declares one wins
+    // WHOLE — environment → product → template → table — so a table asking only for "ALWAYS" does not
+    // inherit a threshold from above it. A table whose live state cannot survive a copy (system
+    // versioning, CDC, replication, Change Tracking, logical replication, inheritance, partitioning)
+    // is refused by name rather than silently altered in place.
+    // "RebuildPolicyMode": "NEVER", // NEVER (default) | ALWAYS | THRESHOLD
+    // "RebuildPolicyThreshold": 3, // With THRESHOLD: rebuild once this many columns need modifying. Additions and removals are not counted — a rebuild saves nothing on those.
+    // "RebuildPolicyOnOrderMismatch": false, // Composes with ANY mode rather than replacing it: also rebuild when deployed column order has drifted from the package. Pairing it with NEVER asks for a rebuild on order drift and nothing else.
+
+    // --- MariaDB system-versioned tables -------------------------------------------------------
+    // MariaDB refuses every column change on a system-versioned table unless this is KEEP -- and KEEP
+    // does not merely permit the change, it applies it to the STORED HISTORY too, rewriting it to a
+    // shape it never actually had. That is a data-retention decision, so it is off by default and the
+    // engine refuses instead. Set KEEP only if rewriting history is what you want.
+    // "SystemVersioningAlterHistory": "KEEP",
+
+    // --- Helper objects (the Forge) ---------------------------------------------------------------
     "KindleTheForge": true, // Install SchemaSmith helper functions/procedures in target database
     "ForceReKindle": false, // Re-install helper objects regardless of kindle version — use after a failed/partial kindle or when debugging helper objects (CLI: --ForceReKindle)
+
+    // --- Migration tracking -----------------------------------------------------------------------
+    // "TrackRunOnceMigrations": true, // Record run-once migration scripts so they are not re-run. Setting false re-runs them every deploy — for development only.
+    // "PruneObsoleteMigrationTracking": true, // Remove tracking rows for migration scripts no longer in the package, so the tracking table reflects the package rather than accumulating forever.
+
+    // --- Execution ---------------------------------------------------------------------------------
+    "RunScriptsTwice": false, // Run object/[ALWAYS] scripts twice; both passes must succeed — an idempotency check, NOT dependency resolution (the retry loop handles dependencies)
     "CheckpointDirectory": "", // Directory for checkpoint files to enable resuming interrupted quenches
-    "DeliverData": true, // Execute data delivery (Table Data scripts and merge scripts)
-    "VerboseLogging": false, // Include PRINT messages and other informational messages in the logged output from the table updates and other scripts
+
+    // --- Diagnostics --------------------------------------------------------------------------------
     "FailureContextLines": 25, // Lines of per-scope context captured and shown for each failure in SchemaQuench - Failures.log (0 = disable capture)
     "BottleneckThresholdMs": 30000, // Slot operations slower than this (ms) are highlighted as bottlenecks in the deployment summary report
-    "ScriptTokens": {}
+    // "ArtifactPath": "", // Where resolved-SQL artifacts are written when a script fails. Blank = beside the log.
+    // "ScrubArtifacts": false // Apply log-hygiene scrubbing to those artifacts too. Off by default because an artifact exists to be debugged, and scrubbing can remove the value that explains the failure.
 }

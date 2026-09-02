@@ -822,4 +822,122 @@ public class SchemaGeneratorTests
                 Does.Contain("Recommended"));
         });
     }
+
+    // Platform scoping. Template and Product are shared types, so a setting that only applies to one
+    // engine was being emitted into every platform's schema file -- editors offered it everywhere and
+    // nothing said it did nothing. Platforms on SchemaPropertyAttribute scopes the EMIT.
+
+    [Test]
+    public void APlatformScopedProperty_IsOmittedForOtherPlatforms()
+    {
+        var mysql = SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, Platform.MySQL);
+
+        Assert.That((mysql["properties"] as JObject)?.Properties().Select(p => p.Name),
+            Does.Not.Contain("SqlServerOnly"),
+            "emitting it for MySQL is the bleed this exists to stop -- an editor offers a setting that "
+            + "does nothing, and additionalProperties:false cannot flag what it still lists");
+    }
+
+    [Test]
+    public void APlatformScopedProperty_IsEmittedForItsOwnPlatform()
+    {
+        var ss = SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, Platform.SqlServer);
+
+        Assert.That((ss["properties"] as JObject)?.Properties().Select(p => p.Name),
+            Does.Contain("SqlServerOnly"),
+            "a filter that dropped it everywhere would pass the omission test while deleting the setting");
+    }
+
+    [Test]
+    public void APropertyScopedToTwoPlatforms_IsEmittedForBoth()
+    {
+        // The case single inheritance cannot express without declaring the property twice, and the
+        // reason this is an attribute rather than a subclass move.
+        Assert.Multiple(() =>
+        {
+            foreach (var platform in new[] { Platform.SqlServer, Platform.PostgreSQL })
+                Assert.That((SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, platform)
+                        ["properties"] as JObject)?.Properties().Select(p => p.Name),
+                    Does.Contain("TwoEngines"), $"must survive for {platform}");
+
+            Assert.That((SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, Platform.MySQL)
+                    ["properties"] as JObject)?.Properties().Select(p => p.Name),
+                Does.Not.Contain("TwoEngines"), "and must not survive for an engine outside the set");
+        });
+    }
+
+    [Test]
+    public void MariaDb_IsScopedSeparatelyFromMySql()
+    {
+        // MariaDB folds to MySQL for the TYPE (there is no MariaDbTemplate), so scoping has to key on
+        // the actual platform. Folding here would make a MariaDB-only setting unexpressible.
+        Assert.Multiple(() =>
+        {
+            Assert.That((SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, Platform.MariaDb)
+                    ["properties"] as JObject)?.Properties().Select(p => p.Name),
+                Does.Contain("MariaDbOnly"));
+            Assert.That((SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, Platform.MySQL)
+                    ["properties"] as JObject)?.Properties().Select(p => p.Name),
+                Does.Not.Contain("MariaDbOnly"));
+        });
+    }
+
+    [Test]
+    public void APlatformScopedProperty_DocumentsItsPlatformsInTheDescription()
+    {
+        // Paul's explicit requirement: the schema file itself says which engines a decorated setting
+        // applies to. Filtering alone leaves a reader of one file unable to tell whether a property is
+        // universal or merely happens to apply here.
+        var ss = SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, Platform.SqlServer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ss["properties"]!["TwoEngines"]!["description"]!.Value<string>(),
+                Does.Contain("SQL Server").And.Contains("PostgreSQL"),
+                "both engines have to be named, not just the one whose file this is");
+            Assert.That(ss["properties"]!["Documented"]!["description"]!.Value<string>(),
+                Is.EqualTo("An existing description. SQL Server and PostgreSQL only."),
+                "the note is APPENDED to an existing description -- asserting only that the original text survives passes over a bug that silently drops the note whenever a property has its own description, "
+                + "which is exactly what a mutation of the append proved");
+        });
+    }
+
+    [Test]
+    public void AnUndecoratedProperty_IsEmittedForEveryPlatform()
+    {
+        // The negative half: scoping must be opt-in. A filter that treated "no Platforms" as "no
+        // platforms" would empty every schema file in the product.
+        foreach (var platform in new[] { Platform.SqlServer, Platform.PostgreSQL, Platform.MySQL, Platform.MariaDb })
+            Assert.That((SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass), t => t, platform)
+                    ["properties"] as JObject)?.Properties().Select(p => p.Name),
+                Does.Contain("Everywhere"), $"must survive for {platform}");
+    }
+
+    [Test]
+    public void WithNoPlatformGiven_EverythingIsEmitted()
+    {
+        // Back-compat: the platform-less overload is what most callers use, and it must not start
+        // dropping properties.
+        Assert.That((SchemaGenerator.GenerateSchema(typeof(PlatformScopedClass))["properties"] as JObject)?
+                .Properties().Select(p => p.Name),
+            Does.Contain("SqlServerOnly").And.Contains("MariaDbOnly"));
+    }
+
+    private class PlatformScopedClass
+    {
+        [SchemaProperty(Platforms = [Platform.SqlServer])]
+        public bool? SqlServerOnly { get; set; }
+
+        [SchemaProperty(Platforms = [Platform.SqlServer, Platform.PostgreSQL])]
+        public bool? TwoEngines { get; set; }
+
+        [SchemaProperty(Platforms = [Platform.MariaDb])]
+        public bool? MariaDbOnly { get; set; }
+
+        [SchemaProperty(Description = "An existing description.", Platforms = [Platform.SqlServer, Platform.PostgreSQL])]
+        public bool? Documented { get; set; }
+
+        public bool? Everywhere { get; set; }
+    }
+
 }

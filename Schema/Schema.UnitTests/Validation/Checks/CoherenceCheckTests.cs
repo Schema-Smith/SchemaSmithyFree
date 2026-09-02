@@ -3,6 +3,7 @@
 using System.Linq;
 using NUnit.Framework;
 using Schema.Domain;
+using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Validation;
 using Schema.Validation.Checks;
@@ -747,5 +748,82 @@ public class CoherenceCheckTests
         var findings = new CoherenceCheck().Run(ctx).ToList();
 
         Assert.That(findings, Is.Empty);
+    }
+
+    // Row-level security and Policies are two halves of one feature, and each half alone fails
+    // silently in an opposite direction. These are Warnings rather than Errors because both
+    // configurations are legal and deployable -- someone may genuinely manage policies outside the
+    // package -- but neither is likely to be what the author meant.
+
+    private static PostgreSqlTable PgTable(bool rls, params string[] policyNames)
+    {
+        var table = new PostgreSqlTable
+        {
+            Name = "invoice",
+            Schema = "public",
+            RowLevelSecurity = rls,
+            Columns = { new PostgreSqlColumn { Name = "id", DataType = "integer" } }
+        };
+        foreach (var name in policyNames)
+            table.Policies.Add(new PostgreSqlPolicy { Name = name, UsingExpression = "true" });
+        return table;
+    }
+
+    private static System.Collections.Generic.List<Finding> RunPg(PostgreSqlTable table)
+    {
+        var template = new Template { Name = "Main" };
+        template.Tables.Add(table);
+        var product = new Product
+        {
+            Name = "Acme",
+            Platform = Platform.PostgreSQL,
+            TemplateOrder = new System.Collections.Generic.List<string>()
+        };
+        return new CoherenceCheck().Run(new ValidationContext(product, [template], "pkg")).ToList();
+    }
+
+    [Test]
+    public void RowLevelSecurityWithNoPolicies_IsReported()
+    {
+        var finding = RunPg(PgTable(rls: true)).Single(f => f.Code == "SS-RLS-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(finding.Message, Does.Contain("no rows"),
+                "the message has to say what actually happens -- a reader who does not already know "
+                + "that PostgreSQL denies everything here will read 'no policies' as harmless. "
+                + finding.Message);
+        });
+    }
+
+    [Test]
+    public void PoliciesWithoutRowLevelSecurity_IsReported()
+    {
+        // The opposite failure, and the more dangerous one: the policies are created, so the package
+        // LOOKS secured, but PostgreSQL does not enforce any of them until RLS is enabled.
+        var finding = RunPg(PgTable(rls: false, "tenant_read")).Single(f => f.Code == "SS-RLS-002");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(finding.Message, Does.Contain("RowLevelSecurity"),
+                "and name the property that would enforce them. " + finding.Message);
+        });
+    }
+
+    [Test]
+    public void RowLevelSecurityWithPolicies_IsClean()
+    {
+        Assert.That(RunPg(PgTable(rls: true, "tenant_read")).Any(f => f.Code.StartsWith("SS-RLS-")),
+            Is.False);
+    }
+
+    [Test]
+    public void ATableWithNeither_IsClean()
+    {
+        // The negative half: a check that fired on absence would warn about every ordinary table in
+        // every PostgreSQL package.
+        Assert.That(RunPg(PgTable(rls: false)).Any(f => f.Code.StartsWith("SS-RLS-")), Is.False);
     }
 }

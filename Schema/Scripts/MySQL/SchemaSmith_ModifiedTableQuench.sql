@@ -591,6 +591,19 @@ BEGIN
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_RebuildFacts;
 
     -- =======================
+    -- STEP 2.96: SYSTEM-VERSIONED TABLES -- HISTORY-REWRITE OPT-IN
+    -- =======================
+    -- MariaDB refuses every column DDL on a system-versioned table unless
+    -- @@system_versioning_alter_history is KEEP, and KEEP rewrites the stored history to match the new
+    -- shape. That is a data-retention decision, so it is opted into and off by default. Delegated to a
+    -- procedure because MySQL will not CREATE a routine that merely mentions that variable -- verified
+    -- live on 8.0.45, ERROR 1193, even inside an unreachable IF VERSION() LIKE '%MariaDB%' branch.
+    -- System-variable resolution is not deferred the way column resolution is.
+    --
+    -- Placed here because STEP 2.9 below carries the first DDL this procedure executes.
+    CALL SchemaSmith_SetSystemVersioningAlterHistory(@ss_system_versioning_alter_history);
+
+    -- =======================
     -- STEP 2.9: DROP FOREIGN KEYS THAT BLOCK A COLUMN-LEVEL COLLATION CHANGE
     -- =======================
     -- Twin of the drop that guards the table-level CONVERT TO CHARACTER SET further down, hoisted here
@@ -3003,6 +3016,192 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8KCU;
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Step8TC;
     END IF;
+
+    -- =======================
+    -- STEP 9: ADD DECLARED APPLICATION-TIME PERIODS TO EXISTING TABLES
+    -- =======================
+    -- MariaDB `ALTER TABLE ... ADD PERIOD FOR <name>(start, end)`. A new table gets its periods inside
+    -- the CREATE (MissingTableAndColumnQuench); this is the existing-table half.
+    --
+    -- WHY LAST: a period can only be declared once its columns exist, and by this point every column
+    -- pass in this procedure has run. The ordering rule is satisfied by placement rather than by a
+    -- check that could drift out of step with it.
+    --
+    -- GATED ON 11.4, NOT 10.4.3, and the difference is the whole reason this is careful. Deciding
+    -- whether to ADD requires knowing whether the period is already present, and
+    -- INFORMATION_SCHEMA.PERIODS -- the only catalog that can answer -- does not arrive until 11.4.
+    -- Below that SchemaSmith_TablePeriodsJson returns '[]' because it genuinely cannot see, and acting
+    -- on that would emit ADD PERIOD on every deploy for a period that already exists and fail the run.
+    -- So below 11.4 an existing table is left alone and the reason is logged, rather than guessed at.
+    --
+    -- MySQL never reaches this: it has no periods, so _SchemaSmith_Periods is always empty there.
+    -- Enters when there is period work of EITHER kind. The declared-periods test alone was not enough:
+    -- removing a table's only period leaves _SchemaSmith_Periods empty for it, and MariaDB permits at
+    -- most one period per table, so gating solely on "something is declared" made the drop unreachable
+    -- in exactly the case it exists for.
+    -- Counted in TWO statements, not one OR-ed EXISTS. MySQL and MariaDB refuse to reference the same
+    -- TEMPORARY table twice in a single statement -- "Can't reopen table" (1137) -- and both arms need
+    -- _SchemaSmith_Tables. Folding them into one expression cost 37 tests across the suite.
+    SET @ss_pd_work = (SELECT COUNT(*) FROM _SchemaSmith_Periods pd
+                       INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+                       WHERE COALESCE(t.NewTable, 0) = 0);
+    SET @ss_pd_work = COALESCE(@ss_pd_work, 0) + (SELECT COUNT(*) FROM _SchemaSmith_Tables t
+                       WHERE COALESCE(t.NewTable, 0) = 0
+                         AND COALESCE(t.DropPeriodsRemovedFromProduct, @ss_drop_periods_removed, 0) = 1);
+
+    -- Enters when there is period work of EITHER kind. The declared-periods test alone was not enough:
+    -- removing a table's only period leaves _SchemaSmith_Periods empty for it, and MariaDB permits at
+    -- most one period per table, so gating solely on "something is declared" made the drop unreachable
+    -- in exactly the case it exists for.
+    IF COALESCE(@ss_pd_work, 0) > 0 THEN
+
+        IF VERSION() LIKE '%MariaDB%' AND SchemaSmith_ServerVersionNum() >= 1104 THEN
+
+            -- ---- DROP a period the package no longer declares -------------------------------------
+            -- Off unless asked for. Extraction OMITS the Periods key when a table has none, so a package
+            -- authored before periods existed -- or extracted from 10.4.3-11.3, where the catalog cannot
+            -- report them -- reads as "no periods declared" while the table plainly has one. Dropping on
+            -- that absence would remove a declaration the package never had the chance to make, which is
+            -- why this is the one drop-by-absence flag that defaults to FALSE.
+            --
+            -- Ordered before the ADD below so a period whose COLUMNS changed is replaced in a single
+            -- deploy -- drop then add -- rather than the add colliding with the period already there.
+            --
+            -- Not data-destructive, and that is verified rather than assumed: on 11.4.12 DROP PERIOD FOR
+            -- leaves every column in place and takes only the period and its backing check constraint.
+            -- What is lost is the temporal semantics, not rows and not columns.
+            IF EXISTS (SELECT 1 FROM _SchemaSmith_Tables t2
+                       WHERE COALESCE(t2.NewTable, 0) = 0
+                         -- Table tier wins over the environment tier, nearest declaration first --
+                         -- the same shape as every other drop flag. Neither set means off.
+                         AND COALESCE(t2.DropPeriodsRemovedFromProduct, @ss_drop_periods_removed, 0) = 1) THEN
+                DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_PeriodsToDrop;
+                CREATE TEMPORARY TABLE _SchemaSmith_PeriodsToDrop (
+                    RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+                    TableName VARCHAR(128) NOT NULL,
+                    PeriodName VARCHAR(128) NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+                -- Only tables the package contains. There is deliberately NO "and the package already
+                -- declares a period" guard: MariaDB permits at most ONE application-time period per
+                -- table (error 4154), so such a guard would make the drop impossible to ever fire --
+                -- removing the only period leaves nothing to satisfy it. The FLAG is the safety here,
+                -- not a shape test: it is off by default, so a package that predates periods is
+                -- untouched, and turning it on is the operator saying the package is authoritative.
+                -- DYNAMIC, and not for style: JSON_TABLE is MySQL 8.0.4+ / MariaDB 10.6+, and a stored
+                -- procedure that so much as MENTIONS it fails to CREATE below those versions -- MySQL 5.7
+                -- and MariaDB 10.2 are both supported floors, and both took the whole kindle down with a
+                -- parser error before this was deferred. The runtime 11.4 gate above never gets a chance:
+                -- parsing happens at CREATE. Every other JSON_TABLE in this codebase was already replaced
+                -- with a version-agnostic aggregation for exactly this reason (see BootstrapTableQuench
+                -- and ParseTableJson); this one is gated to 11.4 anyway, so deferring the parse to EXECUTE
+                -- is enough and keeps the set-based shape.
+                SET @ss_pdd_sql = CONCAT(
+                    'INSERT INTO _SchemaSmith_PeriodsToDrop (TableName, PeriodName) ',
+                    'SELECT t.TableName, ',
+                    '       SchemaSmith_SafeBacktickWrap(JSON_UNQUOTE(JSON_EXTRACT(live.PeriodJson, ''$.Name''))) ',
+                    'FROM _SchemaSmith_Tables t ',
+                    'JOIN JSON_TABLE( ',
+                    '        SchemaSmith_TablePeriodsJson(', QUOTE(p_DatabaseName), ', ',
+                    '            SchemaSmith_StripBacktickWrapping(t.TableName)), ',
+                    '        ''$[*]'' COLUMNS (PeriodJson JSON PATH ''$'')) live ',
+                    'WHERE COALESCE(t.NewTable, 0) = 0 ',
+                    '  AND COALESCE(t.DropPeriodsRemovedFromProduct, @ss_drop_periods_removed, 0) = 1 ',
+                    '  AND NOT EXISTS ( ',
+                    '      SELECT 1 FROM _SchemaSmith_Periods d ',
+                    '      WHERE d.TableName = t.TableName ',
+                    '        AND BINARY SchemaSmith_StripBacktickWrapping(d.PeriodName) ',
+                    '          = BINARY JSON_UNQUOTE(JSON_EXTRACT(live.PeriodJson, ''$.Name'')))');
+                PREPARE ss_pdd_stmt FROM @ss_pdd_sql;
+                EXECUTE ss_pdd_stmt;
+                DEALLOCATE PREPARE ss_pdd_stmt;
+
+                SET @ss_pdd_id := (SELECT MIN(RowId) FROM _SchemaSmith_PeriodsToDrop);
+                WHILE @ss_pdd_id IS NOT NULL DO
+                    SELECT TableName, PeriodName INTO @ss_pdd_table, @ss_pdd_name
+                      FROM _SchemaSmith_PeriodsToDrop WHERE RowId = @ss_pdd_id;
+
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+                    VALUES (CONNECTION_ID(), CONCAT('  Dropping application-time period removed from product: ',
+                            SchemaSmith_StripBacktickWrapping(@ss_pdd_table), '.',
+                            SchemaSmith_StripBacktickWrapping(@ss_pdd_name)));
+
+                    IF p_WhatIf = 0 THEN
+                        -- DROP PERIOD FOR, not the DROP PERIOD the engine's own 4158 message suggests --
+                        -- that shorthand does not parse.
+                        SET @ss_pdd_stmt = CONCAT('ALTER TABLE `', p_DatabaseName, '`.', @ss_pdd_table,
+                                                  ' DROP PERIOD FOR ', @ss_pdd_name);
+                        PREPARE ss_pdd_exec FROM @ss_pdd_stmt;
+                        EXECUTE ss_pdd_exec;
+                        DEALLOCATE PREPARE ss_pdd_exec;
+
+                        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+                        VALUES (CONNECTION_ID(), 'PERIOD',
+                                CONCAT(SchemaSmith_StripBacktickWrapping(@ss_pdd_table), '.',
+                                       SchemaSmith_StripBacktickWrapping(@ss_pdd_name)), 'dropped');
+                    END IF;
+
+                    SET @ss_pdd_id := (SELECT MIN(RowId) FROM _SchemaSmith_PeriodsToDrop WHERE RowId > @ss_pdd_id);
+                END WHILE;
+
+                DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_PeriodsToDrop;
+            END IF;
+
+            SET @ss_pd_done = 0;
+            SET @ss_pd_id := (SELECT MIN(pd.RowId) FROM _SchemaSmith_Periods pd
+                              INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+                              WHERE COALESCE(t.NewTable, 0) = 0);
+            WHILE @ss_pd_id IS NOT NULL DO
+                SELECT pd.TableName, pd.PeriodName, pd.StartColumn, pd.EndColumn
+                  INTO @ss_pd_table, @ss_pd_name, @ss_pd_start, @ss_pd_end
+                  FROM _SchemaSmith_Periods pd WHERE pd.RowId = @ss_pd_id;
+
+                -- Present already? Compared against the live catalog through the same reader extraction
+                -- uses, so the two can never disagree about what "already there" means.
+                IF JSON_SEARCH(SchemaSmith_TablePeriodsJson(p_DatabaseName,
+                                   SchemaSmith_StripBacktickWrapping(@ss_pd_table)),
+                               'one', SchemaSmith_StripBacktickWrapping(@ss_pd_name),
+                               NULL, '$[*].Name') IS NULL THEN
+                    SET @ss_pd_sql = CONCAT('ALTER TABLE `', p_DatabaseName, '`.', @ss_pd_table,
+                                            ' ADD PERIOD FOR ', @ss_pd_name,
+                                            '(', @ss_pd_start, ', ', @ss_pd_end, ')');
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+                    VALUES (CONNECTION_ID(), CONCAT('  Adding application-time period: ',
+                            SchemaSmith_StripBacktickWrapping(@ss_pd_table), '.',
+                            SchemaSmith_StripBacktickWrapping(@ss_pd_name)));
+
+                    IF p_WhatIf = 0 THEN
+                        SET @ss_pd_stmt = @ss_pd_sql;
+                        PREPARE ss_pd_exec FROM @ss_pd_stmt;
+                        EXECUTE ss_pd_exec;
+                        DEALLOCATE PREPARE ss_pd_exec;
+
+                        INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+                        VALUES (CONNECTION_ID(), 'PERIOD',
+                                CONCAT(SchemaSmith_StripBacktickWrapping(@ss_pd_table), '.',
+                                       SchemaSmith_StripBacktickWrapping(@ss_pd_name)), 'added');
+                    END IF;
+                END IF;
+
+                SET @ss_pd_id := (SELECT MIN(pd.RowId) FROM _SchemaSmith_Periods pd
+                                  INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+                                  WHERE COALESCE(t.NewTable, 0) = 0 AND pd.RowId > @ss_pd_id);
+            END WHILE;
+        ELSE
+            -- Not a degrade row: nothing was suppressed and nothing was lost. The period may well
+            -- already be correct; this server simply cannot be asked, so convergence is declined rather
+            -- than attempted blind.
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Application-time period on an existing table not reconciled '
+                   '(needs MariaDB 11.4 to read the current state): ',
+                   SchemaSmith_StripBacktickWrapping(pd.TableName), '.',
+                   SchemaSmith_StripBacktickWrapping(pd.PeriodName))
+            FROM _SchemaSmith_Periods pd
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = pd.TableName
+            WHERE COALESCE(t.NewTable, 0) = 0;
+        END IF;
+    END IF;
+
 
 END//
 

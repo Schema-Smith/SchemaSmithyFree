@@ -41,6 +41,13 @@ namespace Schema.Domain.PostgreSQL
                 exclude.ShouldApplyExpression = TableTokenReplace(exclude.ShouldApplyExpression, scriptTokens);
                 exclude.FilterExpression = TableTokenReplace(exclude.FilterExpression, scriptTokens);
             }
+            foreach (var policy in Policies)
+            {
+                var scriptTokens = tableTokens.Concat(GetCustomTokens(policy.Extensions)).ToList();
+                policy.ShouldApplyExpression = TableTokenReplace(policy.ShouldApplyExpression, scriptTokens);
+                policy.UsingExpression = TableTokenReplace(policy.UsingExpression, scriptTokens);
+                policy.WithCheckExpression = TableTokenReplace(policy.WithCheckExpression, scriptTokens);
+            }
         }
 
         // Default resolution moved to SchemaDefaultResolver (called from Template.Load) so schema
@@ -54,6 +61,11 @@ namespace Schema.Domain.PostgreSQL
 
         [JsonProperty(Order = 102)]
         public List<ExcludeConstraint> ExcludeConstraints { get; set; } = [];
+
+        // Row-level security policies (#rls, gap item D1). Without these, RowLevelSecurity below
+        // could only ever LOCK a table -- RLS with no policy returns no rows to anyone but the owner.
+        [JsonProperty(Order = 103)]
+        public List<PostgreSqlPolicy> Policies { get; set; } = [];
 
         [JsonProperty(Order = 105)]
         public bool RowLevelSecurity { get; set; }

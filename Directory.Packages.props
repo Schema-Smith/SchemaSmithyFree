@@ -6,12 +6,12 @@
 
   <ItemGroup>
     <!-- Core dependencies -->
-    <PackageVersion Include="log4net" Version="3.3.2" />
+    <PackageVersion Include="log4net" Version="3.4.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.0.2" />
     <!-- App-local ICU bundled with self-contained Linux publish output of CLI tools.
          Version is centralized via $(IcuVersion) in Directory.Build.props. -->
     <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="$(IcuVersion)" />
-    <PackageVersion Include="MySqlConnector" Version="2.6.1" />
+    <PackageVersion Include="MySqlConnector" Version="2.6.2" />
     <!-- Newtonsoft.Json 13.0.4 — latest stable; 13.0.5 is beta only -->
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <!-- NJsonSchema (MIT) — used by the Validate JSON-schema lint check, which lives in
@@ -53,14 +53,14 @@
     <PackageVersion Include="Spectre.Console.Testing" Version="0.54.0" />
 
     <!-- Static analysis (dev-only; PrivateAssets=all in Directory.Build.props keeps it out of the packed NuGet) -->
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.31.0.145097" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.33.0.1635" />
 
     <!-- Test infrastructure -->
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageVersion Include="NSubstitute" Version="6.0.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="NUnit" Version="4.6.1" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />
-    <PackageVersion Include="NUnit3TestAdapter" Version="6.2.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
   </ItemGroup>
 </Project>

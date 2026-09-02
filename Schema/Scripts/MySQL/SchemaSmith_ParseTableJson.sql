@@ -38,6 +38,10 @@ BEGIN
     DECLARE v_FtOuterIdx INT;
     DECLARE v_FtInnerCnt INT;
     DECLARE v_FtInnerIdx INT;
+    DECLARE v_PdOuterCnt INT;
+    DECLARE v_PdOuterIdx INT;
+    DECLARE v_PdInnerCnt INT;
+    DECLARE v_PdInnerIdx INT;
 
     -- Parse JSON table definitions into temporary tables for MySQL
     -- These temp tables persist in the session and are used by
@@ -50,6 +54,7 @@ BEGIN
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ForeignKeys;
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CheckConstraints;
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FullTextIndexes;
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Periods;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse table definitions');
 
@@ -80,6 +85,7 @@ BEGIN
         DropColumnsRemovedFromProduct TINYINT DEFAULT NULL,
         DropForeignKeysRemovedFromProduct TINYINT DEFAULT NULL,
         DropCheckConstraintsRemovedFromProduct TINYINT DEFAULT NULL,
+        DropPeriodsRemovedFromProduct TINYINT DEFAULT NULL,
         DropIndexesRemovedFromProduct TINYINT DEFAULT NULL,
         -- RebuildPolicy resolves MOST-SPECIFIC-WINS on the WHOLE object (ProductQuench.ResolveCascadedPolicy),
         -- so the apply side needs the SENTINEL -- did this table declare a policy at all? -- and not just
@@ -101,7 +107,7 @@ BEGIN
     SET v_TblIdx = 0;
     WHILE v_TblIdx < v_TblCnt DO
         IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name'))) IS NOT NULL THEN
-            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
+            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropPeriodsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
             SELECT
                 SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name')))) AS TableName,
                 COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Engine')))), ''), 'InnoDB') AS Engine,
@@ -120,6 +126,7 @@ BEGIN
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropColumnsRemovedFromProduct'))) AS DropColumnsRemovedFromProduct,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropForeignKeysRemovedFromProduct'))) AS DropForeignKeysRemovedFromProduct,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropCheckConstraintsRemovedFromProduct'))) AS DropCheckConstraintsRemovedFromProduct,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropPeriodsRemovedFromProduct'))) AS DropPeriodsRemovedFromProduct,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DropIndexesRemovedFromProduct'))) AS DropIndexesRemovedFromProduct,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RebuildPolicy.Mode')))), '') AS RebuildPolicyMode,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RebuildPolicy.Threshold'))) AS RebuildPolicyThreshold,
@@ -657,6 +664,45 @@ BEGIN
         END WHILE;
         SET v_FtOuterIdx = v_FtOuterIdx + 1;
     END WHILE;
+
+    -- Application-time periods (MariaDB `PERIOD FOR <name>(start, end)`, 10.4.3+). MariaDB-only by
+    -- nature -- MySQL has no equivalent at any version -- but staged by the shared parser because a
+    -- MySQL package simply never carries the key, so the loop finds nothing and costs nothing.
+    --
+    -- SYSTEM_TIME never appears here: extraction excludes it deliberately (the table already declares
+    -- that state through IsSystemVersioned), so a package cannot ask for it through this door either.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Periods;
+    CREATE TEMPORARY TABLE IF NOT EXISTS _SchemaSmith_Periods (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        TableName VARCHAR(128) NOT NULL,
+        PeriodName VARCHAR(128) NOT NULL,
+        StartColumn VARCHAR(128) NOT NULL,
+        EndColumn VARCHAR(128) NOT NULL,
+        KEY ix_pd_table_name (TableName, PeriodName)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    SET v_PdOuterCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_PdOuterIdx = 0;
+    WHILE v_PdOuterIdx < v_PdOuterCnt DO
+        SET v_PdInnerCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Periods'))), 0);
+        SET v_PdInnerIdx = 0;
+        WHILE v_PdInnerIdx < v_PdInnerCnt DO
+            IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Periods[', v_PdInnerIdx, '].Name'))) IS NOT NULL
+               AND SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Periods[', v_PdInnerIdx, '].StartColumn'))) IS NOT NULL
+               AND SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Periods[', v_PdInnerIdx, '].EndColumn'))) IS NOT NULL
+               AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Name'))))) THEN
+                INSERT INTO _SchemaSmith_Periods (TableName, PeriodName, StartColumn, EndColumn)
+                SELECT
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Name')))) AS TableName,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Periods[', v_PdInnerIdx, '].Name')))) AS PeriodName,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Periods[', v_PdInnerIdx, '].StartColumn')))) AS StartColumn,
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Periods[', v_PdInnerIdx, '].EndColumn')))) AS EndColumn;
+            END IF;
+            SET v_PdInnerIdx = v_PdInnerIdx + 1;
+        END WHILE;
+        SET v_PdOuterIdx = v_PdOuterIdx + 1;
+    END WHILE;
+
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Evaluate ShouldApplyExpression');
 

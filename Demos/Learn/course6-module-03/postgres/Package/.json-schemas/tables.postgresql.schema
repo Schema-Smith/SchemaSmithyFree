@@ -473,6 +473,47 @@
         ]
       }
     },
+    "Policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Permissive": {
+            "type": "string",
+            "pattern": "PERMISSIVE|RESTRICTIVE"
+          },
+          "Command": {
+            "type": "string",
+            "pattern": "ALL|SELECT|INSERT|UPDATE|DELETE"
+          },
+          "Roles": {
+            "type": "string"
+          },
+          "UsingExpression": {
+            "type": "string"
+          },
+          "WithCheckExpression": {
+            "type": "string"
+          },
+          "ShouldApplyExpression": {
+            "type": "string"
+          },
+          "VariantName": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional label for a conditional variant — names the intent behind its ShouldApplyExpression and appears in deployment logging when the variant is applied."
+          },
+          "Extensions": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "Name"
+        ]
+      }
+    },
     "RowLevelSecurity": {
       "type": "boolean"
     },

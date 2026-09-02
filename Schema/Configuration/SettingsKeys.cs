@@ -173,6 +173,7 @@ public static class SettingsKeys
     public const string WhatIfOnly = "WhatIfONLY";
     public const string RunScriptsTwice = "RunScriptsTwice";
     public const string DropTablesRemovedFromProduct = "DropTablesRemovedFromProduct";
+    public const string DropSchemaBoundDependents = "DropSchemaBoundDependents";
     public const string DropUnknownIndexes = "DropUnknownIndexes";
     public const string DropColumnsRemovedFromProduct = "DropColumnsRemovedFromProduct";
     public const string DropForeignKeysRemovedFromProduct = "DropForeignKeysRemovedFromProduct";
@@ -180,12 +181,25 @@ public static class SettingsKeys
     public const string DropExcludeConstraintsRemovedFromProduct = "DropExcludeConstraintsRemovedFromProduct";
     public const string DropStatisticsRemovedFromProduct = "DropStatisticsRemovedFromProduct";
     public const string DropIndexesRemovedFromProduct = "DropIndexesRemovedFromProduct";
+
+    /// <summary>
+    /// MariaDB only, and the one drop-by-absence flag that defaults to FALSE. See the property
+    /// description on Table for why -- a package that predates periods, or was extracted below
+    /// 11.4, cannot declare the periods its table actually has.
+    /// </summary>
+    public const string DropPeriodsRemovedFromProduct = "DropPeriodsRemovedFromProduct";
     // Flat keys, not a bound RebuildPolicy section: every other setting here is a flat string key and
     // there is no section-binding facility to reuse. The three compose ONE policy object at the env
     // tier, which then competes with the product/template/table levels as a whole.
     public const string RebuildPolicyMode = "RebuildPolicyMode";
     public const string RebuildPolicyThreshold = "RebuildPolicyThreshold";
     public const string RebuildPolicyOnOrderMismatch = "RebuildPolicyOnOrderMismatch";
+
+    /// <summary>
+    /// MariaDB only. <c>KEEP</c> opts into altering a system-versioned table, which rewrites its stored
+    /// history to the new shape. Anything else leaves the engine default, which refuses the change.
+    /// </summary>
+    public const string SystemVersioningAlterHistory = "SystemVersioningAlterHistory";
     public const string PreventDrop = "PreventDrop";
     public const string UpdateTables = "UpdateTables";
     public const string KindleTheForge = "KindleTheForge";
