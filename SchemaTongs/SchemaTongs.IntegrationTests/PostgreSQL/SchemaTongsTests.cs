@@ -200,7 +200,7 @@ public class SchemaTongsTests
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             // Domain types are DECLARATIVE now (F5): a .json in Domain Types/, not a guarded .sql in Types/.
-            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Domain Types", "Test.Flag.json"))), Arg.Any<string>());
+            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Join("Domain Types", "Test.Flag.json"))), Arg.Any<string>());
 
             config["ShouldCast:DomainTypes"] = "false";
             FactoryContainer.Clear();
