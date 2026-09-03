@@ -263,6 +263,8 @@ public class DatabaseQuench
         public string MaterializedViewSchema { get; set; }
         public string IndexedViewSchema { get; set; }
         public string EventSchema { get; set; }
+        public string EnumTypeSchema { get; set; }
+        public string SequenceSchema { get; set; }
     }
     // Visible for testing — per-iteration slot scripts after folder gating.
     internal List<SqlScript> IterationBeforeScripts => _iteration.BeforeScripts;
@@ -360,6 +362,10 @@ public class DatabaseQuench
     internal string IterationMaterializedViewSchema => _iteration.MaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
 
     internal string IterationEventSchema => _iteration.EventSchema ?? _template.EventSchema ?? "";
+
+    internal string IterationEnumTypeSchema => _iteration.EnumTypeSchema ?? _template.EnumTypeSchema ?? "";
+
+    internal string IterationSequenceSchema => _iteration.SequenceSchema ?? _template.SequenceSchema ?? "";
     // I10: Mirror the iteration-schema pattern for indexed views. QuenchIndexedViews used to
     // rebuild the JSON inline per call; routing through this field puts the substitution alongside
     // the table / materialized-view substitution in PrepareIterationContent. Per-call ShouldApply
@@ -656,6 +662,27 @@ public class DatabaseQuench
                 {
                     SafeProgressLog("  [WhatIf] Object scripts without unresolved tokens:");
                     WhatIfLogScripts(nonTokenScripts, DatabaseScriptSlot.Object);
+                }
+
+                // Step: Enum types (PostgreSQL only). BEFORE tables, deliberately: a column can be OF an
+                // enum type, so the type has to exist before the table that uses it -- and a value the
+                // package adds has to be present before a default or check constraint can reference it.
+                if (_product.Platform == Platform.PostgreSQL && _template.EnumTypes.Count > 0)
+                {
+                    var enumTypeSw = Stopwatch.StartNew();
+                    _checkpointing.Track(DbScope, "EnumTypeQuench", () => QuenchEnumTypes(command));
+                    enumTypeSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "EnumTypeQuench", enumTypeSw.ElapsedMilliseconds, 0);
+                }
+
+                // Step: Sequences (PostgreSQL only). Also before tables -- a column DEFAULT can call
+                // nextval() on one.
+                if (_product.Platform == Platform.PostgreSQL && _template.Sequences.Count > 0)
+                {
+                    var sequenceSw = Stopwatch.StartNew();
+                    _checkpointing.Track(DbScope, "SequenceQuench", () => QuenchSequences(command));
+                    sequenceSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "SequenceQuench", sequenceSw.ElapsedMilliseconds, 0);
                 }
 
                 // Step: Missing tables and columns
@@ -1075,6 +1102,8 @@ public class DatabaseQuench
         _iteration.MaterializedViewSchema = (_template.MaterializedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
         _iteration.IndexedViewSchema = (_template.IndexedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
         _iteration.EventSchema = (_template.EventSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.EnumTypeSchema = (_template.EnumTypeSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.SequenceSchema = (_template.SequenceSchema ?? "").Replace("{{SchemaName}}", _schemaName);
     }
 
     private static List<SqlScript> CloneAndSubstitute(
@@ -1129,6 +1158,8 @@ public class DatabaseQuench
         _iteration.IndexedViewSchema = SubstituteVersionTokens(IterationIndexedViewSchema);
         _iteration.MaterializedViewSchema = SubstituteVersionTokens(IterationMaterializedViewSchema);
         _iteration.EventSchema = SubstituteVersionTokens(IterationEventSchema);
+        _iteration.EnumTypeSchema = SubstituteVersionTokens(IterationEnumTypeSchema);
+        _iteration.SequenceSchema = SubstituteVersionTokens(IterationSequenceSchema);
     }
 
     private List<SqlScript> SubstituteVersionTokens(List<SqlScript> scripts)
@@ -1792,6 +1823,43 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             tableCommand.CommandText = statement;
             ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         }
+        _debugFileLocation = "";
+    }
+
+    /// <summary>
+    /// Converges DECLARED enum types (PostgreSQL). Runs BEFORE tables: a column can be of an enum type,
+    /// so the type has to exist first, and a value the package adds has to be there before a column
+    /// default or check references it.
+    /// </summary>
+    internal void QuenchEnumTypes(IDbCommand tableCommand)
+    {
+        if (_product.Platform != Platform.PostgreSQL) return;
+        var types = IterationEnumTypeSchema;
+        if (string.IsNullOrWhiteSpace(types) || types.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching enum types");
+        tableCommand.CommandText =
+            $@"CALL ""SchemaSmith"".""EnumTypeQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(types)}', {_whatIfOnly});";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Enum Types"), tableCommand.CommandText);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+        _debugFileLocation = "";
+    }
+
+    /// <summary>
+    /// Converges DECLARED sequences (PostgreSQL). Runs beside enum types, before tables: a column DEFAULT
+    /// can call nextval() on one, so the sequence has to exist before the table that references it.
+    /// </summary>
+    internal void QuenchSequences(IDbCommand tableCommand)
+    {
+        if (_product.Platform != Platform.PostgreSQL) return;
+        var sequences = IterationSequenceSchema;
+        if (string.IsNullOrWhiteSpace(sequences) || sequences.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching sequences");
+        tableCommand.CommandText =
+            $@"CALL ""SchemaSmith"".""SequenceQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(sequences)}', {_whatIfOnly});";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Sequences"), tableCommand.CommandText);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
         _debugFileLocation = "";
     }
 

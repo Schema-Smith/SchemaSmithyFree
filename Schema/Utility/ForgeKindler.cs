@@ -368,6 +368,12 @@ public static class ForgeKindler
                 new("SchemaSmith.FixupMaterializedViewOwnership.sql"),
                 new("SchemaSmith.MissingMaterializedViewIndexesQuench.sql"),
                 new("SchemaSmith.MaterializedViewQuench.sql"),
+                // Enum types as a MANAGED type (F5). Replaces a guarded CREATE TYPE whose value-list
+                // edits were a permanent silent no-op once the type existed.
+                new("SchemaSmith.EnumTypeQuench.sql"),
+                new("SchemaSmith.GenerateEnumTypeJson.sql"),
+                new("SchemaSmith.SequenceQuench.sql"),
+                new("SchemaSmith.GenerateSequenceJson.sql"),
             ],
             Platform.MySQL =>
             [

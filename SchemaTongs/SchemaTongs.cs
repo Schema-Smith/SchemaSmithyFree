@@ -2383,29 +2383,66 @@ $$;' AS Code
         PerformPostgreSqlCasting(command, "Domain Types");
     }
 
+    /// <summary>
+    /// Casts enum types as DECLARATIVE .json rather than a guarded CREATE TYPE script (F5).
+    /// <para><b>The script this replaces was the bug.</b> It emitted
+    /// <c>DO $$ IF NOT EXISTS (…) THEN CREATE TYPE … $$</c>, and once the type existed that guard skipped
+    /// — so a package whose enum gained a value deployed clean and changed nothing, forever. Extracting
+    /// the value list declaratively is what makes the difference visible and appliable.</para>
+    /// <para>Written into the same <c>Enum Types/</c> folder, which now holds both forms: a <c>.sql</c>
+    /// file there still runs through the Objects slot exactly as before, so nothing existing breaks.</para>
+    /// </summary>
     private void CastPostgreSqlEnumTypes(IDbCommand command)
     {
         command.CommandText = @"
-SELECT 'Enum Types' AS Folder,
-       n.nspname || '.' || t.typname AS FullName,
-       '
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = ''' || n.nspname || ''' AND t.typname = ''' || t.typname || ''') THEN
-        CREATE TYPE ""' || n.nspname || '"".""' || t.typname || '"" AS ENUM (' || STRING_AGG(QUOTE_LITERAL(e.enumlabel), ', ' ORDER BY e.enumsortorder) || ');
-    END IF;
-END
-$$;' AS Code
+SELECT n.nspname AS SchemaName, t.typname AS TypeName
   FROM pg_type t
   JOIN pg_namespace n ON n.oid = t.typnamespace
-  JOIN pg_enum e ON t.oid = e.enumtypid
   WHERE t.typtype = 'e'
     AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
     AND n.nspname NOT LIKE 'pg_temp_%'
     AND n.nspname NOT LIKE 'pg_toast_temp_%'
-  GROUP BY n.nspname, t.typname;
+  ORDER BY n.nspname, t.typname;
 ";
-        PerformPostgreSqlCasting(command, "Enum Types");
+        _progressLog.Info("Casting Enum Type Structures");
+        var types = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var sch = reader["SchemaName"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                types.Add((sch, reader["TypeName"].ToString()));
+            }
+        }
+
+        if (types.Count == 0) return;
+
+        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateEnumTypeJson.sql", _platform);
+        command.ExecuteNonQuery();
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Enum Types", ScriptObjectType.EnumTypes));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var (schema, name) in types)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for enum type {schema}.{name}");
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateEnumTypeJSON\"('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+            var typeJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(typeJson) || typeJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for enum type {schema}.{name}");
+                continue;
+            }
+
+            var typeObj = JsonConvert.DeserializeObject<PostgreSqlEnumType>(typeJson);
+            if (_isSchemaTemplate) typeObj.Schema = null;
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            JsonHelper.Write(file, typeObj);
+            _stats.EnumTypes++;
+        }
     }
 
     private void CastPostgreSqlCompositeTypes(IDbCommand command)
@@ -2520,34 +2557,73 @@ SELECT 'Procedures' AS Folder,
         PerformPostgreSqlCasting(command, "Procedures");
     }
 
+    /// <summary>
+    /// Casts sequences as DECLARATIVE .json rather than a CREATE SEQUENCE script (F5).
+    /// <para><b>This also fixes a real extraction bug.</b> The previous filter excluded only
+    /// <c>deptype = 'i'</c>, which covers an <c>IDENTITY</c> column's sequence but NOT a <c>serial</c>
+    /// column's — that one is <c>'a'</c> (auto). So every <c>serial</c> column's engine-generated sequence
+    /// was extracted as a standalone object. On deploy the package then created it first, and
+    /// <c>CREATE TABLE … serial</c>, finding the name taken, generated <c>&lt;name&gt;1</c> and pointed the
+    /// column at THAT — leaving an orphan sequence behind and a column whose sequence name no longer
+    /// matches the source. Verified end to end. Both deptypes are excluded now.</para>
+    /// <para>The current value is never captured: it is data, and a package carrying it would reset a live
+    /// sequence on the next deploy.</para>
+    /// </summary>
     private void CastPostgreSqlSequences(IDbCommand command)
     {
         command.CommandText = @"
-SELECT 'Sequences' AS Folder,
-       s.relnamespace::regnamespace || '.' || s.relname AS FullName,
-       'CREATE SEQUENCE IF NOT EXISTS ""' || s.relnamespace::regnamespace || '"".""' || s.relname || E'""\n' ||
-       '  ' || CASE WHEN seq.seqtypid = 'smallint'::regtype THEN 'AS SMALLINT '
-                    WHEN seq.seqtypid = 'integer'::regtype THEN 'AS INT '
-                    WHEN seq.seqtypid = 'bigint'::regtype THEN 'AS BIGINT '
-                    ELSE '' END || 'INCREMENT BY ' || seq.seqincrement || E'\n' ||
-       '  MINVALUE ' || seq.seqmin || E'\n' ||
-       '  MAXVALUE ' || seq.seqmax || E'\n' ||
-       '  START WITH ' || seq.seqstart || E'\n' ||
-       '  CACHE ' || seq.seqcache || E'\n' ||
-       '  ' || CASE WHEN seq.seqcycle THEN 'CYCLE' ELSE 'NO CYCLE' END ||
-       ';' AS Code
+SELECT n.nspname AS SchemaName, s.relname AS SequenceName
   FROM pg_class s
-  JOIN pg_sequence seq ON s.oid = seq.seqrelid
   JOIN pg_namespace n ON n.oid = s.relnamespace
-                     AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
-                     AND n.nspname NOT LIKE 'pg_temp_%'
-                     AND n.nspname NOT LIKE 'pg_toast_temp_%'
   WHERE s.relkind = 'S'
+    AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
+    AND n.nspname NOT LIKE 'pg_temp_%'
+    AND n.nspname NOT LIKE 'pg_toast_temp_%'
     AND NOT EXISTS (SELECT 1 FROM pg_depend d
-                    WHERE d.objid = s.oid AND d.deptype = 'i'
-                      AND d.classid = 'pg_class'::regclass);
+                    WHERE d.objid = s.oid
+                      AND d.classid = 'pg_class'::regclass
+                      AND d.deptype IN ('i', 'a'))
+  ORDER BY n.nspname, s.relname;
 ";
-        PerformPostgreSqlCasting(command, "Sequences");
+        _progressLog.Info("Casting Sequence Structures");
+        var sequences = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var sch = reader["SchemaName"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                sequences.Add((sch, reader["SequenceName"].ToString()));
+            }
+        }
+
+        if (sequences.Count == 0) return;
+
+        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateSequenceJson.sql", _platform);
+        command.ExecuteNonQuery();
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Sequences", ScriptObjectType.Sequences));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var (schema, name) in sequences)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for sequence {schema}.{name}");
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateSequenceJSON\"('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+            var seqJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(seqJson) || seqJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for sequence {schema}.{name}");
+                continue;
+            }
+
+            var seqObj = JsonConvert.DeserializeObject<PostgreSqlSequence>(seqJson);
+            if (_isSchemaTemplate) seqObj.Schema = null;
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            JsonHelper.Write(file, seqObj);
+            _stats.Sequences++;
+        }
     }
 
     private void CastPostgreSqlPublications(IDbCommand command)

@@ -306,7 +306,11 @@ public class ForgeKindlerTests
         //   index, and ModifiedTableQuench runs BEFORE MissingIndexesAndConstraintsQuench -- so on a table's
         //   first deploy that index does not exist yet. Kindled after MissingIndexesAndConstraintsQuench, the
         //   same dependency SQL Server's ChangeTrackingQuench has on a primary key).
-        Assert.That(postgres.Length, Is.EqualTo(38));
+        // +2 = SchemaSmith.EnumTypeQuench + SchemaSmith.GenerateEnumTypeJson (F5 -- enum types promoted
+        //   from scripted to MANAGED. The scripted form was a guarded CREATE TYPE, so once the type
+        //   existed a value-list edit did nothing at all, silently and forever).
+        // +2 = SchemaSmith.SequenceQuench + SchemaSmith.GenerateSequenceJson (F5).
+        Assert.That(postgres.Length, Is.EqualTo(42));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor

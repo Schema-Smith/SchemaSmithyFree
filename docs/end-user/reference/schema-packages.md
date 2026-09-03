@@ -1351,6 +1351,66 @@ Indexed views are defined as JSON files in the `Indexed Views/` directory of eac
 
 ---
 
+## Sequence JSON Format (PostgreSQL)
+
+Sequences live in the `Sequences/` directory of each template, which accepts both `.json` (declared and converged) and `.sql` (scripted, exactly as before).
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Sequence name. Required. |
+| `Schema` | string | `"public"` | Schema name. |
+| `DataType` | string | `"bigint"` | `smallint`, `integer` or `bigint`. |
+| `Start` | long | `null` | The value the sequence starts from **when it is created**. This is not the current value — see below. |
+| `Increment` | long | `1` | Step between values. Negative for a descending sequence. |
+| `MinValue` | long | `null` | Omit for the type's natural minimum. |
+| `MaxValue` | long | `null` | Omit for the type's natural maximum. |
+| `Cache` | long | `1` | Values pre-allocated per session. Higher is faster but leaves larger gaps after a crash. |
+| `Cycle` | bool | `false` | Wrap to `MinValue` after `MaxValue` instead of erroring. |
+
+**The current value is never managed.** A sequence's position records which numbers have already been handed out, so it is data rather than schema. If a deploy reset it, the next insert would re-issue keys already in use. `Start` only applies when the sequence is created; SchemaSmith never issues `RESTART`, and extraction never captures the current value.
+
+**Sequences the engine owns are not managed here.** A `serial` or `IDENTITY` column generates its own sequence, which belongs to that column's declaration; those are excluded from extraction.
+
+```json
+{
+  "Name": "invoice_number_seq",
+  "Schema": "public",
+  "DataType": "bigint",
+  "Start": 1000,
+  "Increment": 1,
+  "Cache": 1,
+  "Cycle": false
+}
+```
+
+---
+
+## Enum Type JSON Format (PostgreSQL)
+
+Enum types live in the `Enum Types/` directory of each template, which accepts **both** forms — `.json` (declared and converged) and `.sql` (scripted, exactly as before).
+
+**Declaring an enum fixes a real trap.** A scripted enum is created by a guarded `CREATE TYPE`; once the type exists that guard skips, so editing the value list in the `.sql` file does nothing at all — silently, and on every future deploy. A declared enum has its value list compared, and missing values are added.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Type name. Required. |
+| `Schema` | string | `"public"` | Schema name. |
+| `Values` | array of string | | The labels, **in order**. Required. |
+
+**Order matters.** PostgreSQL sorts and compares enum values by declared position, not alphabetically, so a value you add in the middle of the list is added in the middle of the type — not appended.
+
+**Removing a value is reported, not performed.** PostgreSQL cannot remove or reorder an enum value without recreating the type, which would mean dropping every column that uses it. A value the package no longer lists is left in place and named in the deploy log and the change manifest, so the divergence is visible rather than silent.
+
+```json
+{
+  "Name": "order_status",
+  "Schema": "public",
+  "Values": [ "draft", "submitted", "shipped", "cancelled" ]
+}
+```
+
+---
+
 ## Scheduled Event JSON Format (MySQL / MariaDB)
 
 Scheduled events live in the `Events/` directory of each template. That folder accepts **both** forms:

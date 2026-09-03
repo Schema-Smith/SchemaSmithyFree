@@ -96,6 +96,8 @@ Per-table options, column attributes, and table-scoped behavior beyond the basic
 | InnoDB page compression | n/a | n/a | ✓ | ✓ | MySQL `Compression`; MariaDB `PageCompressed` + `PageCompressionLevel` |
 | Compressed-page size | n/a | n/a | ✓ | ✓ | `KeyBlockSize`, with `RowFormat: COMPRESSED` |
 | Scheduled events (declarative) | n/a | n/a | ✓ | ✓ | `Events/*.json`; compared, converges, drop-by-absence via `DropEventsRemovedFromProduct` |
+| Enum types (declarative) | n/a | ✓ | n/a | n/a | `Enum Types/*.json`; values compared and added in declared order |
+| Sequences (declarative) | n/a | ✓ | n/a | n/a | `Sequences/*.json`; all attributes converge, current value never touched |
 | Table fill factor | n/a | ✓ | n/a | n/a | `FillFactor` 0–100 on table |
 | Per-table `UpdateFillFactor` | ✓ | ✓ | n/a | n/a | OR'd with template + index level |
 | Temporal tables (system-versioning marker) | ✓ | n/a | n/a | n/a | `IsTemporal` flag |

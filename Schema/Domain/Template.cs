@@ -242,6 +242,21 @@ namespace Schema.Domain
         [JsonIgnore]
         public List<MySqlEvent> Events { get; } = [];
 
+        // Enum types, PostgreSQL. Same additive shape as Events: Enum Types/ holds .json (declared) and
+        // .sql (scripted, unchanged).
+        [JsonIgnore]
+        public List<PostgreSqlEnumType> EnumTypes { get; } = [];
+
+        [JsonIgnore]
+        public string EnumTypeSchema { get; set; } = "[]";
+
+        // Sequences, PostgreSQL. Same additive shape: Sequences/ holds .json (declared) and .sql (scripted).
+        [JsonIgnore]
+        public List<PostgreSqlSequence> Sequences { get; } = [];
+
+        [JsonIgnore]
+        public string SequenceSchema { get; set; } = "[]";
+
         [JsonIgnore]
         public string EventSchema { get; set; } = "[]";
 
@@ -376,6 +391,10 @@ namespace Schema.Domain
             clone.Tables.AddRange(Tables);
             clone.MaterializedViews.AddRange(MaterializedViews);
             clone.Events.AddRange(Events);
+            clone.EnumTypes.AddRange(EnumTypes);
+            clone.EnumTypeSchema = EnumTypeSchema;
+            clone.Sequences.AddRange(Sequences);
+            clone.SequenceSchema = SequenceSchema;
             clone.MaterializedViewSchema = MaterializedViewSchema;
             clone.EventSchema = EventSchema;
             clone.IndexedViews.AddRange(IndexedViews);
@@ -506,6 +525,8 @@ namespace Schema.Domain
             MigrateMySqlColumnCheckExpressionAlias(platform);
             LoadMaterializedViews(platform, tolerateComponentLoadErrors);
             LoadEvents(platform, tolerateComponentLoadErrors);
+            LoadEnumTypes(platform, tolerateComponentLoadErrors);
+            LoadSequences(platform, tolerateComponentLoadErrors);
             LoadIndexedViews(platform, tolerateComponentLoadErrors);
 
             // Run schema-default resolution BEFORE any token serialization touches the in-memory
@@ -568,6 +589,12 @@ namespace Schema.Domain
 
             EventSchema = JArray.FromObject(Events).ToString();
             tokens.Add(new("EventSchema", EventSchema.Replace("'", "''")));
+
+            EnumTypeSchema = JArray.FromObject(EnumTypes).ToString();
+            tokens.Add(new("EnumTypeSchema", EnumTypeSchema.Replace("'", "''")));
+
+            SequenceSchema = JArray.FromObject(Sequences).ToString();
+            tokens.Add(new("SequenceSchema", SequenceSchema.Replace("'", "''")));
 
             IndexedViewSchema = JArray.FromObject(IndexedViews).ToString();
             tokens.Add(new("IndexedViewSchema", IndexedViewSchema.Replace("'", "''")));
@@ -734,6 +761,69 @@ namespace Schema.Domain
         /// Objects slot exactly as before, so no existing package changes behaviour. That is deliberate:
         /// promoting events to a managed type must not strip a folder users already populate.</para>
         /// </summary>
+        /// <summary>
+        /// Loads DECLARATIVE enum types from the same Enum Types/ folder that has always held scripted
+        /// ones. Only *.json is read here; a *.sql file there still runs through the Objects slot.
+        /// </summary>
+        /// <summary>Loads DECLARATIVE sequences from the Sequences/ folder; *.sql there still runs scripted.</summary>
+        private void LoadSequences(Platform platform, bool tolerateComponentLoadErrors)
+        {
+            if (platform != Platform.PostgreSQL) return;
+            var path = Path.Join(Path.GetDirectoryName(FilePath) ?? "", "Sequences");
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(path)) return;
+            var files = ProductDirectoryWrapper.GetFromFactory()
+                .GetFiles(path, "*.json", SearchOption.AllDirectories)
+                .OrderBy(x => x);
+            foreach (var f in files)
+            {
+                try
+                {
+                    var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
+                    Sequences.Add(JsonConvert.DeserializeObject<PostgreSqlSequence>(json, PlatformDeserializer.StrictSettings)
+                                  ?? throw new JsonSerializationException("Failed to deserialize sequence"));
+                }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it
+                catch (Exception e) when (!tolerateComponentLoadErrors)
+                {
+                    throw new Exception($"Error loading sequence from {f}" + Environment.NewLine + e.Message, e);
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure
+                catch (Exception e)
+                {
+                    RecordComponentLoadError(f, e);
+                }
+            }
+        }
+
+        private void LoadEnumTypes(Platform platform, bool tolerateComponentLoadErrors)
+        {
+            if (platform != Platform.PostgreSQL) return;
+            var path = Path.Join(Path.GetDirectoryName(FilePath) ?? "", "Enum Types");
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(path)) return;
+            var files = ProductDirectoryWrapper.GetFromFactory()
+                .GetFiles(path, "*.json", SearchOption.AllDirectories)
+                .OrderBy(x => x);
+            foreach (var f in files)
+            {
+                try
+                {
+                    var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
+                    EnumTypes.Add(JsonConvert.DeserializeObject<PostgreSqlEnumType>(json, PlatformDeserializer.StrictSettings)
+                                  ?? throw new JsonSerializationException("Failed to deserialize enum type"));
+                }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it
+                catch (Exception e) when (!tolerateComponentLoadErrors)
+                {
+                    throw new Exception($"Error loading enum type from {f}" + Environment.NewLine + e.Message, e);
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure
+                catch (Exception e)
+                {
+                    RecordComponentLoadError(f, e);
+                }
+            }
+        }
+
         private void LoadEvents(Platform platform, bool tolerateComponentLoadErrors)
         {
             if (platform.GetBasePlatform() != Platform.MySQL) return;
