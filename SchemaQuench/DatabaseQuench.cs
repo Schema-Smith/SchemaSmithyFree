@@ -142,6 +142,13 @@ public class DatabaseQuench
     // parameter is appended to the SQL Server call alone rather than added to every proc signature.
     public bool DropSchemaBoundDependents { get; init; }
 
+    /// <summary>
+    /// Drop-by-absence for DECLARED scheduled events. Defaults false, and the default matters more here
+    /// than for most drop flags: events were scripted objects that were never removed by absence, so
+    /// turning this on by default would start deleting events on the first deploy after upgrading.
+    /// </summary>
+    public bool DropRemovedEvents { get; init; }
+
     /// <summary>NEVER when no tier declared a policy — the domain object's own default.</summary>
     /// <summary>
     /// MariaDB only. <c>KEEP</c> opts into altering a system-versioned table; the engine then applies the
@@ -255,6 +262,7 @@ public class DatabaseQuench
         public string TableSchema { get; set; }
         public string MaterializedViewSchema { get; set; }
         public string IndexedViewSchema { get; set; }
+        public string EventSchema { get; set; }
     }
     // Visible for testing — per-iteration slot scripts after folder gating.
     internal List<SqlScript> IterationBeforeScripts => _iteration.BeforeScripts;
@@ -350,6 +358,8 @@ public class DatabaseQuench
 
     internal string IterationTableSchema => _iteration.TableSchema ?? _template.TableSchema ?? "";
     internal string IterationMaterializedViewSchema => _iteration.MaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
+
+    internal string IterationEventSchema => _iteration.EventSchema ?? _template.EventSchema ?? "";
     // I10: Mirror the iteration-schema pattern for indexed views. QuenchIndexedViews used to
     // rebuild the JSON inline per call; routing through this field puts the substitution alongside
     // the table / materialized-view substitution in PrepareIterationContent. Per-call ShouldApply
@@ -829,6 +839,16 @@ public class DatabaseQuench
                         RunTiming?.Record(LogPrefix, _databaseName, "MaterializedViewQuench", materializedViewQuenchSw.ElapsedMilliseconds, 0);
                     }
 
+                    // Step: Scheduled events (MySQL/MariaDB only). Runs after tables so an event whose
+                    // body references a table the same deploy creates does not fail on first run.
+                    if (_product.Platform.GetBasePlatform() == Platform.MySQL && _template.Events.Count > 0)
+                    {
+                        var eventQuenchSw = Stopwatch.StartNew();
+                        _checkpointing.Track(DbScope, "EventQuench", () => QuenchEvents(effectiveTableCmd));
+                        eventQuenchSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "EventQuench", eventQuenchSw.ElapsedMilliseconds, 0);
+                    }
+
                     // Step: Indexed views (SQL Server only)
                     if (_product.Platform == Platform.SqlServer && _template.IndexedViews.Count > 0)
                     {
@@ -1054,6 +1074,7 @@ public class DatabaseQuench
         _iteration.TableSchema = (_template.TableSchema ?? "").Replace("{{SchemaName}}", _schemaName);
         _iteration.MaterializedViewSchema = (_template.MaterializedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
         _iteration.IndexedViewSchema = (_template.IndexedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.EventSchema = (_template.EventSchema ?? "").Replace("{{SchemaName}}", _schemaName);
     }
 
     private static List<SqlScript> CloneAndSubstitute(
@@ -1107,6 +1128,7 @@ public class DatabaseQuench
         _iteration.TableSchema = SubstituteVersionTokens(IterationTableSchema);
         _iteration.IndexedViewSchema = SubstituteVersionTokens(IterationIndexedViewSchema);
         _iteration.MaterializedViewSchema = SubstituteVersionTokens(IterationMaterializedViewSchema);
+        _iteration.EventSchema = SubstituteVersionTokens(IterationEventSchema);
     }
 
     private List<SqlScript> SubstituteVersionTokens(List<SqlScript> scripts)
@@ -1725,6 +1747,52 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
             _debugFileLocation = "";
         }
+    }
+
+    /// <summary>
+    /// Converges DECLARED scheduled events (MySQL/MariaDB). Scripted events in the same Events/ folder
+    /// still run through the Objects slot untouched, so this is purely additive for existing packages.
+    /// <para><b>This is the only quench that executes DDL from C# rather than inside the procedure, and
+    /// it is not a style choice.</b> MySQL cannot PREPARE event DDL at all — both CREATE EVENT and DROP
+    /// EVENT fail with 1295, "This command is not supported in the prepared statement protocol yet" —
+    /// so a stored procedure physically cannot create an event there. MariaDB can, but writing to the
+    /// lower common denominator keeps ONE implementation for both engines.</para>
+    /// <para>All the decision-making still lives in SQL: the procedure compares, decides, and returns an
+    /// ORDERED list of statements. This method is a dumb executor. The ownership and audit writes are
+    /// part of that list, so if a CREATE fails execution stops and no ownership row is left claiming an
+    /// event that does not exist.</para>
+    /// </summary>
+    internal void QuenchEvents(IDbCommand tableCommand)
+    {
+        if (_product.Platform.GetBasePlatform() != Platform.MySQL) return;
+        var events = IterationEventSchema;
+        // An empty list is overwhelmingly the common case -- skip rather than pay a round trip per
+        // database for a feature most packages do not use.
+        if (string.IsNullOrWhiteSpace(events) || events.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching scheduled events");
+        var whatIf = _whatIfOnly == "1" ? 1 : 0;
+        var dropRemoved = DropRemovedEvents ? 1 : 0;
+        tableCommand.CommandText =
+            $"CALL SchemaSmith_EventQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', "
+            + $"'{EscapeSqlLiteral(events)}', {whatIf}, {dropRemoved}, '{EscapeSqlLiteral(_template.Name)}')";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Events"), tableCommand.CommandText);
+
+        // Read the whole list BEFORE executing any of it: the reader holds the connection, and the
+        // statements below run on that same connection.
+        var statements = new List<string>();
+        using (var reader = tableCommand.ExecuteReader())
+        {
+            while (reader.Read())
+                if (!reader.IsDBNull(0)) statements.Add(reader.GetString(0));
+        }
+
+        foreach (var statement in statements)
+        {
+            tableCommand.CommandText = statement;
+            ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+        }
+        _debugFileLocation = "";
     }
 
     internal void QuenchIndexedViews(IDbCommand tableCommand)

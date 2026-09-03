@@ -19,6 +19,7 @@ using Schema.Domain;
 using Schema.Isolators;
 using MySqlConnector;
 using Npgsql;
+using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Utility;
@@ -2859,33 +2860,56 @@ SELECT 'Triggers' AS Folder,
         _stats.Triggers = PerformMySqlCasting(command, "Triggers");
     }
 
+    /// <summary>
+    /// Casts scheduled events as DECLARATIVE .json rather than raw .sql (F4).
+    /// <para>Written into the same <c>Events/</c> folder the scripted form has always used, which now
+    /// holds both: a <c>.sql</c> file there still runs through the Objects slot exactly as before, so no
+    /// existing package changes behaviour and migration is per-event and optional. The audit called for
+    /// removal-and-replace; that would have broken every package that already has an Events folder.</para>
+    /// <para>The catalog-to-package translation lives in <c>SchemaSmith_GenerateEventJSON</c>, a kindled
+    /// script, matching how tables and materialized views are extracted — which also means it can be
+    /// certified against a live server rather than only through this whole pipeline. It is kindled
+    /// with the rest of the helper set before extraction runs, so there is nothing to install here.</para>
+    /// </summary>
     private void ScriptMySqlEvents(IDbCommand command, string targetSchema)
     {
-        _progressLog.Info("Casting Event Scripts");
+        _progressLog.Info("Casting Event Structures");
         command.CommandText = $@"
-SELECT 'Events' AS Folder,
-       EVENT_NAME AS FullName,
-       'DROP EVENT IF EXISTS `' || EVENT_NAME || '`;\nDELIMITER //\nCREATE EVENT `' || EVENT_NAME || '`\n  ON SCHEDULE ' ||
-       CASE EVENT_TYPE
-           WHEN 'ONE TIME' THEN 'AT ''' || COALESCE(EXECUTE_AT, NOW()) || ''''
-           ELSE 'EVERY ' || INTERVAL_VALUE || ' ' || INTERVAL_FIELD ||
-               COALESCE('\n    STARTS ''' || STARTS || '''', '') ||
-               COALESCE('\n    ENDS ''' || ENDS || '''', '')
-       END ||
-       '\n  ON COMPLETION ' || CASE WHEN ON_COMPLETION = 'PRESERVE' THEN 'PRESERVE' ELSE 'NOT PRESERVE' END ||
-       '\n  ' || CASE STATUS
-           WHEN 'ENABLED' THEN 'ENABLE'
-           WHEN 'DISABLED' THEN 'DISABLE'
-           WHEN 'SLAVESIDE_DISABLED' THEN 'DISABLE ON SLAVE'
-           ELSE 'UNRECOGNIZED_EVENT_STATUS_' || STATUS
-       END ||
-       CASE WHEN NULLIF(EVENT_COMMENT, '') IS NOT NULL THEN '\n  COMMENT ''' || REPLACE(EVENT_COMMENT, '''', '''''') || '''' ELSE '' END ||
-       '\n  DO ' || EVENT_DEFINITION || ' //\nDELIMITER ;' AS Code
+SELECT EVENT_NAME
   FROM INFORMATION_SCHEMA.EVENTS
   WHERE EVENT_SCHEMA = '{EscapeSql(targetSchema)}'
     AND EVENT_NAME NOT LIKE 'SchemaSmith\_%'
+  ORDER BY EVENT_NAME
 ";
-        _stats.Events = PerformMySqlCasting(command, "Events");
+        var names = new List<string>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read()) names.Add(reader.GetString(0));
+        }
+
+        if (names.Count == 0) return;
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Events", ScriptObjectType.Events));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var name in names)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for event {name}");
+            command.CommandText = $"CALL SchemaSmith_GenerateEventJSON('{EscapeSql(targetSchema)}', '{EscapeSql(name)}')";
+            var eventJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(eventJson) || eventJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for event {name}");
+                continue;
+            }
+
+            var eventObj = JsonConvert.DeserializeObject<MySqlEvent>(eventJson);
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName("", name, ".json"));
+            JsonHelper.Write(file, eventObj);
+            _stats.Events++;
+        }
     }
 
     /// <summary>

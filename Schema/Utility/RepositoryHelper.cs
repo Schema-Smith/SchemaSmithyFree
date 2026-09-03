@@ -284,6 +284,7 @@ public static class RepositoryHelper
             ("tables", Platform.MySQL) => typeof(MySqlTable),
             ("indexedviews", Platform.SqlServer) => typeof(SqlServerIndexedView),
             ("materializedviews", Platform.PostgreSQL) => typeof(PostgreSqlMaterializedView),
+            ("events", Platform.MySQL) => typeof(MySqlEvent),
             _ => throw new ArgumentException($"Unknown schema file mapping: {fileName} for platform {platform}")
         };
     }
@@ -301,6 +302,10 @@ public static class RepositoryHelper
             files.Add($"materializedviews.{platformName}.schema");
         if (platform == Platform.SqlServer)
             files.Add($"indexedviews.{platformName}.schema");
+        // Scheduled events, MySQL and MariaDB. MySqlEvent carries no MariaDB-only properties, so unlike
+        // tables this needs no pre-fold special case -- both engines get the same shape.
+        if (platform.GetBasePlatform() == Platform.MySQL)
+            files.Add($"events.{platformName}.schema");
         return files.ToArray();
     }
 

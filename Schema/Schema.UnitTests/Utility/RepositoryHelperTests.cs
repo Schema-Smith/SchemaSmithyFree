@@ -38,10 +38,13 @@ public class RepositoryHelperTests
     {
         var names = RepositoryHelper.GetSchemaFileNames(Platform.MySQL);
 
-        Assert.That(names, Has.Length.EqualTo(3));
+        // Four since scheduled events became a declarative type: without an events schema an author gets
+        // no editor completion for an Events/*.json file and --Validate cannot check one at all.
+        Assert.That(names, Has.Length.EqualTo(4));
         Assert.That(names[0], Does.StartWith("products."));
         Assert.That(names[1], Does.StartWith("templates."));
         Assert.That(names[2], Does.StartWith("tables."));
+        Assert.That(names[3], Does.StartWith("events."));
 
         var platformStr = Platform.MySQL.ToCanonicalString().ToLower();
         foreach (var name in names)

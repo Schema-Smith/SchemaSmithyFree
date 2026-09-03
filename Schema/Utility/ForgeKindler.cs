@@ -402,6 +402,12 @@ public static class ForgeKindler
                 // COMPRESSION, KEY_BLOCK_SIZE and MariaDB's PAGE_COMPRESSED family all live in. LOCATE
                 // based rather than regex: REGEXP_SUBSTR does not exist on the MySQL 5.7 floor.
                 new("SchemaSmith_CreateOption.sql"),
+                // Scheduled events as a MANAGED type. EventMatches is the "has anything actually
+                // changed" predicate and must precede EventQuench, which calls it -- converging an event
+                // means DROP + CREATE, so a false "changed" would reset its schedule on every deploy.
+                new("SchemaSmith_EventMatches.sql"),
+                new("SchemaSmith_EventQuench.sql"),
+                new("SchemaSmith_GenerateEventJson.sql"),
                 new("SchemaSmith_SupportsApplicationTimePeriods.sql"),
                 // Gates the per-column WITHOUT SYSTEM VERSIONING clause (#408). MariaDB-only, like the
                 // period gate above it; calls SchemaSmith_ServerVersionNum, kindled earlier.

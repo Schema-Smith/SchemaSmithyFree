@@ -1351,6 +1351,43 @@ Indexed views are defined as JSON files in the `Indexed Views/` directory of eac
 
 ---
 
+## Scheduled Event JSON Format (MySQL / MariaDB)
+
+Scheduled events live in the `Events/` directory of each template. That folder accepts **both** forms:
+
+- **`.json`** — declared. The event is compared against the server, converges when it differs, and can be removed when it leaves the package.
+- **`.sql`** — scripted, exactly as before. Re-run on every deploy, never compared, never removed by absence.
+
+Existing packages need no change. Declaring the same event both ways is reported as `SS-EVT-001`.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Event name. Required. |
+| `Definition` | string | | The body after `DO`. A multi-statement body must be wrapped in `BEGIN … END` exactly as it would be in hand-written DDL. Required. |
+| `ScheduleType` | string | `"EVERY"` | `"EVERY"` for a recurring event or `"AT"` for a one-shot. |
+| `Interval` | string | `null` | For `EVERY`: the interval as a value and a unit, e.g. `"1 DAY"` or `"30 MINUTE"`. Compared case- and spacing-insensitively. |
+| `ExecuteAt` | string | `null` | For `AT`: when the event runs, once. |
+| `Starts` | string | `null` | Optional start of the recurrence window. **Omit it and the server's own start time is left alone.** MySQL fills in an unspecified `STARTS` with the moment the event was created, so treating that as declared would make every later deploy see a difference and recreate the event — resetting its schedule each time. Set this only if you want a fixed start. |
+| `Ends` | string | `null` | Optional end of the recurrence window. |
+| `Status` | string | `"ENABLE"` | `"ENABLE"`, `"DISABLE"` or `"DISABLE ON SLAVE"`. |
+| `Preserve` | bool | `false` | When true the event survives its last run instead of dropping itself. Matches the engine default (`NOT PRESERVE`). |
+| `Comment` | string | `null` | Event comment. |
+
+Removing an event from the package drops it only when `DropEventsRemovedFromProduct` is on, and only for events SchemaSmith created — one made by hand, or by a scripted `Events/` file, is never removed.
+
+```json
+{
+  "Name": "nightly_purge",
+  "ScheduleType": "EVERY",
+  "Interval": "1 DAY",
+  "Status": "ENABLE",
+  "Preserve": false,
+  "Definition": "DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL 90 DAY"
+}
+```
+
+---
+
 ## Materialized View JSON Format (PostgreSQL)
 
 Materialized views live in the `Materialized Views/` directory of each template.

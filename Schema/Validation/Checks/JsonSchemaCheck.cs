@@ -216,6 +216,7 @@ public sealed class JsonSchemaCheck : ISchemaCheck
         if (parent.Equals("Tables", StringComparison.OrdinalIgnoreCase)) return "tables";
         if (parent.Equals("Indexed Views", StringComparison.OrdinalIgnoreCase)) return "indexedviews";
         if (parent.Equals("Materialized Views", StringComparison.OrdinalIgnoreCase)) return "materializedviews";
+        if (parent.Equals("Events", StringComparison.OrdinalIgnoreCase)) return "events";
 
         var fileName = Path.GetFileName(jsonFilePath);
         if (fileName.Equals("Product.json", StringComparison.OrdinalIgnoreCase)) return "products";

@@ -384,7 +384,13 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_CreateOption (the CREATE_OPTIONS parser -- COMPRESSION, KEY_BLOCK_SIZE and
         //   MariaDB PAGE_COMPRESSED/_LEVEL all surface only in that one free-text column, so they share
         //   one reader. LOCATE-based, not regex: REGEXP_SUBSTR does not exist on the MySQL 5.7 floor.
-        Assert.That(mysql.Length, Is.EqualTo(54));
+        // +2 = SchemaSmith_EventMatches + SchemaSmith_EventQuench (#F4 -- scheduled events promoted from
+        //   a scripted-object folder to a MANAGED type. EventMatches must kindle FIRST; the quench calls
+        //   it, and converging an event is DROP + CREATE, so a false "changed" resets its schedule.
+        // +1 = SchemaSmith_GenerateEventJson (the catalog-to-package translation for events, kindled
+        //   like GenerateTableJson rather than living inline in SchemaTongs -- which is what lets it be
+        //   certified against a live server instead of only through the whole cast pipeline).
+        Assert.That(mysql.Length, Is.EqualTo(57));
     }
 
     [Test]

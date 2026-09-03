@@ -1930,7 +1930,10 @@ public class ProductQuench
             DropPeriodsRemovedFromProduct = dropRemovedPeriods,
             DropSchemaBoundDependents = ResolveCascadedFlag(
                 ConfigBool(_config, SettingsKeys.DropSchemaBoundDependents), _product.DropSchemaBoundDependents,
-                template.DropSchemaBoundDependents, defaultValue: false)
+                template.DropSchemaBoundDependents, defaultValue: false),
+            // Environment-level only for now: an event is a template-scoped object, so there is no
+            // per-table or per-object level for this to cascade from.
+            DropRemovedEvents = ConfigBool(_config, SettingsKeys.DropEventsRemovedFromProduct) ?? false
         };
         var workUnitStopwatch = Stopwatch.StartNew();
         quench.Execute();

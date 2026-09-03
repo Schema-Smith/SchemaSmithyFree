@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
@@ -38,6 +39,7 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string VersioningExclusionInertCode = "SS-SV-001";
     private const string CompressionConflictCode = "SS-CO-001";
     private const string CompressionLevelInertCode = "SS-CO-002";
+    private const string DuplicateEventCode = "SS-EVT-001";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -51,6 +53,9 @@ public sealed class CoherenceCheck : ISchemaCheck
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var findings = new List<Finding>();
+        foreach (var template in ctx.Templates)
+            findings.AddRange(CheckScheduledEvents(template));
+
         foreach (var template in ctx.Templates)
         foreach (var table in template.Tables)
         {
@@ -414,6 +419,35 @@ public sealed class CoherenceCheck : ISchemaCheck
             yield return new Finding(Severity.Warning, CompressionLevelInertCode, Category, tableLocation,
                 $"Table '{table.Name}' sets PageCompressionLevel but not PageCompressed, so the level is " +
                 "ignored — set PageCompressed, or drop the level.");
+    }
+
+    /// <summary>
+    /// A scheduled event declared BOTH declaratively and as a script (F4).
+    /// <para>Promoting events to a managed type was done additively: the <c>Events/</c> folder now holds
+    /// <c>.json</c> (declared, converged, droppable by absence) alongside <c>.sql</c> (scripted, re-run
+    /// every deploy), so no existing package had to change. The cost of that choice is that the same
+    /// event can be described twice, and the two forms fight — the scripted one drops and recreates on
+    /// every deploy, undoing the convergence the declared one just performed, and which wins depends on
+    /// slot ordering rather than on anything the author wrote.</para>
+    /// <para>Error rather than Warning: there is no reading under which declaring an event twice is what
+    /// someone meant.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckScheduledEvents(Template template)
+    {
+        if (template.Events.Count == 0) yield break;
+
+        var scriptedEventNames = template.ObjectScripts?
+            .Where(s => (s.FilePath ?? "").Replace(Path.DirectorySeparatorChar, '/').Contains("/Events/", StringComparison.OrdinalIgnoreCase))
+            .Select(s => Path.GetFileNameWithoutExtension(s.FilePath ?? ""))
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+
+        foreach (var ev in template.Events.Where(e => scriptedEventNames.Contains(e.Name ?? "")))
+            yield return new Finding(Severity.Error, DuplicateEventCode, Category,
+                $"Template '{template.Name}'",
+                $"Event '{ev.Name}' is declared as JSON and also scripted as a .sql file in the same " +
+                "Events folder. The scripted form drops and recreates the event on every deploy, undoing " +
+                "what the declared form converged — keep one.");
     }
 
     // Mirrors SchemaSmith_NormalizeIndexColumns.sql's DESC/ASC suffix handling (source of truth —

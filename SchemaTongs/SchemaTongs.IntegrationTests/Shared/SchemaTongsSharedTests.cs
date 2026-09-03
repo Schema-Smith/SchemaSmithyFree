@@ -230,35 +230,39 @@ public abstract class SchemaTongsSharedTests
             var config = SetupConfig();
             config["ShouldCast:Events"] = "true";
 
-            string disabledScript = null;
-            string enabledScript = null;
-            string slaveDisabledScript = null;
-            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEvent.sql")), Arg.Any<string>()))
-                .Do(ci => disabledScript = ci.ArgAt<string>(1));
-            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventEnabled.sql")), Arg.Any<string>()))
-                .Do(ci => enabledScript = ci.ArgAt<string>(1));
-            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventSlaveDisabled.sql")), Arg.Any<string>()))
-                .Do(ci => slaveDisabledScript = ci.ArgAt<string>(1));
+            string disabledJson = null;
+            string enabledJson = null;
+            string slaveDisabledJson = null;
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEvent.json")), Arg.Any<string>()))
+                .Do(ci => disabledJson = ci.ArgAt<string>(1));
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventEnabled.json")), Arg.Any<string>()))
+                .Do(ci => enabledJson = ci.ArgAt<string>(1));
+            file.When(f => f.WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventSlaveDisabled.json")), Arg.Any<string>()))
+                .Do(ci => slaveDisabledJson = ci.ArgAt<string>(1));
 
             var tongs = new SchemaTongs(Platform);
             tongs.CastTemplate();
 
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received().WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
-            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEvent.sql")), Arg.Any<string>());
-            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventEnabled.sql")), Arg.Any<string>());
-            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventSlaveDisabled.sql")), Arg.Any<string>());
+            // Events are now cast as DECLARATIVE .json rather than raw .sql (F4). The .sql form still
+            // DEPLOYS -- a hand-written script in Events/ runs exactly as before -- but extraction now
+            // writes the declared form, which is what can be compared and converged.
+            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEvent.json")), Arg.Any<string>());
+            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventEnabled.json")), Arg.Any<string>());
+            file.Received().WriteAllText(Arg.Is<string>(s => s.Contains("Events") && s.EndsWithIgnoringCase("TestEventSlaveDisabled.json")), Arg.Any<string>());
 
-            // INFORMATION_SCHEMA.EVENTS.STATUS reports ENABLED/DISABLED/SLAVESIDE_DISABLED, but
-            // CREATE EVENT only accepts the ENABLE/DISABLE/DISABLE ON SLAVE keywords; assert the
-            // emitted DDL keyword, not just that extraction produced a file (#391). Each check is
-            // anchored on both sides ("\n  " before, "\n" after) so a catalog value that merely
-            // contains the keyword as a substring - DISABLED contains DISABLE, SLAVESIDE_DISABLED
-            // contains DISABLE - cannot pass: the anchor after the keyword only matches on the
-            // fixed-form DDL text, not the catalog spelling.
-            Assert.That(disabledScript, Does.Contain("\n  DISABLE\n"));
-            Assert.That(enabledScript, Does.Contain("\n  ENABLE\n"));
-            Assert.That(slaveDisabledScript, Does.Contain("\n  DISABLE ON SLAVE\n"));
+            // What this test exists for is UNCHANGED (#391): INFORMATION_SCHEMA.EVENTS.STATUS reports
+            // ENABLED / DISABLED / SLAVESIDE_DISABLED, and the package must carry the spelling an author
+            // WRITES -- ENABLE / DISABLE / DISABLE ON SLAVE. Only the surface moved, from emitted DDL to
+            // a JSON property.
+            //
+            // The closing quote is load-bearing, exactly as the DDL anchor was: DISABLED contains
+            // DISABLE and SLAVESIDE_DISABLED contains DISABLE, so an unanchored check would pass on the
+            // raw catalog value this translation exists to replace.
+            Assert.That(disabledJson, Does.Contain("\"Status\": \"DISABLE\""), disabledJson);
+            Assert.That(enabledJson, Does.Contain("\"Status\": \"ENABLE\""), enabledJson);
+            Assert.That(slaveDisabledJson, Does.Contain("\"Status\": \"DISABLE ON SLAVE\""), slaveDisabledJson);
 
             config["ShouldCast:Events"] = "false";
             FactoryContainer.Clear();
