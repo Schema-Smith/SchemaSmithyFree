@@ -106,7 +106,15 @@ SELECT "SchemaSmith"."FormatJson"(ROW_TO_JSON(tbl))
                                -- placement -- it yields NULL so FormatJson strips the key and an ordinary
                                -- index extracts exactly as it did before this shipped. An index does not
                                -- inherit its table's tablespace, so this is read per index.
-                               (SELECT ts.spcname FROM pg_tablespace ts WHERE ts.oid = i.reltablespace) AS "Tablespace"
+                               (SELECT ts.spcname FROM pg_tablespace ts WHERE ts.oid = i.reltablespace) AS "Tablespace",
+                               -- Storage parameters (the WITH clause) as an object, minus fillfactor which
+                               -- FillFactor above owns. This is what carries a vector index's m /
+                               -- ef_construction / lists. JSON_OBJECT_AGG returns NULL for an index with no
+                               -- non-fillfactor options, so FormatJson strips the key and an ordinary index
+                               -- extracts byte-identically to before this shipped.
+                               (SELECT JSON_OBJECT_AGG(SPLIT_PART(opt, '=', 1), SPLIT_PART(opt, '=', 2))
+                                  FROM UNNEST(i.reloptions) AS o(opt)
+                                 WHERE opt NOT LIKE 'fillfactor=%') AS "StorageParameters"
                           FROM pg_index idx
                           JOIN pg_class i ON i.oid = idx.indexrelid
                           LEFT JOIN pg_catalog.pg_constraint con ON con.conrelid = idx.indrelid AND con.conname = i.relname AND con.contype IN ('p', 'u', 'x')

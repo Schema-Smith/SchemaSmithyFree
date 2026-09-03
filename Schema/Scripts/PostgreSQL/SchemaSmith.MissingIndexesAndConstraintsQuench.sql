@@ -141,9 +141,17 @@ BEGIN
                               CASE WHEN NULLIF(ti."IncludeColumns", '') IS NOT NULL THEN ' INCLUDE (' || "SchemaSmith"."QuoteColumnList"(ti."IncludeColumns") || ')' ELSE '' END ||
                               -- NULLS NOT DISTINCT belongs after INCLUDE and before WITH per the CREATE INDEX grammar.
                               CASE WHEN ti."Unique" AND ti."NullsNotDistinct" THEN ' NULLS NOT DISTINCT' ELSE '' END ||
-                              CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
-                                   THEN ' WITH (fillfactor = ' || ti."FillFactor" || ') '
-                                   ELSE ' ' END ||
+                              -- One WITH clause: fillfactor (gated to the AMs that accept it) plus
+                              -- StorageParameters (any AM -- a vector index's m / ef_construction / lists).
+                              -- StorageParameters is already canonical key=value,key=value.
+                              CASE
+                                WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash') AND COALESCE(ti."StorageParameters", '') <> ''
+                                     THEN ' WITH (fillfactor = ' || ti."FillFactor" || ', ' || ti."StorageParameters" || ') '
+                                WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
+                                     THEN ' WITH (fillfactor = ' || ti."FillFactor" || ') '
+                                WHEN COALESCE(ti."StorageParameters", '') <> ''
+                                     THEN ' WITH (' || ti."StorageParameters" || ') '
+                                ELSE ' ' END ||
                               -- TABLESPACE follows WITH and precedes WHERE per the CREATE INDEX grammar
                               -- (verified live on 16).
                               CASE WHEN COALESCE(ti."Tablespace", '') <> '' THEN ' TABLESPACE "' || ti."Tablespace" || '"' ELSE '' END ||

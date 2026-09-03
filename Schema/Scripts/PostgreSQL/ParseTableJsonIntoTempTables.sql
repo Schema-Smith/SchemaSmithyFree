@@ -147,7 +147,14 @@
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
            COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((celem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
-           COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor"
+           COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor",
+           -- Index storage parameters (the WITH clause), canonicalised as key=value pairs sorted by key so
+           -- reloptions' own ordering does not matter, with fillfactor excluded (FillFactor owns it). This is
+           -- what carries a vector index's m / ef_construction / lists. Same shape as IndexOnlyQuench's own
+           -- temp_indexes -- both must declare it because they build the table independently.
+           COALESCE((SELECT STRING_AGG(sp.k || '=' || sp.v, ',' ORDER BY sp.k)
+                       FROM JSON_EACH_TEXT(COALESCE(celem -> 'StorageParameters', '{}'::JSON)) AS sp(k, v)
+                      WHERE sp.k <> 'fillfactor'), '') AS "StorageParameters"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Indexes')::JSON) AS celem(value);
 
