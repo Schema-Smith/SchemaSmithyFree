@@ -211,28 +211,36 @@ BEGIN
     -- Offending tables are logged individually first: MySQL caps SIGNAL MESSAGE_TEXT at 128 characters, so
     -- the detail goes to the run log and the signal stays short -- the same shape as the drop-by-absence
     -- guard in STEP 8.
-    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
-    SELECT CONNECTION_ID(),
-           CONCAT('  Declared partitioning does not match the deployed table (refused -- repartitioning rewrites every row): ',
-                  SchemaSmith_StripBacktickWrapping(t.TableName),
-                  ' declares ', t.PartitionMethod, '(', t.PartitionExpression, ')',
-                  ', deployed ', COALESCE(CONCAT(lp.PARTITION_METHOD, '(', lp.PARTITION_EXPRESSION, ')'), 'unpartitioned'))
-      FROM _SchemaSmith_Tables t
-      LEFT JOIN (SELECT p.TABLE_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION
-                   FROM INFORMATION_SCHEMA.PARTITIONS p
-                  WHERE CONVERT(p.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
-                    AND p.PARTITION_NAME IS NOT NULL
-                    AND p.PARTITION_ORDINAL_POSITION = 1) lp
-        ON CONVERT(lp.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
-     WHERE t.NewTable = 0
-       AND t.PartitionMethod IS NOT NULL
-       AND (lp.PARTITION_METHOD IS NULL
-            OR UPPER(lp.PARTITION_METHOD) <> t.PartitionMethod
-            OR SchemaSmith_NormalizePartitionExpression(lp.PARTITION_EXPRESSION) <> SchemaSmith_NormalizePartitionExpression(t.PartitionExpression));
+    --
+    -- GUARDED so the INFORMATION_SCHEMA.PARTITIONS scan runs ONLY when a declared table actually asks for
+    -- partitioning. That scan opens metadata for every table in the schema on MariaDB, and the outer
+    -- predicate (t.PartitionMethod IS NOT NULL) would prune the RESULT but not stop the eager catalog read.
+    -- Every package in the wild declares no partitioning, so without this guard the feature adds a
+    -- whole-schema metadata scan to every deploy for nothing -- real per-deploy load under concurrent runs.
+    IF EXISTS (SELECT 1 FROM _SchemaSmith_Tables WHERE NewTable = 0 AND PartitionMethod IS NOT NULL) THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(),
+               CONCAT('  Declared partitioning does not match the deployed table (refused -- repartitioning rewrites every row): ',
+                      SchemaSmith_StripBacktickWrapping(t.TableName),
+                      ' declares ', t.PartitionMethod, '(', t.PartitionExpression, ')',
+                      ', deployed ', COALESCE(CONCAT(lp.PARTITION_METHOD, '(', lp.PARTITION_EXPRESSION, ')'), 'unpartitioned'))
+          FROM _SchemaSmith_Tables t
+          LEFT JOIN (SELECT p.TABLE_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION
+                       FROM INFORMATION_SCHEMA.PARTITIONS p
+                      WHERE CONVERT(p.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                        AND p.PARTITION_NAME IS NOT NULL
+                        AND p.PARTITION_ORDINAL_POSITION = 1) lp
+            ON CONVERT(lp.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
+         WHERE t.NewTable = 0
+           AND t.PartitionMethod IS NOT NULL
+           AND (lp.PARTITION_METHOD IS NULL
+                OR UPPER(lp.PARTITION_METHOD) <> t.PartitionMethod
+                OR SchemaSmith_NormalizePartitionExpression(lp.PARTITION_EXPRESSION) <> SchemaSmith_NormalizePartitionExpression(t.PartitionExpression));
 
-    IF ROW_COUNT() > 0 THEN
-        SET @ss_msg = 'Declared partitioning does not match the deployed table -- see the run log. Repartitioning rewrites every row and is refused.';
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        IF ROW_COUNT() > 0 THEN
+            SET @ss_msg = 'Declared partitioning does not match the deployed table -- see the run log. Repartitioning rewrites every row and is refused.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        END IF;
     END IF;
 
     -- =======================

@@ -159,7 +159,9 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             tongs.CastTemplate();
 
-            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            // 11, not 10: this is the one test that casts TWO object files (TestFunction + Test_Trigger),
+            // so the 6 -> 7 schema-count bump from adding domaintypes lands on top of a base of 10, not 9.
+            file.Received(11).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
             file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
@@ -197,7 +199,8 @@ public class SchemaTongsTests
             file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
-            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Types", "Test.Flag.sql"))), Arg.Any<string>());
+            // Domain types are DECLARATIVE now (F5): a .json in Domain Types/, not a guarded .sql in Types/.
+            file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Domain Types", "Test.Flag.json"))), Arg.Any<string>());
 
             config["ShouldCast:DomainTypes"] = "false";
             FactoryContainer.Clear();
