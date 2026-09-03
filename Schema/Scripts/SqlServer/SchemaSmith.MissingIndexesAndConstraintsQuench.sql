@@ -120,7 +120,8 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
-                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+
                                                       -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
                                                       -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
                                                       -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the
@@ -157,7 +158,8 @@ BEGIN TRY
                                                                 'FILLFACTOR = ' + CAST(i.[FillFactor] AS NVARCHAR(20)) 
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
-                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+                                                      CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+
                                                       -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
                                                       -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
                                                       -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the

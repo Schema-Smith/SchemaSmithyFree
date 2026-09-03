@@ -399,7 +399,8 @@ namespace Schema.Domain
             clone.Tables.AddRange(Tables);
             clone.MaterializedViews.AddRange(MaterializedViews);
             clone.Events.AddRange(Events);
-            clone.DomainTypes.AddRange(DomainTypes);
+            clone.DomainTypes.AddRange(DomainTypes);
+
             clone.EnumTypes.AddRange(EnumTypes);
             clone.DomainTypeSchema = DomainTypeSchema;
             clone.EnumTypeSchema = EnumTypeSchema;
@@ -535,7 +536,8 @@ namespace Schema.Domain
             MigrateMySqlColumnCheckExpressionAlias(platform);
             LoadMaterializedViews(platform, tolerateComponentLoadErrors);
             LoadEvents(platform, tolerateComponentLoadErrors);
-            LoadDomainTypes(platform, tolerateComponentLoadErrors);
+            LoadDomainTypes(platform, tolerateComponentLoadErrors);
+
             LoadEnumTypes(platform, tolerateComponentLoadErrors);
             LoadSequences(platform, tolerateComponentLoadErrors);
             LoadIndexedViews(platform, tolerateComponentLoadErrors);
