@@ -487,6 +487,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
 | `FileStreamFileGroup` | string | `null` | The table's `FILESTREAM_ON` filegroup, as a **name only**. `null` means the database's default FILESTREAM filegroup. Effectively immutable -- SQL Server refuses to reassign a table that already has one, so a declared name differing from the deployed one fails rather than being ignored. See [FILESTREAM (SQL Server)](#filestream-sql-server). |
 | `TextImageFileGroup` | string | `null` | The table's `TEXTIMAGE_ON` filegroup -- where large-object data lands -- as a **name only**. `null` means the default. Large-object columns are `text`, `ntext`, `image`, `xml`, and the `(MAX)` types; **a FILESTREAM column does not count**. Declaring it on a table with no large-object column is refused by name, because SQL Server rejects `TEXTIMAGE_ON` outright there (error 1709). Create-time only, like the other two placement clauses: a declared name that differs from the deployed one fails rather than being ignored. |
+| `PartitionScheme` | string | `null` | Partition scheme the table is stored on, as a **name only** — SchemaSmith never creates a partition function or scheme, exactly as it never creates a filegroup. Declared together with `PartitionColumn`; one without the other is refused, because `ON <scheme>` needs the column the function is applied to. Cannot be combined with `FileGroup`: a table lives on one data space. A declared scheme that does not exist on the target fails by name before any DDL runs. **Applied when the table is created; a change on a deployed table is refused** — moving a table onto, off, or between schemes rewrites every row, and comparing two layouts cannot tell you whether a `SPLIT` or a `MERGE` was intended. Leave it unset and SchemaSmith does not manage partitioning at all, so a table someone partitioned by hand is left exactly as it is. |
+| `PartitionColumn` | string | `null` | The column the partition function is applied to. One column — SQL Server partitions on a single column. Declared with `PartitionScheme` or not at all. |
 | `GraphType` | string | `null` | `"Node"` or `"Edge"` creates the table `AS NODE` / `AS EDGE`. `null` or `"None"` is an ordinary table. **Create-time only** -- SQL Server has no `ALTER` that converts a table to or from a graph table, so changing this on a deployed table is refused rather than attempted. Requires SQL Server 2017; below that the table deploys as an ordinary one and the change is reported through `UnsupportedFeaturePolicy`. The graph pseudo-columns SQL Server adds are never extracted and never dropped. |
 | `Ledger` | string | `null` | `"AppendOnly"` or `"Updatable"` creates a tamper-evident ledger table. `null` or `"Off"` is an ordinary table. Cannot be combined with `IsTemporal` -- a ledger table manages its own history, and SQL Server reports it as non-temporal. Requires SQL Server 2022; below that the table deploys as an ordinary one and the change is reported through `UnsupportedFeaturePolicy`. **Close to permanent:** there is no `ALTER` to or from a ledger table, and `DROP` does not remove one -- SQL Server retains it under a generated name -- so changing this on a deployed table is refused. |
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
@@ -524,6 +526,7 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MySQL supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
 | `Compression` | string | `null` | **MySQL only.** InnoDB transparent page compression: `"zlib"`, `"lz4"` or `"none"`. Cannot be combined with `RowFormat: "COMPRESSED"` — MySQL refuses that with error 1031, and `--Validate` reports `SS-CO-001` first. MariaDB spells this `PageCompressed`. |
 | `KeyBlockSize` | int | `null` | InnoDB compressed-page size in KB (1, 2, 4, 8, 16). Only meaningful with `RowFormat: "COMPRESSED"`. |
+| `Partitioning` | object | `null` | How the table is partitioned. See [Partitioning (MySQL / MariaDB)](#partitioning-mysql--mariadb). Leave it unset and SchemaSmith does not manage partitioning at all, so a table someone partitioned by hand is left exactly as it is. |
 
 ### MariaDB (`MariaDbTable`)
 
@@ -749,9 +752,11 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 ### SQL Server index extras
 
 `CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`,
-`FileGroup`, `IgnoreDuplicateKey`, `PadIndex`.
+`FileGroup`, `PartitionScheme`, `PartitionColumn`, `IgnoreDuplicateKey`, `PadIndex`.
 
 `FileGroup` follows the same name-only, unset-means-unmanaged contract as the table property above. Worth knowing when declaring one on a table but not its indexes: an index created with no filegroup of its own follows **its table**, not the database default. An index is declared independently of its table's filegroup, which is what lets you keep a large table's data and its indexes on separate storage.
+
+`PartitionScheme` and `PartitionColumn` work the same way, and are read independently of the table's own placement — an index is **not** required to be aligned with its table. A nonclustered index on a partitioned table may sit on a single filegroup, and an index on an ordinary heap may itself be partitioned; both are real designs, so neither is inferred from the other. As on the table, a declared scheme that differs from where the index already lives is refused rather than rebuilt.
 
 | Property | Type | Default | Description |
 |---|---|---|---|
@@ -1406,6 +1411,48 @@ Enum types live in the `Enum Types/` directory of each template, which accepts *
   "Name": "order_status",
   "Schema": "public",
   "Values": [ "draft", "submitted", "shipped", "cancelled" ]
+}
+```
+
+---
+
+## Partitioning (MySQL / MariaDB)
+
+MySQL and MariaDB carry a table's partition definition in the table DDL itself — there is no separate scheme object to point at, the way SQL Server has one — so the package carries the whole definition.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Method` | string | | `RANGE`, `LIST`, `HASH`, `KEY`, `RANGE COLUMNS` or `LIST COLUMNS`. Required. The `COLUMNS` forms take a column **list** rather than an expression and compare values column by column. |
+| `Expression` | string | | The partitioning expression (`Id`, `YEAR(created)`), or a comma-separated column list for the `COLUMNS` methods. Required. |
+| `PartitionCount` | int | `null` | `HASH` and `KEY` only: how many partitions to spread across. `RANGE` and `LIST` name each partition individually instead. |
+| `Partitions` | array | `[]` | `RANGE` and `LIST` only, **in declared order**. Each entry is `{ "Name": "...", "Values": "..." }` — `Values` is what follows `VALUES LESS THAN` for `RANGE` (a value, a tuple for `RANGE COLUMNS`, or `MAXVALUE`) or `VALUES IN` for `LIST`. |
+
+**Order is part of the definition.** `RANGE` boundaries must ascend, and the engine rejects a definition where they do not, so the list is written and read in declared order rather than sorted.
+
+**Applied when the table is created; a change on a deployed table is refused.** `ALTER TABLE … PARTITION BY` rewrites every row, and comparing two layouts cannot tell you whether a split or a merge was intended — so a declaration that disagrees with the deployed table names both and stops, rather than repartitioning your data on the strength of an edited file. Repartition manually, or correct the declaration to match.
+
+**The comparison ignores backticks, whitespace and case**, because the engines do not agree on how they report a partition expression back: MySQL 5.7 returns the text you wrote, while MySQL 8, MariaDB 10.2 and MariaDB 11.4 all return a rewritten form (`year(`dt`)`). Without normalising, the same package would deploy on one engine and be refused on another.
+
+**MySQL requires every `UNIQUE` and `PRIMARY KEY` to contain every partitioning column.** That is the engine's rule, not SchemaSmith's, and a definition breaking it fails with the engine's own error.
+
+```json
+{
+  "Name": "`order_history`",
+  "Columns": [
+    { "Name": "`Id`", "DataType": "int", "Nullable": false },
+    { "Name": "`Placed`", "DataType": "date", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "`Id`" }
+  ],
+  "Partitioning": {
+    "Method": "RANGE",
+    "Expression": "Id",
+    "Partitions": [
+      { "Name": "p_early", "Values": "1000000" },
+      { "Name": "p_rest",  "Values": "MAXVALUE" }
+    ]
+  }
 }
 ```
 

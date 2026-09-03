@@ -421,6 +421,10 @@ public static class ForgeKindler
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_IndexHasFunctionalKeyPart.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),
+                // Canonicalises a partition expression before comparing declared against live
+                // (#partitioning, K3) -- MySQL 5.7 echoes the text the user wrote while every other
+                // supported engine rewrites it, so a literal compare would be engine-specific.
+                new("SchemaSmith_NormalizePartitionExpression.sql"),
                 new("SchemaSmith_UpperDataType.sql"),
                 new("SchemaSmith_StripIntDisplayWidth.sql"),
                 new("SchemaSmith_NormalizeColumnDefault.sql"),
@@ -431,6 +435,10 @@ public static class ForgeKindler
                 new("SchemaSmith_IsSystemTimePeriodColumn.sql"),
                 new("SchemaSmith_SetSystemVersioningAlterHistory.sql"),
                 new("SchemaSmith_TablePeriodsJson.sql"),
+                // The catalog-to-package read for partitioning (#partitioning, K3). ONE shared
+                // definition, unlike its Periods sibling: INFORMATION_SCHEMA.PARTITIONS exists on every
+                // supported version of both engines, so no MariaDb override is needed.
+                new("SchemaSmith_TablePartitioningJson.sql"),
                 new("SchemaSmith_SnapshotIndexVisibility.sql"),
                 new("SchemaSmith_SnapshotIndexExistence.sql"),
                 new("SchemaSmith_DropCheckClause.sql"),

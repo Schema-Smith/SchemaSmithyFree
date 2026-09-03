@@ -191,6 +191,51 @@ BEGIN
     END IF;
 
     -- =======================
+    -- STEP -0.5: PARTITIONING -- ADOPT AND VERIFY
+    -- =======================
+    -- Runs BEFORE any DDL, in live and WhatIf alike, because every disagreement it can find describes a
+    -- statement that rewrites EVERY ROW of the table. ALTER TABLE ... PARTITION BY is a full table rebuild,
+    -- and a state-based diff cannot derive the SPLIT/MERGE intent behind a changed boundary -- it can only
+    -- see that two layouts differ -- so a mismatch is reported and refused, never applied.
+    --
+    -- An UNSET Partitioning means "SchemaSmith does not manage partitioning here" -- it is NOT a
+    -- declaration that the table is unpartitioned. A package that never mentions it must keep deploying
+    -- against a table a DBA partitioned by hand, which is every package in the wild today. Only a DECLARED
+    -- method is compared.
+    --
+    -- THE EXPRESSION COMPARISON IS NORMALIZED, and the floor is why: MySQL 5.7 returns the text the user
+    -- wrote while MySQL 8, MariaDB 10.2 and MariaDB 11.4 all return a rewritten form (year(`dt`)). A
+    -- literal compare would refuse a package extracted on 5.7 and deployed on 8 -- a false alarm on an
+    -- identical layout. See SchemaSmith_NormalizePartitionExpression.
+    --
+    -- Offending tables are logged individually first: MySQL caps SIGNAL MESSAGE_TEXT at 128 characters, so
+    -- the detail goes to the run log and the signal stays short -- the same shape as the drop-by-absence
+    -- guard in STEP 8.
+    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+    SELECT CONNECTION_ID(),
+           CONCAT('  Declared partitioning does not match the deployed table (refused -- repartitioning rewrites every row): ',
+                  SchemaSmith_StripBacktickWrapping(t.TableName),
+                  ' declares ', t.PartitionMethod, '(', t.PartitionExpression, ')',
+                  ', deployed ', COALESCE(CONCAT(lp.PARTITION_METHOD, '(', lp.PARTITION_EXPRESSION, ')'), 'unpartitioned'))
+      FROM _SchemaSmith_Tables t
+      LEFT JOIN (SELECT p.TABLE_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION
+                   FROM INFORMATION_SCHEMA.PARTITIONS p
+                  WHERE CONVERT(p.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                    AND p.PARTITION_NAME IS NOT NULL
+                    AND p.PARTITION_ORDINAL_POSITION = 1) lp
+        ON CONVERT(lp.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
+     WHERE t.NewTable = 0
+       AND t.PartitionMethod IS NOT NULL
+       AND (lp.PARTITION_METHOD IS NULL
+            OR UPPER(lp.PARTITION_METHOD) <> t.PartitionMethod
+            OR SchemaSmith_NormalizePartitionExpression(lp.PARTITION_EXPRESSION) <> SchemaSmith_NormalizePartitionExpression(t.PartitionExpression));
+
+    IF ROW_COUNT() > 0 THEN
+        SET @ss_msg = 'Declared partitioning does not match the deployed table -- see the run log. Repartitioning rewrites every row and is refused.';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+    END IF;
+
+    -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
     -- =======================
     -- Check if any tables in the definition are owned by a different product
@@ -2007,9 +2052,10 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     -- Drop tables that are owned by this product but no longer in the definition
     IF p_DropTablesRemovedFromProduct = 1 THEN
         -- Data-loss guard: a partitioned table spreads data across partitions that DROP TABLE
-        -- destroys outright. SchemaSmith has no partitioning support -- partitioning only happens
-        -- by hand, typically once a table has grown -- so an ordinary product-owned table can be
-        -- partitioned after deployment and later look like an ordinary drop-by-absence candidate.
+        -- destroys outright. It fires whether the partitioning was DECLARED (#partitioning, K3) or added
+        -- by hand after deployment -- and the hand-added case is still the common one, since partitioning
+        -- usually happens once a table has grown -- so either way an ordinary product-owned table can end
+        -- up looking like an ordinary drop-by-absence candidate.
         -- Fail closed before any DDL below, in both live and WhatIf mode, mirroring the
         -- UnsupportedFeaturePolicy=fail SIGNAL pattern used elsewhere in this proc. Table names are
         -- logged individually first (the SIGNAL MESSAGE_TEXT below stays well under MySQL's 128-char

@@ -1008,6 +1008,90 @@ public class CoherenceCheckTests
         Assert.That(RunFor(table, Platform.MySQL).Where(f => f.Code.StartsWith("SS-CO-")), Is.Empty);
     }
 
+    // ---- partition placement (#partitioning, K1) ------------------------------
+
+    [Test]
+    public void PartitionSchemeWithoutAColumn_IsAnError()
+    {
+        // The quench refuses this too, but only against a live target -- and it would otherwise reach the
+        // engine as ON <scheme> with no column, whose syntax error names neither the table nor the
+        // property. Catching it at authoring time is the point of --Validate.
+        var table = new SqlServerTable { Name = "invoice", PartitionScheme = "[psOrders]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+            Assert.That(finding.Message, Does.Contain("PartitionColumn"),
+                "the message must name the missing half, or the user cannot tell which to add: "
+                + finding.Message);
+        });
+    }
+
+    [Test]
+    public void PartitionColumnWithoutAScheme_IsAnError()
+    {
+        var table = new SqlServerTable { Name = "invoice", PartitionColumn = "[id]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-001");
+
+        Assert.That(finding.Message, Does.Contain("PartitionScheme"), finding.Message);
+    }
+
+    [Test]
+    public void PartitionSchemeAndFileGroupTogether_IsAnError()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "invoice", FileGroup = "[Archive]", PartitionScheme = "[psOrders]", PartitionColumn = "[id]"
+        };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-002");
+
+        Assert.That(finding.Severity, Is.EqualTo(Severity.Error), "a table lives on one data space");
+    }
+
+    [Test]
+    public void AnIndexDeclaringHalfAPartitionPlacement_IsAnError()
+    {
+        // An index carries its own placement independently of its table's, so it has to be checked in its
+        // own right -- a table-only check would miss this entirely.
+        var table = new SqlServerTable { Name = "invoice" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+        table.Indexes.Add(new SqlServerIndex { Name = "ix_invoice_id", IndexColumns = "[id]", PartitionScheme = "[psOrders]" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-001");
+
+        Assert.That(finding.Message, Does.Contain("ix_invoice_id"), finding.Message);
+    }
+
+    [Test]
+    public void AFullyDeclaredPartitionPlacement_IsSilent()
+    {
+        // The negative half -- a correct declaration must not be flagged.
+        var table = new SqlServerTable { Name = "invoice", PartitionScheme = "[psOrders]", PartitionColumn = "[id]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+        table.Indexes.Add(new SqlServerIndex
+        {
+            Name = "ix_invoice_id", IndexColumns = "[id]", PartitionScheme = "[psOrders]", PartitionColumn = "[id]"
+        });
+
+        Assert.That(RunFor(table, Platform.SqlServer).Where(f => f.Code.StartsWith("SS-PART-")), Is.Empty);
+    }
+
+    [Test]
+    public void ATableDeclaringNoPartitioningAtAll_IsSilent()
+    {
+        var table = new SqlServerTable { Name = "invoice", FileGroup = "[Archive]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        Assert.That(RunFor(table, Platform.SqlServer).Where(f => f.Code.StartsWith("SS-PART-")), Is.Empty);
+    }
+
     private static System.Collections.Generic.List<Finding> RunFor(Table table, Platform platform)
     {
         var template = new Template { Name = "Main" };

@@ -186,5 +186,26 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 116, NullValueHandling = NullValueHandling.Ignore)]
         public string Ledger { get; set; }
 
+        // Partition placement (#partitioning): the NAME of an existing partition scheme, plus the column
+        // the table is partitioned on. Both or neither -- a scheme with no column is not a placement.
+        //
+        // A NAME ONLY, exactly like FileGroup, and for the same reason: SchemaSmith places tables on
+        // partitioning, it does not author or migrate the partitioning itself. It never creates a partition
+        // function or scheme (it errors by name if the declared scheme is missing on the target), and it
+        // never moves an existing table onto or off one -- a declared scheme that differs from where the
+        // table already lives is refused rather than attempted, because that statement rewrites every row
+        // and a state-based diff cannot derive the SPLIT/MERGE intent behind a boundary change.
+        //
+        // That restraint has a second payoff: partition schemes required Enterprise Edition before
+        // SQL Server 2016 SP1, and since nothing here ever creates one, no edition or version gate is
+        // needed. If the scheme exists on the target, the target can already do this.
+        [JsonProperty(Order = 119, NullValueHandling = NullValueHandling.Ignore)]
+        public string PartitionScheme { get; set; }
+
+        // The column fed to the partition function. Names one column: SQL Server partitions on a single
+        // column, unlike MySQL's RANGE COLUMNS.
+        [JsonProperty(Order = 120, NullValueHandling = NullValueHandling.Ignore)]
+        public string PartitionColumn { get; set; }
+
     }
 }

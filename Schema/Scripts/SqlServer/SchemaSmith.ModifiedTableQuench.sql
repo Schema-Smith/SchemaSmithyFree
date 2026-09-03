@@ -110,7 +110,17 @@ BEGIN TRY
          SchemaSmith.fn_StripBracketWrapping(t.[FileGroup]) AS Declared,
          t.[FileGroup] AS DeclaredRaw,
          ds.[name] AS DeployedSpace,
-         ds.[type] AS DeployedSpaceType
+         ds.[type] AS DeployedSpaceType,
+         -- Partition placement (#partitioning, K1): carried on the SAME row so the checks below compare
+         -- both halves of the declaration against one resolved data space, rather than re-reading the
+         -- catalog per check and risking two answers.
+         SchemaSmith.fn_StripBracketWrapping(t.[PartitionScheme]) AS DeclaredScheme,
+         SchemaSmith.fn_StripBracketWrapping(t.[PartitionColumn]) AS DeclaredPartitionColumn,
+         (SELECT pc.[name]
+            FROM sys.index_columns pic WITH (NOLOCK)
+            JOIN sys.columns pc WITH (NOLOCK) ON pc.[object_id] = pic.[object_id] AND pc.column_id = pic.column_id
+           WHERE pic.[object_id] = si.[object_id] AND pic.index_id = si.index_id
+             AND pic.partition_ordinal = 1) AS DeployedPartitionColumn
     INTO #DeployedTablePlacement
     FROM #Tables t WITH (NOLOCK)
     LEFT JOIN sys.indexes si WITH (NOLOCK)
@@ -170,6 +180,55 @@ BEGIN TRY
       FROM #DeployedTablePlacement
      WHERE DeclaredRaw IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'FG'
     RAISERROR('Table %s declares filegroup %s, but is currently deployed on partition scheme %s. SchemaSmith cannot place a partitioned table on a single filegroup -- remove the declared FileGroup, or migrate the table manually.', 16, 1, @v_PsTable, @v_PsDeclared, @v_PsScheme)
+  END
+
+  -- Partition placement (#partitioning, K1) -- ADOPT AND VERIFY, the other half of the create-side apply.
+  -- Every disagreement below describes a statement that REWRITES EVERY ROW of the table, and a state-based
+  -- diff cannot derive the SPLIT/MERGE intent behind a boundary change from two layouts -- it can only see
+  -- that they differ. So each one is refused by name rather than attempted.
+  --
+  -- An UNSET PartitionScheme means "SchemaSmith does not manage placement here", exactly as an unset
+  -- FileGroup does: a package that never mentions partitioning must keep deploying against a partitioned
+  -- table it inherited, which is how the pre-existing DBA-partitioned table stays supported. Only a
+  -- DECLARED scheme is compared.
+  RAISERROR('Validate declared partition scheme matches deployed', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement
+              WHERE DeclaredScheme IS NOT NULL AND DeployedSpaceType = 'PS' AND DeclaredScheme <> DeployedSpace)
+  BEGIN
+    DECLARE @v_PsMoveTable NVARCHAR(1010), @v_PsMoveDeclared NVARCHAR(500), @v_PsMoveLive NVARCHAR(500)
+    SELECT TOP 1 @v_PsMoveTable = FullName, @v_PsMoveDeclared = DeclaredScheme, @v_PsMoveLive = DeployedSpace
+      FROM #DeployedTablePlacement
+     WHERE DeclaredScheme IS NOT NULL AND DeployedSpaceType = 'PS' AND DeclaredScheme <> DeployedSpace
+    RAISERROR('Table %s declares partition scheme %s, but is currently deployed on partition scheme %s. SchemaSmith does not move an existing table between partition schemes -- that rewrites every row. Migrate it manually, or correct the declared scheme to match.', 16, 1, @v_PsMoveTable, @v_PsMoveDeclared, @v_PsMoveLive)
+  END
+
+  -- Same scheme, different column: the function is applied to a different column, which is a different
+  -- physical layout even though the scheme name matches. Comparing only the name would let this through.
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement
+              WHERE DeclaredScheme IS NOT NULL AND DeployedSpaceType = 'PS'
+                AND DeclaredPartitionColumn IS NOT NULL AND DeployedPartitionColumn IS NOT NULL
+                AND DeclaredPartitionColumn <> DeployedPartitionColumn)
+  BEGIN
+    DECLARE @v_PsColTable NVARCHAR(1010), @v_PsColDeclared NVARCHAR(500), @v_PsColLive NVARCHAR(500)
+    SELECT TOP 1 @v_PsColTable = FullName, @v_PsColDeclared = DeclaredPartitionColumn, @v_PsColLive = DeployedPartitionColumn
+      FROM #DeployedTablePlacement
+     WHERE DeclaredScheme IS NOT NULL AND DeployedSpaceType = 'PS'
+       AND DeclaredPartitionColumn IS NOT NULL AND DeployedPartitionColumn IS NOT NULL
+       AND DeclaredPartitionColumn <> DeployedPartitionColumn
+    RAISERROR('Table %s declares partition column %s, but is currently partitioned on %s. Repartitioning on a different column rewrites every row -- migrate it manually, or correct the declared column to match.', 16, 1, @v_PsColTable, @v_PsColDeclared, @v_PsColLive)
+  END
+
+  -- Declaring a scheme on a table that is NOT partitioned: adopting an existing table into partitioning is
+  -- the same whole-table rewrite as moving between schemes, so it is refused the same way. DeployedSpace is
+  -- named so the message says which way round the disagreement runs.
+  IF EXISTS (SELECT 1 FROM #DeployedTablePlacement
+              WHERE DeclaredScheme IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'PS')
+  BEGIN
+    DECLARE @v_PsAdoptTable NVARCHAR(1010), @v_PsAdoptDeclared NVARCHAR(500), @v_PsAdoptLive NVARCHAR(500)
+    SELECT TOP 1 @v_PsAdoptTable = FullName, @v_PsAdoptDeclared = DeclaredScheme, @v_PsAdoptLive = DeployedSpace
+      FROM #DeployedTablePlacement
+     WHERE DeclaredScheme IS NOT NULL AND DeployedSpaceType IS NOT NULL AND DeployedSpaceType <> 'PS'
+    RAISERROR('Table %s declares partition scheme %s, but is currently deployed unpartitioned on filegroup %s. SchemaSmith does not partition an existing table -- that rewrites every row. Migrate it manually, or remove the declared PartitionScheme.', 16, 1, @v_PsAdoptTable, @v_PsAdoptDeclared, @v_PsAdoptLive)
   END
 
   RAISERROR('Validate declared GraphType matches deployed', 10, 100) WITH NOWAIT
@@ -1123,10 +1182,20 @@ BEGIN TRY
          IsUnique = si.is_unique, IsClustered = CAST(CASE WHEN si.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT), [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
          -- Filegroup placement (#filegroups): the index's LIVE filegroup name, for the declared-vs-deployed
          -- move check below. Deliberately NOT folded into [IndexScript] -- that string drives #IndexChanges'
-         -- drop+recreate detection, and a filegroup difference must ERROR, never trigger a silent rebuild
-         -- via the ordinary "index definition changed" path. NULL when data_space_id isn't a plain filegroup
-         -- (e.g. a partition scheme) -- out of scope, so those indexes never trip the move check.
+         -- drop+recreate detection, and a placement difference must ERROR, never trigger a silent rebuild
+         -- via the ordinary "index definition changed" path. NULL when data_space_id is a partition scheme
+         -- rather than a plain filegroup, which is exactly when [xPartitionScheme] below is populated
+         -- instead -- the two are mutually exclusive because an index lives on ONE data space.
          [xFileGroup] = fg.[name],
+         -- Partition placement (#partitioning, K1): the same read for a scheme, kept out of [IndexScript]
+         -- for the same reason. The column is read alongside the scheme because the same scheme applied to
+         -- a different column is a different physical layout.
+         [xPartitionScheme] = pds.[name],
+         [xPartitionColumn] = (SELECT pc.[name]
+                                 FROM sys.index_columns pic WITH (NOLOCK)
+                                 JOIN sys.columns pc WITH (NOLOCK) ON pc.[object_id] = pic.[object_id] AND pc.column_id = pic.column_id
+                                WHERE pic.[object_id] = si.[object_id] AND pic.index_id = si.index_id
+                                  AND pic.partition_ordinal = 1),
          IndexScript = 'CREATE ' +
                        CASE WHEN si.is_unique = 1 THEN 'UNIQUE ' ELSE '' END + 
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
@@ -1168,6 +1237,7 @@ BEGIN TRY
     LEFT JOIN sys.partitions p WITH (NOLOCK) ON p.[object_id] = si.[object_id]
                                             AND p.index_id = si.index_id
     LEFT JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
+    LEFT JOIN sys.data_spaces pds WITH (NOLOCK) ON pds.data_space_id = si.data_space_id AND pds.[type] = 'PS'
     CROSS APPLY (SELECT [WithOptions] =
                    CASE WHEN (si.[type] NOT IN (5, 6) AND ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('NONE', 'ROW', 'PAGE'))
                              OR (si.[type] IN (5, 6) AND ISNULL(p.[data_compression_desc], 'NONE') COLLATE DATABASE_DEFAULT IN ('COLUMNSTORE', 'COLUMNSTORE_ARCHIVE'))
@@ -1201,6 +1271,39 @@ BEGIN TRY
       WHERE ei.[xFileGroup] IS NOT NULL AND i.[FileGroup] IS NOT NULL
         AND SchemaSmith.fn_StripBracketWrapping(i.[FileGroup]) <> ei.[xFileGroup]
     RAISERROR('Index %s declares filegroup %s, but is currently deployed on filegroup %s. SchemaSmith does not move an existing index to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.', 16, 1, @v_IdxMoveIndex, @v_IdxMoveDeclared, @v_IdxMoveLive)
+  END
+
+  -- Partition placement (#partitioning, K1): the index-level twin of the table check above, and refused for
+  -- the same reason -- rebuilding an index onto a different scheme rewrites the whole index. Placement is
+  -- deliberately absent from [IndexScript], so without this an index whose declared scheme changed would be
+  -- SILENTLY left where it is: the ordinary drop-and-recreate path cannot see a difference it never
+  -- compares.
+  RAISERROR('Validate declared index partition scheme matches deployed', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #ExistingIndexes ei WITH (NOLOCK)
+               JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                            AND ei.[xTableName] = i.[TableName]
+                                            AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+               WHERE i.[PartitionScheme] IS NOT NULL
+                 AND (ei.[xPartitionScheme] IS NULL
+                      OR SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]) <> ei.[xPartitionScheme]
+                      OR (ei.[xPartitionColumn] IS NOT NULL
+                          AND SchemaSmith.fn_StripBracketWrapping(i.[PartitionColumn]) <> ei.[xPartitionColumn])))
+  BEGIN
+    DECLARE @v_IdxPsIndex NVARCHAR(1510), @v_IdxPsDeclared NVARCHAR(1010), @v_IdxPsLive NVARCHAR(1010)
+    SELECT TOP 1 @v_IdxPsIndex = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName],
+                 @v_IdxPsDeclared = SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]) + '(' + SchemaSmith.fn_StripBracketWrapping(i.[PartitionColumn]) + ')',
+                 @v_IdxPsLive = ISNULL(ei.[xPartitionScheme] + '(' + ISNULL(ei.[xPartitionColumn], '?') + ')', 'filegroup ' + ISNULL(ei.[xFileGroup], 'the database default'))
+      FROM #ExistingIndexes ei WITH (NOLOCK)
+      JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                   AND ei.[xTableName] = i.[TableName]
+                                   AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+      WHERE i.[PartitionScheme] IS NOT NULL
+        AND (ei.[xPartitionScheme] IS NULL
+             OR SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]) <> ei.[xPartitionScheme]
+             OR (ei.[xPartitionColumn] IS NOT NULL
+                 AND SchemaSmith.fn_StripBracketWrapping(i.[PartitionColumn]) <> ei.[xPartitionColumn]))
+    RAISERROR('Index %s declares partition placement %s, but is currently deployed on %s. SchemaSmith does not move an existing index onto or between partition schemes -- that rebuilds the whole index. Migrate it manually, or correct the declaration to match.', 16, 1, @v_IdxPsIndex, @v_IdxPsDeclared, @v_IdxPsLive)
   END
 
   RAISERROR('Detect Index Changes', 10, 100) WITH NOWAIT

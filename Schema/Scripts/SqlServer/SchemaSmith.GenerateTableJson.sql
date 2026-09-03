@@ -71,6 +71,32 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
          WHERE tfg.[object_id] = st.[object_id]
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
+       -- Partition placement (#partitioning, K1): the scheme NAME and the column the function is applied
+       -- to, read from the table's own data space (heap/clustered index, index_id 0/1). Before this the
+       -- [FileGroup] read above joined sys.filegroups on that same data_space_id and simply found no row
+       -- when the data space was a partition SCHEME -- so a partitioned table extracted as an ordinary one,
+       -- cleanly and silently. Emitted only when the data space really is a scheme, so an unpartitioned
+       -- table gains no key and every committed package keeps extracting byte-identically.
+       --
+       -- sys.data_spaces.type = 'PS' and sys.index_columns.partition_ordinal both predate the supported
+       -- floor, so no version gate. partition_ordinal = 1 because SQL Server partitions on ONE column.
+       (SELECT '[' + ds.[name] + ']'
+          FROM sys.indexes tps WITH (NOLOCK)
+          JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = tps.data_space_id
+         WHERE tps.[object_id] = st.[object_id]
+           AND tps.index_id IN (0, 1)
+           AND ds.[type] = 'PS') AS [PartitionScheme],
+       (SELECT '[' + pc.[name] + ']'
+          FROM sys.indexes tps WITH (NOLOCK)
+          JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = tps.data_space_id
+          JOIN sys.index_columns pic WITH (NOLOCK) ON pic.[object_id] = tps.[object_id]
+                                                  AND pic.index_id = tps.index_id
+                                                  AND pic.partition_ordinal = 1
+          JOIN sys.columns pc WITH (NOLOCK) ON pc.[object_id] = pic.[object_id]
+                                           AND pc.column_id = pic.column_id
+         WHERE tps.[object_id] = st.[object_id]
+           AND tps.index_id IN (0, 1)
+           AND ds.[type] = 'PS') AS [PartitionColumn],
        -- FILESTREAM_ON. Read from the table's filestream data space, which is NOT implied by having
        -- FILESTREAM columns: dropping the last one leaves the assignment behind.
        (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
@@ -225,6 +251,23 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.filegroups fg WITH (NOLOCK)
                  WHERE fg.data_space_id = si.data_space_id
                    AND fg.is_default = 0) AS [FileGroup],
+               -- Partition placement (#partitioning, K1): read from si's OWN data space, independently of
+               -- the table's. An index is not required to be aligned -- a nonclustered index on a
+               -- partitioned table may sit on one filegroup, and an index on an ordinary heap may itself be
+               -- partitioned -- so inferring either from the other would lose a real design.
+               (SELECT '[' + ds.[name] + ']'
+                  FROM sys.data_spaces ds WITH (NOLOCK)
+                 WHERE ds.data_space_id = si.data_space_id
+                   AND ds.[type] = 'PS') AS [PartitionScheme],
+               (SELECT '[' + pc.[name] + ']'
+                  FROM sys.data_spaces ds WITH (NOLOCK)
+                  JOIN sys.index_columns pic WITH (NOLOCK) ON pic.[object_id] = si.[object_id]
+                                                          AND pic.index_id = si.index_id
+                                                          AND pic.partition_ordinal = 1
+                  JOIN sys.columns pc WITH (NOLOCK) ON pc.[object_id] = pic.[object_id]
+                                                   AND pc.column_id = pic.column_id
+                 WHERE ds.data_space_id = si.data_space_id
+                   AND ds.[type] = 'PS') AS [PartitionColumn],
                is_primary_key AS [PrimaryKey],
                is_unique AS [Unique],
                is_unique_constraint AS [UniqueConstraint], 

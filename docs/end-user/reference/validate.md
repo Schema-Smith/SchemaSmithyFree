@@ -90,6 +90,8 @@ The JSON schema can enforce shape, but it can't confirm that a foreign key actua
 | `SS-CO-001` | Error | MySQL/MariaDB — a table sets `Compression` (MySQL) or `PageCompressed` (MariaDB) together with `RowFormat: "COMPRESSED"`. Both engines refuse that combination (MySQL error 1031, MariaDB errno 140) and neither error names the option. |
 | `SS-CO-002` | Warning | MariaDB — a table sets `PageCompressionLevel` without `PageCompressed`, so the level is ignored. |
 | `SS-EVT-001` | Error | MySQL/MariaDB — a scheduled event is declared as JSON *and* scripted as a `.sql` file in the same `Events` folder. The scripted form drops and recreates the event on every deploy, undoing what the declared form converged. |
+| `SS-PART-001` | Error | SQL Server — a table or index declares `PartitionScheme` without `PartitionColumn`, or the reverse. The `ON` clause needs both: the scheme, and the column its partition function is applied to. |
+| `SS-PART-002` | Error | SQL Server — a table or index declares both `FileGroup` and `PartitionScheme`. It lives on one data space; declare one or the other. |
 
 Related-table resolution honors the same schema defaulting a real deployment uses -- an explicit `RelatedTableSchema`, a `schema.table` prefix on `RelatedTable`, or (falling back) the owning table's own schema. Because every foreign key target resolves to a concrete schema one way or another, there's no such thing as an "ambiguous target" here -- a `RelatedTable` either resolves to a real table or it doesn't.
 

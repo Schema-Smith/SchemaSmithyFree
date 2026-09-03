@@ -362,7 +362,11 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         '$.FullTextIndexes', JSON_EXTRACT(v_fulltext_indexes, '$'),
         -- Application-time periods, MariaDB only. Nested the same way as every array above, and for the
         -- same reason the comment there gives: MariaDB rejects CAST(x AS JSON).
-        '$.Periods', JSON_EXTRACT(SchemaSmith_TablePeriodsJson(p_Schema, p_Table), '$')
+        '$.Periods', JSON_EXTRACT(SchemaSmith_TablePeriodsJson(p_Schema, p_Table), '$'),
+        -- Partitioning (#partitioning, K3): an OBJECT rather than an array, nested the same way and for
+        -- the same reason -- MariaDB rejects CAST(x AS JSON). 'null' for an unpartitioned table, stripped
+        -- by the JSON_REMOVE pass below so every existing package extracts byte-identically.
+        '$.Partitioning', JSON_EXTRACT(SchemaSmith_TablePartitioningJson(p_Schema, p_Table), '$')
     );
 
     -- Remove null values for cleaner output
@@ -383,7 +387,10 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         -- Empty array, not null: the function returns '[]' for a table with no periods, and an
         -- ordinary table's package must not carry the key at all -- nor must any MySQL package,
         -- whose schema does not declare this property.
-        CASE WHEN JSON_LENGTH(JSON_EXTRACT(v_json, '$.Periods')) = 0 THEN '$.Periods' ELSE '$.___dummy___' END
+        CASE WHEN JSON_LENGTH(JSON_EXTRACT(v_json, '$.Periods')) = 0 THEN '$.Periods' ELSE '$.___dummy___' END,
+        -- JSON null, not SQL NULL: the helper returns the literal 'null' for an unpartitioned table, which
+        -- JSON_EXTRACT yields as a JSON null value -- so JSON_TYPE, not IS NULL, is what detects it.
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Partitioning')), 'NULL') = 'NULL' THEN '$.Partitioning' ELSE '$.___dummy___' END
     );
 
     SELECT v_json AS TableJson;

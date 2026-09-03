@@ -61,5 +61,16 @@ namespace Schema.Domain.SqlServer
         /// </summary>
         [JsonProperty(Order = 109)]
         public bool PadIndex { get; set; }
+
+        // Partition placement (#partitioning): same name-only contract as SqlServerTable.PartitionScheme --
+        // see that property's comment. Independent of the table's own placement because an index is not
+        // required to be aligned: a nonclustered index on a partitioned table may sit on a single filegroup,
+        // and an index on an ordinary heap may be partitioned. Both are real designs, so neither is inferred
+        // from the table.
+        [JsonProperty(Order = 110, NullValueHandling = NullValueHandling.Ignore)]
+        public string PartitionScheme { get; set; }
+
+        [JsonProperty(Order = 111, NullValueHandling = NullValueHandling.Ignore)]
+        public string PartitionColumn { get; set; }
     }
 }

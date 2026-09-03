@@ -54,6 +54,7 @@ BEGIN
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_ForeignKeys;
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_CheckConstraints;
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_FullTextIndexes;
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Partitions;
     DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Periods;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Parse table definitions');
@@ -75,6 +76,11 @@ BEGIN
         KeyBlockSize INT DEFAULT NULL,
         PageCompressed TINYINT DEFAULT 0,
         PageCompressionLevel INT DEFAULT NULL,
+        -- Partitioning (#partitioning, K3). Flat on the table rather than a child table because there is at
+        -- most ONE of each per table; the per-partition list lives in _SchemaSmith_Partitions below.
+        PartitionMethod VARCHAR(20) DEFAULT NULL,
+        PartitionExpression TEXT DEFAULT NULL,
+        PartitionCount INT DEFAULT NULL,
         AutoIncrementValue BIGINT UNSIGNED DEFAULT NULL,
         -- MySQL's table comment ceiling is 2048 characters (COLUMN_COMMENT/COLUMN varies -- see the
         -- Columns/Indexes temp tables below). No pre-validation against that limit: an over-long
@@ -111,7 +117,7 @@ BEGIN
     SET v_TblIdx = 0;
     WHILE v_TblIdx < v_TblCnt DO
         IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name'))) IS NOT NULL THEN
-            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, Compression, KeyBlockSize, PageCompressed, PageCompressionLevel, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropPeriodsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
+            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, Compression, KeyBlockSize, PageCompressed, PageCompressionLevel, PartitionMethod, PartitionExpression, PartitionCount, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropPeriodsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
             SELECT
                 SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name')))) AS TableName,
                 COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Engine')))), ''), 'InnoDB') AS Engine,
@@ -125,6 +131,9 @@ BEGIN
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].KeyBlockSize'))) AS KeyBlockSize,
                 COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PageCompressed'))), 0) AS PageCompressed,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PageCompressionLevel'))) AS PageCompressionLevel,
+                UPPER(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Partitioning.Method')))), '')) AS PartitionMethod,
+                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Partitioning.Expression')))), '') AS PartitionExpression,
+                SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Partitioning.PartitionCount'))) AS PartitionCount,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].AutoIncrementValue'))) AS AutoIncrementValue,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Comment')))), '') AS Comment,
                 0 AS NewTable,
@@ -720,6 +729,42 @@ BEGIN
         SET v_PdOuterIdx = v_PdOuterIdx + 1;
     END WHILE;
 
+
+    -- Partitioning (#partitioning, K3): the ORDERED per-partition list. Order is load-bearing -- RANGE
+    -- boundaries must ascend and the engine rejects a definition where they do not -- so Ordinal is carried
+    -- explicitly rather than relying on insertion order.
+    --
+    -- Values is NULL for HASH and KEY, which have no boundary: those declare PartitionCount instead and
+    -- normally carry no Partitions array at all.
+    DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_Partitions;
+    CREATE TEMPORARY TABLE IF NOT EXISTS _SchemaSmith_Partitions (
+        RowId INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        TableName VARCHAR(128) NOT NULL,
+        Ordinal INT NOT NULL,
+        PartitionName VARCHAR(128) NOT NULL,
+        PartitionValues TEXT DEFAULT NULL,
+        KEY ix_pt_table_name (TableName, Ordinal)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    SET v_PdOuterCnt = JSON_LENGTH(p_TableDefinitions);
+    SET v_PdOuterIdx = 0;
+    WHILE v_PdOuterIdx < v_PdOuterCnt DO
+        SET v_PdInnerCnt = COALESCE(JSON_LENGTH(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Partitioning.Partitions'))), 0);
+        SET v_PdInnerIdx = 0;
+        WHILE v_PdInnerIdx < v_PdInnerCnt DO
+            IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Partitioning.Partitions[', v_PdInnerIdx, '].Name'))) IS NOT NULL
+               AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables st WHERE st.TableName = SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Name'))))) THEN
+                INSERT INTO _SchemaSmith_Partitions (TableName, Ordinal, PartitionName, PartitionValues)
+                SELECT
+                    SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Name')))) AS TableName,
+                    v_PdInnerIdx AS Ordinal,
+                    SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Partitioning.Partitions[', v_PdInnerIdx, '].Name'))) AS PartitionName,
+                    NULLIF(TRIM(COALESCE(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_PdOuterIdx, '].Partitioning.Partitions[', v_PdInnerIdx, '].Values'))), '')), '') AS PartitionValues;
+            END IF;
+            SET v_PdInnerIdx = v_PdInnerIdx + 1;
+        END WHILE;
+        SET v_PdOuterIdx = v_PdOuterIdx + 1;
+    END WHILE;
 
     INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'ParseTableJson: Evaluate ShouldApplyExpression');
 

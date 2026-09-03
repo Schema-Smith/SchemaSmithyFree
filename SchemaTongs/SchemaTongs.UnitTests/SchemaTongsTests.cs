@@ -1000,19 +1000,29 @@ public class SchemaTongsTests
             });
             RegisterConnectionFactory(Platform.PostgreSQL);
 
+            // Enum types are DECLARATIVE (F5): the cast enumerates them from pg_type and asks
+            // GenerateEnumTypeJSON for each one, rather than emitting the guarded CREATE TYPE script
+            // this test used to assert. That script was the bug -- once the type existed the guard
+            // skipped, so an edited value list did nothing forever.
             var reader = Substitute.For<IDataReader>();
             var callCount = 0;
             reader.Read().Returns(_ => callCount++ < 1, _ => false);
-            reader["Folder"].Returns("Enum Types");
-            reader["FullName"].Returns("public.mood");
-            reader["Code"].Returns("DO $$ BEGIN CREATE TYPE public.mood AS ENUM ('happy','sad'); END $$;");
+            reader["SchemaName"].Returns("public");
+            reader["TypeName"].Returns("mood");
             _command.StubReaders(reader);
+
+            var enumJson = "{\"Name\":\"mood\",\"Schema\":\"public\",\"Values\":[\"happy\",\"sad\"]}";
+            _command.ExecuteScalar().Returns(_ =>
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0 :
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)enumJson);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
 
-            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Enum Types")));
-            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("public.mood.sql")), Arg.Any<string>());
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Enum Type Structures")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("public.mood.json")), Arg.Any<string>());
 
             FactoryContainer.Clear();
             LogFactory.Clear();
@@ -1215,19 +1225,28 @@ public class SchemaTongsTests
             });
             RegisterConnectionFactory(Platform.PostgreSQL);
 
+            // Sequences are DECLARATIVE (F5): enumerated from pg_class, then GenerateSequenceJSON per
+            // sequence. Note what the JSON does NOT carry -- the current value is data, and a package
+            // holding it would reset a live sequence on deploy.
             var reader = Substitute.For<IDataReader>();
             var callCount = 0;
             reader.Read().Returns(_ => callCount++ < 1, _ => false);
-            reader["Folder"].Returns("Sequences");
-            reader["FullName"].Returns("public.my_seq");
-            reader["Code"].Returns("CREATE SEQUENCE IF NOT EXISTS public.my_seq;");
+            reader["SchemaName"].Returns("public");
+            reader["SequenceName"].Returns("my_seq");
             _command.StubReaders(reader);
+
+            var seqJson = "{\"Name\":\"my_seq\",\"Schema\":\"public\",\"DataType\":\"bigint\",\"Increment\":1,\"Cache\":1,\"Cycle\":false}";
+            _command.ExecuteScalar().Returns(_ =>
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0 :
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)seqJson);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
 
-            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Sequences")));
-            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("public.my_seq.sql")), Arg.Any<string>());
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Sequence Structures")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("public.my_seq.json")), Arg.Any<string>());
 
             FactoryContainer.Clear();
             LogFactory.Clear();
@@ -1752,7 +1771,11 @@ public class SchemaTongsTests
         lock (FactoryContainer.SharedLockObject)
         {
             SetUpMocks();
-            StubMySqlKindleGate();
+            // NOT StubMySqlKindleGate(): this test stubs ExecuteScalar ONCE, below, covering the gate's
+            // answers and the event JSON together. Layering a second Returns over the gate's lambda does
+            // not replace it -- the setup call runs the existing lambda, which touches the substitute
+            // itself, and NSubstitute then attaches the new Returns to THAT call instead of to
+            // ExecuteScalar. The symptom is a stub that silently never fires.
             RegisterConfig(Platform.MySQL, new Dictionary<string, string>
             {
                 ["ShouldCast:Tables"] = "false",
@@ -1764,19 +1787,48 @@ public class SchemaTongsTests
             });
             RegisterConnectionFactory(Platform.MySQL);
 
+            // Events are DECLARATIVE (F4): enumerated from INFORMATION_SCHEMA.EVENTS, then
+            // SchemaSmith_GenerateEventJson per event, rather than the CREATE EVENT script this test
+            // used to assert.
+            //
+            // Read() is keyed on the COMMAND rather than a bare call counter: the cast issues several
+            // reader queries before it reaches events, and a counter would already be spent by then --
+            // the row would silently never arrive and the test would fail for the wrong reason.
             var reader = Substitute.For<IDataReader>();
-            var callCount = 0;
-            reader.Read().Returns(_ => callCount++ < 1, _ => false);
-            reader["Folder"].Returns("Events");
-            reader["FullName"].Returns("my_event");
-            reader["Code"].Returns("CREATE EVENT my_event ON SCHEDULE EVERY 1 HOUR DO SELECT 1;");
-            _command.StubReaders(reader);
+            var eventRowsRead = 0;
+            reader.Read().Returns(_ =>
+                (_command.CommandText ?? string.Empty).Contains("INFORMATION_SCHEMA.EVENTS") && eventRowsRead++ < 1);
+            // The event enumeration reads by ORDINAL (GetString(0)), not by name.
+            reader.GetString(0).Returns("my_event");
+            // NOT StubReaders: that hands the reader back ONCE and an exhausted one forever after, so an
+            // earlier query in the MySQL cast consumed it and the events read saw no rows. Returning this
+            // reader for every call is safe precisely because Read() is keyed on the command -- it yields
+            // a row to the EVENTS query and nothing to anything else, which is the discrimination
+            // StubReaders exists to provide.
+            _command.ExecuteReader().Returns(_ => reader);
+
+            // The kindle gate's answers and the event JSON in one lambda -- see the note above on why
+            // this cannot be layered on top of StubMySqlKindleGate.
+            var eventJson = "{\"Name\":\"my_event\",\"Schedule\":\"EVERY 1 HOUR\",\"Body\":\"SELECT 1\"}";
+            var stamp = ForgeKindler.ComputeKindleStamp(Platform.MySQL);
+            _command.ExecuteScalar().Returns(_ =>
+            {
+                var sql = _command.CommandText ?? string.Empty;
+                if (sql.Contains("GenerateEventJSON")) return (object)eventJson;
+                if (KindleGateTestHelpers.IsReadOnlyProbe(sql)) return (object)0;
+                if (sql.Contains("GET_LOCK")) return (object)1L;
+                if (sql.Contains("information_schema.tables")) return (object)1L;
+                if (sql.Contains("SchemaSmith_KindleStamp") && sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                    return (object)stamp;
+                return null;
+            });
 
             var tongs = new SchemaTongs(Platform.MySQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
 
-            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Event Scripts")));
-            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("my_event.sql")), Arg.Any<string>());
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Event Structures")));
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Cast Json for event")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("my_event.json")), Arg.Any<string>());
 
             FactoryContainer.Clear();
             LogFactory.Clear();

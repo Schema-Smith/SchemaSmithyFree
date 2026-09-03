@@ -66,5 +66,11 @@ namespace Schema.Domain.MySQL
             Description = "InnoDB compressed-page size in KB (1, 2, 4, 8 or 16). Only meaningful with RowFormat = COMPRESSED.")]
         [JsonProperty(Order = 108, NullValueHandling = NullValueHandling.Ignore)]
         public int? KeyBlockSize { get; set; }
+
+        // Partitioning (#partitioning). Declared here rather than as a separate object because MySQL has no
+        // partition-scheme object to point at -- the definition lives in the table DDL. Applied at CREATE and
+        // verified thereafter; see MySqlPartitioning for why it is never migrated.
+        [JsonProperty(Order = 109, NullValueHandling = NullValueHandling.Ignore)]
+        public MySqlPartitioning Partitioning { get; set; }
     }
 }

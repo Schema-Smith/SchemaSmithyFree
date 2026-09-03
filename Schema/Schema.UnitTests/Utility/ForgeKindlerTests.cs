@@ -394,7 +394,14 @@ public class ForgeKindlerTests
         // +1 = SchemaSmith_GenerateEventJson (the catalog-to-package translation for events, kindled
         //   like GenerateTableJson rather than living inline in SchemaTongs -- which is what lets it be
         //   certified against a live server instead of only through the whole cast pipeline).
-        Assert.That(mysql.Length, Is.EqualTo(57));
+        // +1 = SchemaSmith_NormalizePartitionExpression (#partitioning K3 -- the declared-vs-live compare
+        //   for a partition expression. Its own helper because the engines disagree about what the catalog
+        //   returns: MySQL 5.7 echoes the user's text, every other supported engine rewrites it, so a
+        //   literal compare would refuse a package extracted on the floor and deployed above it).
+        // +1 = SchemaSmith_TablePartitioningJson (#partitioning K3 -- the catalog-to-package read. One
+        //   shared definition rather than the MySQL-stub/MariaDb-override shape TablePeriodsJson needs,
+        //   because INFORMATION_SCHEMA.PARTITIONS exists on every supported version of both engines).
+        Assert.That(mysql.Length, Is.EqualTo(59));
     }
 
     [Test]

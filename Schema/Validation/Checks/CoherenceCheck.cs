@@ -40,6 +40,8 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string CompressionConflictCode = "SS-CO-001";
     private const string CompressionLevelInertCode = "SS-CO-002";
     private const string DuplicateEventCode = "SS-EVT-001";
+    private const string PartitionHalfDeclaredCode = "SS-PART-001";
+    private const string PartitionAndFileGroupCode = "SS-PART-002";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -72,6 +74,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             findings.AddRange(CheckReplicaIdentity(table, location));
             findings.AddRange(CheckSystemVersioningExclusions(table, location));
             findings.AddRange(CheckCompressionOptions(table, location));
+            findings.AddRange(CheckPartitionPlacement(table, location));
         }
 
         return findings;
@@ -396,6 +399,53 @@ public sealed class CoherenceCheck : ISchemaCheck
     /// names the option, so without this the author gets an error that could mean almost anything.</para>
     /// <para>Error rather than Warning: the deploy cannot succeed, so there is nothing to weigh.</para>
     /// </summary>
+    /// <summary>
+    /// SQL Server partition placement declared as half a pair, or contradicting a filegroup
+    /// (#partitioning, K1).
+    /// <para>Both are refused by the quench too, but that refusal only arrives on a live target — and the
+    /// half-pair case would otherwise reach the engine as <c>ON &lt;scheme&gt;</c> with no column, whose
+    /// syntax error names neither the table nor the property. Catching them at authoring time is what
+    /// <c>--Validate</c> is for.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckPartitionPlacement(Table table, string tableLocation)
+    {
+        if (table is not SqlServerTable sqlTable) yield break;
+
+        foreach (var f in PartitionFindings(table.Name, "Table", tableLocation,
+                     sqlTable.PartitionScheme, sqlTable.PartitionColumn, sqlTable.FileGroup))
+            yield return f;
+
+        // An index carries its own placement, independently of its table's, so it is checked in its own
+        // right rather than inherited.
+        foreach (var index in table.Indexes.OfType<SqlServerIndex>())
+            foreach (var f in PartitionFindings($"{table.Name}.{index.Name}", "Index", tableLocation,
+                         index.PartitionScheme, index.PartitionColumn, index.FileGroup))
+                yield return f;
+    }
+
+    private static IEnumerable<Finding> PartitionFindings(
+        string name,
+        string kind,
+        string location,
+        string scheme,
+        string column,
+        string fileGroup)
+    {
+        var hasScheme = !string.IsNullOrWhiteSpace(scheme);
+        var hasColumn = !string.IsNullOrWhiteSpace(column);
+
+        if (hasScheme != hasColumn)
+            yield return new Finding(Severity.Error, PartitionHalfDeclaredCode, Category, location,
+                $"{kind} '{name}' declares {(hasScheme ? "PartitionScheme without PartitionColumn" : "PartitionColumn without PartitionScheme")}. " +
+                "SQL Server needs both — the ON clause names the scheme and the column its partition " +
+                "function is applied to. Declare both, or neither.");
+
+        if (hasScheme && !string.IsNullOrWhiteSpace(fileGroup))
+            yield return new Finding(Severity.Error, PartitionAndFileGroupCode, Category, location,
+                $"{kind} '{name}' declares both FileGroup '{fileGroup}' and PartitionScheme '{scheme}'. " +
+                "It lives on one data space — declare one or the other, not both.");
+    }
+
     private static IEnumerable<Finding> CheckCompressionOptions(Table table, string tableLocation)
     {
         if (table is not MySqlTable mySqlTable) yield break;
