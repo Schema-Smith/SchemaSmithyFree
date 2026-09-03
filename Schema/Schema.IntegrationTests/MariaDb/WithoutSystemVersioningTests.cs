@@ -140,6 +140,15 @@ public class WithoutSystemVersioningTests
     /// </summary>
     private void CreateVersionedTableOutOfBand(bool excludeColumn)
     {
+        // System versioning does not exist below MariaDB 10.3, so WITH SYSTEM VERSIONING is a hard syntax
+        // error on the 10.2 floor -- the scenario these tests exercise cannot even be SET UP there. Skip,
+        // the same way InvisibleColumnGatingTests skips below 10.3: this reads the REAL server, because
+        // SetUp clears @schemasmith_version_override and every test that calls this helper does so before
+        // setting any override. The product's own suppression on < 10.3 is proven separately by the
+        // override-driven degrade tests, which never create a real versioned table.
+        if (Scalar("SELECT SchemaSmith_SupportsSystemVersioning()") == 0)
+            Assert.Ignore("Target does not support system versioning (MariaDB < 10.3); a versioned table cannot be created to exercise the column exclusion.");
+
         DropTestTable();
         Exec($@"CREATE TABLE `{_testDb}`.`{TableName}` (
                   `id` INT NOT NULL,

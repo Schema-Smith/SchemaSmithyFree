@@ -144,8 +144,8 @@ BEGIN
                    CONCAT('INSERT INTO SchemaSmith_ProductOwnership (ObjectType, ObjectSchema, ObjectName, ProductName, TemplateName) ',
                           'SELECT ''EVENT'', ''', p_DatabaseName, ''', ''', Name, ''', ''', p_ProductName, ''', ''', COALESCE(p_TemplateName, ''), ''' ',
                           'FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM SchemaSmith_ProductOwnership po WHERE po.ObjectType = ''EVENT'' ',
-                          'AND po.ObjectSchema COLLATE utf8mb4_general_ci = ''', p_DatabaseName, ''' ',
-                          'AND po.ObjectName COLLATE utf8mb4_general_ci = ''', Name, ''')')
+                          'AND CONVERT(po.ObjectSchema USING utf8mb4) COLLATE utf8mb4_general_ci = ''', p_DatabaseName, ''' ',
+                          'AND CONVERT(po.ObjectName USING utf8mb4) COLLATE utf8mb4_general_ci = ''', Name, ''')')
               FROM _SchemaSmith_Events WHERE ShouldApply = 1;
 
         INSERT INTO _SchemaSmith_EventStatements (Seq, Statement)
@@ -160,11 +160,16 @@ BEGIN
     -- .sql file, which is still fully supported -- has no ownership row and is invisible here. Without
     -- that scoping, turning the flag on would delete every event the package happens not to mention.
     --
-    -- Every comparison below carries an explicit COLLATE. The temp table takes the DATABASE default
-    -- (utf8mb4_uca1400_ai_ci on MariaDB 11.4) while the kindled tables are utf8mb4_unicode_ci, and a
-    -- column-to-column compare across those fails with 1267. CONVERT(... USING utf8mb4) does NOT fix it --
-    -- that only works when one side is a parameter, which is why the existing uses of it elsewhere are
-    -- fine and these needed something stronger.
+    -- Every comparison over a stored string is CONVERT(x USING utf8mb4) COLLATE utf8mb4_general_ci, and it
+    -- needs BOTH halves. Two different engines break it two different ways:
+    --   * MariaDB 11.4: the temp table takes the DATABASE default (utf8mb4_uca1400_ai_ci) while the kindled
+    --     tables are utf8mb4_unicode_ci, so a column-to-column compare fails 1267 -- the COLLATE unifies it.
+    --   * MySQL 5.7: the default charset is latin1, so a bare `COLLATE utf8mb4_general_ci` over a latin1
+    --     value is error 1253 ("not valid for CHARACTER SET 'latin1'") -- the CONVERT lifts it to utf8mb4
+    --     first so the collation is legal. This was the original bug: the COLLATE alone shipped and the
+    --     event drop path failed on the 5.7 floor.
+    -- COLLATE without CONVERT fixes only 11.4; CONVERT without COLLATE fixes only the parameter case. The
+    -- pair is what makes the drop path work on every supported MySQL and MariaDB.
     IF p_DropEventsRemovedFromProduct = 1 THEN
         DROP TEMPORARY TABLE IF EXISTS _SchemaSmith_EventsToDrop;
         CREATE TEMPORARY TABLE _SchemaSmith_EventsToDrop (Id INT AUTO_INCREMENT PRIMARY KEY, Name VARCHAR(64) NOT NULL);
@@ -172,10 +177,10 @@ BEGIN
             SELECT po.ObjectName
               FROM SchemaSmith_ProductOwnership po
              WHERE po.ObjectType = 'EVENT'
-               AND po.ObjectSchema COLLATE utf8mb4_general_ci = p_DatabaseName
-               AND po.ProductName COLLATE utf8mb4_general_ci = p_ProductName
+               AND CONVERT(po.ObjectSchema USING utf8mb4) COLLATE utf8mb4_general_ci = p_DatabaseName
+               AND CONVERT(po.ProductName USING utf8mb4) COLLATE utf8mb4_general_ci = p_ProductName
                AND NOT EXISTS (SELECT 1 FROM _SchemaSmith_Events e
-                                WHERE e.Name COLLATE utf8mb4_general_ci = po.ObjectName COLLATE utf8mb4_general_ci
+                                WHERE CONVERT(e.Name USING utf8mb4) COLLATE utf8mb4_general_ci = CONVERT(po.ObjectName USING utf8mb4) COLLATE utf8mb4_general_ci
                                   AND e.ShouldApply = 1);
 
         IF p_WhatIf = 1 THEN
@@ -193,8 +198,8 @@ BEGIN
             INSERT INTO _SchemaSmith_EventStatements (Seq, Statement)
                 SELECT @ss_ev_base + Id * 10 + 2,
                        CONCAT('DELETE FROM SchemaSmith_ProductOwnership WHERE ObjectType = ''EVENT'' ',
-                              'AND ObjectSchema COLLATE utf8mb4_general_ci = ''', p_DatabaseName, ''' ',
-                              'AND ObjectName COLLATE utf8mb4_general_ci = ''', Name, '''')
+                              'AND CONVERT(ObjectSchema USING utf8mb4) COLLATE utf8mb4_general_ci = ''', p_DatabaseName, ''' ',
+                              'AND CONVERT(ObjectName USING utf8mb4) COLLATE utf8mb4_general_ci = ''', Name, '''')
                   FROM _SchemaSmith_EventsToDrop;
 
             INSERT INTO _SchemaSmith_EventStatements (Seq, Statement)
