@@ -59,6 +59,21 @@ BEGIN
   IF EXISTS (SELECT 1 FROM sys.change_tracking_tables WHERE [object_id] = @v_ObjectId)
     RETURN ''Change Tracking is enabled''
 
+  -- Partitioning, checked across EVERY index rather than only the table''s own data space. A rebuild is a
+  -- shadow copy, and the shadow CREATE TABLE carries no placement clause at all -- so the copy lands on the
+  -- default filegroup and the layout is gone while every row survives, which is the silent kind of loss this
+  -- function exists to prevent. A nonclustered index aligned to a scheme on an otherwise ordinary heap is
+  -- destroyed the same way (the old table is dropped whole and the index passes re-add from the package), so
+  -- reading only index_id 0/1 would miss it.
+  --
+  -- sys.data_spaces.type = ''PS'' is the partition-scheme discriminator; both the view and partitioning
+  -- itself predate the SQL Server 2008 floor, so this is referenced statically like the CDC and replication
+  -- predicates above rather than staged behind a version gate.
+  IF EXISTS (SELECT 1 FROM sys.indexes i WITH (NOLOCK)
+               JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = i.data_space_id
+              WHERE i.[object_id] = @v_ObjectId AND ds.[type] = ''PS'')
+    RETURN ''the table or one of its indexes is partitioned''
+
   RETURN NULL
 END'
 
