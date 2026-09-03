@@ -78,15 +78,17 @@ public class RepositoryHelperTests
     {
         var names = RepositoryHelper.GetSchemaFileNames(Platform.PostgreSQL);
 
-        // Five since enum types became a declarative type (F5): without an enumtypes schema an author
-        // gets no editor completion for an Enum Types/*.json file and --Validate cannot check one.
-        Assert.That(names, Has.Length.EqualTo(6));
+        // One per declarative PostgreSQL type. Each promoted type has to land here or an author gets no
+        // editor completion for its .json file and --Validate cannot check one -- which is exactly the
+        // gap this count exists to catch when a type is promoted and this is forgotten.
+        Assert.That(names, Has.Length.EqualTo(7));
         Assert.That(names[0], Does.StartWith("products."));
         Assert.That(names[1], Does.StartWith("templates."));
         Assert.That(names[2], Does.StartWith("tables."));
         Assert.That(names[3], Is.EqualTo("materializedviews.postgresql.schema"));
-        Assert.That(names[4], Is.EqualTo("enumtypes.postgresql.schema"));
-        Assert.That(names[5], Is.EqualTo("sequences.postgresql.schema"));
+        Assert.That(names[4], Is.EqualTo("domaintypes.postgresql.schema"));
+        Assert.That(names[5], Is.EqualTo("enumtypes.postgresql.schema"));
+        Assert.That(names[6], Is.EqualTo("sequences.postgresql.schema"));
 
         var platformStr = Platform.PostgreSQL.ToCanonicalString().ToLower();
         foreach (var name in names)

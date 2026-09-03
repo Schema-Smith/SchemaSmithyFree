@@ -59,8 +59,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             tongs.CastTemplate();
 
-            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(6).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Join("Tables", "Test.TestTable.json"))), Arg.Any<string>());
@@ -92,8 +92,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             tongs.CastTemplate();
 
-            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(6).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Views", "Test.TestView.sql"))), Arg.Any<string>());
@@ -126,8 +126,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             tongs.CastTemplate();
 
-            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(6).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Procedures", "Test.TestProcedure.sql"))), Arg.Any<string>());
@@ -160,7 +160,7 @@ public class SchemaTongsTests
             tongs.CastTemplate();
 
             file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(6).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Functions", "Test.TestFunction.sql"))), Arg.Any<string>());
@@ -193,8 +193,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             tongs.CastTemplate();
 
-            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(6).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Types", "Test.Flag.sql"))), Arg.Any<string>());
@@ -226,8 +226,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             tongs.CastTemplate();
 
-            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(6).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Schemas", "Test.sql"))), Arg.Any<string>());
@@ -259,8 +259,8 @@ public class SchemaTongsTests
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             tongs.CastTemplate();
 
-            file.Received(9).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            file.Received(6).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
+            file.Received(10).WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            file.Received(7).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(".schema")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("product.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase("template.json")), Arg.Any<string>());
             file.Received(1).WriteAllText(Arg.Is<string>(s => s.EndsWithIgnoringCase(Path.Combine("Triggers", "Test.TestTable.TestTrigger.sql"))), Arg.Any<string>());

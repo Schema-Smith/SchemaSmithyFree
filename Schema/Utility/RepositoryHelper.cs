@@ -285,6 +285,7 @@ public static class RepositoryHelper
             ("indexedviews", Platform.SqlServer) => typeof(SqlServerIndexedView),
             ("materializedviews", Platform.PostgreSQL) => typeof(PostgreSqlMaterializedView),
             ("events", Platform.MySQL) => typeof(MySqlEvent),
+            ("domaintypes", Platform.PostgreSQL) => typeof(PostgreSqlDomainType),
             ("enumtypes", Platform.PostgreSQL) => typeof(PostgreSqlEnumType),
             ("sequences", Platform.PostgreSQL) => typeof(PostgreSqlSequence),
             _ => throw new ArgumentException($"Unknown schema file mapping: {fileName} for platform {platform}")
@@ -308,6 +309,8 @@ public static class RepositoryHelper
         // tables this needs no pre-fold special case -- both engines get the same shape.
         if (platform.GetBasePlatform() == Platform.MySQL)
             files.Add($"events.{platformName}.schema");
+        if (platform == Platform.PostgreSQL)
+            files.Add($"domaintypes.{platformName}.schema");
         if (platform == Platform.PostgreSQL)
             files.Add($"enumtypes.{platformName}.schema");
         if (platform == Platform.PostgreSQL)

@@ -263,6 +263,7 @@ public class DatabaseQuench
         public string MaterializedViewSchema { get; set; }
         public string IndexedViewSchema { get; set; }
         public string EventSchema { get; set; }
+        public string DomainTypeSchema { get; set; }
         public string EnumTypeSchema { get; set; }
         public string SequenceSchema { get; set; }
     }
@@ -362,6 +363,8 @@ public class DatabaseQuench
     internal string IterationMaterializedViewSchema => _iteration.MaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
 
     internal string IterationEventSchema => _iteration.EventSchema ?? _template.EventSchema ?? "";
+
+    internal string IterationDomainTypeSchema => _iteration.DomainTypeSchema ?? _template.DomainTypeSchema ?? "";
 
     internal string IterationEnumTypeSchema => _iteration.EnumTypeSchema ?? _template.EnumTypeSchema ?? "";
 
@@ -662,6 +665,16 @@ public class DatabaseQuench
                 {
                     SafeProgressLog("  [WhatIf] Object scripts without unresolved tokens:");
                     WhatIfLogScripts(nonTokenScripts, DatabaseScriptSlot.Object);
+                }
+
+                // Step: Domain types (PostgreSQL only). Before tables for the same reason enum types are:
+                // a column can be OF a domain, so the domain has to exist before the table that uses it.
+                if (_product.Platform == Platform.PostgreSQL && _template.DomainTypes.Count > 0)
+                {
+                    var domainTypeSw = Stopwatch.StartNew();
+                    _checkpointing.Track(DbScope, "DomainTypeQuench", () => QuenchDomainTypes(command));
+                    domainTypeSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "DomainTypeQuench", domainTypeSw.ElapsedMilliseconds, 0);
                 }
 
                 // Step: Enum types (PostgreSQL only). BEFORE tables, deliberately: a column can be OF an
@@ -1158,6 +1171,7 @@ public class DatabaseQuench
         _iteration.IndexedViewSchema = SubstituteVersionTokens(IterationIndexedViewSchema);
         _iteration.MaterializedViewSchema = SubstituteVersionTokens(IterationMaterializedViewSchema);
         _iteration.EventSchema = SubstituteVersionTokens(IterationEventSchema);
+        _iteration.DomainTypeSchema = SubstituteVersionTokens(IterationDomainTypeSchema);
         _iteration.EnumTypeSchema = SubstituteVersionTokens(IterationEnumTypeSchema);
         _iteration.SequenceSchema = SubstituteVersionTokens(IterationSequenceSchema);
     }
@@ -1831,6 +1845,26 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
     /// so the type has to exist first, and a value the package adds has to be there before a column
     /// default or check references it.
     /// </summary>
+    /// <summary>
+    /// Converges DECLARED domain types (PostgreSQL). Runs before tables: a column can be OF a domain.
+    /// <para>Everything but the base type converges in place, without dropping the domain or touching a
+    /// dependent column. A base-type change is refused by name inside the procedure — there is no
+    /// <c>ALTER DOMAIN … TYPE</c>, so delivering it would mean dropping every column that uses it.</para>
+    /// </summary>
+    internal void QuenchDomainTypes(IDbCommand tableCommand)
+    {
+        if (_product.Platform != Platform.PostgreSQL) return;
+        var types = IterationDomainTypeSchema;
+        if (string.IsNullOrWhiteSpace(types) || types.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching domain types");
+        tableCommand.CommandText =
+            $@"CALL ""SchemaSmith"".""DomainTypeQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(types)}', {_whatIfOnly});";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Domain Types"), tableCommand.CommandText);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+        _debugFileLocation = "";
+    }
+
     internal void QuenchEnumTypes(IDbCommand tableCommand)
     {
         if (_product.Platform != Platform.PostgreSQL) return;

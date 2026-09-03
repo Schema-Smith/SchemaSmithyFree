@@ -242,6 +242,14 @@ namespace Schema.Domain
         [JsonIgnore]
         public List<MySqlEvent> Events { get; } = [];
 
+        // Domain types, PostgreSQL. Same additive shape: Domain Types/ holds .json (declared) and .sql
+        // (scripted, unchanged), so no existing package changes behaviour.
+        [JsonIgnore]
+        public List<PostgreSqlDomainType> DomainTypes { get; } = [];
+
+        [JsonIgnore]
+        public string DomainTypeSchema { get; set; } = "[]";
+
         // Enum types, PostgreSQL. Same additive shape as Events: Enum Types/ holds .json (declared) and
         // .sql (scripted, unchanged).
         [JsonIgnore]
@@ -391,7 +399,9 @@ namespace Schema.Domain
             clone.Tables.AddRange(Tables);
             clone.MaterializedViews.AddRange(MaterializedViews);
             clone.Events.AddRange(Events);
+            clone.DomainTypes.AddRange(DomainTypes);
             clone.EnumTypes.AddRange(EnumTypes);
+            clone.DomainTypeSchema = DomainTypeSchema;
             clone.EnumTypeSchema = EnumTypeSchema;
             clone.Sequences.AddRange(Sequences);
             clone.SequenceSchema = SequenceSchema;
@@ -525,6 +535,7 @@ namespace Schema.Domain
             MigrateMySqlColumnCheckExpressionAlias(platform);
             LoadMaterializedViews(platform, tolerateComponentLoadErrors);
             LoadEvents(platform, tolerateComponentLoadErrors);
+            LoadDomainTypes(platform, tolerateComponentLoadErrors);
             LoadEnumTypes(platform, tolerateComponentLoadErrors);
             LoadSequences(platform, tolerateComponentLoadErrors);
             LoadIndexedViews(platform, tolerateComponentLoadErrors);
@@ -589,6 +600,9 @@ namespace Schema.Domain
 
             EventSchema = JArray.FromObject(Events).ToString();
             tokens.Add(new("EventSchema", EventSchema.Replace("'", "''")));
+
+            DomainTypeSchema = JArray.FromObject(DomainTypes).ToString();
+            tokens.Add(new("DomainTypeSchema", DomainTypeSchema.Replace("'", "''")));
 
             EnumTypeSchema = JArray.FromObject(EnumTypes).ToString();
             tokens.Add(new("EnumTypeSchema", EnumTypeSchema.Replace("'", "''")));
@@ -786,6 +800,35 @@ namespace Schema.Domain
                 catch (Exception e) when (!tolerateComponentLoadErrors)
                 {
                     throw new Exception($"Error loading sequence from {f}" + Environment.NewLine + e.Message, e);
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure
+                catch (Exception e)
+                {
+                    RecordComponentLoadError(f, e);
+                }
+            }
+        }
+
+        private void LoadDomainTypes(Platform platform, bool tolerateComponentLoadErrors)
+        {
+            if (platform != Platform.PostgreSQL) return;
+            var path = Path.Join(Path.GetDirectoryName(FilePath) ?? "", "Domain Types");
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(path)) return;
+            var files = ProductDirectoryWrapper.GetFromFactory()
+                .GetFiles(path, "*.json", SearchOption.AllDirectories)
+                .OrderBy(x => x);
+            foreach (var f in files)
+            {
+                try
+                {
+                    var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
+                    DomainTypes.Add(JsonConvert.DeserializeObject<PostgreSqlDomainType>(json, PlatformDeserializer.StrictSettings)
+                                    ?? throw new JsonSerializationException("Failed to deserialize domain type"));
+                }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it
+                catch (Exception e) when (!tolerateComponentLoadErrors)
+                {
+                    throw new Exception($"Error loading domain type from {f}" + Environment.NewLine + e.Message, e);
                 }
                 // prepush-allow: generic-catch -- --Validate must record ANY component failure
                 catch (Exception e)

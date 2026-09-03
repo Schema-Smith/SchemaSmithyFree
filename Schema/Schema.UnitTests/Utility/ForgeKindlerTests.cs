@@ -310,7 +310,11 @@ public class ForgeKindlerTests
         //   from scripted to MANAGED. The scripted form was a guarded CREATE TYPE, so once the type
         //   existed a value-list edit did nothing at all, silently and forever).
         // +2 = SchemaSmith.SequenceQuench + SchemaSmith.GenerateSequenceJson (F5).
-        Assert.That(postgres.Length, Is.EqualTo(42));
+        // +2 = SchemaSmith.DomainTypeQuench + SchemaSmith.GenerateDomainTypeJson (F5 -- domain types
+        //   promoted for the same reason as enums: a scripted domain is a guarded CREATE DOMAIN, and
+        //   once the domain exists that guard skips, so an edited CHECK never lands. Unlike an enum,
+        //   ALTER DOMAIN converges constraints/default/NOT NULL without touching a dependent column.
+        Assert.That(postgres.Length, Is.EqualTo(44));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor

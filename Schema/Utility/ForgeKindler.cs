@@ -370,6 +370,10 @@ public static class ForgeKindler
                 new("SchemaSmith.MaterializedViewQuench.sql"),
                 // Enum types as a MANAGED type (F5). Replaces a guarded CREATE TYPE whose value-list
                 // edits were a permanent silent no-op once the type existed.
+                // Domain types (F5). BEFORE the enum pair only by convention -- neither depends on the
+                // other -- but both must follow StripParenWrapping, which the extraction function calls.
+                new("SchemaSmith.DomainTypeQuench.sql"),
+                new("SchemaSmith.GenerateDomainTypeJson.sql"),
                 new("SchemaSmith.EnumTypeQuench.sql"),
                 new("SchemaSmith.GenerateEnumTypeJson.sql"),
                 new("SchemaSmith.SequenceQuench.sql"),

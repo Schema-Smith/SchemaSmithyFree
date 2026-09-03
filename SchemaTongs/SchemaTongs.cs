@@ -2357,30 +2357,68 @@ SELECT 'Schemas' AS Folder,
         PerformPostgreSqlCasting(command, "Schemas");
     }
 
+    /// <summary>
+    /// Casts domain types as DECLARATIVE .json rather than a guarded CREATE DOMAIN script (F5).
+    /// <para><b>The script this replaces was the bug</b>, and in exactly the shape the enum one was: it
+    /// emitted <c>DO $$ IF NOT EXISTS (…) THEN CREATE DOMAIN … $$</c>, and once the domain existed that
+    /// guard skipped. Verified on a live server — re-running a guarded create carrying
+    /// <c>CHECK (VALUE &gt; 100)</c> left the domain with its original <c>CHECK (VALUE &gt; 0)</c>, silently,
+    /// reporting success. There is no <c>CREATE OR REPLACE DOMAIN</c>, so the scripted form could not be
+    /// written any other way.</para>
+    /// <para>Written into the same <c>Domain Types/</c> folder, which now holds both forms: a <c>.sql</c>
+    /// file there still runs through the Objects slot exactly as before, so nothing existing breaks.</para>
+    /// </summary>
     private void CastPostgreSqlDomainTypes(IDbCommand command)
     {
         command.CommandText = @"
-SELECT 'Domain Types' AS Folder,
-       n.nspname || '.' || t.typname AS FullName,
-       '
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = ''' || n.nspname || ''' AND t.typname = ''' || t.typname || ''') THEN
-        CREATE DOMAIN ""' || n.nspname || '"".""' || t.typname || '"" AS ' || FORMAT_TYPE(t.typbasetype, t.typtypmod) ||
-               CASE WHEN t.typnotnull THEN ' NOT NULL' ELSE '' END ||
-               COALESCE((SELECT ' DEFAULT ' || PG_GET_EXPR(ad.adbin, ad.adrelid) FROM pg_attrdef ad WHERE ad.adrelid = 0 AND ad.oid = t.oid), '') ||
-               COALESCE((SELECT STRING_AGG(' CONSTRAINT ' || QUOTE_IDENT(conname) || ' ' || PG_GET_CONSTRAINTDEF(c.oid, true), ' ') FROM pg_constraint c WHERE c.contypid = t.oid AND c.contype = 'c'), '') || ';
-    END IF;
-END
-$$;' AS Code
+SELECT n.nspname AS SchemaName, t.typname AS TypeName
   FROM pg_type t
   JOIN pg_namespace n ON n.oid = t.typnamespace
   WHERE t.typtype = 'd'
     AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
     AND n.nspname NOT LIKE 'pg_temp_%'
-    AND n.nspname NOT LIKE 'pg_toast_temp_%';
+    AND n.nspname NOT LIKE 'pg_toast_temp_%'
+  ORDER BY n.nspname, t.typname;
 ";
-        PerformPostgreSqlCasting(command, "Domain Types");
+        _progressLog.Info("Casting Domain Type Structures");
+        var types = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var sch = reader["SchemaName"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                types.Add((sch, reader["TypeName"].ToString()));
+            }
+        }
+
+        if (types.Count == 0) return;
+
+        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateDomainTypeJson.sql", _platform);
+        command.ExecuteNonQuery();
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Domain Types", ScriptObjectType.DomainTypes));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var (schema, name) in types)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for domain type {schema}.{name}");
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateDomainTypeJSON\"('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+            var typeJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(typeJson) || typeJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for domain type {schema}.{name}");
+                continue;
+            }
+
+            var typeObj = JsonConvert.DeserializeObject<PostgreSqlDomainType>(typeJson);
+            if (_isSchemaTemplate) typeObj.Schema = null;
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            JsonHelper.Write(file, typeObj);
+            _stats.DomainTypes++;
+        }
     }
 
     /// <summary>

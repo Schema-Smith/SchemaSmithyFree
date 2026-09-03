@@ -957,19 +957,29 @@ public class SchemaTongsTests
             });
             RegisterConnectionFactory(Platform.PostgreSQL);
 
+            // Domain types are DECLARATIVE (F5): the cast enumerates them from pg_type and asks
+            // GenerateDomainTypeJSON for each, rather than emitting the guarded CREATE DOMAIN script this
+            // test used to assert. That script was the bug -- there is no CREATE OR REPLACE DOMAIN, so once
+            // the domain existed the guard skipped and an edited CHECK never landed.
             var reader = Substitute.For<IDataReader>();
             var callCount = 0;
             reader.Read().Returns(_ => callCount++ < 1, _ => false);
-            reader["Folder"].Returns("Domain Types");
-            reader["FullName"].Returns("public.posint");
-            reader["Code"].Returns("DO $$ BEGIN CREATE DOMAIN public.posint AS INTEGER; END $$;");
+            reader["SchemaName"].Returns("public");
+            reader["TypeName"].Returns("posint");
             _command.StubReaders(reader);
+
+            var domainJson = "{\"Name\":\"posint\",\"Schema\":\"public\",\"DataType\":\"integer\",\"NotNull\":false,\"CheckConstraints\":[]}";
+            _command.ExecuteScalar().Returns(_ =>
+                KindleGateTestHelpers.IsReadOnlyProbe(_command.CommandText) ? (object)0 :
+                _command.CommandText?.Contains("pg_catalog.pg_class") == true
+                    ? (object)0L
+                    : (object)domainJson);
 
             var tongs = new SchemaTongs(Platform.PostgreSQL);
             Assert.DoesNotThrow(() => tongs.CastTemplate());
 
-            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Domain Types")));
-            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("public.posint.sql")), Arg.Any<string>());
+            _progressLog.Received().Info(Arg.Is<string>(s => s.Contains("Casting Domain Type Structures")));
+            _fileWrapper.Received().WriteAllText(Arg.Is<string>(s => s.Contains("public.posint.json")), Arg.Any<string>());
 
             FactoryContainer.Clear();
             LogFactory.Clear();

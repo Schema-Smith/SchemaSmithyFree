@@ -1390,6 +1390,44 @@ Sequences live in the `Sequences/` directory of each template, which accepts bot
 
 ---
 
+## Domain Type JSON Format (PostgreSQL)
+
+Domain types live in the `Domain Types/` directory of each template, which accepts **both** forms — `.json` (declared and converged) and `.sql` (scripted, exactly as before).
+
+**Declaring a domain fixes a real trap.** There is no `CREATE OR REPLACE DOMAIN`, so a scripted domain is a guarded `CREATE DOMAIN` — and once the domain exists that guard skips. Editing the `CHECK` in the `.sql` file changes nothing at all, on every deploy, forever, and the run reports success. A declared domain is compared against the server and converged.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Domain name. Required. |
+| `Schema` | string | `"public"` | Schema name. |
+| `DataType` | string | | The underlying type, with its modifier where it has one — `integer`, `character varying(20)`, `numeric(10,2)`. Required. **Create-time only** — see below. |
+| `NotNull` | bool | `false` | Converges in place via `ALTER DOMAIN … SET/DROP NOT NULL`. |
+| `Default` | string | `null` | Default applied to a column of this domain that declares no default of its own. Converges in place. |
+| `CheckConstraints` | array | `[]` | Named `CHECK` constraints — `{ "Name": "...", "Expression": "VALUE > 0" }`. Write the predicate alone, without the surrounding `CHECK (…)`. |
+
+**Constraints converge as a set.** One the package declares and the server lacks is added; one the server has and the package no longer declares is dropped. Dropping is safe here in a way removing an enum value is not — it removes a validation rule, destroys no data, and cascades to nothing.
+
+**Adding a constraint validates the data already there** and fails if any existing row violates it, naming the offending column. That is PostgreSQL protecting you, and SchemaSmith does not work around it.
+
+**A base-type change is refused, not applied.** PostgreSQL has no `ALTER DOMAIN … TYPE` — it is a syntax error, not an unsupported operation — so the only way to deliver one is to drop the domain, which drops every column typed by it. SchemaSmith names both the declared and the deployed type and stops. Change it with a migration script.
+
+**Name your constraints.** PostgreSQL generates a name (`<domain>_check`, then `_check1`, …) when one is declared without it, and the name is the identity used for comparison. Extraction always emits a name.
+
+```json
+{
+  "Name": "positive_amount",
+  "Schema": "public",
+  "DataType": "numeric(10,2)",
+  "NotNull": true,
+  "Default": "0",
+  "CheckConstraints": [
+    { "Name": "positive_amount_nonneg", "Expression": "VALUE >= 0" }
+  ]
+}
+```
+
+---
+
 ## Enum Type JSON Format (PostgreSQL)
 
 Enum types live in the `Enum Types/` directory of each template, which accepts **both** forms — `.json` (declared and converged) and `.sql` (scripted, exactly as before).
