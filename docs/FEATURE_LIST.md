@@ -99,6 +99,9 @@ Per-table options, column attributes, and table-scoped behavior beyond the basic
 | Per-column history exclusion | n/a | n/a | n/a | ✓ | `WithoutSystemVersioning` on a system-versioned table |
 | InnoDB page compression | n/a | n/a | ✓ | ✓ | MySQL `Compression`; MariaDB `PageCompressed` + `PageCompressionLevel` |
 | Compressed-page size | n/a | n/a | ✓ | ✓ | `KeyBlockSize`, with `RowFormat: COMPRESSED` |
+| At-rest table encryption | n/a | n/a | ✓ | ✓ | MySQL `Encryption`; MariaDB `Encrypted` + `EncryptionKeyId`; converges by rebuild; needs a server keyring |
+| General tablespace placement | n/a | n/a | ✓ | n/a | `Tablespace` (InnoDB general tablespace); create-time only, a move is refused |
+| Data-directory placement | n/a | n/a | ✓ | ✓ | `DataDirectory` (InnoDB `DATA DIRECTORY`); create-time only, a move is refused; MySQL needs `innodb_directories` |
 | Scheduled events (declarative) | n/a | n/a | ✓ | ✓ | `Events/*.json`; compared, converges, drop-by-absence via `DropEventsRemovedFromProduct` |
 | Domain types (declarative) | n/a | ✓ | n/a | n/a | `Domain Types/*.json`; constraints, default and NOT NULL converge in place — a base-type change is refused |
 | Enum types (declarative) | n/a | ✓ | n/a | n/a | `Enum Types/*.json`; values compared and added in declared order |
