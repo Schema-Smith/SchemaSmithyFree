@@ -95,6 +95,7 @@ Per-table options, column attributes, and table-scoped behavior beyond the basic
 | Tablespace placement (table + index) | n/a | ✓ | n/a | n/a | `Tablespace`; create-time only, a move is refused |
 | Partition placement (table + index) | ✓ | n/a | n/a | n/a | `PartitionScheme` + `PartitionColumn`; a scheme NAME, never created — applied at create, a change is refused |
 | Partitioning (RANGE / LIST / HASH / KEY, incl. COLUMNS) | n/a | n/a | ✓ | ✓ | `Partitioning`; applied at create, a change is refused — repartitioning rewrites every row |
+| System-versioned table | n/a | n/a | n/a | ✓ | `IsSystemVersioned`; created WITH SYSTEM VERSIONING, existing table converges via ALTER ADD; removing it is refused (MariaDB purges history on DROP); MariaDB 10.3+ |
 | Per-column history exclusion | n/a | n/a | n/a | ✓ | `WithoutSystemVersioning` on a system-versioned table |
 | InnoDB page compression | n/a | n/a | ✓ | ✓ | MySQL `Compression`; MariaDB `PageCompressed` + `PageCompressionLevel` |
 | Compressed-page size | n/a | n/a | ✓ | ✓ | `KeyBlockSize`, with `RowFormat: COMPRESSED` |
