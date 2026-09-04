@@ -106,6 +106,10 @@ BEGIN
         RebuildPolicyOnOrderMismatch TINYINT DEFAULT NULL,
         RebuildPolicySpecified TINYINT DEFAULT 0,
         PreventDrop TINYINT DEFAULT 0,
+        -- F1S1: table-level system versioning (MariaDB WITH SYSTEM VERSIONING). Read here so a new
+        -- table's CREATE can emit the clause; converging an EXISTING table's versioning is a separate
+        -- later task, so this flag is only consulted where t.NewTable = 1.
+        IsSystemVersioned TINYINT DEFAULT 0,
         KEY ix_tables_name (TableName)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -117,7 +121,7 @@ BEGIN
     SET v_TblIdx = 0;
     WHILE v_TblIdx < v_TblCnt DO
         IF SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name'))) IS NOT NULL THEN
-            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, Compression, KeyBlockSize, PageCompressed, PageCompressionLevel, PartitionMethod, PartitionExpression, PartitionCount, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropPeriodsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop)
+            INSERT INTO _SchemaSmith_Tables (TableName, Engine, Collation, OldName, RowFormat, Compression, KeyBlockSize, PageCompressed, PageCompressionLevel, PartitionMethod, PartitionExpression, PartitionCount, AutoIncrementValue, Comment, NewTable, ShouldApply, ShouldApplyExpression, VariantName, DropColumnsRemovedFromProduct, DropForeignKeysRemovedFromProduct, DropCheckConstraintsRemovedFromProduct, DropPeriodsRemovedFromProduct, DropIndexesRemovedFromProduct, RebuildPolicyMode, RebuildPolicyThreshold, RebuildPolicyOnOrderMismatch, RebuildPolicySpecified, PreventDrop, IsSystemVersioned)
             SELECT
                 SchemaSmith_SafeBacktickWrap(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Name')))) AS TableName,
                 COALESCE(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Engine')))), ''), 'InnoDB') AS Engine,
@@ -154,7 +158,8 @@ BEGIN
                 -- applying. JSON_TYPE returns 'NULL' there and SQL NULL when the path is absent entirely,
                 -- so both fall out as 0.
                 COALESCE(JSON_TYPE(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].RebuildPolicy'))) = 'OBJECT', 0) AS RebuildPolicySpecified,
-                COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PreventDrop'))), 0) AS PreventDrop;
+                COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].PreventDrop'))), 0) AS PreventDrop,
+                COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].IsSystemVersioned'))), 0) AS IsSystemVersioned;
         END IF;
         SET v_TblIdx = v_TblIdx + 1;
     END WHILE;

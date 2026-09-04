@@ -158,6 +158,22 @@ namespace Schema.Capabilities
             rows.Add(new("column-history-exclusion", "Per-column history exclusion", Platform.MariaDb,
                 1003, "MariaDB 10.3.4", null, DegradeKind.Reduced, "column without its WITHOUT SYSTEM VERSIONING clause"));
 
+            // Table-level system versioning (MariaDB WITH SYSTEM VERSIONING, F1S1). MySQL has no system
+            // versioning at any version, so SchemaSmith_SupportsSystemVersioning() is an unconditional 0
+            // there and MySQL gets no row -- same "no row, no version boundary to cross" shape as the
+            // period/column-history rows above.
+            //
+            // Skip, not Reduced: below the threshold the WHOLE table's versioning is dropped -- the table
+            // still deploys, but as an ordinary table, not merely with reduced fidelity. Contrast with
+            // column-history-exclusion directly above, where only the exclusion is lost and the column
+            // survives.
+            //
+            // Scope note for anything driving UI or AI off this row: this row covers CREATING a new
+            // versioned table. Converging an EXISTING table's versioning (ALTER ADD/DROP SYSTEM
+            // VERSIONING) is a separate later task and has no guard yet, so it is not reflected here.
+            rows.Add(new("table-system-versioning", "Table-level system versioning", Platform.MariaDb,
+                1003, "MariaDB 10.3", null, DegradeKind.Skip, "table without its WITH SYSTEM VERSIONING clause"));
+
             // Change Data Capture, gated by a DATABASE setting rather than an engine version -- the first
             // row of that kind, which is why Capability gained RequiredDatabaseSetting. IntroducedInComparable
             // is 0 and means "not version-gated": CDC is old enough that no supported server lacks it, and

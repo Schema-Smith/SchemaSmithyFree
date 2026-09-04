@@ -109,7 +109,14 @@ BEGIN
                                              FROM _SchemaSmith_Partitions pt
                                             WHERE pt.TableName = t.TableName), ''),
                                  ')')
-                     END
+                     END,
+                -- System versioning (MariaDB WITH SYSTEM VERSIONING, F1S1). A trailing table SUFFIX
+                -- keyword, not a KEY=VALUE option, so it goes last -- after PARTITION BY, which is where
+                -- MariaDB's own grammar places it. Gated on the EXISTING SchemaSmith_SupportsSystemVersioning()
+                -- (MariaDB 10.3+; MySQL never): below the floor the clause is suppressed here so the table
+                -- still deploys as an ordinary table -- see the degrade guard below, which reports the loss.
+                CASE WHEN t.IsSystemVersioned = 1 AND SchemaSmith_SupportsSystemVersioning() = 1
+                     THEN ' WITH SYSTEM VERSIONING' ELSE '' END
             ) AS CreateTableStatement
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
@@ -353,6 +360,49 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- Degrade table-level system versioning below MariaDB 10.3 / on MySQL at any version (F1S1). Mirrors
+    -- the per-column history exclusion guard directly above, and for the same reason: the CREATE TABLE
+    -- CONCAT above suppresses the trailing WITH SYSTEM VERSIONING clause when the gate is 0, so a new
+    -- table declaring IsSystemVersioned would otherwise deploy as an ORDINARY table -- silently losing
+    -- the versioning the package asked for. Suppressing that silently is the failure this guard exists
+    -- to prevent.
+    --
+    -- Skip, not Reduced: the WHOLE table's versioning is dropped here, not merely a part of it (unlike
+    -- the column-level exclusion above, which loses only the exclusion while the column itself survives).
+    --
+    -- Scope: t.NewTable = 1 only. Converging an EXISTING table's versioning (ALTER ADD/DROP SYSTEM
+    -- VERSIONING) is a separate later task, not built here.
+    -- =========================================================================
+    IF SchemaSmith_SupportsSystemVersioning() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables t
+                   WHERE t.NewTable = 1
+                     AND t.IsSystemVersioned = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  System versioning requires MariaDB 10.3 (MySQL unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(t.TableName))
+            FROM _SchemaSmith_Tables t
+            WHERE t.NewTable = 1
+              AND t.IsSystemVersioned = 1;
+            SET @ss_msg = 'System versioning needs MariaDB 10.3 (UnsupportedFeaturePolicy=fail). See the run log.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Table deployed without system versioning (requires MariaDB 10.3, MySQL unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(t.TableName))
+            FROM _SchemaSmith_Tables t
+            WHERE t.NewTable = 1
+              AND t.IsSystemVersioned = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'table without its WITH SYSTEM VERSIONING clause',
+                   SchemaSmith_StripBacktickWrapping(t.TableName), 'downgraded'
+            FROM _SchemaSmith_Tables t
+            WHERE t.NewTable = 1
+              AND t.IsSystemVersioned = 1;
+        END IF;
+    END IF;
+
 
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
@@ -440,7 +490,11 @@ BEGIN
                                                    FROM _SchemaSmith_Partitions pt
                                                   WHERE pt.TableName = t.TableName), ''),
                                        ')')
-                           END)
+                           END,
+                      -- Must match the real-path emit above exactly, or the WhatIf preview shows a
+                      -- statement the live run would not issue.
+                      CASE WHEN t.IsSystemVersioned = 1 AND SchemaSmith_SupportsSystemVersioning() = 1
+                           THEN ' WITH SYSTEM VERSIONING' ELSE '' END)
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
