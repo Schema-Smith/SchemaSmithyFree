@@ -2006,7 +2006,10 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     --   declared 1 / deployed 0 -> CONVERGE. ADD SYSTEM VERSIONING is additive (MariaDB implicitly adds
     --   the hidden ROW_START/ROW_END columns) and destroys nothing, so it is applied the same way the
     --   other table-attribute converge steps above are (Engine/Collation/Comment/RowFormat/AutoIncrement)
-    --   -- gated on SchemaSmith_SupportsSystemVersioning(), mirroring the CREATE path's gate.
+    --   -- gated on SchemaSmith_SupportsSystemVersioning(), mirroring the CREATE path's gate. Below that
+    --   gate (MariaDB <10.3, or MySQL at any version) this is NOT a silent no-op: a dedicated degrade
+    --   block below (mirroring F1S1's NewTable=1 degrade in MissingTableAndColumnQuench) fails or warns
+    --   per UnsupportedFeaturePolicy exactly like the CREATE path does.
     --
     --   declared 0 / deployed 1 -> REFUSE, never DROP. MariaDB's DROP SYSTEM VERSIONING purges the row
     --   history outright, and a state diff cannot tell "never wanted this" apart from "still want the
@@ -2060,6 +2063,61 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
 
         SET @ss_msg = CONCAT('Table ', @ss_sysver_refuse_table, ': DROP SYSTEM VERSIONING refused (data loss) -- use a migration.');
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+    END IF;
+
+    -- =========================================================================
+    -- Below-floor degrade: declared 1 / deployed 0, but SchemaSmith_SupportsSystemVersioning() = 0
+    -- (below MariaDB 10.3, or MySQL at any version). Mirrors SchemaSmith_MissingTableAndColumnQuench's
+    -- F1S1 degrade block EXACTLY (same message text, same ObjectType wording, same fail/warn split) --
+    -- that block is scoped to t.NewTable = 1 only, so an EXISTING ordinary table whose package NEWLY
+    -- declares IsSystemVersioned was falling through both there and here with no report and no
+    -- UnsupportedFeaturePolicy=fail honored, silently losing the declared attribute exactly like the gap
+    -- F1S1's block exists to close for CREATE. Runs unconditionally (both WhatIf and live, ahead of the
+    -- converge cursor below), matching F1S1's placement ahead of its own p_WhatIf branch.
+    -- =========================================================================
+    IF SchemaSmith_SupportsSystemVersioning() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Tables t
+                   INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                       ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                       AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+                   WHERE t.NewTable = 0
+                     AND t.IsSystemVersioned = 1
+                     AND ist.TABLE_TYPE != 'SYSTEM VERSIONED') THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  System versioning requires MariaDB 10.3 (MySQL unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(t.TableName))
+            FROM _SchemaSmith_Tables t
+            INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+            WHERE t.NewTable = 0
+              AND t.IsSystemVersioned = 1
+              AND ist.TABLE_TYPE != 'SYSTEM VERSIONED';
+            SET @ss_msg = 'System versioning needs MariaDB 10.3 (UnsupportedFeaturePolicy=fail). See the run log.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Table deployed without system versioning (requires MariaDB 10.3, MySQL unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(t.TableName))
+            FROM _SchemaSmith_Tables t
+            INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+            WHERE t.NewTable = 0
+              AND t.IsSystemVersioned = 1
+              AND ist.TABLE_TYPE != 'SYSTEM VERSIONED';
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'table without its WITH SYSTEM VERSIONING clause',
+                   SchemaSmith_StripBacktickWrapping(t.TableName), 'downgraded'
+            FROM _SchemaSmith_Tables t
+            INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+            WHERE t.NewTable = 0
+              AND t.IsSystemVersioned = 1
+              AND ist.TABLE_TYPE != 'SYSTEM VERSIONED';
+        END IF;
     END IF;
 
     -- Converge direction: declared 1 / deployed 0. Same WhatIf-preview / live-cursor shape as the

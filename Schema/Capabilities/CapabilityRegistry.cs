@@ -168,9 +168,15 @@ namespace Schema.Capabilities
             // column-history-exclusion directly above, where only the exclusion is lost and the column
             // survives.
             //
-            // Scope note for anything driving UI or AI off this row: this row covers CREATING a new
-            // versioned table. Converging an EXISTING table's versioning (ALTER ADD/DROP SYSTEM
-            // VERSIONING) is a separate later task and has no guard yet, so it is not reflected here.
+            // Scope note for anything driving UI or AI off this row: this row's threshold/DegradeKind
+            // describe the CREATE path (F1S1). Convergence for an EXISTING table (F1S2, in
+            // SchemaSmith_ModifiedTableQuench) is now guarded too, using this same threshold: ADD SYSTEM
+            // VERSIONING converges when declared true and the deployed table is ordinary and the target
+            // is at/above this threshold; below it, the existing table degrades the same way this row
+            // describes (Skip, per UnsupportedFeaturePolicy) rather than converging; and a declared-false
+            // table that is ALREADY deployed versioned is refused by name (SIGNAL, never DROP -- MariaDB
+            // purges row history on DROP SYSTEM VERSIONING) regardless of this row's DegradeKind, since
+            // that direction is a data-loss guard, not a version degrade.
             rows.Add(new("table-system-versioning", "Table-level system versioning", Platform.MariaDb,
                 1003, "MariaDB 10.3", null, DegradeKind.Skip, "table without its WITH SYSTEM VERSIONING clause"));
 
