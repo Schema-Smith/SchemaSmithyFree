@@ -20,9 +20,16 @@ BEGIN
     DECLARE v_foreign_keys LONGTEXT;
     DECLARE v_check_constraints LONGTEXT;
     DECLARE v_fulltext_indexes LONGTEXT;
+    DECLARE v_tablespace VARCHAR(64);
 
     -- Set session variables for proper GROUP_CONCAT handling
     SET SESSION group_concat_max_len = 1000000;
+
+    -- SchemaSmith_TableTablespace is a PROCEDURE (OUT param), not a function -- it needs dynamic SQL to
+    -- keep INFORMATION_SCHEMA.INNODB_TABLES/INNODB_TABLESPACES out of anything bound at CREATE time (see
+    -- that script), and MySQL does not allow PREPARE/EXECUTE inside a stored FUNCTION (ERROR 1336). CALLed
+    -- once here, ahead of the JSON_OBJECT SELECT below, which references the OUT result by variable.
+    CALL SchemaSmith_TableTablespace(p_Schema, p_Table, v_tablespace);
 
     -- NULLIF(x, '') is NOT used inside JSON_OBJECT here. On MySQL 5.7 it collapses to a BOOLEAN --
     -- JSON_OBJECT emits `false` in place of the value -- so a table/column/index comment and a
@@ -58,6 +65,14 @@ BEGIN
         'Encrypted', CASE WHEN SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'ENCRYPTED') = 'YES'
                           THEN TRUE ELSE NULL END,
         'EncryptionKeyId', SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'),
+        -- The InnoDB general tablespace this table is placed in (F2b), MySQL only. NOT in CREATE_OPTIONS
+        -- (unlike the block above) -- read via the per-engine SchemaSmith_TableTablespace CALL above (a
+        -- PROCEDURE, not a function -- see its script for why), whose MySQL body reads
+        -- INFORMATION_SCHEMA.INNODB_TABLES/INNODB_TABLESPACES through dynamic SQL and whose MariaDb
+        -- override always sets NULL, keeping this shared proc kindle-safe on MariaDB (no bare reference to
+        -- either MySQL-only view here). NULL for a table in the implicit per-table tablespace -- the
+        -- overwhelming majority -- so it needs the same JSON_REMOVE strip below as the CREATE_OPTIONS four.
+        'Tablespace', v_tablespace,
         -- MariaDB only, and NULL (stripped by the JSON_REMOVE pass) everywhere else, so a MySQL package
         -- never carries a property its schema does not declare.
         'IsSystemVersioned', CASE WHEN t.TABLE_TYPE = 'SYSTEM VERSIONED' THEN TRUE ELSE NULL END,
@@ -400,6 +415,9 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Encryption')), 'NULL') = 'NULL' THEN '$.Encryption' ELSE '$.___dummy___' END,
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Encrypted')), 'NULL') = 'NULL' THEN '$.Encrypted' ELSE '$.___dummy___' END,
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.EncryptionKeyId')), 'NULL') = 'NULL' THEN '$.EncryptionKeyId' ELSE '$.___dummy___' END,
+        -- Tablespace (F2b): absent means the table lives in its own implicit per-table tablespace, and a
+        -- package must not carry the key at all -- the no-churn contract every property in this block shares.
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Tablespace')), 'NULL') = 'NULL' THEN '$.Tablespace' ELSE '$.___dummy___' END,
         -- Empty array, not null: the function returns '[]' for a table with no periods, and an
         -- ordinary table's package must not carry the key at all -- nor must any MySQL package,
         -- whose schema does not declare this property.

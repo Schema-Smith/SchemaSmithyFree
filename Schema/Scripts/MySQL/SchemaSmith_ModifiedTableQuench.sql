@@ -244,6 +244,95 @@ BEGIN
     END IF;
 
     -- =======================
+    -- STEP -0.4: TABLESPACE -- REFUSE A MOVE (MySQL only, F2b)
+    -- =======================
+    -- Placement, exactly like partitioning (STEP -0.5 above), SQL Server FileGroup and PostgreSQL
+    -- Tablespace: applied at CREATE only, never migrated by a state diff. ALTER TABLE ... TABLESPACE
+    -- relocates the table's whole data file, and a state-based diff cannot tell "meant to move it" apart
+    -- from "stale/typo'd package" -- so a mismatch is reported and refused, never applied.
+    --
+    -- Read through the per-engine SchemaSmith_TableTablespace PROCEDURE (not a function -- see that
+    -- script for why: its MySQL body reaches INFORMATION_SCHEMA.INNODB_TABLES/INNODB_TABLESPACES only
+    -- through dynamic SQL, which MySQL disallows inside a stored FUNCTION, so it takes its schema/table
+    -- and an OUT param instead of returning a value). Being a procedure, it cannot be called inline inside
+    -- a SELECT/subquery the way STEP -0.5's partitioning check reads INFORMATION_SCHEMA.PARTITIONS
+    -- directly -- so this step CALLs it once per candidate table in a cursor loop rather than a single
+    -- set-based comparison.
+    --
+    -- VERSION() NOT LIKE '%MariaDB%' guards the whole block, matching the CREATE-time emit gate in
+    -- MissingTableAndColumnQuench: MariaDB has no general tablespaces, so SchemaSmith_TableTablespace's
+    -- MariaDb override always sets its OUT param NULL. Without this guard, a package that carries a
+    -- MySQL-authored Tablespace value into a shared/MariaDB deploy (harmless everywhere else -- the emit
+    -- gate above already suppresses it) would compare that declared value against an always-NULL deployed
+    -- read and FALSE-REFUSE every redeploy on MariaDB, forever, for a property MariaDB can never satisfy.
+    --
+    -- An UNSET declared Tablespace (NULL/'') means "SchemaSmith does not manage this table's tablespace
+    -- placement" -- not a declaration that the table has none -- so only a DECLARED, non-empty value is
+    -- compared; matching (or both unset) is a no-op. Guarded by the outer EXISTS so the cursor loop (and
+    -- its per-table CALL) only runs at all when some table actually declares a tablespace.
+    --
+    -- Fires REGARDLESS of p_WhatIf, ahead of the p_WhatIf branch below -- mirroring STEP -0.5 above and
+    -- STEP 7.5's DROP SYSTEM VERSIONING refuse further down: there is no safe "preview" of a refusal.
+    IF EXISTS (SELECT 1 FROM _SchemaSmith_Tables
+               WHERE NewTable = 0 AND Tablespace IS NOT NULL AND Tablespace != '' AND VERSION() NOT LIKE '%MariaDB%') THEN
+        -- Reset explicitly: this session variable is only ASSIGNED below when a mismatch is found, so on
+        -- a pooled connection a stale value from an earlier, unrelated call would otherwise survive a
+        -- clean pass and fire a false SIGNAL after the loop.
+        SET @ss_tablespace_refuse_table = NULL;
+
+        BEGIN
+            DECLARE v_TtsDone INT DEFAULT FALSE;
+            DECLARE v_TtsTableName VARCHAR(128);
+            DECLARE v_TtsDeclared VARCHAR(64);
+            DECLARE v_TtsDeployed VARCHAR(64);
+            DECLARE cur_TablespaceCandidates CURSOR FOR
+                SELECT t.TableName, t.Tablespace
+                FROM _SchemaSmith_Tables t
+                WHERE t.NewTable = 0
+                  AND t.Tablespace IS NOT NULL AND t.Tablespace != ''
+                  AND VERSION() NOT LIKE '%MariaDB%';
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_TtsDone = TRUE;
+
+            OPEN cur_TablespaceCandidates;
+
+            tablespace_refuse_loop: LOOP
+                FETCH cur_TablespaceCandidates INTO v_TtsTableName, v_TtsDeclared;
+                IF v_TtsDone THEN
+                    LEAVE tablespace_refuse_loop;
+                END IF;
+
+                SET v_TtsDeployed = NULL;
+                CALL SchemaSmith_TableTablespace(p_DatabaseName, SchemaSmith_StripBacktickWrapping(v_TtsTableName), v_TtsDeployed);
+
+                IF COALESCE(v_TtsDeployed, '') <> v_TtsDeclared THEN
+                    -- Log every offending table (not just the one named in the SIGNAL below), same shape
+                    -- as the partitioning guard above.
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(),
+                        CONCAT('  Declared tablespace does not match the deployed table (refused -- SchemaSmith will not move a table between tablespaces): ',
+                               SchemaSmith_StripBacktickWrapping(v_TtsTableName),
+                               ' declares ', v_TtsDeclared,
+                               ', deployed ', COALESCE(v_TtsDeployed, '(none)')));
+
+                    -- SIGNAL MESSAGE_TEXT is capped at 128 characters (see STEP 7.5 and STEP 8's comments
+                    -- on the same limit) -- name only the FIRST offender here, truncated defensively; the
+                    -- run log above carries every offender and the full declared/deployed detail.
+                    IF @ss_tablespace_refuse_table IS NULL THEN
+                        SET @ss_tablespace_refuse_table = LEFT(SchemaSmith_StripBacktickWrapping(v_TtsTableName), 40);
+                    END IF;
+                END IF;
+            END LOOP;
+
+            CLOSE cur_TablespaceCandidates;
+        END;
+
+        IF @ss_tablespace_refuse_table IS NOT NULL THEN
+            SET @ss_msg = CONCAT('Table ', @ss_tablespace_refuse_table, ': declared tablespace differs from deployed (refused) -- use a migration.');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        END IF;
+    END IF;
+
+    -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
     -- =======================
     -- Check if any tables in the definition are owned by a different product

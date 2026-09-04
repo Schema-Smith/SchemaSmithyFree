@@ -82,5 +82,17 @@ namespace Schema.Domain.MySQL
             Description = "MySQL only. InnoDB at-rest tablespace encryption ('Y' or 'N'). MariaDB spells this ENCRYPTED=YES/NO instead.")]
         [JsonProperty(Order = 115, NullValueHandling = NullValueHandling.Ignore)]
         public string Encryption { get; set; }
+
+        // The InnoDB GENERAL tablespace (CREATE TABLESPACE ... ADD DATAFILE) this table is placed in --
+        // placement, like SQL Server FileGroup and PostgreSQL Tablespace, applied only at CREATE. MariaDB
+        // has no general tablespaces at any version (CREATE TABLESPACE is a syntax error there), so this
+        // stays MySQL-only rather than offer MariaDB a setting its grammar rejects -- same shape as
+        // Encryption above. Order 118, not 116: MariaDbTable (a subclass of this type) already occupies
+        // 110-114/116/117, so anything added here must clear that range or collide
+        // (SharedTypeSerializationOrderTests).
+        [SchemaProperty(Platforms = [Platform.MySQL],
+            Description = "MySQL only. The InnoDB general tablespace this table is placed in; applied at create, a move is refused.")]
+        [JsonProperty(Order = 118, NullValueHandling = NullValueHandling.Ignore)]
+        public string Tablespace { get; set; }
     }
 }

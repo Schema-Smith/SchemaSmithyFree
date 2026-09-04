@@ -97,6 +97,17 @@ BEGIN
                 CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
                      THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
                      ELSE '' END,
+                -- General tablespace placement (F2b), MySQL only -- like the CREATE_OPTIONS four above,
+                -- engine-gated in SQL as well as by the domain's Platforms scoping, because a
+                -- hand-authored package can still name this on a MariaDB target and MariaDB has no general
+                -- tablespaces at all. UNQUOTED (`TABLESPACE name`, not `TABLESPACE='name'`) -- MySQL's own
+                -- grammar for this clause, unlike the KEY=VALUE CREATE_OPTIONS above. Applied only here, on
+                -- CREATE: an existing table whose declared value disagrees with what is deployed is
+                -- refused by ModifiedTableQuench (STEP -0.4), never converged -- a move is a full data-file
+                -- relocation, the same posture partitioning and system versioning's DROP direction take.
+                CASE WHEN t.Tablespace IS NOT NULL AND t.Tablespace != '' AND VERSION() NOT LIKE '%MariaDB%'
+                     THEN CONCAT(' TABLESPACE ', t.Tablespace)
+                     ELSE '' END,
                 -- Partitioning (#partitioning, K3). LAST in the statement, which is where MySQL's own
                 -- CREATE TABLE grammar puts it -- after every table option.
                 --
@@ -136,7 +147,7 @@ BEGIN
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
                  t.PageCompressed, t.PageCompressionLevel, t.Encryption, t.Encrypted, t.EncryptionKeyId,
-                 t.AutoIncrementValue, t.Comment,
+                 t.AutoIncrementValue, t.Comment, t.Tablespace,
                  t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
@@ -497,6 +508,10 @@ BEGIN
                       CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
                            THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
                            ELSE '' END,
+                      -- General tablespace placement (F2b) -- must match the real-path cur_NewTables CONCAT above exactly.
+                      CASE WHEN t.Tablespace IS NOT NULL AND t.Tablespace != '' AND VERSION() NOT LIKE '%MariaDB%'
+                           THEN CONCAT(' TABLESPACE ', t.Tablespace)
+                           ELSE '' END,
                       -- Partitioning (#partitioning, K3) -- must match the real-path emit above exactly,
                       -- or the WhatIf preview shows a statement the live run would not issue.
                       CASE WHEN t.PartitionMethod IS NULL THEN ''
@@ -524,7 +539,7 @@ BEGIN
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
                  t.PageCompressed, t.PageCompressionLevel, t.Encryption, t.Encrypted, t.EncryptionKeyId,
-                 t.AutoIncrementValue, t.Comment,
+                 t.AutoIncrementValue, t.Comment, t.Tablespace,
                  t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
         -- Step 2: Show ALTER TABLE ADD COLUMN for new columns on existing tables (set-based;

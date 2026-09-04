@@ -455,6 +455,15 @@ public static class ForgeKindler
                 // Must follow SchemaSmith_RebuildBlockedReason (it calls it to refuse) and the identifier
                 // helpers above, and precede the quench procedures that will elect a rebuild.
                 new("SchemaSmith_RebuildTable.sql"),
+                // The general-tablespace placement read (F2b). A PROCEDURE with an OUT param, not a
+                // function -- its MySQL body reaches INNODB_TABLES/INNODB_TABLESPACES only through dynamic
+                // SQL (PREPARE/EXECUTE), which MySQL disallows inside a stored FUNCTION and which is the
+                // only way to keep those MySQL-8.0+-only view names from binding at CREATE time and
+                // breaking kindle on the MySQL 5.7 floor; MariaDb's override sets the OUT param NULL
+                // unconditionally. Must precede BOTH GenerateTableJson (CALLs it for extraction) and
+                // ModifiedTableQuench (CALLs it in the tablespace-move refuse guard), which is why it sits
+                // just ahead of the former.
+                new("SchemaSmith_TableTablespace.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),
                 new("SchemaSmith_MissingTableAndColumnQuench.sql"),
