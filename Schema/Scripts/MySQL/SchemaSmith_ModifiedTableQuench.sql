@@ -1942,6 +1942,103 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     END IF;
 
     -- =======================
+    -- STEP 6.5: ALTER TABLE ENCRYPTION (F2a)
+    -- =======================
+    -- At-rest tablespace encryption is ALTERable the same way ROW_FORMAT is (STEP 6 directly above) --
+    -- unlike system versioning (STEP 7.5 below), there is no data-loss direction to refuse: toggling
+    -- either engine's encryption clause rebuilds the tablespace in place, it does not purge anything, so
+    -- both directions (declared-on/deployed-off AND declared-off/deployed-on) converge symmetrically here.
+    --
+    -- Deployed state is read via SchemaSmith_CreateOption over INFORMATION_SCHEMA.TABLES.CREATE_OPTIONS --
+    -- a plain column, safe on both engines (see that function's own header) -- so this whole step needs
+    -- no @@system-variable or MariaDB-only catalog reference despite living in the file shared by both
+    -- engines. VERSION() picks the engine-specific branch at execution time, exactly like the CREATE-path
+    -- emit in MissingTableAndColumnQuench.
+    --
+    -- A server without an encryption keyring rejects the ALTER with its own error -- that is server
+    -- configuration, not a version floor SchemaSmith can degrade around (like a missing filegroup), so no
+    -- SchemaSmith_Supports... gate exists for this step.
+    IF p_WhatIf = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Change table encryption');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName,
+                      CASE WHEN VERSION() NOT LIKE '%MariaDB%'
+                           THEN CONCAT(' ENCRYPTION=''', t.Encryption, '''')
+                           ELSE CONCAT(' ENCRYPTED=', CASE WHEN t.Encrypted = 1 THEN 'YES' ELSE 'NO' END,
+                                       CASE WHEN t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL
+                                            THEN CONCAT(' ENCRYPTION_KEY_ID=', t.EncryptionKeyId) ELSE '' END)
+                      END)
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        WHERE t.NewTable = 0
+          AND (
+              (VERSION() NOT LIKE '%MariaDB%'
+               AND t.Encryption IS NOT NULL AND t.Encryption != ''
+               AND UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION'), 'N')) != UPPER(t.Encryption))
+              OR
+              (VERSION() LIKE '%MariaDB%'
+               AND (
+                   (CASE WHEN UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTED'), 'NO')) = 'YES' THEN 1 ELSE 0 END) != t.Encrypted
+                   OR (t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL
+                       AND COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'), '') != CAST(t.EncryptionKeyId AS CHAR))
+               ))
+          );
+    ELSE
+        BEGIN
+            DECLARE v_EncryptionDone INT DEFAULT FALSE;
+            DECLARE v_EncryptionSql TEXT;
+            DECLARE cur_EncryptionChanges CURSOR FOR
+                SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName,
+                              CASE WHEN VERSION() NOT LIKE '%MariaDB%'
+                                   THEN CONCAT(' ENCRYPTION=''', t.Encryption, '''')
+                                   ELSE CONCAT(' ENCRYPTED=', CASE WHEN t.Encrypted = 1 THEN 'YES' ELSE 'NO' END,
+                                               CASE WHEN t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL
+                                                    THEN CONCAT(' ENCRYPTION_KEY_ID=', t.EncryptionKeyId) ELSE '' END)
+                              END) AS AlterEncryptionStatement
+                FROM _SchemaSmith_Tables t
+                INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                    ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                    AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+                WHERE t.NewTable = 0
+                  AND (
+                      (VERSION() NOT LIKE '%MariaDB%'
+                       AND t.Encryption IS NOT NULL AND t.Encryption != ''
+                       AND UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION'), 'N')) != UPPER(t.Encryption))
+                      OR
+                      (VERSION() LIKE '%MariaDB%'
+                       AND (
+                           (CASE WHEN UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTED'), 'NO')) = 'YES' THEN 1 ELSE 0 END) != t.Encrypted
+                           OR (t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL
+                               AND COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'), '') != CAST(t.EncryptionKeyId AS CHAR))
+                       ))
+                  );
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_EncryptionDone = TRUE;
+
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Change table encryption');
+            SET v_EncryptionDone = FALSE;
+            OPEN cur_EncryptionChanges;
+
+            encryption_changes_loop: LOOP
+                FETCH cur_EncryptionChanges INTO v_EncryptionSql;
+                IF v_EncryptionDone THEN
+                    LEAVE encryption_changes_loop;
+                END IF;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Change encryption: ', v_EncryptionSql));
+                SET @exec_sql = v_EncryptionSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+
+            CLOSE cur_EncryptionChanges;
+        END;
+    END IF;
+
+    -- =======================
     -- STEP 7: ALTER TABLE AUTO_INCREMENT
     -- =======================
     -- Set auto-increment seed when declared value is higher than the live value (set-if-higher, idempotent).

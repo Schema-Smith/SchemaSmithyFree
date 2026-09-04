@@ -78,6 +78,17 @@ BEGIN
                 CASE WHEN t.PageCompressed = 1 AND t.PageCompressionLevel IS NOT NULL AND VERSION() LIKE '%MariaDB%'
                      THEN CONCAT(' PAGE_COMPRESSION_LEVEL=', t.PageCompressionLevel)
                      ELSE '' END,
+                -- At-rest encryption (F2a), same engine-gated shape as the compression pair above:
+                -- MySQL's ENCRYPTION='Y'|'N' string vs MariaDB's ENCRYPTED=YES bool (+ ENCRYPTION_KEY_ID).
+                CASE WHEN t.Encryption IS NOT NULL AND t.Encryption != '' AND VERSION() NOT LIKE '%MariaDB%'
+                     THEN CONCAT(' ENCRYPTION=''', t.Encryption, '''')
+                     ELSE '' END,
+                CASE WHEN t.Encrypted = 1 AND VERSION() LIKE '%MariaDB%'
+                     THEN ' ENCRYPTED=YES'
+                     ELSE '' END,
+                CASE WHEN t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL AND VERSION() LIKE '%MariaDB%'
+                     THEN CONCAT(' ENCRYPTION_KEY_ID=', t.EncryptionKeyId)
+                     ELSE '' END,
                 CASE WHEN t.AutoIncrementValue IS NOT NULL
                      THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
                      ELSE '' END,
@@ -124,7 +135,8 @@ BEGIN
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
-                 t.PageCompressed, t.PageCompressionLevel, t.AutoIncrementValue, t.Comment,
+                 t.PageCompressed, t.PageCompressionLevel, t.Encryption, t.Encrypted, t.EncryptionKeyId,
+                 t.AutoIncrementValue, t.Comment,
                  t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
@@ -469,6 +481,16 @@ BEGIN
                       CASE WHEN t.PageCompressed = 1 AND t.PageCompressionLevel IS NOT NULL AND VERSION() LIKE '%MariaDB%'
                            THEN CONCAT(' PAGE_COMPRESSION_LEVEL=', t.PageCompressionLevel)
                            ELSE '' END,
+                      -- At-rest encryption (F2a) -- must match the real-path cur_NewTables CONCAT above exactly.
+                      CASE WHEN t.Encryption IS NOT NULL AND t.Encryption != '' AND VERSION() NOT LIKE '%MariaDB%'
+                           THEN CONCAT(' ENCRYPTION=''', t.Encryption, '''')
+                           ELSE '' END,
+                      CASE WHEN t.Encrypted = 1 AND VERSION() LIKE '%MariaDB%'
+                           THEN ' ENCRYPTED=YES'
+                           ELSE '' END,
+                      CASE WHEN t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL AND VERSION() LIKE '%MariaDB%'
+                           THEN CONCAT(' ENCRYPTION_KEY_ID=', t.EncryptionKeyId)
+                           ELSE '' END,
                       CASE WHEN t.AutoIncrementValue IS NOT NULL
                            THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
                            ELSE '' END,
@@ -501,7 +523,8 @@ BEGIN
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
-                 t.PageCompressed, t.PageCompressionLevel, t.AutoIncrementValue, t.Comment,
+                 t.PageCompressed, t.PageCompressionLevel, t.Encryption, t.Encrypted, t.EncryptionKeyId,
+                 t.AutoIncrementValue, t.Comment,
                  t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
         -- Step 2: Show ALTER TABLE ADD COLUMN for new columns on existing tables (set-based;

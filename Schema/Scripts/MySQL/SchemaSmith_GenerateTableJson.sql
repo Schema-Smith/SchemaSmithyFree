@@ -47,6 +47,17 @@ BEGIN
         'PageCompressed', CASE WHEN SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'PAGE_COMPRESSED') = '1'
                                THEN TRUE ELSE NULL END,
         'PageCompressionLevel', SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'PAGE_COMPRESSION_LEVEL'),
+        -- At-rest encryption, same CREATE_OPTIONS family as the compression four above. MySQL records
+        -- ENCRYPTION in CREATE_OPTIONS only when ='Y' -- ='N'/default is ABSENT -- so absent means
+        -- unencrypted default, same convention as every other property in this block. MySQL only,
+        -- like Compression above.
+        'Encryption', CASE WHEN VERSION() LIKE '%MariaDB%' THEN NULL
+                           ELSE SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'ENCRYPTION') END,
+        -- MariaDB only, like PageCompressed above. Verified live 2026-09-04: ENCRYPTED=YES surfaces as
+        -- `ENCRYPTED`=YES in CREATE_OPTIONS.
+        'Encrypted', CASE WHEN SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'ENCRYPTED') = 'YES'
+                          THEN TRUE ELSE NULL END,
+        'EncryptionKeyId', SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'),
         -- MariaDB only, and NULL (stripped by the JSON_REMOVE pass) everywhere else, so a MySQL package
         -- never carries a property its schema does not declare.
         'IsSystemVersioned', CASE WHEN t.TABLE_TYPE = 'SYSTEM VERSIONED' THEN TRUE ELSE NULL END,
@@ -384,6 +395,11 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.KeyBlockSize')), 'NULL') = 'NULL' THEN '$.KeyBlockSize' ELSE '$.___dummy___' END,
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PageCompressed')), 'NULL') = 'NULL' THEN '$.PageCompressed' ELSE '$.___dummy___' END,
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PageCompressionLevel')), 'NULL') = 'NULL' THEN '$.PageCompressionLevel' ELSE '$.___dummy___' END,
+        -- The encryption three, same treatment: absent means the table declares none, and a MariaDB
+        -- package must not carry Encryption (nor a MySQL one Encrypted/EncryptionKeyId) at all.
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Encryption')), 'NULL') = 'NULL' THEN '$.Encryption' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Encrypted')), 'NULL') = 'NULL' THEN '$.Encrypted' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.EncryptionKeyId')), 'NULL') = 'NULL' THEN '$.EncryptionKeyId' ELSE '$.___dummy___' END,
         -- Empty array, not null: the function returns '[]' for a table with no periods, and an
         -- ordinary table's package must not carry the key at all -- nor must any MySQL package,
         -- whose schema does not declare this property.

@@ -72,5 +72,15 @@ namespace Schema.Domain.MySQL
         // verified thereafter; see MySqlPartitioning for why it is never migrated.
         [JsonProperty(Order = 109, NullValueHandling = NullValueHandling.Ignore)]
         public MySqlPartitioning Partitioning { get; set; }
+
+        // InnoDB at-rest (transparent tablespace) encryption. MariaDB spells the same idea ENCRYPTED=YES/NO
+        // (a bool, plus an optional ENCRYPTION_KEY_ID) -- see MariaDbTable.Encrypted -- rather than MySQL's
+        // ENCRYPTION='Y'/'N' string, so this stays scoped to MySQL rather than offer MariaDB a setting its
+        // grammar rejects. Order starts at 115, not 110: MariaDbTable (a subclass of this type) already
+        // occupies 110-114, so anything added here must clear that range or collide (SharedTypeSerializationOrderTests).
+        [SchemaProperty(Pattern = "Y|N", Platforms = [Platform.MySQL],
+            Description = "MySQL only. InnoDB at-rest tablespace encryption ('Y' or 'N'). MariaDB spells this ENCRYPTED=YES/NO instead.")]
+        [JsonProperty(Order = 115, NullValueHandling = NullValueHandling.Ignore)]
+        public string Encryption { get; set; }
     }
 }
