@@ -1995,6 +1995,126 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
         END;
     END IF;
 
+    -- =======================
+    -- STEP 7.5: SYSTEM VERSIONING CONVERGENCE (EXISTING TABLES)
+    -- =======================
+    -- F1S1 (MissingTableAndColumnQuench) handles a NEW table's WITH SYSTEM VERSIONING clause. This step
+    -- converges an EXISTING table (t.NewTable = 0) whose declared _SchemaSmith_Tables.IsSystemVersioned
+    -- disagrees with what is deployed (INFORMATION_SCHEMA.TABLES.TABLE_TYPE = 'SYSTEM VERSIONED'). The
+    -- two directions are NOT symmetric, by design:
+    --
+    --   declared 1 / deployed 0 -> CONVERGE. ADD SYSTEM VERSIONING is additive (MariaDB implicitly adds
+    --   the hidden ROW_START/ROW_END columns) and destroys nothing, so it is applied the same way the
+    --   other table-attribute converge steps above are (Engine/Collation/Comment/RowFormat/AutoIncrement)
+    --   -- gated on SchemaSmith_SupportsSystemVersioning(), mirroring the CREATE path's gate.
+    --
+    --   declared 0 / deployed 1 -> REFUSE, never DROP. MariaDB's DROP SYSTEM VERSIONING purges the row
+    --   history outright, and a state diff cannot tell "never wanted this" apart from "still want the
+    --   history, just stopped declaring it". This is a data-loss guard, not a version degrade, so it
+    --   fires REGARDLESS of UnsupportedFeaturePolicy and BEFORE the p_WhatIf branch below -- there is no
+    --   safe "preview" of a refusal, it must abort the run in both modes, mirroring STEP -0.5's
+    --   partitioning refuse further up this procedure. It does not break round-trip: extraction only
+    --   ever emits IsSystemVersioned when true (SchemaSmith_GenerateTableJson), so a re-extracted package
+    --   of a versioned table always re-declares it -- this only fires on a deliberate hand-edit that
+    --   removes the property from an otherwise-versioned table's package.
+    --
+    -- NO SystemVersioningAlterHistory OPT-IN for the ADD direction (investigated against
+    -- SchemaSmith_SetSystemVersioningAlterHistory.sql / STEP 2.96 above): that session variable exists
+    -- because "MariaDB refuses every column DDL on a system-versioned table by default" (ERROR 4119, "Not
+    -- allowed for system-versioned ... Change @@system_versioning_alter_history to proceed with ALTER") --
+    -- it governs ALTERs against a table that IS ALREADY versioned. A table converging here is NOT YET
+    -- versioned at the moment this ALTER runs, so that restriction does not apply and KEEP is never
+    -- required just to add versioning to a plain table. (The REFUSE direction never emits DROP SYSTEM
+    -- VERSIONING at all, so it needs no opt-in either -- the whole point is that statement never runs.)
+    --
+    -- SIGNAL MESSAGE_TEXT is capped at 128 characters (see STEP 8's comment on the same limit). Unlike
+    -- the partitioning/PreventDrop guards, which can name arbitrarily many offending tables and so keep
+    -- the SIGNAL generic and push detail to the run log, this refuse only ever names the single first
+    -- offender and truncates it defensively -- comfortably inside the cap even at MySQL's 64-character
+    -- identifier ceiling -- so the exception message itself names the table.
+    SET @ss_sysver_refuse_table := (
+        SELECT LEFT(SchemaSmith_StripBacktickWrapping(t.TableName), 40)
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        WHERE t.NewTable = 0
+          AND t.IsSystemVersioned = 0
+          AND ist.TABLE_TYPE = 'SYSTEM VERSIONED'
+        LIMIT 1
+    );
+
+    IF @ss_sysver_refuse_table IS NOT NULL THEN
+        -- Log every offending table (not just the first named in the SIGNAL below) to the run log, same
+        -- shape as the partitioning/PreventDrop guards.
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('  Table is system-versioned and no longer declared -- DROP SYSTEM VERSIONING refused (would purge row history): ',
+               SchemaSmith_StripBacktickWrapping(t.TableName))
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        WHERE t.NewTable = 0
+          AND t.IsSystemVersioned = 0
+          AND ist.TABLE_TYPE = 'SYSTEM VERSIONED';
+
+        SET @ss_msg = CONCAT('Table ', @ss_sysver_refuse_table, ': DROP SYSTEM VERSIONING refused (data loss) -- use a migration.');
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+    END IF;
+
+    -- Converge direction: declared 1 / deployed 0. Same WhatIf-preview / live-cursor shape as the
+    -- Engine/Collation/Comment/RowFormat/AutoIncrement steps above; no ChangeAudit row, matching those
+    -- (only the column-level and table-drop passes elsewhere in this file audit their WhatIf twin).
+    IF p_WhatIf = 1 THEN
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Add system versioning to existing tables');
+        INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+        SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName, ' ADD SYSTEM VERSIONING')
+        FROM _SchemaSmith_Tables t
+        INNER JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+        WHERE t.NewTable = 0
+          AND t.IsSystemVersioned = 1
+          AND ist.TABLE_TYPE != 'SYSTEM VERSIONED'
+          AND SchemaSmith_SupportsSystemVersioning() = 1;
+    ELSE
+        BEGIN
+            DECLARE v_AddVersioningDone INT DEFAULT FALSE;
+            DECLARE v_AddVersioningSql TEXT;
+            DECLARE cur_AddVersioning CURSOR FOR
+                SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', t.TableName, ' ADD SYSTEM VERSIONING') AS AlterAddVersioningStatement
+                FROM _SchemaSmith_Tables t
+                INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                    ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                    AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
+                WHERE t.NewTable = 0
+                  AND t.IsSystemVersioned = 1
+                  AND ist.TABLE_TYPE != 'SYSTEM VERSIONED'
+                  AND SchemaSmith_SupportsSystemVersioning() = 1;
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_AddVersioningDone = TRUE;
+
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Add system versioning to existing tables');
+            SET v_AddVersioningDone = FALSE;
+            OPEN cur_AddVersioning;
+
+            add_versioning_loop: LOOP
+                FETCH cur_AddVersioning INTO v_AddVersioningSql;
+                IF v_AddVersioningDone THEN
+                    LEAVE add_versioning_loop;
+                END IF;
+
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Add system versioning: ', v_AddVersioningSql));
+                SET @exec_sql = v_AddVersioningSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+
+            CLOSE cur_AddVersioning;
+        END;
+    END IF;
+
     -- Update ProductOwnership for managed tables (non-WhatIf mode only)
     IF p_WhatIf = 0 THEN
         INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName, PreventDrop)
