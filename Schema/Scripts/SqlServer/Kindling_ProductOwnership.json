@@ -1,0 +1,41 @@
+{
+  "Schema": "[SchemaSmith]",
+  "Name": "[ProductOwnership]",
+  "Columns": [
+    {
+      "Name": "[Schema]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": false
+    },
+    {
+      "Name": "[TableName]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": false
+    },
+    {
+      "Name": "[IndexName]",
+      "DataType": "NVARCHAR(256)",
+      "Nullable": false
+    },
+    {
+      "Name": "[ProductName]",
+      "DataType": "NVARCHAR(100)",
+      "Nullable": false
+    },
+    {
+      "Name": "[PreventDrop]",
+      "DataType": "BIT",
+      "Nullable": false,
+      "Default": "0"
+    }
+  ],
+  "Indexes": [
+    {
+      "Name": "[PK_ProductOwnership]",
+      "PrimaryKey": true,
+      "Unique": true,
+      "Clustered": true,
+      "IndexColumns": "[Schema],[TableName],[IndexName]"
+    }
+  ]
+}

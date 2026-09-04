@@ -141,6 +141,9 @@
             "maxLength": 128,
             "description": "PostgreSQL only. The tablespace this index lives on. Omit to leave placement unmanaged — an omitted value does NOT mean the database default, and an index does not automatically follow its table. Create-time only: moving an existing index rebuilds it, so a declared tablespace that differs from where the index already lives is refused rather than moved."
           },
+          "StorageParameters": {
+            "type": "object"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,

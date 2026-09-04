@@ -111,6 +111,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        -- Graph tables (#graph). Emitted only when the table IS one, so no existing package gains a
        -- "GraphType": "None" on every table. is_node/is_edge are 2017+, which the JSON tier requires.
        CASE WHEN st.is_node = 1 THEN 'Node' WHEN st.is_edge = 1 THEN 'Edge' END AS [GraphType],
+       -- Memory-optimized (#J1). is_memory_optimized and durability_desc are SQL Server 2014 columns,
+       -- referenced statically here because the JSON extraction path only ever runs on 2016+ (OPENJSON) --
+       -- the XML path is the one that reaches 2008-2012 and gates them. Emitted only when the table IS
+       -- memory-optimized, so an ordinary table's package gains no key.
+       CASE WHEN st.is_memory_optimized = 1 THEN CONVERT(BIT, 1) END AS [MemoryOptimized],
+       CASE WHEN st.is_memory_optimized = 1 THEN st.durability_desc END AS [Durability],
        -- Ledger (#ledger, 2022+). Emitted only when the table IS one. ledger_type_desc is 2022, so
        -- it is read through a version-gated helper rather than referenced here -- see @v_Ledger.
        @v_Ledger AS [Ledger],
@@ -268,6 +274,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                                                    AND pc.column_id = pic.column_id
                  WHERE ds.data_space_id = si.data_space_id
                    AND ds.[type] = 'PS') AS [PartitionColumn],
+               -- BUCKET_COUNT for a HASH index on a memory-optimized table (#J1). sys.hash_indexes is 2014;
+               -- safe statically here because the JSON path is 2016+. NULL for any non-hash index, so an
+               -- ordinary index gains no key.
+               (SELECT hi.bucket_count FROM sys.hash_indexes hi WITH (NOLOCK)
+                 WHERE hi.[object_id] = si.[object_id] AND hi.index_id = si.index_id) AS [BucketCount],
                is_primary_key AS [PrimaryKey],
                is_unique AS [Unique],
                is_unique_constraint AS [UniqueConstraint], 

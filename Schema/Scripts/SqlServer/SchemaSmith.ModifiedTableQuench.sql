@@ -65,6 +65,25 @@ BEGIN TRY
     CROSS APPLY fn_listextendedproperty(default, 'Schema', SchemaSmith.fn_StripBracketWrapping([Schema]), 'Table', default, default, default) x
     WHERE x.[Name] COLLATE DATABASE_DEFAULT IN ('ProductName', 'PreventDrop')
 
+  -- Memory-optimized tables cannot carry extended properties (sp_addextendedproperty raises a
+  -- schema-version error on them), so their ownership lives in the SchemaSmith.ProductOwnership tracking
+  -- table -- the same table-based ownership fallback PostgreSQL and MySQL use for every table. Fold those
+  -- rows into #TableProperties in the SAME shape the extended-property scan produces, so every downstream
+  -- ownership check (cross-product validation, PreventDrop protection, drop-by-absence) treats a
+  -- memory-optimized table identically to an extended-property-tracked one. Scoped to #SchemaList for
+  -- parity with the scan above; PreventDrop is emitted as the 'true'/'false' text the marker uses so the
+  -- existing px.[value] = 'true' comparisons match unchanged. IndexName = '' is the table-level marker.
+  INSERT INTO #TableProperties ([Schema], TableName, PropertyName, [value])
+    SELECT po.[Schema] COLLATE DATABASE_DEFAULT, po.[TableName] COLLATE DATABASE_DEFAULT, 'ProductName', po.[ProductName] COLLATE DATABASE_DEFAULT
+      FROM SchemaSmith.ProductOwnership po WITH (NOLOCK)
+      JOIN #SchemaList sl WITH (NOLOCK) ON sl.[Schema] = po.[Schema] COLLATE DATABASE_DEFAULT
+      WHERE po.[IndexName] = ''
+    UNION ALL
+    SELECT po.[Schema] COLLATE DATABASE_DEFAULT, po.[TableName] COLLATE DATABASE_DEFAULT, 'PreventDrop', CASE WHEN po.[PreventDrop] = 1 THEN 'true' ELSE 'false' END
+      FROM SchemaSmith.ProductOwnership po WITH (NOLOCK)
+      JOIN #SchemaList sl WITH (NOLOCK) ON sl.[Schema] = po.[Schema] COLLATE DATABASE_DEFAULT
+      WHERE po.[IndexName] = ''
+
   RAISERROR('Validate Table Ownership', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Table ' + tp.[Schema] + '.' + tp.[TableName] + ' owned by different product. [' + tp.[Value] + ']'', 10, 100) WITH NOWAIT;' AS NVARCHAR(MAX))
                            FROM #Tables t WITH (NOLOCK)
@@ -259,6 +278,120 @@ BEGIN TRY
       SELECT TOP 1 @v_GraphTable = FullName, @v_GraphDeclared = Declared, @v_GraphLive = Deployed
         FROM #DeployedGraphType WHERE Declared <> Deployed
       RAISERROR('Table %s declares GraphType %s, but is currently deployed as %s. SQL Server has no ALTER that converts a table to or from a graph node/edge table, so SchemaSmith will not attempt it -- recreate the table, or correct the declared GraphType to match.', 16, 1, @v_GraphTable, @v_GraphDeclared, @v_GraphLive)
+    END
+  END
+
+  RAISERROR('Validate declared MemoryOptimized/Durability matches deployed', 10, 100) WITH NOWAIT
+  -- Memory-optimized tables (#J1) are create-time only in the hardest sense: there is no
+  -- ALTER TABLE ... SET (MEMORY_OPTIMIZED = ON/OFF) and no ALTER for DURABILITY -- both are error 102,
+  -- not even syntax -- so a table cannot be converted in either direction. A declaration that disagrees
+  -- with the deployed table is refused by name, exactly like GraphType above.
+  --
+  -- sys.tables.is_memory_optimized / durability_desc are SQL Server 2014, and this proc body is kindled
+  -- for the XML tier too, so the read is version-gated and dynamic rather than a static reference that
+  -- would fail to CREATE on a 2008/2012 binary.
+  IF SchemaSmith.fn_ServerMajorVersion() >= 12
+  BEGIN
+    IF OBJECT_ID('tempdb..#DeployedMemOpt') IS NOT NULL DROP TABLE #DeployedMemOpt
+    CREATE TABLE #DeployedMemOpt (FullName NVARCHAR(1010), DeclaredMO BIT, DeployedMO BIT, DeclaredDur NVARCHAR(20), DeployedDur NVARCHAR(20))
+    EXEC sp_executesql N'
+      INSERT INTO #DeployedMemOpt (FullName, DeclaredMO, DeployedMO, DeclaredDur, DeployedDur)
+        SELECT t.[Schema] + ''.'' + t.[Name],
+               ISNULL(t.[MemoryOptimized], 0),
+               CONVERT(BIT, st.is_memory_optimized),
+               ISNULL(NULLIF(t.[Durability], ''''), ''SCHEMA_AND_DATA''),
+               st.durability_desc
+          FROM #Tables t WITH (NOLOCK)
+          JOIN sys.tables st WITH (NOLOCK) ON st.[object_id] = OBJECT_ID(t.[Schema] + ''.'' + t.[Name])
+         WHERE t.NewTable = 0'
+
+    IF EXISTS (SELECT 1 FROM #DeployedMemOpt WHERE DeclaredMO <> DeployedMO)
+    BEGIN
+      DECLARE @v_MoTable NVARCHAR(1010), @v_MoDeclared INT, @v_MoLive INT
+      SELECT TOP 1 @v_MoTable = FullName, @v_MoDeclared = CONVERT(INT, DeclaredMO), @v_MoLive = CONVERT(INT, DeployedMO)
+        FROM #DeployedMemOpt WHERE DeclaredMO <> DeployedMO
+      RAISERROR('Table %s declares MemoryOptimized = %d, but is currently deployed with is_memory_optimized = %d. SQL Server has no ALTER that converts a table to or from the memory-optimized (Hekaton) engine -- migrate it manually, or correct the declaration to match.', 16, 1, @v_MoTable, @v_MoDeclared, @v_MoLive)
+    END
+
+    -- DURABILITY change on a table that IS and STAYS memory-optimized: also un-ALTERable, refused the same way.
+    IF EXISTS (SELECT 1 FROM #DeployedMemOpt WHERE DeployedMO = 1 AND DeclaredMO = 1 AND DeclaredDur <> DeployedDur)
+    BEGIN
+      DECLARE @v_DurTable NVARCHAR(1010), @v_DurDeclared NVARCHAR(20), @v_DurLive NVARCHAR(20)
+      SELECT TOP 1 @v_DurTable = FullName, @v_DurDeclared = DeclaredDur, @v_DurLive = DeployedDur
+        FROM #DeployedMemOpt WHERE DeployedMO = 1 AND DeclaredMO = 1 AND DeclaredDur <> DeployedDur
+      RAISERROR('Table %s declares memory-optimized DURABILITY %s, but is currently %s. There is no ALTER for a memory-optimized table''s durability -- migrate it manually, or correct the declared Durability to match.', 16, 1, @v_DurTable, @v_DurDeclared, @v_DurLive)
+    END
+
+    -- Inline-index changes on an existing memory-optimized table. Its indexes are declared inline in the
+    -- CREATE and are immutable through SchemaSmith's ordinary CREATE/DROP INDEX convergence -- the engine
+    -- rejects both -- so an added or removed inline index, a changed key-column set, a uniqueness flip, or
+    -- a changed hash bucket count cannot be applied. Refuse by name (like the MemoryOptimized/Durability
+    -- refusals above) rather than silently ignoring the declared change; recreate via a migration script.
+    -- Bucket count uses a power-of-two RANGE test (deployed/2 < declared <= deployed) because the engine
+    -- rounds a declared bucket count UP to the next power of two, so an unchanged redeploy of, say, 1000
+    -- buckets must compare equal to the deployed 1024. This proc is SHARED with the compatibility-level-100
+    -- XML kindle path and must bind on a genuine pre-2016 binary, so: the 2014 catalog references
+    -- (is_memory_optimized, sys.hash_indexes) go in dynamic SQL, and STRING_AGG (2017) / STRING_SPLIT
+    -- (needs compat 130) are avoided entirely -- fn_SplitList and FOR XML PATH are the all-version idioms.
+    IF OBJECT_ID('tempdb..#MODeplIx') IS NOT NULL DROP TABLE #MODeplIx
+    CREATE TABLE #MODeplIx (sch SYSNAME, tbl SYSNAME, ixname SYSNAME, obj_id INT, idx_id INT, is_unique BIT, is_hash BIT, buckets BIGINT, colset NVARCHAR(MAX) NULL)
+    EXEC sp_executesql N'
+      INSERT INTO #MODeplIx (sch, tbl, ixname, obj_id, idx_id, is_unique, is_hash, buckets)
+        SELECT SCHEMA_NAME(o.[schema_id]), o.[name], i.[name], i.[object_id], i.index_id, i.is_unique,
+               CASE WHEN i.[type] = 7 THEN 1 ELSE 0 END,
+               ISNULL(hi.bucket_count, 0)
+          FROM sys.indexes i
+          JOIN sys.tables o ON o.[object_id] = i.[object_id]
+          LEFT JOIN sys.hash_indexes hi ON hi.[object_id] = i.[object_id] AND hi.index_id = i.index_id
+         WHERE o.is_memory_optimized = 1 AND i.index_id >= 1 AND i.[type] <> 0'
+
+    -- Deployed key-column set, sorted and lowercased. sys.index_columns / sys.columns exist on every
+    -- version, so this is a static all-version aggregation (FOR XML PATH, not STRING_AGG).
+    UPDATE p
+      SET colset = STUFF((SELECT ',' + LOWER(c.[name])
+                            FROM sys.index_columns ic WITH (NOLOCK)
+                            JOIN sys.columns c WITH (NOLOCK) ON c.[object_id] = ic.[object_id] AND c.column_id = ic.column_id
+                            WHERE ic.[object_id] = p.obj_id AND ic.index_id = p.idx_id AND ic.is_included_column = 0
+                            ORDER BY LOWER(c.[name])
+                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '')
+      FROM #MODeplIx p
+
+    IF OBJECT_ID('tempdb..#MODeclIx') IS NOT NULL DROP TABLE #MODeclIx
+    SELECT sch = SchemaSmith.fn_StripBracketWrapping(i.[Schema]),
+           tbl = SchemaSmith.fn_StripBracketWrapping(i.[TableName]),
+           ixname = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]),
+           is_unique = CONVERT(BIT, i.[Unique]),
+           is_hash = CONVERT(BIT, CASE WHEN i.[BucketCount] IS NOT NULL THEN 1 ELSE 0 END),
+           decl_buckets = CONVERT(BIGINT, ISNULL(i.[BucketCount], 0)),
+           colset = STUFF((SELECT ',' + LOWER(SchemaSmith.fn_StripBracketWrapping(RTRIM(REPLACE(sl.[value], ' DESC', ''))))
+                             FROM SchemaSmith.fn_SplitList(i.[IndexColumns], ',') sl
+                             ORDER BY LOWER(SchemaSmith.fn_StripBracketWrapping(RTRIM(REPLACE(sl.[value], ' DESC', ''))))
+                             FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '')
+      INTO #MODeclIx
+      FROM #Indexes i WITH (NOLOCK)
+      JOIN #Tables t WITH (NOLOCK) ON t.[Schema] = i.[Schema] AND t.[Name] = i.[TableName]
+      WHERE t.[MemoryOptimized] = 1 AND t.NewTable = 0
+
+    IF OBJECT_ID('tempdb..#MOIndexDrift') IS NOT NULL DROP TABLE #MOIndexDrift
+    SELECT DISTINCT FullName = '[' + COALESCE(d.sch, p.sch) + '].[' + COALESCE(d.tbl, p.tbl) + ']'
+      INTO #MOIndexDrift
+      FROM #MODeclIx d
+      FULL OUTER JOIN #MODeplIx p ON p.sch = d.sch AND p.tbl = d.tbl AND p.ixname = d.ixname
+      -- only tables that are memory-optimized on BOTH sides (a memory-optimized/disk flip is refused above)
+      WHERE EXISTS (SELECT 1 FROM #MODeclIx x WHERE x.sch = COALESCE(d.sch, p.sch) AND x.tbl = COALESCE(d.tbl, p.tbl))
+        AND EXISTS (SELECT 1 FROM #MODeplIx y WHERE y.sch = COALESCE(d.sch, p.sch) AND y.tbl = COALESCE(d.tbl, p.tbl))
+        AND (d.ixname IS NULL
+          OR p.ixname IS NULL
+          OR d.is_unique <> p.is_unique
+          OR d.is_hash <> p.is_hash
+          OR ISNULL(d.colset, '') <> ISNULL(p.colset, '')
+          OR (d.is_hash = 1 AND NOT (p.buckets / 2 < d.decl_buckets AND d.decl_buckets <= p.buckets)))
+
+    IF EXISTS (SELECT 1 FROM #MOIndexDrift)
+    BEGIN
+      DECLARE @v_MoIxTable NVARCHAR(1010)
+      SELECT TOP 1 @v_MoIxTable = FullName FROM #MOIndexDrift
+      RAISERROR('Table %s is memory-optimized and its declared inline index set differs from what is deployed (an added or removed index, changed key columns, a uniqueness change, or a changed hash bucket count). SQL Server memory-optimized indexes are immutable through ordinary CREATE/DROP INDEX, so SchemaSmith will not attempt it -- recreate the table via a migration script, or correct the declaration to match.', 16, 1, @v_MoIxTable)
     END
   END
 
@@ -1824,6 +1957,7 @@ BEGIN TRY
                            FROM #Tables t WITH (NOLOCK)
                            WHERE NOT EXISTS (SELECT * FROM #TableProperties tp WITH (NOLOCK) WHERE t.[Schema] = tp.[Schema] AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) = tp.TableName AND tp.PropertyName = 'ProductName')
                              AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- and the table physically exists
+                             AND t.[MemoryOptimized] = 0  -- memory-optimized tables reject extended properties; their ownership is tracked in SchemaSmith.ProductOwnership below
                            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
 
@@ -1837,8 +1971,51 @@ BEGIN TRY
     'ELSE EXEC sp_addextendedproperty @name = N''PreventDrop'', @value = ''' + CASE WHEN t.[PreventDrop] = 1 THEN 'true' ELSE 'false' END + ''', @level0type = N''Schema'', @level0name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Schema]) + ''', @level1type = N''Table'', @level1name = ''' + SchemaSmith.fn_StripBracketWrapping(t.[Name]) + ''';' AS NVARCHAR(MAX))
     FROM #Tables t WITH (NOLOCK)
     WHERE OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL  -- table physically exists
+      AND t.[MemoryOptimized] = 0  -- memory-optimized tables reject extended properties; PreventDrop is tracked in SchemaSmith.ProductOwnership below
     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
   IF @WhatIf = 1 EXEC SchemaSmith.PrintWithNoWait @v_SQL ELSE EXEC(@v_SQL)
+
+  -- Memory-optimized tables reject extended properties, so their ProductName / PreventDrop ownership is
+  -- recorded in SchemaSmith.ProductOwnership instead of stamped on the table (the read-side fold into
+  -- #TableProperties near the top of this proc turns these rows back into the ownership records every
+  -- downstream check reads). Insert missing owner rows and refresh the marker each run so it tracks the
+  -- package, mirroring the two extended-property stamps above. IndexName = '' is the table-level marker.
+  -- Ownership bookkeeping is a real mutation, so like the other engines it is skipped under WhatIf.
+  RAISERROR('Record memory-optimized table ownership in ProductOwnership', 10, 100) WITH NOWAIT
+  IF @WhatIf = 0
+  BEGIN
+    INSERT INTO SchemaSmith.ProductOwnership ([Schema], [TableName], [IndexName], [ProductName], [PreventDrop])
+      SELECT t.[Schema], SchemaSmith.fn_StripBracketWrapping(t.[Name]), '', @ProductName, ISNULL(t.[PreventDrop], 0)
+        FROM #Tables t WITH (NOLOCK)
+        WHERE t.[MemoryOptimized] = 1
+          AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM SchemaSmith.ProductOwnership po WITH (NOLOCK)
+                            WHERE po.[Schema] = t.[Schema] COLLATE DATABASE_DEFAULT
+                              AND po.[TableName] = SchemaSmith.fn_StripBracketWrapping(t.[Name]) COLLATE DATABASE_DEFAULT
+                              AND po.[IndexName] = '')
+
+    UPDATE po
+      SET po.[ProductName] = @ProductName, po.[PreventDrop] = ISNULL(t.[PreventDrop], 0)
+      FROM SchemaSmith.ProductOwnership po
+      JOIN #Tables t WITH (NOLOCK) ON t.[Schema] COLLATE DATABASE_DEFAULT = po.[Schema]
+                                  AND SchemaSmith.fn_StripBracketWrapping(t.[Name]) COLLATE DATABASE_DEFAULT = po.[TableName]
+      WHERE t.[MemoryOptimized] = 1
+        AND po.[IndexName] = ''
+        AND OBJECT_ID(t.[Schema] + '.' + t.[Name]) IS NOT NULL
+        AND (po.[ProductName] <> @ProductName OR po.[PreventDrop] <> ISNULL(t.[PreventDrop], 0))
+  END
+
+  -- Prune ownership rows for memory-optimized tables that no longer exist -- dropped by absence earlier in
+  -- this proc, or removed out of band. Mirrors the catalog-existence prune the other engines run; a
+  -- PreventDrop-retained table still physically exists, so its row survives. Scoped to this product and
+  -- this run's schemas. Runs after the drops above, so a table removed this run is already gone here.
+  RAISERROR('Prune ProductOwnership for memory-optimized tables no longer present', 10, 100) WITH NOWAIT
+  IF @WhatIf = 0
+    DELETE po
+      FROM SchemaSmith.ProductOwnership po
+      JOIN #SchemaList sl WITH (NOLOCK) ON sl.[Schema] = po.[Schema] COLLATE DATABASE_DEFAULT
+      WHERE po.[ProductName] = @ProductName COLLATE DATABASE_DEFAULT
+        AND OBJECT_ID(po.[Schema] + '.[' + po.[TableName] + ']') IS NULL
 
   RAISERROR('Add Missing Physical Columns', 10, 100) WITH NOWAIT
   -- Need to do this a second time for the edge case of replacing a computed column with a physical column

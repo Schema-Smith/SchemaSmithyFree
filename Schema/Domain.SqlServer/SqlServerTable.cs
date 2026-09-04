@@ -207,5 +207,33 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 120, NullValueHandling = NullValueHandling.Ignore)]
         public string PartitionColumn { get; set; }
 
+        // Memory-optimized (Hekaton) tables (#J1, SQL Server 2014+). "true" creates the table
+        // WITH (MEMORY_OPTIMIZED = ON) -- a distinct in-memory storage engine, not a variation of the
+        // disk-based one.
+        //
+        // Create-time only, and a hard constraint rather than a choice: there is no
+        // ALTER TABLE ... SET (MEMORY_OPTIMIZED = ON) at all (error 102, not even syntax), so a table
+        // cannot be converted in either direction. A change on a deployed table is refused by name, exactly
+        // like GraphType and Ledger.
+        //
+        // Its indexes must be declared INLINE in the CREATE TABLE: CREATE INDEX is rejected on a
+        // memory-optimized table ("The operation 'CREATE INDEX' is not supported with memory optimized
+        // tables"). SchemaSmith emits them inline and the ordinary index passes skip the table.
+        //
+        // Requires a MEMORY_OPTIMIZED_DATA filegroup on the database and an edition/version that supports
+        // the engine (SERVERPROPERTY('IsXTPSupported') = 1). SchemaSmith creates neither; a table asking
+        // for this without them is reported through UnsupportedFeaturePolicy rather than failing the raw
+        // CREATE -- the same detect-don't-create posture FileGroup and the temporal history table take.
+        [JsonProperty(Order = 121, NullValueHandling = NullValueHandling.Ignore)]
+        public bool MemoryOptimized { get; set; }
+
+        // DURABILITY for a memory-optimized table: "SCHEMA_AND_DATA" (default -- data survives a restart)
+        // or "SCHEMA_ONLY" (only the schema survives; rows are transient). Meaningless unless
+        // MemoryOptimized is true. Create-time only like MemoryOptimized -- no ALTER exists (error 102) --
+        // so a change on a deployed table is refused rather than attempted.
+        [SchemaProperty(Pattern = "SCHEMA_AND_DATA|SCHEMA_ONLY",
+            Description = "Memory-optimized durability: SCHEMA_AND_DATA (default, data persists) or SCHEMA_ONLY (rows are transient). Only meaningful with MemoryOptimized. Create-time only.")]
+        [JsonProperty(Order = 122, NullValueHandling = NullValueHandling.Ignore)]
+        public string Durability { get; set; }
     }
 }

@@ -87,6 +87,7 @@ Per-table options, column attributes, and table-scoped behavior beyond the basic
 | Initial auto-increment value | n/a | n/a | ✓ | ✓ | `AutoIncrementValue` |
 | Data compression | ✓ | n/a | n/a | n/a | `CompressionType`: NONE / ROW / PAGE |
 | XML compression | ✓ | n/a | n/a | n/a | `XmlCompression` on table and index; deploy 2022+, extract 2025+ |
+| Memory-optimized (Hekaton) tables | ✓ | n/a | n/a | n/a | `MemoryOptimized` + `Durability` (SCHEMA_AND_DATA / SCHEMA_ONLY); indexes declared inline; the memory-optimized nature, durability, and inline index shape are refused on change; ownership tracked in `SchemaSmith.ProductOwnership` (extended properties are rejected on such tables); requires In-Memory OLTP support + a `MEMORY_OPTIMIZED_DATA` filegroup |
 | Table-level access method | n/a | ✓ | n/a | n/a | `AccessMethod` |
 | Persistence type (UNLOGGED / TEMPORARY) | n/a | ✓ | n/a | n/a | `PersistenceType` |
 | Row-level security | n/a | ✓ | n/a | n/a | `RowLevelSecurity`, `ForceRowLevelSecurity` |
@@ -123,6 +124,8 @@ Index shape, predicates, included columns, fill factor, and platform-specific in
 | Filtered / partial (`WHERE` predicate) | ✓ | ✓ | n/a | n/a | `FilterExpression` |
 | Included / covering columns | ✓ | ✓ | n/a | n/a | PG 11+; `IncludeColumns` |
 | Per-index fill factor | ✓ | n/a | n/a | n/a | `FillFactor`, `UpdateFillFactor` |
+| Index storage parameters (`WITH`) | n/a | ✓ | n/a | n/a | `StorageParameters` map (e.g. gin `fastupdate`, brin `pages_per_range`, pgvector `hnsw` tuning); `fillfactor` handled separately |
+| Hash index bucket count | ✓ | n/a | n/a | n/a | `BucketCount` on a memory-optimized hash index |
 | Per-index compression | ✓ | n/a | n/a | n/a | `CompressionType` |
 | Columnstore | ✓ | n/a | n/a | n/a | `ColumnStore` |
 | Index access method (btree / gin / gist / brin / spgist / hash) | n/a | ✓ | n/a | n/a | `AccessMethod` |

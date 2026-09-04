@@ -72,5 +72,20 @@ namespace Schema.Domain.SqlServer
 
         [JsonProperty(Order = 111, NullValueHandling = NullValueHandling.Ignore)]
         public string PartitionColumn { get; set; }
+
+        /// <summary>
+        /// <c>BUCKET_COUNT</c> for a HASH index on a memory-optimized table (#J1). A HASH index needs one --
+        /// it sizes the hash table -- and it is meaningless on any other index. Its presence is also what
+        /// tells SchemaSmith to emit the index as <c>NONCLUSTERED HASH</c> rather than a range index.
+        /// <para>Unlike the table's <c>MEMORY_OPTIMIZED</c>/<c>DURABILITY</c>, this one converges:
+        /// <c>ALTER TABLE … ALTER INDEX … REBUILD WITH (BUCKET_COUNT = n)</c> is supported and the new count
+        /// is readable back from <c>sys.hash_indexes</c> (verified live). SQL Server rounds the requested
+        /// count up to the next power of two, so the comparison is against the rounded value the catalog
+        /// reports, not the raw request.</para>
+        /// </summary>
+        [SchemaProperty(Minimum = 1,
+            Description = "BUCKET_COUNT for a HASH index on a memory-optimized table. Required for a hash index, ignored elsewhere. SQL Server rounds it up to the next power of two.")]
+        [JsonProperty(Order = 112, NullValueHandling = NullValueHandling.Ignore)]
+        public int? BucketCount { get; set; }
     }
 }

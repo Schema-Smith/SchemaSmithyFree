@@ -285,6 +285,10 @@ public static class ForgeKindler
                 new("Kindling_SchemaSmith_Schema.sql"),
                 new("SchemaSmith.BootstrapTableQuench.sql"),
                 new("Kindling_KindleStamp_Table.sql", ReplaceTableDef: true),
+                // Ownership fallback for tables that cannot carry the ProductName extended property
+                // (memory-optimized tables reject it). Regular tables still use the extended property;
+                // this mirrors the table-based ownership PostgreSQL and MySQL use for every table.
+                new("Kindling_ProductOwnership_Table.sql", ReplaceTableDef: true),
                 new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
                 new("Kindling_ChangeAudit_Table.sql", ReplaceTableDef: true),
                 new("SchemaSmith.fn_StripParenWrapping.sql"),

@@ -88,6 +88,11 @@
           "PartitionColumn": {
             "type": "string"
           },
+          "BucketCount": {
+            "type": "integer",
+            "minimum": 1.0,
+            "description": "BUCKET_COUNT for a HASH index on a memory-optimized table. Required for a hash index, ignored elsewhere. SQL Server rounds it up to the next power of two."
+          },
           "Extensions": {}
         },
         "additionalProperties": false,

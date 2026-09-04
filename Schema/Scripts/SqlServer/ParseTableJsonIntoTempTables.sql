@@ -52,7 +52,7 @@
          [FileStreamFileGroup] = SchemaSmith.fn_SafeBracketWrap([FileStreamFileGroup]),
          [TextImageFileGroup] = SchemaSmith.fn_SafeBracketWrap([TextImageFileGroup]),
          [Indexes], [XmlIndexes], [Columns], [Statistics], [FullTextIndex], [ForeignKeys], [CheckConstraints],
-         [ShouldApplyExpression], [VariantName], [GraphType] = RTRIM(ISNULL([GraphType], 'None')), [Ledger] = RTRIM(ISNULL([Ledger], 'Off')), [EnableCDC] = ISNULL([EnableCDC], 0), [EnableChangeTracking] = ISNULL([EnableChangeTracking], 0), [TrackColumnsUpdated] = ISNULL([TrackColumnsUpdated], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
+         [ShouldApplyExpression], [VariantName], [GraphType] = RTRIM(ISNULL([GraphType], 'None')), [Ledger] = RTRIM(ISNULL([Ledger], 'Off')), [MemoryOptimized] = ISNULL([MemoryOptimized], 0), [Durability] = UPPER(RTRIM(ISNULL(NULLIF([Durability], ''), 'SCHEMA_AND_DATA'))), [EnableCDC] = ISNULL([EnableCDC], 0), [EnableChangeTracking] = ISNULL([EnableChangeTracking], 0), [TrackColumnsUpdated] = ISNULL([TrackColumnsUpdated], 0), [OldName] = SchemaSmith.fn_SafeBracketWrap([OldName]),
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          -- RebuildPolicy resolves MOST-SPECIFIC-WINS on the WHOLE object (ProductQuench.ResolveCascadedPolicy),
          -- so the apply side needs to know whether this table declared one AT ALL -- not just what its fields
@@ -93,6 +93,8 @@
       [EnableCDC] BIT '$.EnableCDC',
       [GraphType] NVARCHAR(10) '$.GraphType',
       [Ledger] NVARCHAR(12) '$.Ledger',
+      [MemoryOptimized] BIT '$.MemoryOptimized',
+      [Durability] NVARCHAR(20) '$.Durability',
       [EnableChangeTracking] BIT '$.EnableChangeTracking',
       [TrackColumnsUpdated] BIT '$.TrackColumnsUpdated',
       [DropColumnsRemovedFromProduct] BIT '$.DropColumnsRemovedFromProduct',
@@ -118,7 +120,7 @@
   EXEC(@v_SQL)
 
   DROP TABLE IF EXISTS #Tables
-  SELECT [Schema], [Name], [CompressionType], [XmlCompression], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [PartitionScheme], [PartitionColumn], [FileStreamFileGroup], [TextImageFileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [XmlCompression], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [PartitionScheme], [PartitionColumn], [FileStreamFileGroup], [TextImageFileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [MemoryOptimized], [Durability], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch], [RebuildPolicySpecified],
@@ -225,7 +227,7 @@
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]),
-         [PartitionScheme] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionScheme]), [PartitionColumn] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionColumn]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
+         [PartitionScheme] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionScheme]), [PartitionColumn] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionColumn]), [BucketCount] = i.[BucketCount], [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
          [IndexColumns] = (SELECT STRING_AGG(CAST(CASE WHEN RTRIM([value]) LIKE '% DESC' 
                                                        THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
                                                        ELSE SchemaSmith.fn_SafeBracketWrap([value])
@@ -257,6 +259,7 @@
       [FileGroup] NVARCHAR(500) '$.FileGroup',
       [PartitionScheme] NVARCHAR(500) '$.PartitionScheme',
       [PartitionColumn] NVARCHAR(500) '$.PartitionColumn',
+      [BucketCount] INT '$.BucketCount',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
       [VariantName] NVARCHAR(128) '$.VariantName'

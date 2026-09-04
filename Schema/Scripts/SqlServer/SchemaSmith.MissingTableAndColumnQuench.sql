@@ -188,7 +188,7 @@ BEGIN TRY
   RAISERROR('Add New Tables', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] +
                                   CASE WHEN RTRIM(ISNULL(T.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(T.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'EXEC(''CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + REPLACE(ScriptColumns, '''', '''''') + ')' +
+                                  'EXEC(''CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + REPLACE(ScriptColumns, '''', '''''') + REPLACE(InlineIndexes, '''', '''''') + ')' +
                                   -- Filegroup placement (#filegroups): ON comes right after the column list,
                                   -- BEFORE the WITH clause, per CREATE TABLE's own grammar. Existence was
                                   -- already validated above, so this can emit unconditionally.
@@ -220,14 +220,41 @@ BEGIN TRY
                                   -- keeps a table with neither exactly as it was before ledger existed.
                                   CASE WHEN t.[WithOptions] <> '' THEN ' WITH (' + STUFF(t.[WithOptions], 1, 2, '') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + T.[Schema] + '.' + T.[Name] + ''', ''created'');' AS NVARCHAR(MAX))
-                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[XmlCompression], t.[FileGroup], t.[PartitionScheme], t.[PartitionColumn], t.[FileStreamFileGroup], t.[TextImageFileGroup], T.[VariantName], T.[GraphType],
+                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[XmlCompression], t.[FileGroup], t.[PartitionScheme], t.[PartitionColumn], t.[FileStreamFileGroup], t.[TextImageFileGroup], T.[VariantName], T.[GraphType], T.[MemoryOptimized],
+                                        -- Memory-optimized indexes must be declared INLINE in the CREATE TABLE
+                                        -- (#J1) -- CREATE INDEX is rejected on such a table. Built here from
+                                        -- #Indexes; each is NONCLUSTERED (the only kind a memory-optimized
+                                        -- table has), HASH with a BUCKET_COUNT when one is declared, and a
+                                        -- range index otherwise. The PK is a named constraint; the rest are
+                                        -- INDEX clauses. Empty for an ordinary disk table, so nothing changes
+                                        -- for one. The ordinary index passes skip memory-optimized tables.
+                                        InlineIndexes = CASE WHEN T.[MemoryOptimized] = 1 THEN
+                                            ISNULL((SELECT ', ' +
+                                                      CASE WHEN I.[PrimaryKey] = 1
+                                                           THEN 'CONSTRAINT ' + I.[IndexName] + ' PRIMARY KEY NONCLUSTERED '
+                                                           ELSE 'INDEX ' + I.[IndexName] + CASE WHEN I.[Unique] = 1 THEN ' UNIQUE' ELSE '' END + ' NONCLUSTERED ' END +
+                                                      CASE WHEN I.[BucketCount] IS NOT NULL
+                                                           THEN 'HASH (' + I.[IndexColumns] + ') WITH (BUCKET_COUNT = ' + CAST(I.[BucketCount] AS NVARCHAR(20)) + ')'
+                                                           ELSE '(' + I.[IndexColumns] + ')' END
+                                                     FROM #Indexes I WITH (NOLOCK)
+                                                    WHERE I.[Schema] = T.[Schema] AND I.[TableName] = T.[Name]
+                                                    ORDER BY I.[PrimaryKey] DESC, I.[IndexName]
+                                                    FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), '')
+                                          ELSE '' END,
                                         WithOptions =
                                             CASE T.[Ledger] WHEN 'AppendOnly' THEN ', LEDGER = ON (APPEND_ONLY = ON)'
                                                             WHEN 'Updatable'  THEN ', SYSTEM_VERSIONING = ON, LEDGER = ON'
                                                             ELSE '' END +
+                                            -- Memory-optimized (#J1): the WITH that switches on the Hekaton
+                                            -- storage engine. DURABILITY defaults to SCHEMA_AND_DATA in the parse.
+                                            CASE WHEN T.[MemoryOptimized] = 1 THEN ', MEMORY_OPTIMIZED = ON, DURABILITY = ' + T.[Durability] ELSE '' END +
                                             -- Sparse columns and a COLUMN_SET are incompatible with data compression, and SQL
                                             -- Server 2008 REJECTS the clause outright on such a table -- even DATA_COMPRESSION=NONE.
-                                            CASE WHEN NOT EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
+                                            -- Memory-optimized tables reject DATA_COMPRESSION (and XML_COMPRESSION)
+                                            -- outright -- the in-memory engine has no page compression -- so both
+                                            -- are suppressed for them here.
+                                            CASE WHEN T.[MemoryOptimized] = 0
+                                                  AND NOT EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
                                                                    WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
                                                                      AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1))
                                                       AND ISNULL(T.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE')
@@ -238,7 +265,7 @@ BEGIN TRY
                                             -- compression. Gated on 2022 by VALUE (fn_ServerMajorVersion), which
                                             -- is safe anywhere; only the CATALOG READ in extraction needs
                                             -- kindle-time composition, because that names a column.
-                                            CASE WHEN ISNULL(T.[XmlCompression], 0) = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16
+                                            CASE WHEN ISNULL(T.[XmlCompression], 0) = 1 AND T.[MemoryOptimized] = 0 AND SchemaSmith.fn_ServerMajorVersion() >= 16
                                                  THEN ', XML_COMPRESSION = ON' ELSE '' END,
                                         HasSparseOrColumnSet = CASE WHEN EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
                                                                                   WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]

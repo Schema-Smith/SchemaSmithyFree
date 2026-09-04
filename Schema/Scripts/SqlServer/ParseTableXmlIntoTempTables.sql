@@ -53,7 +53,7 @@
          [FileStreamFileGroup] = SchemaSmith.fn_SafeBracketWrap(t.value('(FileStreamFileGroup/text())[1]', 'NVARCHAR(500)')),
          [TextImageFileGroup] = SchemaSmith.fn_SafeBracketWrap(t.value('(TextImageFileGroup/text())[1]', 'NVARCHAR(500)')),
          [TableXml] = t.query('.'),
-         [ShouldApplyExpression] = t.value('(ShouldApplyExpression/text())[1]', 'NVARCHAR(MAX)'), [VariantName] = t.value('(VariantName/text())[1]', 'NVARCHAR(128)'), [GraphType] = RTRIM(ISNULL(t.value('(GraphType/text())[1]', 'NVARCHAR(10)'), 'None')), [Ledger] = RTRIM(ISNULL(t.value('(Ledger/text())[1]', 'NVARCHAR(12)'), 'Off')), [EnableCDC] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(EnableCDC/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [EnableChangeTracking] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(EnableChangeTracking/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [TrackColumnsUpdated] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(TrackColumnsUpdated/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [OldName] = SchemaSmith.fn_SafeBracketWrap(t.value('(OldName/text())[1]', 'NVARCHAR(500)')),
+         [ShouldApplyExpression] = t.value('(ShouldApplyExpression/text())[1]', 'NVARCHAR(MAX)'), [VariantName] = t.value('(VariantName/text())[1]', 'NVARCHAR(128)'), [GraphType] = RTRIM(ISNULL(t.value('(GraphType/text())[1]', 'NVARCHAR(10)'), 'None')), [Ledger] = RTRIM(ISNULL(t.value('(Ledger/text())[1]', 'NVARCHAR(12)'), 'Off')), [MemoryOptimized] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(MemoryOptimized/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [Durability] = UPPER(RTRIM(ISNULL(NULLIF(t.value('(Durability/text())[1]', 'NVARCHAR(20)'), ''), 'SCHEMA_AND_DATA'))), [EnableCDC] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(EnableCDC/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [EnableChangeTracking] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(EnableChangeTracking/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [TrackColumnsUpdated] = ISNULL(CONVERT(BIT, CASE LOWER(t.value('(TrackColumnsUpdated/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END), 0), [OldName] = SchemaSmith.fn_SafeBracketWrap(t.value('(OldName/text())[1]', 'NVARCHAR(500)')),
          [DropColumnsRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropColumnsRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
          [DropForeignKeysRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropForeignKeysRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
          [DropCheckConstraintsRemovedFromProduct] = CONVERT(BIT, CASE LOWER(t.value('(DropCheckConstraintsRemovedFromProduct/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
@@ -81,7 +81,7 @@
   EXEC(@v_SQL)
 
   IF OBJECT_ID('tempdb..#Tables') IS NOT NULL DROP TABLE #Tables
-  SELECT [Schema], [Name], [CompressionType], [XmlCompression], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [PartitionScheme], [PartitionColumn], [FileStreamFileGroup], [TextImageFileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [OldName], [VariantName],
+  SELECT [Schema], [Name], [CompressionType], [XmlCompression], [IsTemporal], [HistoryTableSchema], [HistoryTableName], [HistoryRetentionPeriod], [FileGroup], [PartitionScheme], [PartitionColumn], [FileStreamFileGroup], [TextImageFileGroup], [UpdateFillFactor], [EnableCDC], [EnableChangeTracking], [TrackColumnsUpdated], [GraphType], [Ledger], [MemoryOptimized], [Durability], [OldName], [VariantName],
          CONVERT(BIT, CASE WHEN OBJECT_ID([Schema] + '.' + [Name], 'U') IS NULL AND OBJECT_ID([Schema] + '.' + [OldName], 'U') IS NULL THEN 1 ELSE 0 END) AS NewTable,
          [DropColumnsRemovedFromProduct], [DropForeignKeysRemovedFromProduct], [DropCheckConstraintsRemovedFromProduct], [DropExcludeConstraintsRemovedFromProduct], [DropStatisticsRemovedFromProduct], [DropIndexesRemovedFromProduct],
          [RebuildPolicyMode], [RebuildPolicyThreshold], [RebuildPolicyOnOrderMismatch], [RebuildPolicySpecified],
@@ -174,7 +174,7 @@
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
          i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]),
-         [PartitionScheme] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionScheme]), [PartitionColumn] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionColumn]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
+         [PartitionScheme] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionScheme]), [PartitionColumn] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionColumn]), [BucketCount] = i.[BucketCount], [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
          [IndexColumns] = STUFF((SELECT ',' + CASE WHEN RTRIM([value]) LIKE '% DESC'
                                                    THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
                                                    ELSE SchemaSmith.fn_SafeBracketWrap([value])
@@ -209,6 +209,7 @@
       [FileGroup] = idx.value('(FileGroup/text())[1]', 'NVARCHAR(500)'),
       [PartitionScheme] = idx.value('(PartitionScheme/text())[1]', 'NVARCHAR(500)'),
       [PartitionColumn] = idx.value('(PartitionColumn/text())[1]', 'NVARCHAR(500)'),
+      [BucketCount] = idx.value('(BucketCount/text())[1]', 'INT'),
       [UpdateFillFactor] = CONVERT(BIT, CASE LOWER(idx.value('(UpdateFillFactor/text())[1]', 'VARCHAR(8)')) WHEN 'true' THEN 1 WHEN 'false' THEN 0 END),
       [ShouldApplyExpression] = idx.value('(ShouldApplyExpression/text())[1]', 'NVARCHAR(MAX)'),
       [VariantName] = idx.value('(VariantName/text())[1]', 'NVARCHAR(128)')

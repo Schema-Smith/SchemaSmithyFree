@@ -149,6 +149,11 @@
           "PartitionColumn": {
             "type": "string"
           },
+          "BucketCount": {
+            "type": "integer",
+            "minimum": 1.0,
+            "description": "BUCKET_COUNT for a HASH index on a memory-optimized table. Required for a hash index, ignored elsewhere. SQL Server rounds it up to the next power of two."
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -605,6 +610,14 @@
     },
     "PartitionColumn": {
       "type": "string"
+    },
+    "MemoryOptimized": {
+      "type": "boolean"
+    },
+    "Durability": {
+      "type": "string",
+      "pattern": "SCHEMA_AND_DATA|SCHEMA_ONLY",
+      "description": "Memory-optimized durability: SCHEMA_AND_DATA (default, data persists) or SCHEMA_ONLY (rows are transient). Only meaningful with MemoryOptimized. Create-time only."
     },
     "Extensions": {}
   },
