@@ -108,6 +108,16 @@ BEGIN
                 CASE WHEN t.Tablespace IS NOT NULL AND t.Tablespace != '' AND VERSION() NOT LIKE '%MariaDB%'
                      THEN CONCAT(' TABLESPACE ', t.Tablespace)
                      ELSE '' END,
+                -- InnoDB DATA DIRECTORY placement (F2c), BOTH engines -- unlike Tablespace above, no
+                -- VERSION() guard: both MySQL and MariaDB support this clause. Applied only here, on
+                -- CREATE: an existing table whose declared value disagrees with what is deployed is
+                -- refused by ModifiedTableQuench, never converged -- a move is a full data-file relocation,
+                -- the same posture Tablespace above takes. MySQL requires the directory to already be
+                -- listed in the server's innodb_directories or CREATE fails with its own ERROR 3121 -- that
+                -- is user server configuration, like a missing filegroup, not something to gate here.
+                CASE WHEN t.DataDirectory IS NOT NULL AND t.DataDirectory != ''
+                     THEN CONCAT(' DATA DIRECTORY=''', REPLACE(t.DataDirectory, '''', ''''''), '''')
+                     ELSE '' END,
                 -- Partitioning (#partitioning, K3). LAST in the statement, which is where MySQL's own
                 -- CREATE TABLE grammar puts it -- after every table option.
                 --
@@ -147,7 +157,7 @@ BEGIN
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
                  t.PageCompressed, t.PageCompressionLevel, t.Encryption, t.Encrypted, t.EncryptionKeyId,
-                 t.AutoIncrementValue, t.Comment, t.Tablespace,
+                 t.AutoIncrementValue, t.Comment, t.Tablespace, t.DataDirectory,
                  t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
@@ -512,6 +522,10 @@ BEGIN
                       CASE WHEN t.Tablespace IS NOT NULL AND t.Tablespace != '' AND VERSION() NOT LIKE '%MariaDB%'
                            THEN CONCAT(' TABLESPACE ', t.Tablespace)
                            ELSE '' END,
+                      -- DATA DIRECTORY placement (F2c) -- must match the real-path cur_NewTables CONCAT above exactly.
+                      CASE WHEN t.DataDirectory IS NOT NULL AND t.DataDirectory != ''
+                           THEN CONCAT(' DATA DIRECTORY=''', REPLACE(t.DataDirectory, '''', ''''''), '''')
+                           ELSE '' END,
                       -- Partitioning (#partitioning, K3) -- must match the real-path emit above exactly,
                       -- or the WhatIf preview shows a statement the live run would not issue.
                       CASE WHEN t.PartitionMethod IS NULL THEN ''
@@ -539,7 +553,7 @@ BEGIN
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
         GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
                  t.PageCompressed, t.PageCompressionLevel, t.Encryption, t.Encrypted, t.EncryptionKeyId,
-                 t.AutoIncrementValue, t.Comment, t.Tablespace,
+                 t.AutoIncrementValue, t.Comment, t.Tablespace, t.DataDirectory,
                  t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
         -- Step 2: Show ALTER TABLE ADD COLUMN for new columns on existing tables (set-based;

@@ -333,6 +333,92 @@ BEGIN
     END IF;
 
     -- =======================
+    -- STEP -0.35: DATA DIRECTORY -- REFUSE A MOVE (both engines, F2c)
+    -- =======================
+    -- Placement, same posture as STEP -0.4's Tablespace immediately above (and partitioning at STEP -0.5,
+    -- SQL Server FileGroup, PostgreSQL Tablespace): applied at CREATE only, never migrated by a state diff.
+    -- DATA DIRECTORY names the physical location of the table's data file, and a state-based diff cannot
+    -- tell "meant to move it" apart from "stale/typo'd package" -- so a mismatch is reported and refused,
+    -- never applied.
+    --
+    -- Read through the per-engine SchemaSmith_TableDataDirectory PROCEDURE -- same OUT-param shape as
+    -- SchemaSmith_TableTablespace and for the same reason on the MySQL side (dynamic SQL cannot live in a
+    -- FUNCTION); it cannot be called inline inside a SELECT/subquery, so this step CALLs it once per
+    -- candidate table in a cursor loop rather than a single set-based comparison.
+    --
+    -- UNLIKE STEP -0.4, no VERSION() NOT LIKE '%MariaDB%' guard: DATA DIRECTORY is a real InnoDB clause on
+    -- BOTH engines (MariaDB has no general tablespaces at all, but it does support DATA DIRECTORY), and
+    -- SchemaSmith_TableDataDirectory has a real MariaDb body -- not an always-NULL override -- so the same
+    -- false-refuse trap STEP -0.4's guard exists to avoid does not apply here.
+    --
+    -- An UNSET declared DataDirectory (NULL/'') means "SchemaSmith does not manage this table's data-file
+    -- placement" -- not a declaration that the table has none -- so only a DECLARED, non-empty value is
+    -- compared; matching (or both unset) is a no-op. Guarded by the outer EXISTS so the cursor loop (and
+    -- its per-table CALL) only runs at all when some table actually declares a directory.
+    --
+    -- Fires REGARDLESS of p_WhatIf, ahead of the p_WhatIf branch below -- same reasoning as STEP -0.4: there
+    -- is no safe "preview" of a refusal, and this pre-check runs before any CREATE/ALTER is attempted, so a
+    -- refused redeploy never touches the table.
+    IF EXISTS (SELECT 1 FROM _SchemaSmith_Tables
+               WHERE NewTable = 0 AND DataDirectory IS NOT NULL AND DataDirectory != '') THEN
+        -- Reset explicitly: this session variable is only ASSIGNED below when a mismatch is found, so on
+        -- a pooled connection a stale value from an earlier, unrelated call would otherwise survive a
+        -- clean pass and fire a false SIGNAL after the loop.
+        SET @ss_datadirectory_refuse_table = NULL;
+
+        BEGIN
+            DECLARE v_TddDone INT DEFAULT FALSE;
+            DECLARE v_TddTableName VARCHAR(128);
+            DECLARE v_TddDeclared VARCHAR(512);
+            DECLARE v_TddDeployed VARCHAR(512);
+            DECLARE cur_DataDirectoryCandidates CURSOR FOR
+                SELECT t.TableName, t.DataDirectory
+                FROM _SchemaSmith_Tables t
+                WHERE t.NewTable = 0
+                  AND t.DataDirectory IS NOT NULL AND t.DataDirectory != '';
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_TddDone = TRUE;
+
+            OPEN cur_DataDirectoryCandidates;
+
+            datadirectory_refuse_loop: LOOP
+                FETCH cur_DataDirectoryCandidates INTO v_TddTableName, v_TddDeclared;
+                IF v_TddDone THEN
+                    LEAVE datadirectory_refuse_loop;
+                END IF;
+
+                SET v_TddDeployed = NULL;
+                CALL SchemaSmith_TableDataDirectory(p_DatabaseName, SchemaSmith_StripBacktickWrapping(v_TddTableName), v_TddDeployed);
+
+                IF COALESCE(v_TddDeployed, '') <> v_TddDeclared THEN
+                    -- Log every offending table (not just the one named in the SIGNAL below), same shape
+                    -- as the tablespace guard above.
+                    INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(),
+                        CONCAT('  Declared data directory does not match the deployed table (refused -- SchemaSmith will not move a table between data directories): ',
+                               SchemaSmith_StripBacktickWrapping(v_TddTableName),
+                               ' declares ', v_TddDeclared,
+                               ', deployed ', COALESCE(v_TddDeployed, '(none)')));
+
+                    -- SIGNAL MESSAGE_TEXT is capped at 128 characters (see STEP -0.4, STEP 7.5 and STEP 8's
+                    -- comments on the same limit) -- name only the FIRST offender here, truncated
+                    -- defensively; the run log above carries every offender and the full declared/deployed
+                    -- detail.
+                    IF @ss_datadirectory_refuse_table IS NULL THEN
+                        SET @ss_datadirectory_refuse_table = LEFT(SchemaSmith_StripBacktickWrapping(v_TddTableName), 40);
+                    END IF;
+                END IF;
+            END LOOP;
+
+            CLOSE cur_DataDirectoryCandidates;
+        END;
+
+        IF @ss_datadirectory_refuse_table IS NOT NULL THEN
+            SET @ss_msg = CONCAT('Table ', @ss_datadirectory_refuse_table, ': declared data directory differs from deployed (refused) -- use a migration.');
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        END IF;
+    END IF;
+
+    -- =======================
     -- STEP 0: OWNERSHIP VALIDATION
     -- =======================
     -- Check if any tables in the definition are owned by a different product

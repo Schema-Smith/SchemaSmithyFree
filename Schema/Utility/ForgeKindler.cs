@@ -464,6 +464,12 @@ public static class ForgeKindler
                 // ModifiedTableQuench (CALLs it in the tablespace-move refuse guard), which is why it sits
                 // just ahead of the former.
                 new("SchemaSmith_TableTablespace.sql"),
+                // The DATA DIRECTORY placement read (F2c), both engines -- unlike SchemaSmith_TableTablespace
+                // above (MySQL-only), the MariaDb per-file override here resolves through the same
+                // ResourceLoader variant fallback. Must precede BOTH GenerateTableJson (CALLs it for
+                // extraction) and ModifiedTableQuench (CALLs it in the move-refuse guard), same ordering
+                // reason as its sibling immediately above.
+                new("SchemaSmith_TableDataDirectory.sql"),
                 new("SchemaSmith_GenerateTableJson.sql"),
                 new("SchemaSmith_ParseTableJson.sql"),
                 new("SchemaSmith_MissingTableAndColumnQuench.sql"),

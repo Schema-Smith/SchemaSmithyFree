@@ -94,5 +94,21 @@ namespace Schema.Domain.MySQL
             Description = "MySQL only. The InnoDB general tablespace this table is placed in; applied at create, a move is refused.")]
         [JsonProperty(Order = 118, NullValueHandling = NullValueHandling.Ignore)]
         public string Tablespace { get; set; }
+
+        // The filesystem directory an InnoDB table's data file is placed in (DATA DIRECTORY='<path>'),
+        // both engines -- unlike Tablespace above (MySQL-only general tablespaces), both MySQL and MariaDB
+        // support this clause. Placement, applied only at CREATE; a declared change on an existing table
+        // is refused, never applied as a move -- the same posture as Tablespace, SQL Server FileGroup and
+        // PostgreSQL Tablespace. Order 119, not 116: MariaDbTable (a subclass of this type) already
+        // occupies 110-114/116/117, so anything added here must clear that range or collide
+        // (SharedTypeSerializationOrderTests).
+        // Pattern forbids a single quote: the value is emitted inside a single-quoted DDL literal (escaped
+        // on write, but belt-and-suspenders) AND read back on MariaDB by parsing CREATE_OPTIONS up to the
+        // first quote -- a quote in the path could not survive that round-trip anyway, so it is rejected at
+        // validation rather than silently truncated into a redeploy-refusing mismatch.
+        [SchemaProperty(Platforms = [Platform.MySQL, Platform.MariaDb], Pattern = "^[^']+$",
+            Description = "The filesystem directory the table's data file is placed in (InnoDB DATA DIRECTORY); applied at create, a move is refused. MySQL requires the directory to be listed in the server's innodb_directories.")]
+        [JsonProperty(Order = 119, NullValueHandling = NullValueHandling.Ignore)]
+        public string DataDirectory { get; set; }
     }
 }
