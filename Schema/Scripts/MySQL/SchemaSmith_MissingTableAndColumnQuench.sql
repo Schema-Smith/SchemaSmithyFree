@@ -562,9 +562,16 @@ BEGIN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), 'Add missing columns to existing tables');
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                      ' ADD COLUMN ', c.ColumnScript)
+                      ' ADD COLUMN ',
+                      -- WhatIf preview must match the real run: strip WITHOUT SYSTEM VERSIONING on a
+                      -- not-yet-versioned table exactly as the ELSE branch's exec does (MariaDB 4124).
+                      CASE WHEN ist.TABLE_TYPE = 'SYSTEM VERSIONED' THEN c.ColumnScript
+                           ELSE REPLACE(c.ColumnScript, ' WITHOUT SYSTEM VERSIONING', '') END)
         FROM _SchemaSmith_Columns c
         INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        LEFT JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
@@ -820,10 +827,16 @@ BEGIN
         INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
         SELECT CONNECTION_ID(), CONCAT('  Add column: ',
                       CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
-                             ' ADD COLUMN ', c.ColumnScript),
+                             ' ADD COLUMN ',
+                             -- Match the exec below: strip WITHOUT SYSTEM VERSIONING on a not-yet-versioned table.
+                             CASE WHEN ist.TABLE_TYPE = 'SYSTEM VERSIONED' THEN c.ColumnScript
+                                  ELSE REPLACE(c.ColumnScript, ' WITHOUT SYSTEM VERSIONING', '') END),
                       CASE WHEN COALESCE(c.VariantName, '') <> '' THEN CONCAT(' (variant: ', c.VariantName, ')') ELSE '' END)
         FROM _SchemaSmith_Columns c
         INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        LEFT JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
@@ -836,14 +849,27 @@ BEGIN
             ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         INSERT INTO _SchemaSmith_AddColumnStmts (Stmt)
         SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName, ' ',
-                      GROUP_CONCAT(CONCAT('ADD COLUMN ', c.ColumnScript) ORDER BY c.OrdinalPosition SEPARATOR ', '))
+                      -- Strip WITHOUT SYSTEM VERSIONING from the ADD COLUMN clause when the target table is
+                      -- not (yet) system-versioned: MariaDB refuses that clause on an ALTER ADD COLUMN
+                      -- against a non-versioned table (ERROR 4124), which aborts the whole deploy for a table
+                      -- that is only CONVERGING to versioned in this same run (STEP 7.5 of ModifiedTableQuench
+                      -- adds the versioning AFTER this pass). The clause is valid inline on CREATE (unchanged)
+                      -- and on ADD COLUMN against an already-versioned table (kept). The column's exclusion is
+                      -- (re)applied post-versioning by ModifiedTableQuench's exclusion pass.
+                      GROUP_CONCAT(CONCAT('ADD COLUMN ',
+                          CASE WHEN ist.TABLE_TYPE = 'SYSTEM VERSIONED' THEN c.ColumnScript
+                               ELSE REPLACE(c.ColumnScript, ' WITHOUT SYSTEM VERSIONING', '') END)
+                          ORDER BY c.OrdinalPosition SEPARATOR ', '))
         FROM _SchemaSmith_Columns c
         INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+        LEFT JOIN INFORMATION_SCHEMA.TABLES ist
+            ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+            AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
         WHERE t.NewTable = 0
           AND c.NewColumn = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
-        GROUP BY c.TableName;
+        GROUP BY c.TableName, ist.TABLE_TYPE;
 
         SET @v_addcol_id := (SELECT MIN(RowId) FROM _SchemaSmith_AddColumnStmts);
         WHILE @v_addcol_id IS NOT NULL DO

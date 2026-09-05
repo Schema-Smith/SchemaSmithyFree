@@ -2453,6 +2453,57 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
         END;
     END IF;
 
+    -- =======================
+    -- STEP 7.6: APPLY PER-COLUMN "WITHOUT SYSTEM VERSIONING" AFTER VERSIONING (#408 / F1S2)
+    -- =======================
+    -- STEP 3's per-column exclusion drift is gated on the table ALREADY reading SYSTEM VERSIONED, and STEP 3
+    -- runs BEFORE STEP 7.5 -- so a table CONVERGING to versioned in THIS deploy had its declared column
+    -- exclusions skipped, and a newly-added excluded column had its clause stripped at ADD COLUMN time
+    -- (MissingTableAndColumnQuench, to avoid ERROR 4124 on a not-yet-versioned table). Now that STEP 7.5 has
+    -- versioned the table, apply the exclusion to any declared-excluded column that does not yet carry it.
+    -- Idempotent (fires only where the deployed column lacks the clause), so it is a harmless no-op for the
+    -- columns STEP 3 already handled on already-versioned tables. Requires @@system_versioning_alter_history
+    -- (STEP 2.96 / the user's SystemVersioningAlterHistory opt-in): MariaDB refuses column DDL on a versioned
+    -- table without it (ERROR 4119), so when the opt-in is off this is skipped and the exclusion converges on
+    -- a later deploy under that setting -- exactly like any other exclusion change on a versioned table.
+    IF SchemaSmith_SupportsSystemVersioning() = 1 AND @@system_versioning_alter_history = 1 AND p_WhatIf = 0 THEN
+        BEGIN
+            DECLARE v_ExclDone INT DEFAULT FALSE;
+            DECLARE v_ExclSql TEXT;
+            DECLARE cur_Excl CURSOR FOR
+                SELECT CONCAT('ALTER TABLE `', CONVERT(p_DatabaseName USING utf8mb4) COLLATE utf8mb4_unicode_ci, '`.', c.TableName,
+                              ' MODIFY COLUMN ', c.ColumnScript)
+                FROM _SchemaSmith_Columns c
+                INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                INNER JOIN INFORMATION_SCHEMA.TABLES ist
+                    ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
+                    AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                INNER JOIN INFORMATION_SCHEMA.COLUMNS isc
+                    ON BINARY isc.TABLE_SCHEMA = BINARY p_DatabaseName
+                    AND BINARY isc.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.TableName)
+                    AND BINARY isc.COLUMN_NAME = BINARY SchemaSmith_StripBacktickWrapping(c.ColumnName)
+                WHERE t.NewTable = 0
+                  AND c.IsWithoutSystemVersioning = 1
+                  AND ist.TABLE_TYPE = 'SYSTEM VERSIONED'
+                  AND isc.EXTRA NOT LIKE '%WITHOUT SYSTEM VERSIONING%';
+
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_ExclDone = TRUE;
+
+            SET v_ExclDone = FALSE;
+            OPEN cur_Excl;
+            excl_loop: LOOP
+                FETCH cur_Excl INTO v_ExclSql;
+                IF v_ExclDone THEN LEAVE excl_loop; END IF;
+                INSERT INTO SchemaSmith_StatusMessages (SessionId, Message) VALUES (CONNECTION_ID(), CONCAT('  Apply WITHOUT SYSTEM VERSIONING: ', v_ExclSql));
+                SET @exec_sql = v_ExclSql;
+                PREPARE stmt FROM @exec_sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END LOOP;
+            CLOSE cur_Excl;
+        END;
+    END IF;
+
     -- Update ProductOwnership for managed tables (non-WhatIf mode only)
     IF p_WhatIf = 0 THEN
         INSERT IGNORE INTO SchemaSmith_ProductOwnership (ProductName, TemplateName, ObjectSchema, ObjectType, ObjectName, PreventDrop)
