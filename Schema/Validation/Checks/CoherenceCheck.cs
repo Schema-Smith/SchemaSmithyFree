@@ -42,6 +42,8 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string DuplicateEventCode = "SS-EVT-001";
     private const string PartitionHalfDeclaredCode = "SS-PART-001";
     private const string PartitionAndFileGroupCode = "SS-PART-002";
+    private const string MyPartitionRangeListNoPartitionsCode = "SS-PART-003";
+    private const string MyPartitionHashBoundaryCode = "SS-PART-004";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -75,6 +77,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             findings.AddRange(CheckSystemVersioningExclusions(table, location));
             findings.AddRange(CheckCompressionOptions(table, location));
             findings.AddRange(CheckPartitionPlacement(table, location));
+            findings.AddRange(CheckMyPartitioning(table, location));
         }
 
         return findings;
@@ -469,6 +472,39 @@ public sealed class CoherenceCheck : ISchemaCheck
             yield return new Finding(Severity.Warning, CompressionLevelInertCode, Category, tableLocation,
                 $"Table '{table.Name}' sets PageCompressionLevel but not PageCompressed, so the level is " +
                 "ignored — set PageCompressed, or drop the level.");
+    }
+
+    /// <summary>
+    /// MySQL/MariaDB partitioning (#partitioning K3) internal-consistency checks — the engine equivalent of
+    /// the SQL Server SS-PART rules, which this feature shipped without. Only the unambiguous inconsistencies
+    /// are flagged (MySQL legitimately allows named HASH partitions, so that is NOT one):
+    /// SS-PART-003 RANGE/LIST with no named Partitions (they need per-partition boundaries), and SS-PART-004
+    /// a HASH/KEY partition carrying a VALUES boundary (HASH/KEY assign by hashing and have none).
+    /// </summary>
+    private static IEnumerable<Finding> CheckMyPartitioning(Table table, string tableLocation)
+    {
+        if (table is not MySqlTable mySqlTable) yield break;
+        var p = mySqlTable.Partitioning;
+        if (p == null || string.IsNullOrWhiteSpace(p.Method)) yield break;
+
+        var method = p.Method.Trim().ToUpperInvariant();
+        var isHashKey = method is "HASH" or "KEY" or "LINEAR HASH" or "LINEAR KEY";
+        var isRangeList = method.StartsWith("RANGE", StringComparison.Ordinal) ||
+                          method.StartsWith("LIST", StringComparison.Ordinal);
+        var hasNamedPartitions = p.Partitions is { Count: > 0 };
+
+        if (isRangeList && !hasNamedPartitions)
+            yield return new Finding(Severity.Error, MyPartitionRangeListNoPartitionsCode, Category, tableLocation,
+                $"Table '{table.Name}' partitions by {method} but declares no Partitions. RANGE/LIST need each " +
+                "partition named with its boundary (VALUES LESS THAN / VALUES IN) — add Partitions, or use " +
+                "HASH/KEY with a PartitionCount.");
+
+        if (isHashKey && hasNamedPartitions)
+            foreach (var part in p.Partitions.Where(pt => !string.IsNullOrWhiteSpace(pt.Values)))
+                yield return new Finding(Severity.Error, MyPartitionHashBoundaryCode, Category, tableLocation,
+                    $"Table '{table.Name}' partitions by {method} but partition '{part.Name}' declares a " +
+                    "Values boundary. HASH/KEY assign rows by hashing and have no boundary — drop the Values, " +
+                    "or use RANGE/LIST if you meant to define boundaries.");
     }
 
     /// <summary>

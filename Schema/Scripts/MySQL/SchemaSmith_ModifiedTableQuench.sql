@@ -235,7 +235,15 @@ BEGIN
            AND t.PartitionMethod IS NOT NULL
            AND (lp.PARTITION_METHOD IS NULL
                 OR UPPER(lp.PARTITION_METHOD) <> t.PartitionMethod
-                OR SchemaSmith_NormalizePartitionExpression(lp.PARTITION_EXPRESSION) <> SchemaSmith_NormalizePartitionExpression(t.PartitionExpression));
+                OR SchemaSmith_NormalizePartitionExpression(lp.PARTITION_EXPRESSION) <> SchemaSmith_NormalizePartitionExpression(t.PartitionExpression)
+                -- Partition COUNT change (HASH/KEY declare a count, not named partitions): re-partitioning
+                -- from N to M buckets rewrites every row, so it is refused like a method/expression change.
+                -- Gated on a declared count so RANGE/LIST (named partitions, no declared count) is untouched.
+                OR (t.PartitionCount IS NOT NULL AND t.PartitionCount > 0
+                    AND (SELECT COUNT(*) FROM INFORMATION_SCHEMA.PARTITIONS pc
+                          WHERE CONVERT(pc.TABLE_SCHEMA USING utf8mb4) = CONVERT(p_DatabaseName USING utf8mb4)
+                            AND CONVERT(pc.TABLE_NAME USING utf8mb4) = CONVERT(SchemaSmith_StripBacktickWrapping(t.TableName) USING utf8mb4)
+                            AND pc.PARTITION_NAME IS NOT NULL) <> t.PartitionCount));
 
         IF ROW_COUNT() > 0 THEN
             SET @ss_msg = 'Declared partitioning does not match the deployed table -- see the run log. Repartitioning rewrites every row and is refused.';
