@@ -90,7 +90,10 @@ namespace Schema.Domain.MySQL
         // Encryption above. Order 118, not 116: MariaDbTable (a subclass of this type) already occupies
         // 110-114/116/117, so anything added here must clear that range or collide
         // (SharedTypeSerializationOrderTests).
-        [SchemaProperty(Platforms = [Platform.MySQL],
+        // Pattern restricts to unquoted-identifier chars: the value is concatenated UNQUOTED into a
+        // dynamically-built CREATE TABLE (`TABLESPACE <name>`), so anything outside a legal tablespace
+        // identifier is either invalid DDL or an injection vector -- reject it at validation.
+        [SchemaProperty(Platforms = [Platform.MySQL], Pattern = "^[A-Za-z0-9_$]+$",
             Description = "MySQL only. The InnoDB general tablespace this table is placed in; applied at create, a move is refused.")]
         [JsonProperty(Order = 118, NullValueHandling = NullValueHandling.Ignore)]
         public string Tablespace { get; set; }

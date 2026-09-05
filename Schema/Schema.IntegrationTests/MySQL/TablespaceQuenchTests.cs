@@ -40,6 +40,16 @@ public class TablespaceQuenchTests
         _connection = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(FixtureSetup.GetMainDbConnectionString());
         _connection.Open();
 
+        // Version gate: SchemaSmith_TableTablespace's read is gated to MySQL 8.0+ (below the floor it returns
+        // NULL), so on the MySQL 5.7 floor a placed table reads back as unplaced and the round-trip/refuse
+        // tests would fail for a version where the feature is deliberately unreported. Skip the fixture there
+        // rather than fail — the same posture the DataDirectory and encryption fixtures take for absent infra.
+        var version = ScalarStr("SELECT VERSION()") ?? "";
+        var major = int.TryParse(version.Split('.')[0], out var m) ? m : 0;
+        if (major < 8)
+            Assert.Ignore($"MySQL general-tablespace placement requires MySQL 8.0+ (SchemaSmith_TableTablespace "
+                          + $"is gated below 8.0); this server is '{version}'. Not applicable on the floor.");
+
         // Defensive: a prior aborted run could have left either object behind.
         Exec($"DROP TABLE IF EXISTS `{_testDb}`.`{TableName}`");
         DropTablespaceIfExists(Tablespace1);

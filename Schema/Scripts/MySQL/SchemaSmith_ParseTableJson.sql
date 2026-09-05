@@ -152,7 +152,10 @@ BEGIN
                 COALESCE(SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Encrypted'))), 0) AS Encrypted,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].EncryptionKeyId'))) AS EncryptionKeyId,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Tablespace')))), '') AS Tablespace,
-                NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DataDirectory')))), '') AS DataDirectory,
+                -- Strip a trailing '/' on the DECLARED value so it matches SchemaSmith_TableDataDirectory's
+                -- deployed read, which normalizes it off (both engines). Without this, a declared '/x/'
+                -- compares unequal to the deployed '/x' and the move-refuse fires on every redeploy forever.
+                NULLIF(TRIM(TRAILING '/' FROM TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].DataDirectory'))))), '') AS DataDirectory,
                 UPPER(NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Partitioning.Method')))), '')) AS PartitionMethod,
                 NULLIF(TRIM(SchemaSmith_JsonScalarStr(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Partitioning.Expression')))), '') AS PartitionExpression,
                 SchemaSmith_JsonScalarInt(JSON_EXTRACT(p_TableDefinitions, CONCAT('$[', v_TblIdx, '].Partitioning.PartitionCount'))) AS PartitionCount,

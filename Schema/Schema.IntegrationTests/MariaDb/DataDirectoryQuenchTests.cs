@@ -30,6 +30,7 @@ namespace Schema.IntegrationTests.MariaDb;
 public class DataDirectoryQuenchTests
 {
     private const string TableName = "mdb_datadir_test";
+    private const string ProbeTable = "mdb_datadir_probe";
     private const string DataDir = "/ddspace";
     // The refuse test needs a SECOND, different declared value that need not exist -- the refuse fires
     // from the declared-vs-deployed diff BEFORE any CREATE/ALTER is attempted (verified below).
@@ -44,6 +45,24 @@ public class DataDirectoryQuenchTests
         _testDb = FixtureSetup.MainDb;
         _connection = DbConnectionFactory.ForPlatform(Platform.MariaDb).GetDbConnection(FixtureSetup.GetMainDbConnectionString());
         _connection.Open();
+
+        // Availability gate (mirrors the encryption fixture's keyring gate): these tests need a
+        // mysql-writable /ddspace directory that ONLY the purpose-built datadir image provides
+        // (scripts/run-datadir-sweep.sh). On a stock container -- the normal gate, the version-floor sweep --
+        // it is absent, so DATA DIRECTORY='/ddspace' cannot be created. Probe it and Assert.Ignore the whole
+        // fixture when unavailable, rather than failing tests for missing local-only infra.
+        try
+        {
+            Exec($"CREATE TABLE `{_testDb}`.`{ProbeTable}` (id INT) DATA DIRECTORY='{DataDir}'");
+            Exec($"DROP TABLE `{_testDb}`.`{ProbeTable}`");
+        }
+        catch (System.Data.Common.DbException ex)
+        {
+            Exec($"DROP TABLE IF EXISTS `{_testDb}`.`{ProbeTable}`");
+            Assert.Ignore($"DATA DIRECTORY='{DataDir}' is not usable on this server -- the purpose-built "
+                          + "/ddspace directory is absent. Run scripts/run-datadir-sweep.sh, which provisions it. "
+                          + $"Probe failed: {ex.Message}");
+        }
     }
 
     [OneTimeTearDown]

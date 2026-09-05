@@ -28,6 +28,7 @@ namespace Schema.IntegrationTests.MySQL;
 public class DataDirectoryQuenchTests
 {
     private const string TableName = "datadir_quench_test";
+    private const string ProbeTable = "datadir_probe";
     private const string DataDir = "/ddspace";
     // The refuse test needs a SECOND, different declared value -- it must not exist / not be a known
     // innodb_directories entry, because the refuse fires from the declared-vs-deployed diff BEFORE any
@@ -44,6 +45,24 @@ public class DataDirectoryQuenchTests
         _testDb = FixtureSetup.MainDb;
         _connection = DbConnectionFactory.ForPlatform(Platform.MySQL).GetDbConnection(FixtureSetup.GetMainDbConnectionString());
         _connection.Open();
+
+        // Availability gate (mirrors the encryption fixture's keyring gate): these tests need a
+        // mysql-writable /ddspace directory listed in innodb_directories, which ONLY the purpose-built
+        // datadir image provides (scripts/run-datadir-sweep.sh). On a stock container -- the normal gate, the
+        // version-floor sweep -- it is absent (and 5.7/8.0 stock reject DATA DIRECTORY='/ddspace'), so probe
+        // it and Assert.Ignore the whole fixture when unavailable rather than failing on missing local infra.
+        try
+        {
+            Exec($"CREATE TABLE `{_testDb}`.`{ProbeTable}` (id INT) DATA DIRECTORY='{DataDir}'");
+            Exec($"DROP TABLE `{_testDb}`.`{ProbeTable}`");
+        }
+        catch (System.Data.Common.DbException ex)
+        {
+            Exec($"DROP TABLE IF EXISTS `{_testDb}`.`{ProbeTable}`");
+            Assert.Ignore($"DATA DIRECTORY='{DataDir}' is not usable on this server -- the purpose-built "
+                          + "/ddspace directory (+ innodb_directories) is absent. Run scripts/run-datadir-sweep.sh, "
+                          + $"which provisions it. Probe failed: {ex.Message}");
+        }
     }
 
     [OneTimeTearDown]

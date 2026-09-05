@@ -35,8 +35,18 @@ BEGIN
          (elem ->> 'MinValue')::BIGINT AS "MinValue",
          (elem ->> 'MaxValue')::BIGINT AS "MaxValue",
          COALESCE((elem ->> 'Cache')::BIGINT, 1) AS "Cache",
-         COALESCE((elem ->> 'Cycle')::BOOLEAN, false) AS "Cycle"
+         COALESCE((elem ->> 'Cycle')::BOOLEAN, false) AS "Cycle",
+         COALESCE(elem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression"
     FROM src, JSON_ARRAY_ELEMENTS(arr) AS elem;
+
+  -- Evaluate ShouldApplyExpression: drop sequences whose condition is false so a conditional variant is
+  -- SKIPPED rather than silently always applied. Always executes, even under --WhatIf -- this filters the
+  -- internal working set, it is not user-visible DDL.
+  SELECT STRING_AGG('DELETE FROM temp_sequences WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
+    INTO sql_script
+    FROM temp_sequences
+    WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, false);
 
   RAISE NOTICE 'Add Missing Sequences';
   SELECT STRING_AGG('RAISE NOTICE ''  Create sequence ' || s."Schema" || '.' || s."Name" || ''';' || CHR(10) ||

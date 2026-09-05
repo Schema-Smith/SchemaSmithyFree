@@ -39,6 +39,15 @@ BEGIN
          ARRAY(SELECT JSON_ARRAY_ELEMENTS_TEXT(elem -> 'Values')) AS "Values"
     FROM src, JSON_ARRAY_ELEMENTS(arr) AS elem;
 
+  -- Evaluate ShouldApplyExpression: drop enum types whose condition is false so a conditional variant is
+  -- SKIPPED rather than always applied (the value was parsed but never acted on). Always executes, even
+  -- under --WhatIf -- this filters the internal working set, it is not user-visible DDL.
+  SELECT STRING_AGG('DELETE FROM temp_enum_types WHERE "Schema" = ''' || "Schema" || ''' AND "Name" = ''' || "Name" || ''' AND NOT (' || "SchemaSmith"."StripLeadingSelect"("ShouldApplyExpression") || ');', CHR(10))
+    INTO sql_script
+    FROM temp_enum_types
+    WHERE NULLIF("ShouldApplyExpression", '') IS NOT NULL;
+  CALL "SchemaSmith"."ExecuteOrDebug"(sql_script, false);
+
   -- Create the ones that do not exist yet, values and order intact.
   RAISE NOTICE 'Add Missing Enum Types';
   SELECT STRING_AGG('RAISE NOTICE ''  Create enum type ' || t."Schema" || '.' || t."Name" || ''';' || CHR(10) ||
