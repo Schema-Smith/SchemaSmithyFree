@@ -2462,11 +2462,15 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
     -- (MissingTableAndColumnQuench, to avoid ERROR 4124 on a not-yet-versioned table). Now that STEP 7.5 has
     -- versioned the table, apply the exclusion to any declared-excluded column that does not yet carry it.
     -- Idempotent (fires only where the deployed column lacks the clause), so it is a harmless no-op for the
-    -- columns STEP 3 already handled on already-versioned tables. Requires @@system_versioning_alter_history
-    -- (STEP 2.96 / the user's SystemVersioningAlterHistory opt-in): MariaDB refuses column DDL on a versioned
-    -- table without it (ERROR 4119), so when the opt-in is off this is skipped and the exclusion converges on
-    -- a later deploy under that setting -- exactly like any other exclusion change on a versioned table.
-    IF SchemaSmith_SupportsSystemVersioning() = 1 AND @@system_versioning_alter_history = 1 AND p_WhatIf = 0 THEN
+    -- columns STEP 3 already handled on already-versioned tables. Requires the SystemVersioningAlterHistory
+    -- opt-in (STEP 2.96): MariaDB refuses column DDL on a versioned table without it (ERROR 4119). The gate
+    -- reads the OPT-IN MODE from the @ss_system_versioning_alter_history user variable (what STEP 2.96 passes
+    -- to the per-engine setter), NOT the @@system_versioning_alter_history SYSTEM variable -- MySQL rejects a
+    -- routine that merely mentions that MariaDB-only system variable at CREATE time (ERROR 1193, even in an
+    -- unreachable branch; see STEP 2.96's note), which would break kindle on MySQL. When the opt-in is off
+    -- this is skipped and the exclusion converges on a later deploy, like any exclusion change on a versioned
+    -- table. SchemaSmith_SupportsSystemVersioning() is already 0 on MySQL, so this whole block is MariaDB-only.
+    IF SchemaSmith_SupportsSystemVersioning() = 1 AND UPPER(COALESCE(@ss_system_versioning_alter_history, '')) = 'KEEP' AND p_WhatIf = 0 THEN
         BEGIN
             DECLARE v_ExclDone INT DEFAULT FALSE;
             DECLARE v_ExclSql TEXT;
