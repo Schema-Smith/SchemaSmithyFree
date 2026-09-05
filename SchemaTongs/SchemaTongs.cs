@@ -19,6 +19,7 @@ using Schema.Domain;
 using Schema.Isolators;
 using MySqlConnector;
 using Npgsql;
+using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Utility;
@@ -281,6 +282,16 @@ public class SchemaTongs
     /// it. That column is 2022+, so the clause is added only when the source is new enough to have it;
     /// referencing it statically would fail to bind on an older server.
     /// </summary>
+    /// <summary>
+    /// Whether the SOURCE server can report XML_COMPRESSION. It DEPLOYS from SQL Server 2022 but only
+    /// READS from 2025 -- sys.partitions.xml_compression does not exist before then -- and the legacy XML
+    /// ingest path cannot read it at any version. Where this is false the package being refreshed is the
+    /// only record of the setting, so ImportTableHelper carries it forward instead of letting an
+    /// extraction that structurally cannot see it strip a property the server is honouring.
+    /// </summary>
+    private bool SourceCanReportXmlCompression =>
+        _platform == Platform.SqlServer && _sourceMajor >= 17 && _ingestEncoding != IngestEncoding.Xml;
+
     private string LedgerViewFilter() =>
         _sourceMajor >= 16
             ? Environment.NewLine + "   AND NOT EXISTS (SELECT 1 FROM sys.tables lt WITH (NOLOCK) WHERE lt.ledger_view_id = o.object_id)"
@@ -2305,7 +2316,7 @@ SELECT con.conname AS ""Name"",
                 if (FileWrapper.GetFromFactory().Exists(tableFile) || (oldTableFile != null && FileWrapper.GetFromFactory().Exists(oldTableFile)))
                 {
                     var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(tableFile) ? tableFile : oldTableFile);
-                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                    ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive, SourceCanReportXmlCompression);
                         if (_preserveExistingOrder)
                             ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                 }
@@ -2346,55 +2357,130 @@ SELECT 'Schemas' AS Folder,
         PerformPostgreSqlCasting(command, "Schemas");
     }
 
+    /// <summary>
+    /// Casts domain types as DECLARATIVE .json rather than a guarded CREATE DOMAIN script (F5).
+    /// <para><b>The script this replaces was the bug</b>, and in exactly the shape the enum one was: it
+    /// emitted <c>DO $$ IF NOT EXISTS (…) THEN CREATE DOMAIN … $$</c>, and once the domain existed that
+    /// guard skipped. Verified on a live server — re-running a guarded create carrying
+    /// <c>CHECK (VALUE &gt; 100)</c> left the domain with its original <c>CHECK (VALUE &gt; 0)</c>, silently,
+    /// reporting success. There is no <c>CREATE OR REPLACE DOMAIN</c>, so the scripted form could not be
+    /// written any other way.</para>
+    /// <para>Written into the same <c>Domain Types/</c> folder, which now holds both forms: a <c>.sql</c>
+    /// file there still runs through the Objects slot exactly as before, so nothing existing breaks.</para>
+    /// </summary>
     private void CastPostgreSqlDomainTypes(IDbCommand command)
     {
         command.CommandText = @"
-SELECT 'Domain Types' AS Folder,
-       n.nspname || '.' || t.typname AS FullName,
-       '
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = ''' || n.nspname || ''' AND t.typname = ''' || t.typname || ''') THEN
-        CREATE DOMAIN ""' || n.nspname || '"".""' || t.typname || '"" AS ' || FORMAT_TYPE(t.typbasetype, t.typtypmod) ||
-               CASE WHEN t.typnotnull THEN ' NOT NULL' ELSE '' END ||
-               COALESCE((SELECT ' DEFAULT ' || PG_GET_EXPR(ad.adbin, ad.adrelid) FROM pg_attrdef ad WHERE ad.adrelid = 0 AND ad.oid = t.oid), '') ||
-               COALESCE((SELECT STRING_AGG(' CONSTRAINT ' || QUOTE_IDENT(conname) || ' ' || PG_GET_CONSTRAINTDEF(c.oid, true), ' ') FROM pg_constraint c WHERE c.contypid = t.oid AND c.contype = 'c'), '') || ';
-    END IF;
-END
-$$;' AS Code
+SELECT n.nspname AS SchemaName, t.typname AS TypeName
   FROM pg_type t
   JOIN pg_namespace n ON n.oid = t.typnamespace
   WHERE t.typtype = 'd'
     AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
     AND n.nspname NOT LIKE 'pg_temp_%'
-    AND n.nspname NOT LIKE 'pg_toast_temp_%';
+    AND n.nspname NOT LIKE 'pg_toast_temp_%'
+  ORDER BY n.nspname, t.typname;
 ";
-        PerformPostgreSqlCasting(command, "Domain Types");
+        _progressLog.Info("Casting Domain Type Structures");
+        var types = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var sch = reader["SchemaName"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                types.Add((sch, reader["TypeName"].ToString()));
+            }
+        }
+
+        if (types.Count == 0) return;
+
+        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateDomainTypeJson.sql", _platform);
+        command.ExecuteNonQuery();
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Domain Types", ScriptObjectType.DomainTypes));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var (schema, name) in types)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for domain type {schema}.{name}");
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateDomainTypeJSON\"('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+            var typeJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(typeJson) || typeJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for domain type {schema}.{name}");
+                continue;
+            }
+
+            var typeObj = JsonConvert.DeserializeObject<PostgreSqlDomainType>(typeJson);
+            if (_isSchemaTemplate) typeObj.Schema = null;
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            JsonHelper.Write(file, typeObj);
+            _stats.DomainTypes++;
+        }
     }
 
+    /// <summary>
+    /// Casts enum types as DECLARATIVE .json rather than a guarded CREATE TYPE script (F5).
+    /// <para><b>The script this replaces was the bug.</b> It emitted
+    /// <c>DO $$ IF NOT EXISTS (…) THEN CREATE TYPE … $$</c>, and once the type existed that guard skipped
+    /// — so a package whose enum gained a value deployed clean and changed nothing, forever. Extracting
+    /// the value list declaratively is what makes the difference visible and appliable.</para>
+    /// <para>Written into the same <c>Enum Types/</c> folder, which now holds both forms: a <c>.sql</c>
+    /// file there still runs through the Objects slot exactly as before, so nothing existing breaks.</para>
+    /// </summary>
     private void CastPostgreSqlEnumTypes(IDbCommand command)
     {
         command.CommandText = @"
-SELECT 'Enum Types' AS Folder,
-       n.nspname || '.' || t.typname AS FullName,
-       '
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = ''' || n.nspname || ''' AND t.typname = ''' || t.typname || ''') THEN
-        CREATE TYPE ""' || n.nspname || '"".""' || t.typname || '"" AS ENUM (' || STRING_AGG(QUOTE_LITERAL(e.enumlabel), ', ' ORDER BY e.enumsortorder) || ');
-    END IF;
-END
-$$;' AS Code
+SELECT n.nspname AS SchemaName, t.typname AS TypeName
   FROM pg_type t
   JOIN pg_namespace n ON n.oid = t.typnamespace
-  JOIN pg_enum e ON t.oid = e.enumtypid
   WHERE t.typtype = 'e'
     AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
     AND n.nspname NOT LIKE 'pg_temp_%'
     AND n.nspname NOT LIKE 'pg_toast_temp_%'
-  GROUP BY n.nspname, t.typname;
+  ORDER BY n.nspname, t.typname;
 ";
-        PerformPostgreSqlCasting(command, "Enum Types");
+        _progressLog.Info("Casting Enum Type Structures");
+        var types = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var sch = reader["SchemaName"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                types.Add((sch, reader["TypeName"].ToString()));
+            }
+        }
+
+        if (types.Count == 0) return;
+
+        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateEnumTypeJson.sql", _platform);
+        command.ExecuteNonQuery();
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Enum Types", ScriptObjectType.EnumTypes));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var (schema, name) in types)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for enum type {schema}.{name}");
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateEnumTypeJSON\"('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+            var typeJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(typeJson) || typeJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for enum type {schema}.{name}");
+                continue;
+            }
+
+            var typeObj = JsonConvert.DeserializeObject<PostgreSqlEnumType>(typeJson);
+            if (_isSchemaTemplate) typeObj.Schema = null;
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            JsonHelper.Write(file, typeObj);
+            _stats.EnumTypes++;
+        }
     }
 
     private void CastPostgreSqlCompositeTypes(IDbCommand command)
@@ -2509,34 +2595,73 @@ SELECT 'Procedures' AS Folder,
         PerformPostgreSqlCasting(command, "Procedures");
     }
 
+    /// <summary>
+    /// Casts sequences as DECLARATIVE .json rather than a CREATE SEQUENCE script (F5).
+    /// <para><b>This also fixes a real extraction bug.</b> The previous filter excluded only
+    /// <c>deptype = 'i'</c>, which covers an <c>IDENTITY</c> column's sequence but NOT a <c>serial</c>
+    /// column's — that one is <c>'a'</c> (auto). So every <c>serial</c> column's engine-generated sequence
+    /// was extracted as a standalone object. On deploy the package then created it first, and
+    /// <c>CREATE TABLE … serial</c>, finding the name taken, generated <c>&lt;name&gt;1</c> and pointed the
+    /// column at THAT — leaving an orphan sequence behind and a column whose sequence name no longer
+    /// matches the source. Verified end to end. Both deptypes are excluded now.</para>
+    /// <para>The current value is never captured: it is data, and a package carrying it would reset a live
+    /// sequence on the next deploy.</para>
+    /// </summary>
     private void CastPostgreSqlSequences(IDbCommand command)
     {
         command.CommandText = @"
-SELECT 'Sequences' AS Folder,
-       s.relnamespace::regnamespace || '.' || s.relname AS FullName,
-       'CREATE SEQUENCE IF NOT EXISTS ""' || s.relnamespace::regnamespace || '"".""' || s.relname || E'""\n' ||
-       '  ' || CASE WHEN seq.seqtypid = 'smallint'::regtype THEN 'AS SMALLINT '
-                    WHEN seq.seqtypid = 'integer'::regtype THEN 'AS INT '
-                    WHEN seq.seqtypid = 'bigint'::regtype THEN 'AS BIGINT '
-                    ELSE '' END || 'INCREMENT BY ' || seq.seqincrement || E'\n' ||
-       '  MINVALUE ' || seq.seqmin || E'\n' ||
-       '  MAXVALUE ' || seq.seqmax || E'\n' ||
-       '  START WITH ' || seq.seqstart || E'\n' ||
-       '  CACHE ' || seq.seqcache || E'\n' ||
-       '  ' || CASE WHEN seq.seqcycle THEN 'CYCLE' ELSE 'NO CYCLE' END ||
-       ';' AS Code
+SELECT n.nspname AS SchemaName, s.relname AS SequenceName
   FROM pg_class s
-  JOIN pg_sequence seq ON s.oid = seq.seqrelid
   JOIN pg_namespace n ON n.oid = s.relnamespace
-                     AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
-                     AND n.nspname NOT LIKE 'pg_temp_%'
-                     AND n.nspname NOT LIKE 'pg_toast_temp_%'
   WHERE s.relkind = 'S'
+    AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'SchemaSmith')
+    AND n.nspname NOT LIKE 'pg_temp_%'
+    AND n.nspname NOT LIKE 'pg_toast_temp_%'
     AND NOT EXISTS (SELECT 1 FROM pg_depend d
-                    WHERE d.objid = s.oid AND d.deptype = 'i'
-                      AND d.classid = 'pg_class'::regclass);
+                    WHERE d.objid = s.oid
+                      AND d.classid = 'pg_class'::regclass
+                      AND d.deptype IN ('i', 'a'))
+  ORDER BY n.nspname, s.relname;
 ";
-        PerformPostgreSqlCasting(command, "Sequences");
+        _progressLog.Info("Casting Sequence Structures");
+        var sequences = new List<(string Schema, string Name)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var sch = reader["SchemaName"].ToString();
+                if (!ShouldExtractFromSchema(sch)) continue;
+                sequences.Add((sch, reader["SequenceName"].ToString()));
+            }
+        }
+
+        if (sequences.Count == 0) return;
+
+        command.CommandText = ResourceLoader.Load("SchemaSmith.GenerateSequenceJson.sql", _platform);
+        command.ExecuteNonQuery();
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Sequences", ScriptObjectType.Sequences));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var (schema, name) in sequences)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains($"{schema}.{name}".ToLower()) && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for sequence {schema}.{name}");
+            command.CommandText = $"SELECT \"SchemaSmith\".\"GenerateSequenceJSON\"('{EscapeSql(schema)}', '{EscapeSql(name)}')";
+            var seqJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(seqJson) || seqJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for sequence {schema}.{name}");
+                continue;
+            }
+
+            var seqObj = JsonConvert.DeserializeObject<PostgreSqlSequence>(seqJson);
+            if (_isSchemaTemplate) seqObj.Schema = null;
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName(schema, name, ".json"));
+            JsonHelper.Write(file, seqObj);
+            _stats.Sequences++;
+        }
     }
 
     private void CastPostgreSqlPublications(IDbCommand command)
@@ -2849,33 +2974,56 @@ SELECT 'Triggers' AS Folder,
         _stats.Triggers = PerformMySqlCasting(command, "Triggers");
     }
 
+    /// <summary>
+    /// Casts scheduled events as DECLARATIVE .json rather than raw .sql (F4).
+    /// <para>Written into the same <c>Events/</c> folder the scripted form has always used, which now
+    /// holds both: a <c>.sql</c> file there still runs through the Objects slot exactly as before, so no
+    /// existing package changes behaviour and migration is per-event and optional. The audit called for
+    /// removal-and-replace; that would have broken every package that already has an Events folder.</para>
+    /// <para>The catalog-to-package translation lives in <c>SchemaSmith_GenerateEventJSON</c>, a kindled
+    /// script, matching how tables and materialized views are extracted — which also means it can be
+    /// certified against a live server rather than only through this whole pipeline. It is kindled
+    /// with the rest of the helper set before extraction runs, so there is nothing to install here.</para>
+    /// </summary>
     private void ScriptMySqlEvents(IDbCommand command, string targetSchema)
     {
-        _progressLog.Info("Casting Event Scripts");
+        _progressLog.Info("Casting Event Structures");
         command.CommandText = $@"
-SELECT 'Events' AS Folder,
-       EVENT_NAME AS FullName,
-       'DROP EVENT IF EXISTS `' || EVENT_NAME || '`;\nDELIMITER //\nCREATE EVENT `' || EVENT_NAME || '`\n  ON SCHEDULE ' ||
-       CASE EVENT_TYPE
-           WHEN 'ONE TIME' THEN 'AT ''' || COALESCE(EXECUTE_AT, NOW()) || ''''
-           ELSE 'EVERY ' || INTERVAL_VALUE || ' ' || INTERVAL_FIELD ||
-               COALESCE('\n    STARTS ''' || STARTS || '''', '') ||
-               COALESCE('\n    ENDS ''' || ENDS || '''', '')
-       END ||
-       '\n  ON COMPLETION ' || CASE WHEN ON_COMPLETION = 'PRESERVE' THEN 'PRESERVE' ELSE 'NOT PRESERVE' END ||
-       '\n  ' || CASE STATUS
-           WHEN 'ENABLED' THEN 'ENABLE'
-           WHEN 'DISABLED' THEN 'DISABLE'
-           WHEN 'SLAVESIDE_DISABLED' THEN 'DISABLE ON SLAVE'
-           ELSE 'UNRECOGNIZED_EVENT_STATUS_' || STATUS
-       END ||
-       CASE WHEN NULLIF(EVENT_COMMENT, '') IS NOT NULL THEN '\n  COMMENT ''' || REPLACE(EVENT_COMMENT, '''', '''''') || '''' ELSE '' END ||
-       '\n  DO ' || EVENT_DEFINITION || ' //\nDELIMITER ;' AS Code
+SELECT EVENT_NAME
   FROM INFORMATION_SCHEMA.EVENTS
   WHERE EVENT_SCHEMA = '{EscapeSql(targetSchema)}'
     AND EVENT_NAME NOT LIKE 'SchemaSmith\_%'
+  ORDER BY EVENT_NAME
 ";
-        _stats.Events = PerformMySqlCasting(command, "Events");
+        var names = new List<string>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read()) names.Add(reader.GetString(0));
+        }
+
+        if (names.Count == 0) return;
+
+        var castPath = Path.Join(_templatePath, ResolveFolderName("Events", ScriptObjectType.Events));
+        DirectoryWrapper.GetFromFactory().CreateDirectory(castPath);
+
+        foreach (var name in names)
+        {
+            if (_objectsToCast.Length > 0 && !_objectsToCast.Contains(name.ToLower())) continue;
+
+            _progressLog.Info($"  Cast Json for event {name}");
+            command.CommandText = $"CALL SchemaSmith_GenerateEventJSON('{EscapeSql(targetSchema)}', '{EscapeSql(name)}')";
+            var eventJson = command.ExecuteScalar()?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(eventJson) || eventJson.Trim() == "{}")
+            {
+                _progressLog.Error($"    No json returned for event {name}");
+                continue;
+            }
+
+            var eventObj = JsonConvert.DeserializeObject<MySqlEvent>(eventJson);
+            var file = ResolveOutputPath(castPath, EncodeObjectFileName("", name, ".json"));
+            JsonHelper.Write(file, eventObj);
+            _stats.Events++;
+        }
     }
 
     /// <summary>
@@ -3032,7 +3180,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME
                     {
                         var originalPath = FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile;
                         var original = LoadOriginalForPreservation(originalPath);
-                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive, SourceCanReportXmlCompression);
                         if (_preserveExistingOrder)
                             ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                     }
@@ -3202,7 +3350,7 @@ SELECT cc.name AS [Name],
                     if (FileWrapper.GetFromFactory().Exists(filename) || FileWrapper.GetFromFactory().Exists(oldTableFile))
                     {
                         var original = LoadOriginalForPreservation(FileWrapper.GetFromFactory().Exists(filename) ? filename : oldTableFile);
-                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive);
+                        ImportTableHelper.PreserveDataDeliveryAndCustomProperties(tableObj, original, IsVariantActive, SourceCanReportXmlCompression);
                         if (_preserveExistingOrder)
                             ImportTableHelper.PreserveListOrder(tableObj, original, _objectOrder);
                     }

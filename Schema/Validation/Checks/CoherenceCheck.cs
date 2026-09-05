@@ -2,9 +2,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Schema.Delivery;
 using Schema.Domain;
+using Schema.Domain.MariaDb;
+using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Index = Schema.Domain.Index;
@@ -29,6 +32,16 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string RebuildThresholdCode = "SS-TBL-001";
     private const string RlsWithoutPoliciesCode = "SS-RLS-001";
     private const string PoliciesWithoutRlsCode = "SS-RLS-002";
+    private const string ReplicaIdentityIndexMissingCode = "SS-RI-001";
+    private const string ReplicaIdentityIndexUnknownCode = "SS-RI-002";
+    private const string ReplicaIdentityIndexNotUniqueCode = "SS-RI-003";
+    private const string ReplicaIdentityIndexIgnoredCode = "SS-RI-004";
+    private const string VersioningExclusionInertCode = "SS-SV-001";
+    private const string CompressionConflictCode = "SS-CO-001";
+    private const string CompressionLevelInertCode = "SS-CO-002";
+    private const string DuplicateEventCode = "SS-EVT-001";
+    private const string PartitionHalfDeclaredCode = "SS-PART-001";
+    private const string PartitionAndFileGroupCode = "SS-PART-002";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -43,6 +56,9 @@ public sealed class CoherenceCheck : ISchemaCheck
 
         var findings = new List<Finding>();
         foreach (var template in ctx.Templates)
+            findings.AddRange(CheckScheduledEvents(template));
+
+        foreach (var template in ctx.Templates)
         foreach (var table in template.Tables)
         {
             var location = $"Template '{template.Name}' / Table '{table.Name}'";
@@ -55,6 +71,10 @@ public sealed class CoherenceCheck : ISchemaCheck
             findings.AddRange(CheckBackfill(table, location));
             findings.AddRange(CheckRebuildPolicy(table, location));
             findings.AddRange(CheckRowLevelSecurity(table, location));
+            findings.AddRange(CheckReplicaIdentity(table, location));
+            findings.AddRange(CheckSystemVersioningExclusions(table, location));
+            findings.AddRange(CheckCompressionOptions(table, location));
+            findings.AddRange(CheckPartitionPlacement(table, location));
         }
 
         return findings;
@@ -297,6 +317,187 @@ public sealed class CoherenceCheck : ISchemaCheck
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// PostgreSQL REPLICA IDENTITY coherence — issue #407.
+    /// <para>The deploy raises on a declaration it cannot honour, but a mid-deploy failure is a worse
+    /// place to learn about a typo than <c>--Validate</c>. These catch the same mistakes statically, and
+    /// two of them (unknown index, non-unique index) the deploy could only report as PostgreSQL's own
+    /// error against generated DDL.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckReplicaIdentity(Table table, string tableLocation)
+    {
+        if (table is not PostgreSqlTable pgTable) yield break;
+
+        var mode = pgTable.ReplicaIdentity?.Trim();
+        var indexName = pgTable.ReplicaIdentityIndex?.Trim();
+        var wantsIndex = string.Equals(mode, "INDEX", StringComparison.OrdinalIgnoreCase);
+
+        if (!wantsIndex)
+        {
+            if (!string.IsNullOrEmpty(indexName))
+                yield return new Finding(Severity.Warning, ReplicaIdentityIndexIgnoredCode, Category, tableLocation,
+                    $"Table '{table.Name}' names ReplicaIdentityIndex '{indexName}' but its ReplicaIdentity is " +
+                    $"'{(string.IsNullOrEmpty(mode) ? "unset" : mode)}', so the index is ignored — set ReplicaIdentity " +
+                    "to INDEX, or drop ReplicaIdentityIndex.");
+            yield break;
+        }
+
+        if (string.IsNullOrEmpty(indexName))
+        {
+            yield return new Finding(Severity.Error, ReplicaIdentityIndexMissingCode, Category, tableLocation,
+                $"Table '{table.Name}' sets ReplicaIdentity to INDEX but declares no ReplicaIdentityIndex. " +
+                "PostgreSQL needs the name of the unique index that carries the identity.");
+            yield break;
+        }
+
+        var named = table.Indexes.FirstOrDefault(i =>
+            string.Equals(i.Name, indexName, StringComparison.OrdinalIgnoreCase));
+
+        if (named == null)
+        {
+            // Only flag when the table declares indexes at all: an index-less table may legitimately
+            // carry one created by a script rather than by the package.
+            if (table.Indexes.Count > 0)
+                yield return new Finding(Severity.Error, ReplicaIdentityIndexUnknownCode, Category, tableLocation,
+                    $"Table '{table.Name}' names ReplicaIdentityIndex '{indexName}', which is not one of its " +
+                    "declared Indexes. A replica identity pointing at an index that is never created fails the deploy.");
+            yield break;
+        }
+
+        if (!named.Unique && !named.PrimaryKey && !named.UniqueConstraint)
+            yield return new Finding(Severity.Error, ReplicaIdentityIndexNotUniqueCode, Category, tableLocation,
+                $"Table '{table.Name}' names ReplicaIdentityIndex '{indexName}', which is not unique. " +
+                "PostgreSQL requires a unique, non-partial index over NOT NULL columns.");
+    }
+
+    /// <summary>
+    /// MariaDB per-column <c>WITHOUT SYSTEM VERSIONING</c> coherence — issue #408.
+    /// <para>Verified on 11.4: MariaDB <b>accepts the clause on a table that is not system-versioned and
+    /// silently discards it</b> — no error, and <c>EXTRA</c> comes back empty. So the declaration is inert,
+    /// and nothing at deploy time can tell the author, because nothing failed.</para>
+    /// <para>Warning rather than Error: it is legal and deployable, and a table may gain versioning later.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckSystemVersioningExclusions(Table table, string tableLocation)
+    {
+        if (table is not MariaDbTable mariaTable || mariaTable.IsSystemVersioned) yield break;
+
+        foreach (var column in table.Columns.OfType<MariaDbColumn>().Where(c => c.WithoutSystemVersioning))
+            yield return new Finding(Severity.Warning, VersioningExclusionInertCode, Category, tableLocation,
+                $"Column '{column.Name}' on table '{table.Name}' sets WithoutSystemVersioning, but the table " +
+                "does not set IsSystemVersioned. MariaDB accepts the clause here and silently discards it, so " +
+                "the exclusion does nothing — set IsSystemVersioned, or drop WithoutSystemVersioning.");
+    }
+
+    /// <summary>
+    /// MySQL/MariaDB compression table options that cannot be combined.
+    /// <para><b>Both engines REFUSE the combination, and neither error names what is wrong.</b> Verified
+    /// live: MySQL 8.0 rejects <c>COMPRESSION</c> alongside <c>ROW_FORMAT=COMPRESSED</c> with 1031
+    /// ("Table storage engine ... doesn't have this option"); MariaDB 11.4 rejects <c>PAGE_COMPRESSED</c>
+    /// with the same row format as errno 140 ("Wrong create options"). Both name the table and neither
+    /// names the option, so without this the author gets an error that could mean almost anything.</para>
+    /// <para>Error rather than Warning: the deploy cannot succeed, so there is nothing to weigh.</para>
+    /// </summary>
+    /// <summary>
+    /// SQL Server partition placement declared as half a pair, or contradicting a filegroup
+    /// (#partitioning, K1).
+    /// <para>Both are refused by the quench too, but that refusal only arrives on a live target — and the
+    /// half-pair case would otherwise reach the engine as <c>ON &lt;scheme&gt;</c> with no column, whose
+    /// syntax error names neither the table nor the property. Catching them at authoring time is what
+    /// <c>--Validate</c> is for.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckPartitionPlacement(Table table, string tableLocation)
+    {
+        if (table is not SqlServerTable sqlTable) yield break;
+
+        foreach (var f in PartitionFindings(table.Name, "Table", tableLocation,
+                     sqlTable.PartitionScheme, sqlTable.PartitionColumn, sqlTable.FileGroup))
+            yield return f;
+
+        // An index carries its own placement, independently of its table's, so it is checked in its own
+        // right rather than inherited.
+        foreach (var index in table.Indexes.OfType<SqlServerIndex>())
+            foreach (var f in PartitionFindings($"{table.Name}.{index.Name}", "Index", tableLocation,
+                         index.PartitionScheme, index.PartitionColumn, index.FileGroup))
+                yield return f;
+    }
+
+    private static IEnumerable<Finding> PartitionFindings(
+        string name,
+        string kind,
+        string location,
+        string scheme,
+        string column,
+        string fileGroup)
+    {
+        var hasScheme = !string.IsNullOrWhiteSpace(scheme);
+        var hasColumn = !string.IsNullOrWhiteSpace(column);
+
+        if (hasScheme != hasColumn)
+            yield return new Finding(Severity.Error, PartitionHalfDeclaredCode, Category, location,
+                $"{kind} '{name}' declares {(hasScheme ? "PartitionScheme without PartitionColumn" : "PartitionColumn without PartitionScheme")}. " +
+                "SQL Server needs both — the ON clause names the scheme and the column its partition " +
+                "function is applied to. Declare both, or neither.");
+
+        if (hasScheme && !string.IsNullOrWhiteSpace(fileGroup))
+            yield return new Finding(Severity.Error, PartitionAndFileGroupCode, Category, location,
+                $"{kind} '{name}' declares both FileGroup '{fileGroup}' and PartitionScheme '{scheme}'. " +
+                "It lives on one data space — declare one or the other, not both.");
+    }
+
+    private static IEnumerable<Finding> CheckCompressionOptions(Table table, string tableLocation)
+    {
+        if (table is not MySqlTable mySqlTable) yield break;
+
+        var rowFormatCompressed = string.Equals(mySqlTable.RowFormat?.Trim(), "COMPRESSED",
+            StringComparison.OrdinalIgnoreCase);
+        var mariaTable = table as MariaDbTable;
+
+        if (rowFormatCompressed && !string.IsNullOrWhiteSpace(mySqlTable.Compression))
+            yield return new Finding(Severity.Error, CompressionConflictCode, Category, tableLocation,
+                $"Table '{table.Name}' sets Compression to '{mySqlTable.Compression}' and RowFormat to " +
+                "COMPRESSED. MySQL refuses that combination (error 1031) — transparent page compression " +
+                "needs an uncompressed row format. Drop one of the two.");
+
+        if (rowFormatCompressed && mariaTable is { PageCompressed: true })
+            yield return new Finding(Severity.Error, CompressionConflictCode, Category, tableLocation,
+                $"Table '{table.Name}' sets PageCompressed and RowFormat to COMPRESSED. MariaDB refuses " +
+                "that combination (errno 140, \"Wrong create options\"). Drop one of the two.");
+
+        if (mariaTable is { PageCompressed: false, PageCompressionLevel: not null })
+            yield return new Finding(Severity.Warning, CompressionLevelInertCode, Category, tableLocation,
+                $"Table '{table.Name}' sets PageCompressionLevel but not PageCompressed, so the level is " +
+                "ignored — set PageCompressed, or drop the level.");
+    }
+
+    /// <summary>
+    /// A scheduled event declared BOTH declaratively and as a script (F4).
+    /// <para>Promoting events to a managed type was done additively: the <c>Events/</c> folder now holds
+    /// <c>.json</c> (declared, converged, droppable by absence) alongside <c>.sql</c> (scripted, re-run
+    /// every deploy), so no existing package had to change. The cost of that choice is that the same
+    /// event can be described twice, and the two forms fight — the scripted one drops and recreates on
+    /// every deploy, undoing the convergence the declared one just performed, and which wins depends on
+    /// slot ordering rather than on anything the author wrote.</para>
+    /// <para>Error rather than Warning: there is no reading under which declaring an event twice is what
+    /// someone meant.</para>
+    /// </summary>
+    private static IEnumerable<Finding> CheckScheduledEvents(Template template)
+    {
+        if (template.Events.Count == 0) yield break;
+
+        var scriptedEventNames = template.ObjectScripts?
+            .Where(s => (s.FilePath ?? "").Replace(Path.DirectorySeparatorChar, '/').Contains("/Events/", StringComparison.OrdinalIgnoreCase))
+            .Select(s => Path.GetFileNameWithoutExtension(s.FilePath ?? ""))
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+
+        foreach (var ev in template.Events.Where(e => scriptedEventNames.Contains(e.Name ?? "")))
+            yield return new Finding(Severity.Error, DuplicateEventCode, Category,
+                $"Template '{template.Name}'",
+                $"Event '{ev.Name}' is declared as JSON and also scripted as a .sql file in the same " +
+                "Events folder. The scripted form drops and recreates the event on every deploy, undoing " +
+                "what the declared form converged — keep one.");
     }
 
     // Mirrors SchemaSmith_NormalizeIndexColumns.sql's DESC/ASC suffix handling (source of truth —

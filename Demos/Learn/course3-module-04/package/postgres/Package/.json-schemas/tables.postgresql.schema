@@ -119,6 +119,14 @@
           "UpdateFillFactor": {
             "type": "boolean"
           },
+          "Tablespace": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "PostgreSQL only. The tablespace this index lives on. Omit to leave placement unmanaged — an omitted value does NOT mean the database default, and an index does not automatically follow its table. Create-time only: moving an existing index rebuilds it, so a declared tablespace that differs from where the index already lives is refused rather than moved."
+          },
+          "StorageParameters": {
+            "type": "object"
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -516,6 +524,21 @@
       "type": "integer",
       "minimum": 0.0,
       "maximum": 100.0
+    },
+    "ReplicaIdentity": {
+      "type": "string",
+      "pattern": "DEFAULT|FULL|NOTHING|INDEX",
+      "description": "PostgreSQL only. The table's REPLICA IDENTITY, which determines what a logical-replication publication sends for an UPDATE or DELETE — and whether either is permitted at all on a published table. INDEX requires ReplicaIdentityIndex. Omit to leave the server's current setting alone."
+    },
+    "ReplicaIdentityIndex": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "PostgreSQL only. Names the unique index backing ReplicaIdentity = INDEX. The index must be unique, non-partial and over NOT NULL columns; PostgreSQL rejects anything else."
+    },
+    "Tablespace": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "PostgreSQL only. The tablespace the table's data lives on. Omit to leave placement unmanaged — an omitted value does NOT mean the database default. Create-time only: moving an existing table rewrites it, so a declared tablespace that differs from where the table already lives is refused rather than moved."
     },
     "Extensions": {}
   },

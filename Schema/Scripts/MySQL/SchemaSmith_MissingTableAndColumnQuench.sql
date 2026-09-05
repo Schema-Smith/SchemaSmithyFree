@@ -62,6 +62,22 @@ BEGIN
                 CASE WHEN t.RowFormat IS NOT NULL AND t.RowFormat != ''
                      THEN CONCAT(' ROW_FORMAT=', t.RowFormat)
                      ELSE '' END,
+                -- The CREATE_OPTIONS four. Engine-gated in SQL as well as by the domain's Platforms scoping,
+                -- because a hand-authored package can still name a property its schema does not declare, and
+                -- each of these is a hard syntax error on the other engine. Option names sit inside string
+                -- literals, so nothing here resolves at CREATE PROCEDURE time.
+                CASE WHEN t.Compression IS NOT NULL AND t.Compression != '' AND VERSION() NOT LIKE '%MariaDB%'
+                     THEN CONCAT(' COMPRESSION=''', t.Compression, '''')
+                     ELSE '' END,
+                CASE WHEN t.KeyBlockSize IS NOT NULL
+                     THEN CONCAT(' KEY_BLOCK_SIZE=', t.KeyBlockSize)
+                     ELSE '' END,
+                CASE WHEN t.PageCompressed = 1 AND VERSION() LIKE '%MariaDB%'
+                     THEN ' PAGE_COMPRESSED=1'
+                     ELSE '' END,
+                CASE WHEN t.PageCompressed = 1 AND t.PageCompressionLevel IS NOT NULL AND VERSION() LIKE '%MariaDB%'
+                     THEN CONCAT(' PAGE_COMPRESSION_LEVEL=', t.PageCompressionLevel)
+                     ELSE '' END,
                 CASE WHEN t.AutoIncrementValue IS NOT NULL
                      THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
                      ELSE '' END,
@@ -69,14 +85,40 @@ BEGIN
                 -- the embedded single quotes) -- see SchemaSmith_IndexOnlyQuench.sql.
                 CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
                      THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
-                     ELSE '' END
+                     ELSE '' END,
+                -- Partitioning (#partitioning, K3). LAST in the statement, which is where MySQL's own
+                -- CREATE TABLE grammar puts it -- after every table option.
+                --
+                -- Inside the CREATE, never as a follow-up ALTER: ALTER TABLE ... PARTITION BY rewrites
+                -- every row, so it is emitted only here, where the table is empty by construction. On an
+                -- already-deployed table a mismatch is REFUSED in ModifiedTableQuench instead.
+                --
+                -- RANGE and LIST name each partition with its boundary and the ORDER matters (RANGE
+                -- boundaries must ascend, and the engine rejects a definition where they do not), so the
+                -- list is aggregated by Ordinal. HASH and KEY carry a count instead and no list at all.
+                CASE WHEN t.PartitionMethod IS NULL THEN ''
+                     WHEN t.PartitionMethod IN ('HASH', 'KEY')
+                     THEN CONCAT(' PARTITION BY ', t.PartitionMethod, ' (', t.PartitionExpression, ')',
+                                 CASE WHEN t.PartitionCount IS NOT NULL THEN CONCAT(' PARTITIONS ', t.PartitionCount) ELSE '' END)
+                     ELSE CONCAT(' PARTITION BY ', t.PartitionMethod, ' (', t.PartitionExpression, ') (',
+                                 COALESCE((SELECT GROUP_CONCAT(CONCAT('PARTITION ', pt.PartitionName,
+                                                                      CASE WHEN t.PartitionMethod LIKE 'LIST%'
+                                                                           THEN CONCAT(' VALUES IN (', pt.PartitionValues, ')')
+                                                                           ELSE CONCAT(' VALUES LESS THAN (', pt.PartitionValues, ')') END)
+                                                               ORDER BY pt.Ordinal SEPARATOR ', ')
+                                             FROM _SchemaSmith_Partitions pt
+                                            WHERE pt.TableName = t.TableName), ''),
+                                 ')')
+                     END
             ) AS CreateTableStatement
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
+                 t.PageCompressed, t.PageCompressionLevel, t.AutoIncrementValue, t.Comment,
+                 t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_Done = TRUE;
 
@@ -270,6 +312,47 @@ BEGIN
         END IF;
     END IF;
 
+    -- =========================================================================
+    -- Degrade per-column history exclusion below MariaDB 10.3.4 / on MySQL at any version (#408).
+    -- Mirrors the application-time-period guard directly above, and for the same reason: ParseTableJson
+    -- suppresses the WITHOUT SYSTEM VERSIONING clause when the gate is 0 (below the floor the keyword is
+    -- a hard syntax error), so the column is created WITHOUT the exclusion -- meaning it silently starts
+    -- keeping history the package said not to keep. Suppressing that silently is the failure this guard
+    -- exists to prevent. Reduced, not Skipped: the column is still created, only its exclusion is lost.
+    -- =========================================================================
+    IF SchemaSmith_SupportsSystemVersioning() = 0
+       AND EXISTS (SELECT 1 FROM _SchemaSmith_Columns c
+                   INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+                   WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+                     AND c.IsWithoutSystemVersioning = 1) THEN
+        IF SchemaSmith_UnsupportedFeaturePolicy() = 'fail' THEN
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Per-column history exclusion requires MariaDB 10.3.4 (MySQL unsupported) (UnsupportedFeaturePolicy=fail): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsWithoutSystemVersioning = 1;
+            SET @ss_msg = 'Per-column history exclusion needs MariaDB 10.3.4 (UnsupportedFeaturePolicy=fail). See the run log.';
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @ss_msg;
+        ELSE
+            INSERT INTO SchemaSmith_StatusMessages (SessionId, Message)
+            SELECT CONNECTION_ID(), CONCAT('  Column history exclusion not applied (requires MariaDB 10.3.4, MySQL unsupported - downgraded): ',
+                   SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName))
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsWithoutSystemVersioning = 1;
+            INSERT INTO SchemaSmith_ChangeAudit (SessionId, ObjectType, ObjectName, ActionType)
+            SELECT CONNECTION_ID(), 'column without its WITHOUT SYSTEM VERSIONING clause',
+                   CONCAT(SchemaSmith_StripBacktickWrapping(c.TableName), '.', SchemaSmith_StripBacktickWrapping(c.ColumnName)), 'downgraded'
+            FROM _SchemaSmith_Columns c
+            INNER JOIN _SchemaSmith_Tables t ON t.TableName = c.TableName
+            WHERE (t.NewTable = 1 OR c.NewColumn = 1)
+              AND c.IsWithoutSystemVersioning = 1;
+        END IF;
+    END IF;
+
 
     IF p_WhatIf = 1 THEN
         -- WhatIf mode: output the actual SQL that would be executed
@@ -320,18 +403,52 @@ BEGIN
                       CASE WHEN t.RowFormat IS NOT NULL AND t.RowFormat != ''
                            THEN CONCAT(' ROW_FORMAT=', t.RowFormat)
                            ELSE '' END,
+                      -- The CREATE_OPTIONS four. Engine-gated in SQL as well as by the domain's Platforms scoping,
+                      -- because a hand-authored package can still name a property its schema does not declare, and
+                      -- each of these is a hard syntax error on the other engine. Option names sit inside string
+                      -- literals, so nothing here resolves at CREATE PROCEDURE time.
+                      CASE WHEN t.Compression IS NOT NULL AND t.Compression != '' AND VERSION() NOT LIKE '%MariaDB%'
+                           THEN CONCAT(' COMPRESSION=''', t.Compression, '''')
+                           ELSE '' END,
+                      CASE WHEN t.KeyBlockSize IS NOT NULL
+                           THEN CONCAT(' KEY_BLOCK_SIZE=', t.KeyBlockSize)
+                           ELSE '' END,
+                      CASE WHEN t.PageCompressed = 1 AND VERSION() LIKE '%MariaDB%'
+                           THEN ' PAGE_COMPRESSED=1'
+                           ELSE '' END,
+                      CASE WHEN t.PageCompressed = 1 AND t.PageCompressionLevel IS NOT NULL AND VERSION() LIKE '%MariaDB%'
+                           THEN CONCAT(' PAGE_COMPRESSION_LEVEL=', t.PageCompressionLevel)
+                           ELSE '' END,
                       CASE WHEN t.AutoIncrementValue IS NOT NULL
                            THEN CONCAT(' AUTO_INCREMENT=', t.AutoIncrementValue)
                            ELSE '' END,
                       CASE WHEN t.Comment IS NOT NULL AND t.Comment != ''
                            THEN CONCAT(' COMMENT=''', REPLACE(t.Comment, '''', ''''''), '''')
-                           ELSE '' END)
+                           ELSE '' END,
+                      -- Partitioning (#partitioning, K3) -- must match the real-path emit above exactly,
+                      -- or the WhatIf preview shows a statement the live run would not issue.
+                      CASE WHEN t.PartitionMethod IS NULL THEN ''
+                           WHEN t.PartitionMethod IN ('HASH', 'KEY')
+                           THEN CONCAT(' PARTITION BY ', t.PartitionMethod, ' (', t.PartitionExpression, ')',
+                                       CASE WHEN t.PartitionCount IS NOT NULL THEN CONCAT(' PARTITIONS ', t.PartitionCount) ELSE '' END)
+                           ELSE CONCAT(' PARTITION BY ', t.PartitionMethod, ' (', t.PartitionExpression, ') (',
+                                       COALESCE((SELECT GROUP_CONCAT(CONCAT('PARTITION ', pt.PartitionName,
+                                                                            CASE WHEN t.PartitionMethod LIKE 'LIST%'
+                                                                                 THEN CONCAT(' VALUES IN (', pt.PartitionValues, ')')
+                                                                                 ELSE CONCAT(' VALUES LESS THAN (', pt.PartitionValues, ')') END)
+                                                                     ORDER BY pt.Ordinal SEPARATOR ', ')
+                                                   FROM _SchemaSmith_Partitions pt
+                                                  WHERE pt.TableName = t.TableName), ''),
+                                       ')')
+                           END)
         FROM _SchemaSmith_Tables t
         INNER JOIN _SchemaSmith_Columns c ON c.TableName = t.TableName
         WHERE t.NewTable = 1
           AND (c.GeneratedExpression IS NULL OR TRIM(c.GeneratedExpression) = '')
           AND NOT (c.IsAutoIncrement = 0 AND c.DefaultValue IS NOT NULL AND TRIM(c.DefaultValue) LIKE '(%' AND SchemaSmith_SupportsDefaultExpression() = 0)
-        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.AutoIncrementValue, t.Comment;
+        GROUP BY t.TableName, t.VariantName, t.Engine, t.RowFormat, t.Compression, t.KeyBlockSize,
+                 t.PageCompressed, t.PageCompressionLevel, t.AutoIncrementValue, t.Comment,
+                 t.PartitionMethod, t.PartitionExpression, t.PartitionCount;
 
         -- Step 2: Show ALTER TABLE ADD COLUMN for new columns on existing tables (set-based;
         -- one row per column, matching the per-column statement the ELSE branch would issue

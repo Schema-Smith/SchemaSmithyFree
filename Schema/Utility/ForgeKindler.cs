@@ -150,6 +150,31 @@ public static class ForgeKindler
         // the two SQL Server helper functions, so these replaces are a no-op on every other script.
         script = script.Replace("{{ServerMajorVersion}}", serverMajorVersion.ToString(CultureInfo.InvariantCulture))
                        .Replace("{{UnsupportedPolicy}}", policy);
+
+        // {{XmlCompressionRead}} is a COLUMN REFERENCE, not a value, and that is why it is resolved here
+        // rather than guarded at runtime. sys.partitions.xml_compression does not exist before SQL Server
+        // 2025 -- verified on 2022 CU25, where the column lives only on sys.internal_partitions -- and a
+        // procedure naming a column the server does not have fails to CREATE, taking the whole kindle
+        // down. A runtime IF cannot save it because binding happens first. Composing the reference out at
+        // kindle time is the same move LedgerViewFilter() makes in C# for sys.tables.ledger_view_id, and
+        // it is why this needs no sp_executesql staging.
+        //
+        // 0 means "version not detected", which happens on paths that never probed. Treat that as OLD:
+        // emitting NULL loses a value, emitting an unbindable column loses the entire kindle.
+        // TWO tokens, and they MUST be resolved together. {{XmlCompressionCanRead}} is the guard that
+        // decides whether the comparison runs at all, and it is baked here rather than tested at runtime
+        // with fn_ServerMajorVersion() -- because those two can DISAGREE. fn_ServerMajorVersion falls
+        // back to SERVERPROPERTY when no version was baked, so on a caller that kindles without passing
+        // one, a runtime guard says "2025, compare away" while the token above resolved to NULL. The
+        // comparison then reads NULL as "currently off" and REBUILDS every declared-ON table on every
+        // deploy, while a declared-OFF table never converges. Both were observed on a real 2025 server
+        // before this was split into two tokens. Deriving both from the same value makes that
+        // disagreement impossible by construction.
+        var xmlCompressionReadable = serverMajorVersion >= 17;
+        script = script.Replace("{{XmlCompressionRead}}",
+                            xmlCompressionReadable ? "p.xml_compression" : "CONVERT(BIT, NULL)")
+                       .Replace("{{XmlCompressionCanRead}}", xmlCompressionReadable ? "1" : "0");
+
         return script;
     }
 
@@ -260,6 +285,10 @@ public static class ForgeKindler
                 new("Kindling_SchemaSmith_Schema.sql"),
                 new("SchemaSmith.BootstrapTableQuench.sql"),
                 new("Kindling_KindleStamp_Table.sql", ReplaceTableDef: true),
+                // Ownership fallback for tables that cannot carry the ProductName extended property
+                // (memory-optimized tables reject it). Regular tables still use the extended property;
+                // this mirrors the table-based ownership PostgreSQL and MySQL use for every table.
+                new("Kindling_ProductOwnership_Table.sql", ReplaceTableDef: true),
                 new("Kindling_CompletedMigrationScripts_Table.sql", ReplaceTableDef: true),
                 new("Kindling_ChangeAudit_Table.sql", ReplaceTableDef: true),
                 new("SchemaSmith.fn_StripParenWrapping.sql"),
@@ -331,6 +360,9 @@ public static class ForgeKindler
                 new("SchemaSmith.BuildExistingIndexesSnapshot.sql"),
                 new("SchemaSmith.ModifiedTableQuench.sql"),
                 new("SchemaSmith.MissingIndexesAndConstraintsQuench.sql"),
+                // Must follow MissingIndexesAndConstraintsQuench: REPLICA IDENTITY USING INDEX names an
+                // index, which a table created in the same run does not have until that pass.
+                new("SchemaSmith.ReplicaIdentityQuench.sql"),
                 new("SchemaSmith.ForeignKeyQuench.sql"),
                 new("SchemaSmith.TableQuench.sql", ReplaceParseJson: true),
                 new("SchemaSmith.IndexOnlyQuench.sql"),
@@ -340,6 +372,16 @@ public static class ForgeKindler
                 new("SchemaSmith.FixupMaterializedViewOwnership.sql"),
                 new("SchemaSmith.MissingMaterializedViewIndexesQuench.sql"),
                 new("SchemaSmith.MaterializedViewQuench.sql"),
+                // Enum types as a MANAGED type (F5). Replaces a guarded CREATE TYPE whose value-list
+                // edits were a permanent silent no-op once the type existed.
+                // Domain types (F5). BEFORE the enum pair only by convention -- neither depends on the
+                // other -- but both must follow StripParenWrapping, which the extraction function calls.
+                new("SchemaSmith.DomainTypeQuench.sql"),
+                new("SchemaSmith.GenerateDomainTypeJson.sql"),
+                new("SchemaSmith.EnumTypeQuench.sql"),
+                new("SchemaSmith.GenerateEnumTypeJson.sql"),
+                new("SchemaSmith.SequenceQuench.sql"),
+                new("SchemaSmith.GenerateSequenceJson.sql"),
             ],
             Platform.MySQL =>
             [
@@ -370,10 +412,27 @@ public static class ForgeKindler
                 new("SchemaSmith_SupportsDefaultExpression.sql"),
                 new("SchemaSmith_SupportsInvisibleColumn.sql"),
                 new("SchemaSmith_SupportsColumnSrid.sql"),
+                // Parses one option out of INFORMATION_SCHEMA.TABLES.CREATE_OPTIONS -- the single blob
+                // COMPRESSION, KEY_BLOCK_SIZE and MariaDB's PAGE_COMPRESSED family all live in. LOCATE
+                // based rather than regex: REGEXP_SUBSTR does not exist on the MySQL 5.7 floor.
+                new("SchemaSmith_CreateOption.sql"),
+                // Scheduled events as a MANAGED type. EventMatches is the "has anything actually
+                // changed" predicate and must precede EventQuench, which calls it -- converging an event
+                // means DROP + CREATE, so a false "changed" would reset its schedule on every deploy.
+                new("SchemaSmith_EventMatches.sql"),
+                new("SchemaSmith_EventQuench.sql"),
+                new("SchemaSmith_GenerateEventJson.sql"),
                 new("SchemaSmith_SupportsApplicationTimePeriods.sql"),
+                // Gates the per-column WITHOUT SYSTEM VERSIONING clause (#408). MariaDB-only, like the
+                // period gate above it; calls SchemaSmith_ServerVersionNum, kindled earlier.
+                new("SchemaSmith_SupportsSystemVersioning.sql"),
                 new("SchemaSmith_NormalizeIndexColumns.sql"),
                 new("SchemaSmith_IndexHasFunctionalKeyPart.sql"),
                 new("SchemaSmith_NormalizeCheckExpression.sql"),
+                // Canonicalises a partition expression before comparing declared against live
+                // (#partitioning, K3) -- MySQL 5.7 echoes the text the user wrote while every other
+                // supported engine rewrites it, so a literal compare would be engine-specific.
+                new("SchemaSmith_NormalizePartitionExpression.sql"),
                 new("SchemaSmith_UpperDataType.sql"),
                 new("SchemaSmith_StripIntDisplayWidth.sql"),
                 new("SchemaSmith_NormalizeColumnDefault.sql"),
@@ -384,6 +443,10 @@ public static class ForgeKindler
                 new("SchemaSmith_IsSystemTimePeriodColumn.sql"),
                 new("SchemaSmith_SetSystemVersioningAlterHistory.sql"),
                 new("SchemaSmith_TablePeriodsJson.sql"),
+                // The catalog-to-package read for partitioning (#partitioning, K3). ONE shared
+                // definition, unlike its Periods sibling: INFORMATION_SCHEMA.PARTITIONS exists on every
+                // supported version of both engines, so no MariaDb override is needed.
+                new("SchemaSmith_TablePartitioningJson.sql"),
                 new("SchemaSmith_SnapshotIndexVisibility.sql"),
                 new("SchemaSmith_SnapshotIndexExistence.sql"),
                 new("SchemaSmith_DropCheckClause.sql"),

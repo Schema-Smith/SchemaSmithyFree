@@ -49,6 +49,9 @@ BEGIN
            REGEXP_REPLACE(COALESCE(celem ->> 'IndexColumns', ''), '\s*,\s*', ',', 'g') AS "IndexColumns",
            COALESCE(celem ->> 'IncludeColumns', '') AS "IncludeColumns",
            COALESCE(celem ->> 'AccessMethod', 'btree') AS "AccessMethod",
+           -- IndexOnlyQuench builds its OWN temp_indexes rather than reusing the one
+           -- ParseTableJsonIntoTempTables makes, so every index column has to be declared in both.
+           COALESCE(celem ->> 'Tablespace', '') AS "Tablespace",
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
@@ -60,7 +63,14 @@ BEGIN
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
            COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((celem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
-           COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor"
+           COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor",
+           -- Index storage parameters (the WITH clause) canonicalised for comparison: key=value pairs
+           -- sorted by key, because reloptions reorders itself and the declared map has no order. fillfactor
+           -- is excluded here -- FillFactor above owns it -- so a package declaring only fillfactor produces
+           -- an empty StorageParameters and compares equal to a live index that has only fillfactor.
+           COALESCE((SELECT STRING_AGG(sp.k || '=' || sp.v, ',' ORDER BY sp.k)
+                       FROM JSON_EACH_TEXT(COALESCE(celem -> 'StorageParameters', '{}'::JSON)) AS sp(k, v)
+                      WHERE sp.k <> 'fillfactor'), '') AS "StorageParameters"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Indexes')::JSON) AS celem(value);
 
@@ -141,6 +151,7 @@ BEGIN
                          AND COALESCE(i."NullsNotDistinct", false) = COALESCE(ei."NullsNotDistinct", false)
                          AND COALESCE(i."Deferrable", false) = COALESCE(ei."Deferrable", false)
                          AND COALESCE(i."InitiallyDeferred", false) = COALESCE(ei."InitiallyDeferred", false)
+                         AND COALESCE(i."StorageParameters", '') = COALESCE(ei."StorageParameters", '')
       WHERE NOT EXISTS (SELECT 1
                           FROM temp_indexes i
                           WHERE i."TableSchema" = ei."TableSchema"
@@ -176,7 +187,11 @@ BEGIN
                             OR COALESCE(i."AccessMethod", 'btree') != COALESCE(ei."AccessMethod", 'btree'))
                             OR COALESCE(i."NullsNotDistinct", false) != COALESCE(ei."NullsNotDistinct", false)
                             OR COALESCE(i."Deferrable", false) != COALESCE(ei."Deferrable", false)
-                            OR COALESCE(i."InitiallyDeferred", false) != COALESCE(ei."InitiallyDeferred", false))
+                            OR COALESCE(i."InitiallyDeferred", false) != COALESCE(ei."InitiallyDeferred", false)
+                            -- A storage-parameter change (hnsw m, ivfflat lists, brin pages_per_range, ...)
+                            -- rebuilds: several cannot be ALTERed in place, so the whole index drops and is
+                            -- recreated by the missing-index pass, which always works.
+                            OR COALESCE(i."StorageParameters", '') != COALESCE(ei."StorageParameters", ''))
            OR (p_DropIndexesRemovedFromProduct -- Index Removed from Product Definition (gated)
                AND COALESCE((SELECT tt."DropIndexesRemovedFromProduct" FROM temp_tables tt WHERE tt."Schema" = ei."TableSchema" AND tt."Name" = ei."TableName"), TRUE)
                AND EXISTS (SELECT 1
@@ -268,7 +283,11 @@ BEGIN
                                 CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
                                      THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
                                      ELSE '' END ||
-                                CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
+                                -- USING INDEX TABLESPACE precedes DEFERRABLE per the table-constraint grammar
+                              -- (verified live on 16). Emitted only when declared: unset means placement is
+                              -- not managed, so the backing index follows default_tablespace as before.
+                              CASE WHEN COALESCE(ti."Tablespace", '') <> '' THEN ' USING INDEX TABLESPACE "' || ti."Tablespace" || '"' ELSE '' END ||
+                              CASE WHEN ti."Deferrable" THEN ' DEFERRABLE' ELSE '' END ||
                                 CASE WHEN ti."InitiallyDeferred" THEN ' INITIALLY DEFERRED' ELSE '' END || ';'
                            ELSE 'CREATE ' || CASE WHEN ti."Unique" THEN 'UNIQUE ' ELSE '' END || 'INDEX "' || ti."Name" || '" ON "' || ti."TableSchema" || '"."' || ti."TableName" || '" ' ||
                                 'USING ' || COALESCE(ti."AccessMethod", 'btree') || ' ' ||
@@ -276,10 +295,22 @@ BEGIN
                                 CASE WHEN NULLIF(ti."IncludeColumns", '') IS NOT NULL THEN ' INCLUDE (' || "SchemaSmith"."QuoteColumnList"(ti."IncludeColumns") || ')' ELSE '' END ||
                                 -- CREATE INDEX grammar order: (cols) INCLUDE [NULLS NOT DISTINCT] [WITH] [WHERE].
                                 CASE WHEN ti."Unique" AND ti."NullsNotDistinct" THEN ' NULLS NOT DISTINCT' ELSE '' END ||
-                                CASE WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
-                                     THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
-                                     ELSE '' END ||
-                                CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'
+                                -- ONE WITH clause carrying fillfactor (still gated to the AMs that accept it)
+                                -- AND StorageParameters (any AM -- this is how a vector index gets its m /
+                                -- ef_construction / lists). StorageParameters is already canonical
+                                -- key=value,key=value, which is WITH-clause syntax, so it drops straight in.
+                                CASE
+                                  WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash') AND COALESCE(ti."StorageParameters", '') <> ''
+                                       THEN ' WITH (fillfactor = ' || ti."FillFactor" || ', ' || ti."StorageParameters" || ')'
+                                  WHEN COALESCE(ti."AccessMethod", 'btree') IN ('btree', 'gist', 'hash')
+                                       THEN ' WITH (fillfactor = ' || ti."FillFactor" || ')'
+                                  WHEN COALESCE(ti."StorageParameters", '') <> ''
+                                       THEN ' WITH (' || ti."StorageParameters" || ')'
+                                  ELSE '' END ||
+                                -- TABLESPACE follows WITH and precedes WHERE per the CREATE INDEX grammar
+                              -- (verified live on 16).
+                              CASE WHEN COALESCE(ti."Tablespace", '') <> '' THEN ' TABLESPACE "' || ti."Tablespace" || '"' ELSE '' END ||
+                              CASE WHEN NULLIF(ti."FilterExpression", '') IS NOT NULL THEN ' WHERE ' || ti."FilterExpression" ELSE '' END || ';'
                            END, CHR(10))
       INTO sql_script
       FROM temp_indexes ti

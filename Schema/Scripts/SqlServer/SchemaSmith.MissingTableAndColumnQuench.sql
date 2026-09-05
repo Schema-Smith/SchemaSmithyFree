@@ -31,6 +31,61 @@ BEGIN TRY
     RAISERROR('Table %s declares filegroup %s, which does not exist on this database. SchemaSmith does not create filegroups -- create it on the target first, or correct the declared name.', 16, 1, @v_FGTable, @v_FGName)
   END
 
+  -- Partition placement (#partitioning, K1). Three checks, all BEFORE any DDL, because each one produces
+  -- either a wrong physical layout or an engine error that names nothing useful.
+  --
+  -- (a) The scheme must exist. SchemaSmith does not create partition functions or schemes any more than it
+  --     creates filegroups -- provisioning stays the user's job so packages stay portable. Falling back to
+  --     the default filegroup would build the wrong layout and report success, which is the failure this
+  --     whole feature exists to close.
+  RAISERROR('Validate declared partition schemes exist', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #Tables t WITH (NOLOCK)
+               WHERE t.NewTable = 1
+                 AND t.[PartitionScheme] IS NOT NULL
+                 AND NOT EXISTS (SELECT * FROM sys.partition_schemes ps WITH (NOLOCK)
+                                  WHERE ps.[name] = SchemaSmith.fn_StripBracketWrapping(t.[PartitionScheme])))
+  BEGIN
+    DECLARE @v_PsMissingTable NVARCHAR(1010), @v_PsMissingName NVARCHAR(500)
+    SELECT TOP 1 @v_PsMissingTable = t.[Schema] + '.' + t.[Name], @v_PsMissingName = t.[PartitionScheme]
+      FROM #Tables t WITH (NOLOCK)
+      WHERE t.NewTable = 1
+        AND t.[PartitionScheme] IS NOT NULL
+        AND NOT EXISTS (SELECT * FROM sys.partition_schemes ps WITH (NOLOCK)
+                         WHERE ps.[name] = SchemaSmith.fn_StripBracketWrapping(t.[PartitionScheme]))
+    RAISERROR('Table %s declares partition scheme %s, which does not exist on this database. SchemaSmith does not create partition functions or schemes -- create them on the target first, or correct the declared name.', 16, 1, @v_PsMissingTable, @v_PsMissingName)
+  END
+
+  -- (b) Both or neither. SQL Server's ON clause needs the column the partition function is applied to, so
+  --     half a declaration is not a placement -- and emitting ON <scheme> with no column is a syntax error
+  --     whose message names neither the table nor the property. Checked on EVERY declared table, not just
+  --     new ones: a half-pair is equally wrong on one that already exists.
+  IF EXISTS (SELECT 1 FROM #Tables t WITH (NOLOCK)
+              WHERE (t.[PartitionScheme] IS NOT NULL AND t.[PartitionColumn] IS NULL)
+                 OR (t.[PartitionScheme] IS NULL AND t.[PartitionColumn] IS NOT NULL))
+  BEGIN
+    DECLARE @v_PsHalfTable NVARCHAR(1010), @v_PsHalfMissing NVARCHAR(30)
+    SELECT TOP 1 @v_PsHalfTable = t.[Schema] + '.' + t.[Name],
+                 @v_PsHalfMissing = CASE WHEN t.[PartitionColumn] IS NULL THEN 'PartitionColumn' ELSE 'PartitionScheme' END
+      FROM #Tables t WITH (NOLOCK)
+      WHERE (t.[PartitionScheme] IS NOT NULL AND t.[PartitionColumn] IS NULL)
+         OR (t.[PartitionScheme] IS NULL AND t.[PartitionColumn] IS NOT NULL)
+    RAISERROR('Table %s declares one half of a partition placement but not the other -- %s is missing. PartitionScheme and PartitionColumn are declared together or not at all.', 16, 1, @v_PsHalfTable, @v_PsHalfMissing)
+  END
+
+  -- (c) Not both placements. A table lives on ONE data space; declaring a filegroup AND a partition scheme
+  --     is a contradiction the CREATE would otherwise resolve by clause order, quietly honouring whichever
+  --     was emitted. The mirror of this for an ALREADY-DEPLOYED table lives in ModifiedTableQuench.
+  IF EXISTS (SELECT 1 FROM #Tables t WITH (NOLOCK)
+              WHERE t.[PartitionScheme] IS NOT NULL AND t.[FileGroup] IS NOT NULL)
+  BEGIN
+    DECLARE @v_PsBothTable NVARCHAR(1010), @v_PsBothFg NVARCHAR(500), @v_PsBothPs NVARCHAR(500)
+    SELECT TOP 1 @v_PsBothTable = t.[Schema] + '.' + t.[Name], @v_PsBothFg = t.[FileGroup], @v_PsBothPs = t.[PartitionScheme]
+      FROM #Tables t WITH (NOLOCK)
+      WHERE t.[PartitionScheme] IS NOT NULL AND t.[FileGroup] IS NOT NULL
+    RAISERROR('Table %s declares both filegroup %s and partition scheme %s. A table lives on one data space -- declare one or the other, not both.', 16, 1, @v_PsBothTable, @v_PsBothFg, @v_PsBothPs)
+  END
+
   -- Same check for the other two placement clauses. A FILESTREAM filegroup must additionally BE one
   -- (type 'FD'): naming an ordinary filegroup there fails with the engine's own message, which does not
   -- say which table asked for it.
@@ -133,7 +188,7 @@ BEGIN TRY
   RAISERROR('Add New Tables', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STUFF((SELECT CHAR(13) + CHAR(10) + CAST('RAISERROR(''  Adding new table ' + T.[Schema] + '.' + T.[Name] +
                                   CASE WHEN RTRIM(ISNULL(T.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(T.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
-                                  'EXEC(''CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + REPLACE(ScriptColumns, '''', '''''') + ')' +
+                                  'EXEC(''CREATE TABLE ' + T.[Schema] + '.' + T.[Name] + ' (' + REPLACE(ScriptColumns, '''', '''''') + REPLACE(InlineIndexes, '''', '''''') + ')' +
                                   -- Filegroup placement (#filegroups): ON comes right after the column list,
                                   -- BEFORE the WITH clause, per CREATE TABLE's own grammar. Existence was
                                   -- already validated above, so this can emit unconditionally.
@@ -142,7 +197,11 @@ BEGIN TRY
                                   -- existing table is refused in ModifiedTableQuench rather than attempted.
                                   CASE WHEN T.[GraphType] = 'Node' THEN ' AS NODE'
                                        WHEN T.[GraphType] = 'Edge' THEN ' AS EDGE' ELSE '' END +
-                                  CASE WHEN T.[FileGroup] IS NOT NULL THEN ' ON ' + T.[FileGroup] ELSE '' END +
+                                  -- Partition placement wins over FileGroup because the two cannot both be
+                                  -- declared -- validated above -- so this is a branch, not a precedence
+                                  -- rule. ON <scheme>(<column>) is the same clause slot as ON <filegroup>.
+                                  CASE WHEN T.[PartitionScheme] IS NOT NULL THEN ' ON ' + T.[PartitionScheme] + '(' + T.[PartitionColumn] + ')'
+                                       WHEN T.[FileGroup] IS NOT NULL THEN ' ON ' + T.[FileGroup] ELSE '' END +
                                   -- TEXTIMAGE_ON follows ON, in SQL Server's own clause order. FILESTREAM_ON
                                   -- deliberately does NOT appear here: the FILESTREAM column is withheld from
                                   -- this CREATE (it needs a unique constraint first, see FileStreamColumnQuench),
@@ -161,18 +220,53 @@ BEGIN TRY
                                   -- keeps a table with neither exactly as it was before ledger existed.
                                   CASE WHEN t.[WithOptions] <> '' THEN ' WITH (' + STUFF(t.[WithOptions], 1, 2, '') + ')' ELSE '' END + ''');' + CHAR(13) + CHAR(10) +
                                   'INSERT INTO SchemaSmith.ChangeAudit (SessionId, ObjectType, ObjectName, ActionType) VALUES (@@SPID, ''table'', ''' + T.[Schema] + '.' + T.[Name] + ''', ''created'');' AS NVARCHAR(MAX))
-                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[FileGroup], t.[FileStreamFileGroup], t.[TextImageFileGroup], T.[VariantName], T.[GraphType],
+                           FROM (SELECT T.[Schema], T.[Name], t.[CompressionType], t.[XmlCompression], t.[FileGroup], t.[PartitionScheme], t.[PartitionColumn], t.[FileStreamFileGroup], t.[TextImageFileGroup], T.[VariantName], T.[GraphType], T.[MemoryOptimized],
+                                        -- Memory-optimized indexes must be declared INLINE in the CREATE TABLE
+                                        -- (#J1) -- CREATE INDEX is rejected on such a table. Built here from
+                                        -- #Indexes; each is NONCLUSTERED (the only kind a memory-optimized
+                                        -- table has), HASH with a BUCKET_COUNT when one is declared, and a
+                                        -- range index otherwise. The PK is a named constraint; the rest are
+                                        -- INDEX clauses. Empty for an ordinary disk table, so nothing changes
+                                        -- for one. The ordinary index passes skip memory-optimized tables.
+                                        InlineIndexes = CASE WHEN T.[MemoryOptimized] = 1 THEN
+                                            ISNULL((SELECT ', ' +
+                                                      CASE WHEN I.[PrimaryKey] = 1
+                                                           THEN 'CONSTRAINT ' + I.[IndexName] + ' PRIMARY KEY NONCLUSTERED '
+                                                           ELSE 'INDEX ' + I.[IndexName] + CASE WHEN I.[Unique] = 1 THEN ' UNIQUE' ELSE '' END + ' NONCLUSTERED ' END +
+                                                      CASE WHEN I.[BucketCount] IS NOT NULL
+                                                           THEN 'HASH (' + I.[IndexColumns] + ') WITH (BUCKET_COUNT = ' + CAST(I.[BucketCount] AS NVARCHAR(20)) + ')'
+                                                           ELSE '(' + I.[IndexColumns] + ')' END
+                                                     FROM #Indexes I WITH (NOLOCK)
+                                                    WHERE I.[Schema] = T.[Schema] AND I.[TableName] = T.[Name]
+                                                    ORDER BY I.[PrimaryKey] DESC, I.[IndexName]
+                                                    FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), '')
+                                          ELSE '' END,
                                         WithOptions =
                                             CASE T.[Ledger] WHEN 'AppendOnly' THEN ', LEDGER = ON (APPEND_ONLY = ON)'
                                                             WHEN 'Updatable'  THEN ', SYSTEM_VERSIONING = ON, LEDGER = ON'
                                                             ELSE '' END +
+                                            -- Memory-optimized (#J1): the WITH that switches on the Hekaton
+                                            -- storage engine. DURABILITY defaults to SCHEMA_AND_DATA in the parse.
+                                            CASE WHEN T.[MemoryOptimized] = 1 THEN ', MEMORY_OPTIMIZED = ON, DURABILITY = ' + T.[Durability] ELSE '' END +
                                             -- Sparse columns and a COLUMN_SET are incompatible with data compression, and SQL
                                             -- Server 2008 REJECTS the clause outright on such a table -- even DATA_COMPRESSION=NONE.
-                                            CASE WHEN NOT EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
+                                            -- Memory-optimized tables reject DATA_COMPRESSION (and XML_COMPRESSION)
+                                            -- outright -- the in-memory engine has no page compression -- so both
+                                            -- are suppressed for them here.
+                                            CASE WHEN T.[MemoryOptimized] = 0
+                                                  AND NOT EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
                                                                    WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
                                                                      AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1))
                                                       AND ISNULL(T.[CompressionType], 'NONE') IN ('NONE', 'ROW', 'PAGE')
-                                                 THEN ', DATA_COMPRESSION=' + ISNULL(T.[CompressionType], 'NONE') ELSE '' END,
+                                                 THEN ', DATA_COMPRESSION=' + ISNULL(T.[CompressionType], 'NONE') ELSE '' END +
+                                            -- XML_COMPRESSION joins the same WITH list. Independent of
+                                            -- DATA_COMPRESSION -- a table can carry both -- and unaffected by
+                                            -- the sparse/COLUMN_SET restriction above, which is specific to data
+                                            -- compression. Gated on 2022 by VALUE (fn_ServerMajorVersion), which
+                                            -- is safe anywhere; only the CATALOG READ in extraction needs
+                                            -- kindle-time composition, because that names a column.
+                                            CASE WHEN ISNULL(T.[XmlCompression], 0) = 1 AND T.[MemoryOptimized] = 0 AND SchemaSmith.fn_ServerMajorVersion() >= 16
+                                                 THEN ', XML_COMPRESSION = ON' ELSE '' END,
                                         HasSparseOrColumnSet = CASE WHEN EXISTS (SELECT 1 FROM #Columns C2 WITH (NOLOCK)
                                                                                   WHERE C2.[Schema] = T.[Schema] AND C2.[TableName] = T.[Name]
                                                                                     AND (ISNULL(C2.[Sparse], 0) = 1 OR ISNULL(C2.[IsColumnSet], 0) = 1)) THEN 1 ELSE 0 END,

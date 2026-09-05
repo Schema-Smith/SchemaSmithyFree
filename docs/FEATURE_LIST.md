@@ -86,9 +86,22 @@ Per-table options, column attributes, and table-scoped behavior beyond the basic
 | Row format | n/a | n/a | ✓ | ✓ | `RowFormat`: DYNAMIC / COMPACT / COMPRESSED / REDUNDANT |
 | Initial auto-increment value | n/a | n/a | ✓ | ✓ | `AutoIncrementValue` |
 | Data compression | ✓ | n/a | n/a | n/a | `CompressionType`: NONE / ROW / PAGE |
+| XML compression | ✓ | n/a | n/a | n/a | `XmlCompression` on table and index; deploy 2022+, extract 2025+ |
+| Memory-optimized (Hekaton) tables | ✓ | n/a | n/a | n/a | `MemoryOptimized` + `Durability` (SCHEMA_AND_DATA / SCHEMA_ONLY); indexes declared inline; the memory-optimized nature, durability, and inline index shape are refused on change; ownership tracked in `SchemaSmith.ProductOwnership` (extended properties are rejected on such tables); requires In-Memory OLTP support + a `MEMORY_OPTIMIZED_DATA` filegroup |
 | Table-level access method | n/a | ✓ | n/a | n/a | `AccessMethod` |
 | Persistence type (UNLOGGED / TEMPORARY) | n/a | ✓ | n/a | n/a | `PersistenceType` |
 | Row-level security | n/a | ✓ | n/a | n/a | `RowLevelSecurity`, `ForceRowLevelSecurity` |
+| Replica identity (logical replication) | n/a | ✓ | n/a | n/a | `ReplicaIdentity`, `ReplicaIdentityIndex` |
+| Tablespace placement (table + index) | n/a | ✓ | n/a | n/a | `Tablespace`; create-time only, a move is refused |
+| Partition placement (table + index) | ✓ | n/a | n/a | n/a | `PartitionScheme` + `PartitionColumn`; a scheme NAME, never created — applied at create, a change is refused |
+| Partitioning (RANGE / LIST / HASH / KEY, incl. COLUMNS) | n/a | n/a | ✓ | ✓ | `Partitioning`; applied at create, a change is refused — repartitioning rewrites every row |
+| Per-column history exclusion | n/a | n/a | n/a | ✓ | `WithoutSystemVersioning` on a system-versioned table |
+| InnoDB page compression | n/a | n/a | ✓ | ✓ | MySQL `Compression`; MariaDB `PageCompressed` + `PageCompressionLevel` |
+| Compressed-page size | n/a | n/a | ✓ | ✓ | `KeyBlockSize`, with `RowFormat: COMPRESSED` |
+| Scheduled events (declarative) | n/a | n/a | ✓ | ✓ | `Events/*.json`; compared, converges, drop-by-absence via `DropEventsRemovedFromProduct` |
+| Domain types (declarative) | n/a | ✓ | n/a | n/a | `Domain Types/*.json`; constraints, default and NOT NULL converge in place — a base-type change is refused |
+| Enum types (declarative) | n/a | ✓ | n/a | n/a | `Enum Types/*.json`; values compared and added in declared order |
+| Sequences (declarative) | n/a | ✓ | n/a | n/a | `Sequences/*.json`; all attributes converge, current value never touched |
 | Table fill factor | n/a | ✓ | n/a | n/a | `FillFactor` 0–100 on table |
 | Per-table `UpdateFillFactor` | ✓ | ✓ | n/a | n/a | OR'd with template + index level |
 | Temporal tables (system-versioning marker) | ✓ | n/a | n/a | n/a | `IsTemporal` flag |
@@ -111,12 +124,15 @@ Index shape, predicates, included columns, fill factor, and platform-specific in
 | Filtered / partial (`WHERE` predicate) | ✓ | ✓ | n/a | n/a | `FilterExpression` |
 | Included / covering columns | ✓ | ✓ | n/a | n/a | PG 11+; `IncludeColumns` |
 | Per-index fill factor | ✓ | n/a | n/a | n/a | `FillFactor`, `UpdateFillFactor` |
+| Index storage parameters (`WITH`) | n/a | ✓ | n/a | n/a | `StorageParameters` map (e.g. gin `fastupdate`, brin `pages_per_range`, pgvector `hnsw` tuning); `fillfactor` handled separately |
+| Hash index bucket count | ✓ | n/a | n/a | n/a | `BucketCount` on a memory-optimized hash index |
 | Per-index compression | ✓ | n/a | n/a | n/a | `CompressionType` |
 | Columnstore | ✓ | n/a | n/a | n/a | `ColumnStore` |
 | Index access method (btree / gin / gist / brin / spgist / hash) | n/a | ✓ | n/a | n/a | `AccessMethod` |
 | Index type `BTREE` / `HASH` | n/a | n/a | ✓ | ✓ | `IndexType` |
 | Visible / invisible index | n/a | n/a | ✓ | ✓ | `Visible` flag |
 | Index tablespace | n/a | ✓ | n/a | n/a | `Tablespace` |
+| Index partition alignment | ✓ | n/a | n/a | n/a | `PartitionScheme` + `PartitionColumn`, independent of the table's own placement |
 | Sort direction per column | ✓ | ✓ | ✓ | ✓ | In `IndexColumns` string |
 | Conditional index application | ✓ | ✓ | ✓ | ✓ | `ShouldApplyExpression` |
 | XML index (primary / secondary VALUE / PATH / PROPERTY) | ✓ | n/a | n/a | n/a | `XmlIndexes` |

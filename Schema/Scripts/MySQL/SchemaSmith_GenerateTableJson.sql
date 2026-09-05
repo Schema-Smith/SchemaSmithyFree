@@ -37,6 +37,16 @@ BEGIN
         'Collation', t.TABLE_COLLATION,
         'Comment', CASE WHEN t.TABLE_COMMENT = '' THEN NULL ELSE t.TABLE_COMMENT END,
         'AutoIncrementValue', t.AUTO_INCREMENT,
+        -- These four live ONLY in CREATE_OPTIONS, a single free-text blob, which is why they share one
+        -- parser and are read together. NULL (stripped by the JSON_REMOVE pass) when absent, so a table
+        -- declaring none extracts exactly as it did before this shipped. #scope-boundary
+        'Compression', CASE WHEN VERSION() LIKE '%MariaDB%' THEN NULL
+                            ELSE SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'COMPRESSION') END,
+        'KeyBlockSize', SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'KEY_BLOCK_SIZE'),
+        -- MariaDB only, like IsSystemVersioned below.
+        'PageCompressed', CASE WHEN SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'PAGE_COMPRESSED') = '1'
+                               THEN TRUE ELSE NULL END,
+        'PageCompressionLevel', SchemaSmith_CreateOption(t.CREATE_OPTIONS, 'PAGE_COMPRESSION_LEVEL'),
         -- MariaDB only, and NULL (stripped by the JSON_REMOVE pass) everywhere else, so a MySQL package
         -- never carries a property its schema does not declare.
         'IsSystemVersioned', CASE WHEN t.TABLE_TYPE = 'SYSTEM VERSIONED' THEN TRUE ELSE NULL END,
@@ -59,7 +69,13 @@ BEGIN
 
     -- Get columns
     SELECT CONCAT('[', GROUP_CONCAT(
-        JSON_OBJECT(
+        -- JSON_REMOVE wrapper: WithoutSystemVersioning is stripped unless the column actually carries
+        -- the exclusion. The table-level strip pass at the end of this procedure operates on the
+        -- top-level object only and cannot reach inside a column, and leaving the key as null would be
+        -- worse than noisy -- it is a NON-NULLABLE bool, so it fails deserialisation outright, the same
+        -- trap IsSystemVersioned documents in that pass. It also keeps a MariaDB-only property out of
+        -- every MySQL package, whose schema does not declare it and would reject it. #408
+        JSON_REMOVE(JSON_OBJECT(
             'Name', CONCAT('`', c.COLUMN_NAME, '`'),
             'DataType', c.COLUMN_TYPE,
             'Nullable', CASE WHEN c.IS_NULLABLE = 'YES' THEN TRUE ELSE FALSE END,
@@ -106,6 +122,11 @@ BEGIN
             -- here is safe on every version: below MySQL 8.0.23 / MariaDB 10.3 the INVISIBLE marker simply
             -- never appears, so the LIKE is always false there -- no version gate needed at extraction time.
             'Invisible', CASE WHEN c.EXTRA LIKE '%INVISIBLE%' THEN TRUE ELSE FALSE END,
+            -- MariaDB only, and NULL (stripped by the JSON_REMOVE pass) everywhere else, so a MySQL
+            -- package never carries a property its schema does not declare -- the IsSystemVersioned
+            -- convention above. EXTRA is safe to read at every supported floor; below MariaDB 10.3 the
+            -- marker simply never appears. #408
+            'WithoutSystemVersioning', CASE WHEN c.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%' THEN TRUE ELSE NULL END,
             -- SRS_ID does not exist on MariaDB's INFORMATION_SCHEMA.COLUMNS at all (unlike EXTRA above,
             -- which both engines carry), so it cannot be read as a plain c.SRS_ID here without breaking
             -- extraction for every table on MariaDB (ER_BAD_FIELD_ERROR). SchemaSmith_ColumnSrid isolates
@@ -127,7 +148,8 @@ BEGIN
                 ELSE c.COLLATION_NAME
             END,
             'Comment', CASE WHEN c.COLUMN_COMMENT = '' THEN NULL ELSE c.COLUMN_COMMENT END
-        )
+        ), CASE WHEN c.EXTRA LIKE '%WITHOUT SYSTEM VERSIONING%'
+                THEN '$.___dummy___' ELSE '$.WithoutSystemVersioning' END)
         -- Alphabetical, matching SQL Server and PostgreSQL. Ordinal order made the same table extract
         -- differently depending on which engine it came from, so a package re-extracted elsewhere showed
         -- a whole-file diff that was pure noise. Name order is also stable against a source table whose
@@ -340,7 +362,11 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         '$.FullTextIndexes', JSON_EXTRACT(v_fulltext_indexes, '$'),
         -- Application-time periods, MariaDB only. Nested the same way as every array above, and for the
         -- same reason the comment there gives: MariaDB rejects CAST(x AS JSON).
-        '$.Periods', JSON_EXTRACT(SchemaSmith_TablePeriodsJson(p_Schema, p_Table), '$')
+        '$.Periods', JSON_EXTRACT(SchemaSmith_TablePeriodsJson(p_Schema, p_Table), '$'),
+        -- Partitioning (#partitioning, K3): an OBJECT rather than an array, nested the same way and for
+        -- the same reason -- MariaDB rejects CAST(x AS JSON). 'null' for an unpartitioned table, stripped
+        -- by the JSON_REMOVE pass below so every existing package extracts byte-identically.
+        '$.Partitioning', JSON_EXTRACT(SchemaSmith_TablePartitioningJson(p_Schema, p_Table), '$')
     );
 
     -- Remove null values for cleaner output
@@ -352,10 +378,19 @@ WHERE tc.TABLE_SCHEMA = @v_ccSchema
         -- Same treatment as PreventDrop: a bool the package only carries when true. Without this the
         -- property serialises as null and deserialisation of the non-nullable bool fails outright.
         CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.IsSystemVersioned')), 'NULL') = 'NULL' THEN '$.IsSystemVersioned' ELSE '$.___dummy___' END,
+        -- The CREATE_OPTIONS four, same treatment: absent means the table declares none, and a MySQL
+        -- package must not carry PageCompressed* (nor a MariaDB one Compression) at all.
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Compression')), 'NULL') = 'NULL' THEN '$.Compression' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.KeyBlockSize')), 'NULL') = 'NULL' THEN '$.KeyBlockSize' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PageCompressed')), 'NULL') = 'NULL' THEN '$.PageCompressed' ELSE '$.___dummy___' END,
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.PageCompressionLevel')), 'NULL') = 'NULL' THEN '$.PageCompressionLevel' ELSE '$.___dummy___' END,
         -- Empty array, not null: the function returns '[]' for a table with no periods, and an
         -- ordinary table's package must not carry the key at all -- nor must any MySQL package,
         -- whose schema does not declare this property.
-        CASE WHEN JSON_LENGTH(JSON_EXTRACT(v_json, '$.Periods')) = 0 THEN '$.Periods' ELSE '$.___dummy___' END
+        CASE WHEN JSON_LENGTH(JSON_EXTRACT(v_json, '$.Periods')) = 0 THEN '$.Periods' ELSE '$.___dummy___' END,
+        -- JSON null, not SQL NULL: the helper returns the literal 'null' for an unpartitioned table, which
+        -- JSON_EXTRACT yields as a JSON null value -- so JSON_TYPE, not IS NULL, is what detects it.
+        CASE WHEN COALESCE(JSON_TYPE(JSON_EXTRACT(v_json, '$.Partitioning')), 'NULL') = 'NULL' THEN '$.Partitioning' ELSE '$.___dummy___' END
     );
 
     SELECT v_json AS TableJson;

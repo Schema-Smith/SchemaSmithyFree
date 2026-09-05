@@ -37,6 +37,7 @@ namespace Schema.UnitTests.Capabilities
             ["SchemaSmith_SupportsApplicationTimePeriods.sql"] = "application-time-period",
             ["SchemaSmith_SupportsColumnSrid.sql"] = "column-srid",
             ["SchemaSmith_SupportsFunctionalIndex.sql"] = "functional-index",
+            ["SchemaSmith_SupportsSystemVersioning.sql"] = "column-history-exclusion",
         };
 
         // Gates whose predicate is real but deliberately carries NO registry row. CapabilityRegistry's own

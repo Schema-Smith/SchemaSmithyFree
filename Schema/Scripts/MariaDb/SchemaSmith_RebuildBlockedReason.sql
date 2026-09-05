@@ -56,6 +56,24 @@ BEGIN
         RETURN 'an application-time period is defined';
     END IF;
 
+    -- PARTITIONING IS THE ONE STATE THIS ENGINE DOES HAVE. A partition definition lives in the table DDL,
+    -- not in a separate catalog object, so a shadow built from the package's column list is unpartitioned by
+    -- construction: the swap keeps every row and drops the layout, with nothing to report it. PostgreSQL's
+    -- twin of this function already refuses for the same reason.
+    --
+    -- A NON-partitioned table yields ONE row here with every partition column NULL rather than no rows at
+    -- all, so the test is PARTITION_NAME IS NOT NULL. INFORMATION_SCHEMA.PARTITIONS predates the supported
+    -- floor on both engines (verified on MySQL 5.7 and MariaDB 10.2), so it is read statically.
+    SELECT COUNT(*) INTO v_Count
+    FROM INFORMATION_SCHEMA.PARTITIONS pt
+    WHERE BINARY pt.TABLE_SCHEMA = BINARY p_Schema
+      AND BINARY pt.TABLE_NAME = BINARY p_Table
+      AND pt.PARTITION_NAME IS NOT NULL;
+
+    IF v_Count > 0 THEN
+        RETURN 'the table is partitioned';
+    END IF;
+
     RETURN NULL;
 END //
 

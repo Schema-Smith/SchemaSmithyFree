@@ -3,6 +3,8 @@
 using System.Linq;
 using NUnit.Framework;
 using Schema.Domain;
+using Schema.Domain.MariaDb;
+using Schema.Domain.MySQL;
 using Schema.Domain.PostgreSQL;
 using Schema.Domain.SqlServer;
 using Schema.Validation;
@@ -826,4 +828,278 @@ public class CoherenceCheckTests
         // every PostgreSQL package.
         Assert.That(RunPg(PgTable(rls: false)).Any(f => f.Code.StartsWith("SS-RLS-")), Is.False);
     }
+
+    // REPLICA IDENTITY coherence (#407). The deploy raises on the unhonourable cases, but --Validate is
+    // where an author should learn about a typo -- and the unknown/non-unique index cases could only ever
+    // surface at deploy time as PostgreSQL complaining about generated DDL.
+
+    private static PostgreSqlTable RiTable(string mode, string indexName, bool indexUnique = true, bool declareIndex = true)
+    {
+        var table = new PostgreSqlTable
+        {
+            Name = "invoice",
+            Schema = "public",
+            ReplicaIdentity = mode,
+            ReplicaIdentityIndex = indexName,
+            Columns = { new PostgreSqlColumn { Name = "id", DataType = "integer" } }
+        };
+        if (declareIndex)
+            table.Indexes.Add(new PostgreSqlIndex { Name = "uq_invoice", IndexColumns = "id", Unique = indexUnique });
+        return table;
+    }
+
+    [Test]
+    public void ReplicaIdentityIndexMode_WithNoIndexNamed_IsAnError()
+    {
+        var finding = RunPg(RiTable("INDEX", null)).Single(f => f.Code == "SS-RI-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error), "this cannot be deployed at all");
+            Assert.That(finding.Message, Does.Contain("ReplicaIdentityIndex"), finding.Message);
+        });
+    }
+
+    [Test]
+    public void ReplicaIdentityNamingAnUndeclaredIndex_IsAnError()
+    {
+        var finding = RunPg(RiTable("INDEX", "uq_typo")).Single(f => f.Code == "SS-RI-002");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+            Assert.That(finding.Message, Does.Contain("uq_typo"),
+                "naming the offending index is the whole point -- a reader cannot act on a message that "
+                + "only says the package is wrong. " + finding.Message);
+        });
+    }
+
+    [Test]
+    public void ReplicaIdentityNamingANonUniqueIndex_IsAnError()
+    {
+        var finding = RunPg(RiTable("INDEX", "uq_invoice", indexUnique: false)).Single(f => f.Code == "SS-RI-003");
+
+        Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+    }
+
+    [Test]
+    public void ReplicaIdentityIndexNamedWithoutIndexMode_IsAWarning()
+    {
+        // Legal and deployable -- PostgreSQL just ignores the name -- but almost certainly not intended.
+        var finding = RunPg(RiTable("FULL", "uq_invoice")).Single(f => f.Code == "SS-RI-004");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(finding.Message, Does.Contain("ignored"), finding.Message);
+        });
+    }
+
+    [Test]
+    public void AValidReplicaIdentityDeclaration_IsSilent()
+    {
+        // The negative half: a rule that fires on correct packages is worse than no rule.
+        Assert.That(RunPg(RiTable("INDEX", "uq_invoice")).Where(f => f.Code.StartsWith("SS-RI-")), Is.Empty);
+    }
+
+    [Test]
+    public void ATableWithNoReplicaIdentity_IsSilent()
+    {
+        Assert.That(RunPg(RiTable(null, null)).Where(f => f.Code.StartsWith("SS-RI-")), Is.Empty);
+    }
+
+    // MariaDB per-column WITHOUT SYSTEM VERSIONING (#408). Verified on 11.4: MariaDB ACCEPTS the clause
+    // on a non-versioned table and silently discards it, so nothing at deploy time can tell the author
+    // the declaration is inert. --Validate is the only place this can surface.
+
+    private static System.Collections.Generic.List<Finding> RunMaria(bool tableVersioned, bool columnExcluded)
+    {
+        var table = new MariaDbTable
+        {
+            Name = "invoice",
+            IsSystemVersioned = tableVersioned,
+            Columns = { new MariaDbColumn { Name = "payload", DataType = "int(11)", WithoutSystemVersioning = columnExcluded } }
+        };
+        var template = new Template { Name = "Main" };
+        template.Tables.Add(table);
+        var product = new Product { Name = "Acme", Platform = Platform.MariaDb, TemplateOrder = new System.Collections.Generic.List<string>() };
+        return new CoherenceCheck().Run(new ValidationContext(product, [template], "pkg")).ToList();
+    }
+
+    [Test]
+    public void VersioningExclusionOnANonVersionedTable_IsReported()
+    {
+        var finding = RunMaria(tableVersioned: false, columnExcluded: true).Single(f => f.Code == "SS-SV-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(finding.Message, Does.Contain("payload"), "name the column " + finding.Message);
+            Assert.That(finding.Message, Does.Contain("silently discards"),
+                "the message has to say WHY nothing complained -- a reader who does not know MariaDB "
+                + "swallows the clause will assume it worked. " + finding.Message);
+        });
+    }
+
+    [Test]
+    public void VersioningExclusionOnAVersionedTable_IsSilent()
+    {
+        Assert.That(RunMaria(tableVersioned: true, columnExcluded: true).Where(f => f.Code == "SS-SV-001"), Is.Empty,
+            "the correct declaration must not be flagged");
+    }
+
+    [Test]
+    public void ANonVersionedTableWithNoExclusion_IsSilent()
+    {
+        Assert.That(RunMaria(tableVersioned: false, columnExcluded: false).Where(f => f.Code == "SS-SV-001"), Is.Empty);
+    }
+
+    // Compression options that cannot be combined. Both engines REFUSE these and neither error names the
+    // option: MySQL 8.0 gives 1031 "Table storage engine ... doesn't have this option", MariaDB 11.4
+    // gives errno 140 "Wrong create options". Verified live on both.
+
+    [Test]
+    public void MySqlCompressionWithCompressedRowFormat_IsAnError()
+    {
+        var table = new MySqlTable { Name = "invoice", RowFormat = "COMPRESSED", Compression = "zlib" };
+        table.Columns.Add(new MySqlColumn { Name = "id", DataType = "INT" });
+        var finding = RunFor(table, Platform.MySQL).Single(f => f.Code == "SS-CO-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error), "the deploy cannot succeed");
+            Assert.That(finding.Message, Does.Contain("1031"),
+                "quoting the engine error number is what lets someone match this to what they saw. "
+                + finding.Message);
+        });
+    }
+
+    [Test]
+    public void MariaDbPageCompressedWithCompressedRowFormat_IsAnError()
+    {
+        var table = new MariaDbTable { Name = "invoice", RowFormat = "COMPRESSED", PageCompressed = true };
+        table.Columns.Add(new MariaDbColumn { Name = "id", DataType = "INT" });
+        var finding = RunFor(table, Platform.MariaDb).Single(f => f.Code == "SS-CO-001");
+
+        Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+    }
+
+    [Test]
+    public void PageCompressionLevelWithoutPageCompressed_IsAWarning()
+    {
+        var table = new MariaDbTable { Name = "invoice", PageCompressed = false, PageCompressionLevel = 6 };
+        table.Columns.Add(new MariaDbColumn { Name = "id", DataType = "INT" });
+        var finding = RunFor(table, Platform.MariaDb).Single(f => f.Code == "SS-CO-002");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Warning), "legal, just inert");
+            Assert.That(finding.Message, Does.Contain("ignored"), finding.Message);
+        });
+    }
+
+    [Test]
+    public void CompressionOnAnUncompressedRowFormat_IsSilent()
+    {
+        // The negative half -- the combination that IS valid must not be flagged.
+        var table = new MySqlTable { Name = "invoice", RowFormat = "DYNAMIC", Compression = "zlib" };
+        table.Columns.Add(new MySqlColumn { Name = "id", DataType = "INT" });
+
+        Assert.That(RunFor(table, Platform.MySQL).Where(f => f.Code.StartsWith("SS-CO-")), Is.Empty);
+    }
+
+    // ---- partition placement (#partitioning, K1) ------------------------------
+
+    [Test]
+    public void PartitionSchemeWithoutAColumn_IsAnError()
+    {
+        // The quench refuses this too, but only against a live target -- and it would otherwise reach the
+        // engine as ON <scheme> with no column, whose syntax error names neither the table nor the
+        // property. Catching it at authoring time is the point of --Validate.
+        var table = new SqlServerTable { Name = "invoice", PartitionScheme = "[psOrders]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-001");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finding.Severity, Is.EqualTo(Severity.Error));
+            Assert.That(finding.Message, Does.Contain("PartitionColumn"),
+                "the message must name the missing half, or the user cannot tell which to add: "
+                + finding.Message);
+        });
+    }
+
+    [Test]
+    public void PartitionColumnWithoutAScheme_IsAnError()
+    {
+        var table = new SqlServerTable { Name = "invoice", PartitionColumn = "[id]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-001");
+
+        Assert.That(finding.Message, Does.Contain("PartitionScheme"), finding.Message);
+    }
+
+    [Test]
+    public void PartitionSchemeAndFileGroupTogether_IsAnError()
+    {
+        var table = new SqlServerTable
+        {
+            Name = "invoice", FileGroup = "[Archive]", PartitionScheme = "[psOrders]", PartitionColumn = "[id]"
+        };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-002");
+
+        Assert.That(finding.Severity, Is.EqualTo(Severity.Error), "a table lives on one data space");
+    }
+
+    [Test]
+    public void AnIndexDeclaringHalfAPartitionPlacement_IsAnError()
+    {
+        // An index carries its own placement independently of its table's, so it has to be checked in its
+        // own right -- a table-only check would miss this entirely.
+        var table = new SqlServerTable { Name = "invoice" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+        table.Indexes.Add(new SqlServerIndex { Name = "ix_invoice_id", IndexColumns = "[id]", PartitionScheme = "[psOrders]" });
+
+        var finding = RunFor(table, Platform.SqlServer).Single(f => f.Code == "SS-PART-001");
+
+        Assert.That(finding.Message, Does.Contain("ix_invoice_id"), finding.Message);
+    }
+
+    [Test]
+    public void AFullyDeclaredPartitionPlacement_IsSilent()
+    {
+        // The negative half -- a correct declaration must not be flagged.
+        var table = new SqlServerTable { Name = "invoice", PartitionScheme = "[psOrders]", PartitionColumn = "[id]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+        table.Indexes.Add(new SqlServerIndex
+        {
+            Name = "ix_invoice_id", IndexColumns = "[id]", PartitionScheme = "[psOrders]", PartitionColumn = "[id]"
+        });
+
+        Assert.That(RunFor(table, Platform.SqlServer).Where(f => f.Code.StartsWith("SS-PART-")), Is.Empty);
+    }
+
+    [Test]
+    public void ATableDeclaringNoPartitioningAtAll_IsSilent()
+    {
+        var table = new SqlServerTable { Name = "invoice", FileGroup = "[Archive]" };
+        table.Columns.Add(new SqlServerColumn { Name = "id", DataType = "INT" });
+
+        Assert.That(RunFor(table, Platform.SqlServer).Where(f => f.Code.StartsWith("SS-PART-")), Is.Empty);
+    }
+
+    private static System.Collections.Generic.List<Finding> RunFor(Table table, Platform platform)
+    {
+        var template = new Template { Name = "Main" };
+        template.Tables.Add(table);
+        var product = new Product { Name = "Acme", Platform = platform, TemplateOrder = new System.Collections.Generic.List<string>() };
+        return new CoherenceCheck().Run(new ValidationContext(product, [template], "pkg")).ToList();
+    }
+
+
+
 }

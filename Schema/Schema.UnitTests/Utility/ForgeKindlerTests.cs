@@ -35,6 +35,7 @@ public class ForgeKindlerTests
         Assert.That(scripts, Does.Contain("SchemaSmith.IndexOnlyQuench.sql"));
         Assert.That(scripts, Does.Contain("Kindling_CompletedMigrationScripts_Table.sql"));
         Assert.That(scripts, Does.Contain("Kindling_ChangeAudit_Table.sql"));
+        Assert.That(scripts, Does.Contain("Kindling_ProductOwnership_Table.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.fn_FormatJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.GenerateTableJson.sql"));
         Assert.That(scripts, Does.Contain("SchemaSmith.ValidateIndexedViewOwnership.sql"));
@@ -286,7 +287,9 @@ public class ForgeKindlerTests
         // + SchemaSmith.RebuildTable (the shadow-copy-and-swap engine: refuse-if-blocked, capture the identity
         //   counter, drop inbound foreign keys, create the shadow in declared order, copy, reseed, swap, drop.
         //   Kindled after fn_RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
-        Assert.That(sqlServer.Length, Is.EqualTo(34));
+        // + Kindling_ProductOwnership_Table (#J1 -- ownership fallback for SQL Server memory-optimized tables,
+        //   which reject the ProductName extended property; the same table-based ownership PostgreSQL/MySQL use).
+        Assert.That(sqlServer.Length, Is.EqualTo(35));
         // PostgreSQL: 35 = 28 prior + Kindling_ChangeAudit_Table (#243 E5) + Kindling_ProductOwnership_IndexMigration
         // (one-owner enforcement, #270 TRANSITIONAL) + SchemaSmith.UnsupportedFeaturePolicy (version-adaptive
         // codegen policy helper) + SchemaSmith.IndexNullsNotDistinct (PG15-adaptive extraction read)
@@ -301,7 +304,20 @@ public class ForgeKindlerTests
         //   the sequence position AND its name, drop inbound foreign keys, create the shadow in declared
         //   order, copy, restore the sequence, swap, drop, put the sequence name back. Kindled after
         //   RebuildBlockedReason, which it calls to refuse, and before the quench procedures).
-        Assert.That(postgres.Length, Is.EqualTo(37));
+        // + SchemaSmith.ReplicaIdentityQuench (#407 -- applies a declared REPLICA IDENTITY. Its own procedure
+        //   rather than a clause in ModifiedTableQuench's attribute fixup because the USING INDEX form names an
+        //   index, and ModifiedTableQuench runs BEFORE MissingIndexesAndConstraintsQuench -- so on a table's
+        //   first deploy that index does not exist yet. Kindled after MissingIndexesAndConstraintsQuench, the
+        //   same dependency SQL Server's ChangeTrackingQuench has on a primary key).
+        // +2 = SchemaSmith.EnumTypeQuench + SchemaSmith.GenerateEnumTypeJson (F5 -- enum types promoted
+        //   from scripted to MANAGED. The scripted form was a guarded CREATE TYPE, so once the type
+        //   existed a value-list edit did nothing at all, silently and forever).
+        // +2 = SchemaSmith.SequenceQuench + SchemaSmith.GenerateSequenceJson (F5).
+        // +2 = SchemaSmith.DomainTypeQuench + SchemaSmith.GenerateDomainTypeJson (F5 -- domain types
+        //   promoted for the same reason as enums: a scripted domain is a guarded CREATE DOMAIN, and
+        //   once the domain exists that guard skips, so an edited CHECK never lands. Unlike an enum,
+        //   ALTER DOMAIN converges constraints/default/NOT NULL without touching a dependent column.
+        Assert.That(postgres.Length, Is.EqualTo(44));
         // MySQL: 36 = 27 prior (22 base + five MariaDB-compat helpers, all #351: SchemaSmith_IndexIsVisible
         // (IS_VISIBLE/IGNORED), SchemaSmith_StripIntDisplayWidth, SchemaSmith_NormalizeColumnDefault,
         // SchemaSmith_DropCheckClause, SchemaSmith_IndexInvisibleClause) + eight MySQL-5.7/MariaDB-10.2 floor
@@ -373,7 +389,26 @@ public class ForgeKindlerTests
         // /*M!110400 */ version comment, because that catalog is 11.4+ and an unknown TABLE is rejected
         // when the routine is CREATED -- so the reference must be invisible to the parser, not merely
         // unreached).
-        Assert.That(mysql.Length, Is.EqualTo(52));
+        // +1 = SchemaSmith_SupportsSystemVersioning (#408 -- gates the per-column
+        //   WITHOUT SYSTEM VERSIONING clause. MariaDB 10.3.4+; an unconditional 0 on MySQL, which has no
+        //   system versioning at any version, the same shape as SupportsApplicationTimePeriods).
+        // +1 = SchemaSmith_CreateOption (the CREATE_OPTIONS parser -- COMPRESSION, KEY_BLOCK_SIZE and
+        //   MariaDB PAGE_COMPRESSED/_LEVEL all surface only in that one free-text column, so they share
+        //   one reader. LOCATE-based, not regex: REGEXP_SUBSTR does not exist on the MySQL 5.7 floor.
+        // +2 = SchemaSmith_EventMatches + SchemaSmith_EventQuench (#F4 -- scheduled events promoted from
+        //   a scripted-object folder to a MANAGED type. EventMatches must kindle FIRST; the quench calls
+        //   it, and converging an event is DROP + CREATE, so a false "changed" resets its schedule.
+        // +1 = SchemaSmith_GenerateEventJson (the catalog-to-package translation for events, kindled
+        //   like GenerateTableJson rather than living inline in SchemaTongs -- which is what lets it be
+        //   certified against a live server instead of only through the whole cast pipeline).
+        // +1 = SchemaSmith_NormalizePartitionExpression (#partitioning K3 -- the declared-vs-live compare
+        //   for a partition expression. Its own helper because the engines disagree about what the catalog
+        //   returns: MySQL 5.7 echoes the user's text, every other supported engine rewrites it, so a
+        //   literal compare would refuse a package extracted on the floor and deployed above it).
+        // +1 = SchemaSmith_TablePartitioningJson (#partitioning K3 -- the catalog-to-package read. One
+        //   shared definition rather than the MySQL-stub/MariaDb-override shape TablePeriodsJson needs,
+        //   because INFORMATION_SCHEMA.PARTITIONS exists on every supported version of both engines).
+        Assert.That(mysql.Length, Is.EqualTo(59));
     }
 
     [Test]

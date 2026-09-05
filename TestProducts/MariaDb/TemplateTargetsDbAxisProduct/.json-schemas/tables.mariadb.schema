@@ -63,6 +63,10 @@
           "OnUpdateCurrentTimestamp": {
             "type": "string"
           },
+          "WithoutSystemVersioning": {
+            "type": "boolean",
+            "description": "MariaDB only. Excludes this column from the row history of a system-versioned table: an UPDATE that changes only this column writes no history row. Meaningless on a table that is not system-versioned — MariaDB accepts the clause there and silently discards it."
+          },
           "Extensions": {}
         },
         "additionalProperties": false,
@@ -395,6 +399,58 @@
         ]
       }
     },
+    "KeyBlockSize": {
+      "type": "integer",
+      "minimum": 1.0,
+      "maximum": 16.0,
+      "description": "InnoDB compressed-page size in KB (1, 2, 4, 8 or 16). Only meaningful with RowFormat = COMPRESSED."
+    },
+    "Partitioning": {
+      "type": "object",
+      "properties": {
+        "Method": {
+          "type": "string",
+          "pattern": "RANGE|LIST|HASH|KEY|RANGE COLUMNS|LIST COLUMNS",
+          "description": "RANGE, LIST, HASH, KEY, RANGE COLUMNS or LIST COLUMNS."
+        },
+        "Expression": {
+          "type": "string",
+          "description": "The partitioning expression, or a comma-separated column list for the COLUMNS methods. Compared with backticks, whitespace and case normalized away, because the engines disagree on how they report it."
+        },
+        "PartitionCount": {
+          "type": "integer",
+          "minimum": 1.0,
+          "description": "Number of partitions for HASH and KEY. Not used by RANGE or LIST, which name each partition and its boundary explicitly."
+        },
+        "Partitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Name": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "Values": {
+                "type": "string",
+                "description": "The VALUES LESS THAN boundary for RANGE, or the VALUES IN list for LIST. Omitted for HASH and KEY, which have no boundary."
+              },
+              "Extensions": {}
+            },
+            "additionalProperties": false,
+            "required": [
+              "Name"
+            ]
+          }
+        },
+        "Extensions": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "Method",
+        "Expression"
+      ]
+    },
     "IsSystemVersioned": {
       "type": "boolean"
     },
@@ -419,6 +475,16 @@
     "DropPeriodsRemovedFromProduct": {
       "type": "boolean",
       "description": "MariaDB only. When set, overrides the environment-level DropPeriodsRemovedFromProduct for this table. Defaults to off, unlike the other drop-by-absence flags, because a package that predates periods or was extracted below MariaDB 11.4 cannot declare the periods its table actually has."
+    },
+    "PageCompressed": {
+      "type": "boolean",
+      "description": "MariaDB only. InnoDB page compression for the table. MariaDB's equivalent of MySQL's COMPRESSION option, which it does not support."
+    },
+    "PageCompressionLevel": {
+      "type": "integer",
+      "minimum": 1.0,
+      "maximum": 9.0,
+      "description": "MariaDB only. Compression level 1-9 for PageCompressed. Ignored unless PageCompressed is set."
     },
     "Extensions": {}
   },

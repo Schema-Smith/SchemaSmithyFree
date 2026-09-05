@@ -32,6 +32,9 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             Assert.That(table.ForceRowLevelSecurity, Is.False);
             Assert.That(table.AccessMethod, Is.Null);
             Assert.That(table.PersistenceType, Is.Null);
+            Assert.That(table.Tablespace, Is.Null);
+            Assert.That(table.ReplicaIdentity, Is.Null);
+            Assert.That(table.ReplicaIdentityIndex, Is.Null);
             Assert.That(table.UpdateFillFactor, Is.False);
             Assert.That(table.FillFactor, Is.EqualTo((short)0));
         }
@@ -48,6 +51,9 @@ namespace Schema.UnitTests.Domain.PostgreSQL
                 ForceRowLevelSecurity = true,
                 AccessMethod = "heap",
                 PersistenceType = "UNLOGGED",
+                Tablespace = "fast_ssd",
+                ReplicaIdentity = "INDEX",
+                ReplicaIdentityIndex = "ix_customer_uq",
                 UpdateFillFactor = true,
                 FillFactor = 90
             };
@@ -71,6 +77,9 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             Assert.That(deserialized.ForceRowLevelSecurity, Is.True);
             Assert.That(deserialized.AccessMethod, Is.EqualTo("heap"));
             Assert.That(deserialized.PersistenceType, Is.EqualTo("UNLOGGED"));
+            Assert.That(deserialized.Tablespace, Is.EqualTo("fast_ssd"));
+            Assert.That(deserialized.ReplicaIdentity, Is.EqualTo("INDEX"));
+            Assert.That(deserialized.ReplicaIdentityIndex, Is.EqualTo("ix_customer_uq"));
             Assert.That(deserialized.FillFactor, Is.EqualTo((short)90));
             Assert.That(deserialized.Statistics, Has.Count.EqualTo(1));
             Assert.That(deserialized.Statistics[0].Name, Is.EqualTo("st_name"));

@@ -237,6 +237,37 @@ namespace Schema.Domain
         public string MaterializedViewXml => ModelXmlSerializer.ToIngestXml(
             string.IsNullOrWhiteSpace(MaterializedViewSchema) ? "[]" : MaterializedViewSchema, "MaterializedViews", "MaterializedView");
 
+        // Scheduled events, MySQL/MariaDB. Declarative form of what the Events/ folder has always held
+        // as raw scripts -- both are supported, and a .sql file there keeps working untouched.
+        [JsonIgnore]
+        public List<MySqlEvent> Events { get; } = [];
+
+        // Domain types, PostgreSQL. Same additive shape: Domain Types/ holds .json (declared) and .sql
+        // (scripted, unchanged), so no existing package changes behaviour.
+        [JsonIgnore]
+        public List<PostgreSqlDomainType> DomainTypes { get; } = [];
+
+        [JsonIgnore]
+        public string DomainTypeSchema { get; set; } = "[]";
+
+        // Enum types, PostgreSQL. Same additive shape as Events: Enum Types/ holds .json (declared) and
+        // .sql (scripted, unchanged).
+        [JsonIgnore]
+        public List<PostgreSqlEnumType> EnumTypes { get; } = [];
+
+        [JsonIgnore]
+        public string EnumTypeSchema { get; set; } = "[]";
+
+        // Sequences, PostgreSQL. Same additive shape: Sequences/ holds .json (declared) and .sql (scripted).
+        [JsonIgnore]
+        public List<PostgreSqlSequence> Sequences { get; } = [];
+
+        [JsonIgnore]
+        public string SequenceSchema { get; set; } = "[]";
+
+        [JsonIgnore]
+        public string EventSchema { get; set; } = "[]";
+
         [JsonIgnore]
         public List<SqlServerIndexedView> IndexedViews { get; } = [];
 
@@ -367,7 +398,16 @@ namespace Schema.Domain
             clone.ScriptFolders.AddRange(ScriptFolders.Select(s => s.Clone()));
             clone.Tables.AddRange(Tables);
             clone.MaterializedViews.AddRange(MaterializedViews);
+            clone.Events.AddRange(Events);
+            clone.DomainTypes.AddRange(DomainTypes);
+
+            clone.EnumTypes.AddRange(EnumTypes);
+            clone.DomainTypeSchema = DomainTypeSchema;
+            clone.EnumTypeSchema = EnumTypeSchema;
+            clone.Sequences.AddRange(Sequences);
+            clone.SequenceSchema = SequenceSchema;
             clone.MaterializedViewSchema = MaterializedViewSchema;
+            clone.EventSchema = EventSchema;
             clone.IndexedViews.AddRange(IndexedViews);
             clone.IndexedViewSchema = IndexedViewSchema;
             // Rebuild the token-scope map from the cloned tokens. Cheaper than copying the
@@ -495,6 +535,11 @@ namespace Schema.Domain
             LoadTables(platform, tolerateComponentLoadErrors);
             MigrateMySqlColumnCheckExpressionAlias(platform);
             LoadMaterializedViews(platform, tolerateComponentLoadErrors);
+            LoadEvents(platform, tolerateComponentLoadErrors);
+            LoadDomainTypes(platform, tolerateComponentLoadErrors);
+
+            LoadEnumTypes(platform, tolerateComponentLoadErrors);
+            LoadSequences(platform, tolerateComponentLoadErrors);
             LoadIndexedViews(platform, tolerateComponentLoadErrors);
 
             // Run schema-default resolution BEFORE any token serialization touches the in-memory
@@ -554,6 +599,18 @@ namespace Schema.Domain
             MaterializedViewSchema = JArray.FromObject(MaterializedViews).ToString();
             tokens.Add(new("MaterializedViewSchema", MaterializedViewSchema.Replace("'", "''")));
             tokens.Add(new("MaterializedViewXml", MaterializedViewXml.Replace("'", "''")));
+
+            EventSchema = JArray.FromObject(Events).ToString();
+            tokens.Add(new("EventSchema", EventSchema.Replace("'", "''")));
+
+            DomainTypeSchema = JArray.FromObject(DomainTypes).ToString();
+            tokens.Add(new("DomainTypeSchema", DomainTypeSchema.Replace("'", "''")));
+
+            EnumTypeSchema = JArray.FromObject(EnumTypes).ToString();
+            tokens.Add(new("EnumTypeSchema", EnumTypeSchema.Replace("'", "''")));
+
+            SequenceSchema = JArray.FromObject(Sequences).ToString();
+            tokens.Add(new("SequenceSchema", SequenceSchema.Replace("'", "''")));
 
             IndexedViewSchema = JArray.FromObject(IndexedViews).ToString();
             tokens.Add(new("IndexedViewSchema", IndexedViewSchema.Replace("'", "''")));
@@ -711,6 +768,133 @@ namespace Schema.Domain
 
                 if (legacyPath != null && dir.Exists(Path.Combine(templateDir, legacyPath)))
                     folder.FolderPath = legacyPath;
+            }
+        }
+
+        /// <summary>
+        /// Loads DECLARATIVE events from the same Events/ folder that has always held scripted ones.
+        /// <para>Only *.json is read here; a *.sql file in that folder is still picked up by the scripted
+        /// Objects slot exactly as before, so no existing package changes behaviour. That is deliberate:
+        /// promoting events to a managed type must not strip a folder users already populate.</para>
+        /// </summary>
+        /// <summary>
+        /// Loads DECLARATIVE enum types from the same Enum Types/ folder that has always held scripted
+        /// ones. Only *.json is read here; a *.sql file there still runs through the Objects slot.
+        /// </summary>
+        /// <summary>Loads DECLARATIVE sequences from the Sequences/ folder; *.sql there still runs scripted.</summary>
+        private void LoadSequences(Platform platform, bool tolerateComponentLoadErrors)
+        {
+            if (platform != Platform.PostgreSQL) return;
+            var path = Path.Join(Path.GetDirectoryName(FilePath) ?? "", "Sequences");
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(path)) return;
+            var files = ProductDirectoryWrapper.GetFromFactory()
+                .GetFiles(path, "*.json", SearchOption.AllDirectories)
+                .OrderBy(x => x);
+            foreach (var f in files)
+            {
+                try
+                {
+                    var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
+                    Sequences.Add(JsonConvert.DeserializeObject<PostgreSqlSequence>(json, PlatformDeserializer.StrictSettings)
+                                  ?? throw new JsonSerializationException("Failed to deserialize sequence"));
+                }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it
+                catch (Exception e) when (!tolerateComponentLoadErrors)
+                {
+                    throw new Exception($"Error loading sequence from {f}" + Environment.NewLine + e.Message, e);
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure
+                catch (Exception e)
+                {
+                    RecordComponentLoadError(f, e);
+                }
+            }
+        }
+
+        private void LoadDomainTypes(Platform platform, bool tolerateComponentLoadErrors)
+        {
+            if (platform != Platform.PostgreSQL) return;
+            var path = Path.Join(Path.GetDirectoryName(FilePath) ?? "", "Domain Types");
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(path)) return;
+            var files = ProductDirectoryWrapper.GetFromFactory()
+                .GetFiles(path, "*.json", SearchOption.AllDirectories)
+                .OrderBy(x => x);
+            foreach (var f in files)
+            {
+                try
+                {
+                    var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
+                    DomainTypes.Add(JsonConvert.DeserializeObject<PostgreSqlDomainType>(json, PlatformDeserializer.StrictSettings)
+                                    ?? throw new JsonSerializationException("Failed to deserialize domain type"));
+                }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it
+                catch (Exception e) when (!tolerateComponentLoadErrors)
+                {
+                    throw new Exception($"Error loading domain type from {f}" + Environment.NewLine + e.Message, e);
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure
+                catch (Exception e)
+                {
+                    RecordComponentLoadError(f, e);
+                }
+            }
+        }
+
+        private void LoadEnumTypes(Platform platform, bool tolerateComponentLoadErrors)
+        {
+            if (platform != Platform.PostgreSQL) return;
+            var path = Path.Join(Path.GetDirectoryName(FilePath) ?? "", "Enum Types");
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(path)) return;
+            var files = ProductDirectoryWrapper.GetFromFactory()
+                .GetFiles(path, "*.json", SearchOption.AllDirectories)
+                .OrderBy(x => x);
+            foreach (var f in files)
+            {
+                try
+                {
+                    var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
+                    EnumTypes.Add(JsonConvert.DeserializeObject<PostgreSqlEnumType>(json, PlatformDeserializer.StrictSettings)
+                                  ?? throw new JsonSerializationException("Failed to deserialize enum type"));
+                }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it
+                catch (Exception e) when (!tolerateComponentLoadErrors)
+                {
+                    throw new Exception($"Error loading enum type from {f}" + Environment.NewLine + e.Message, e);
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure
+                catch (Exception e)
+                {
+                    RecordComponentLoadError(f, e);
+                }
+            }
+        }
+
+        private void LoadEvents(Platform platform, bool tolerateComponentLoadErrors)
+        {
+            if (platform.GetBasePlatform() != Platform.MySQL) return;
+            var eventsPath = Path.Join(Path.GetDirectoryName(FilePath) ?? "", "Events");
+            if (!ProductDirectoryWrapper.GetFromFactory().Exists(eventsPath)) return;
+            var files = ProductDirectoryWrapper.GetFromFactory()
+                .GetFiles(eventsPath, "*.json", SearchOption.AllDirectories)
+                .OrderBy(x => x);
+            foreach (var f in files)
+            {
+                try
+                {
+                    var json = ProductFileWrapper.GetFromFactory().ReadAllText(f);
+                    Events.Add(JsonConvert.DeserializeObject<MySqlEvent>(json, PlatformDeserializer.StrictSettings)
+                               ?? throw new JsonSerializationException("Failed to deserialize event"));
+                }
+                // prepush-allow: generic-catch -- any load failure must surface wrapped with the file that caused it
+                catch (Exception e) when (!tolerateComponentLoadErrors)
+                {
+                    throw new Exception($"Error loading event from {f}" + Environment.NewLine + e.Message, e);
+                }
+                // prepush-allow: generic-catch -- --Validate must record ANY component failure
+                catch (Exception e)
+                {
+                    RecordComponentLoadError(f, e);
+                }
             }
         }
 

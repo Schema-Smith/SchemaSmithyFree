@@ -539,6 +539,9 @@ namespace Schema.UnitTests.Domain
         [TestCase(Platform.SqlServer, typeof(SqlServerColumn))]
         [TestCase(Platform.PostgreSQL, typeof(PostgreSqlColumn))]
         [TestCase(Platform.MySQL, typeof(MySqlColumn))]
+        // MariaDb was absent here entirely, and it mapped to MySqlColumn -- so the platform that has a
+        // column attribute MySQL lacks was the one platform this case did not pin. #408
+        [TestCase(Platform.MariaDb, typeof(MariaDbColumn))]
         public void GetColumnType_ReturnsCorrectType(Platform platform, System.Type expectedType)
         {
             Assert.That(PlatformDeserializer.GetColumnType(platform), Is.EqualTo(expectedType));

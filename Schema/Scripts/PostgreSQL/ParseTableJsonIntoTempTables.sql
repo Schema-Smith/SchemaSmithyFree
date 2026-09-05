@@ -19,7 +19,14 @@
            COALESCE((elem ->> 'RowLevelSecurity')::BOOLEAN, false) AS "RowLevelSecurity",
            COALESCE((elem ->> 'ForceRowLevelSecurity')::BOOLEAN, false) AS "ForceRowLevelSecurity",
            COALESCE(elem ->> 'AccessMethod', '') AS "AccessMethod",
+           -- Empty means "placement not managed here", NOT "the database default" -- the FileGroup
+           -- contract. Treating unset as the default fails every object a DBA placed elsewhere on its
+           -- SECOND deploy, in packages that never mentioned placement.
+           COALESCE(elem ->> 'Tablespace', '') AS "Tablespace",
            COALESCE(elem ->> 'PersistenceType', '') AS "PersistenceType",
+           -- Empty string means "not declared, leave the server alone", the AccessMethod convention. #407
+           COALESCE(UPPER(elem ->> 'ReplicaIdentity'), '') AS "ReplicaIdentity",
+           COALESCE(elem ->> 'ReplicaIdentityIndex', '') AS "ReplicaIdentityIndex",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((elem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
            COALESCE(NULLIF((elem ->> 'FillFactor')::INT2, 0), 100) AS "FillFactor",
            COALESCE((elem ->> 'PreventDrop')::BOOLEAN, FALSE) AS "PreventDrop",
@@ -128,6 +135,7 @@
            REGEXP_REPLACE(COALESCE(celem ->> 'IndexColumns', ''), '\s*,\s*', ',', 'g') AS "IndexColumns",
            COALESCE(celem ->> 'IncludeColumns', '') AS "IncludeColumns",
            COALESCE(celem ->> 'AccessMethod', 'btree') AS "AccessMethod",
+           COALESCE(celem ->> 'Tablespace', '') AS "Tablespace",
            COALESCE(celem ->> 'FilterExpression', '') AS "FilterExpression",
            COALESCE((celem ->> 'Deferrable')::BOOLEAN, false) AS "Deferrable",
            COALESCE((celem ->> 'InitiallyDeferred')::BOOLEAN, false) AS "InitiallyDeferred",
@@ -139,7 +147,14 @@
            COALESCE(celem ->> 'ShouldApplyExpression', '') AS "ShouldApplyExpression",
            COALESCE(celem ->> 'VariantName', '') AS "VariantName",
            CASE WHEN p_UpdateFillFactor THEN true ELSE COALESCE((celem ->> 'UpdateFillFactor')::BOOLEAN, false) END AS "UpdateFillFactor",
-           COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor"
+           COALESCE(NULLIF((celem ->> 'FillFactor')::INT2, 0), 90) AS "FillFactor",
+           -- Index storage parameters (the WITH clause), canonicalised as key=value pairs sorted by key so
+           -- reloptions' own ordering does not matter, with fillfactor excluded (FillFactor owns it). This is
+           -- what carries a vector index's m / ef_construction / lists. Same shape as IndexOnlyQuench's own
+           -- temp_indexes -- both must declare it because they build the table independently.
+           COALESCE((SELECT STRING_AGG(sp.k || '=' || sp.v, ',' ORDER BY sp.k)
+                       FROM JSON_EACH_TEXT(COALESCE(celem -> 'StorageParameters', '{}'::JSON)) AS sp(k, v)
+                      WHERE sp.k <> 'fillfactor'), '') AS "StorageParameters"
       FROM my_tables, JSON_ARRAY_ELEMENTS(arr) AS elem
       CROSS JOIN LATERAL JSON_ARRAY_ELEMENTS((elem ->> 'Indexes')::JSON) AS celem(value);
 

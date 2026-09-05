@@ -142,6 +142,13 @@ public class DatabaseQuench
     // parameter is appended to the SQL Server call alone rather than added to every proc signature.
     public bool DropSchemaBoundDependents { get; init; }
 
+    /// <summary>
+    /// Drop-by-absence for DECLARED scheduled events. Defaults false, and the default matters more here
+    /// than for most drop flags: events were scripted objects that were never removed by absence, so
+    /// turning this on by default would start deleting events on the first deploy after upgrading.
+    /// </summary>
+    public bool DropRemovedEvents { get; init; }
+
     /// <summary>NEVER when no tier declared a policy — the domain object's own default.</summary>
     /// <summary>
     /// MariaDB only. <c>KEEP</c> opts into altering a system-versioned table; the engine then applies the
@@ -255,6 +262,10 @@ public class DatabaseQuench
         public string TableSchema { get; set; }
         public string MaterializedViewSchema { get; set; }
         public string IndexedViewSchema { get; set; }
+        public string EventSchema { get; set; }
+        public string DomainTypeSchema { get; set; }
+        public string EnumTypeSchema { get; set; }
+        public string SequenceSchema { get; set; }
     }
     // Visible for testing — per-iteration slot scripts after folder gating.
     internal List<SqlScript> IterationBeforeScripts => _iteration.BeforeScripts;
@@ -350,6 +361,14 @@ public class DatabaseQuench
 
     internal string IterationTableSchema => _iteration.TableSchema ?? _template.TableSchema ?? "";
     internal string IterationMaterializedViewSchema => _iteration.MaterializedViewSchema ?? _template.MaterializedViewSchema ?? "";
+
+    internal string IterationEventSchema => _iteration.EventSchema ?? _template.EventSchema ?? "";
+
+    internal string IterationDomainTypeSchema => _iteration.DomainTypeSchema ?? _template.DomainTypeSchema ?? "";
+
+    internal string IterationEnumTypeSchema => _iteration.EnumTypeSchema ?? _template.EnumTypeSchema ?? "";
+
+    internal string IterationSequenceSchema => _iteration.SequenceSchema ?? _template.SequenceSchema ?? "";
     // I10: Mirror the iteration-schema pattern for indexed views. QuenchIndexedViews used to
     // rebuild the JSON inline per call; routing through this field puts the substitution alongside
     // the table / materialized-view substitution in PrepareIterationContent. Per-call ShouldApply
@@ -648,6 +667,37 @@ public class DatabaseQuench
                     WhatIfLogScripts(nonTokenScripts, DatabaseScriptSlot.Object);
                 }
 
+                // Step: Domain types (PostgreSQL only). Before tables for the same reason enum types are:
+                // a column can be OF a domain, so the domain has to exist before the table that uses it.
+                if (_product.Platform == Platform.PostgreSQL && _template.DomainTypes.Count > 0)
+                {
+                    var domainTypeSw = Stopwatch.StartNew();
+                    _checkpointing.Track(DbScope, "DomainTypeQuench", () => QuenchDomainTypes(command));
+                    domainTypeSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "DomainTypeQuench", domainTypeSw.ElapsedMilliseconds, 0);
+                }
+
+                // Step: Enum types (PostgreSQL only). BEFORE tables, deliberately: a column can be OF an
+                // enum type, so the type has to exist before the table that uses it -- and a value the
+                // package adds has to be present before a default or check constraint can reference it.
+                if (_product.Platform == Platform.PostgreSQL && _template.EnumTypes.Count > 0)
+                {
+                    var enumTypeSw = Stopwatch.StartNew();
+                    _checkpointing.Track(DbScope, "EnumTypeQuench", () => QuenchEnumTypes(command));
+                    enumTypeSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "EnumTypeQuench", enumTypeSw.ElapsedMilliseconds, 0);
+                }
+
+                // Step: Sequences (PostgreSQL only). Also before tables -- a column DEFAULT can call
+                // nextval() on one.
+                if (_product.Platform == Platform.PostgreSQL && _template.Sequences.Count > 0)
+                {
+                    var sequenceSw = Stopwatch.StartNew();
+                    _checkpointing.Track(DbScope, "SequenceQuench", () => QuenchSequences(command));
+                    sequenceSw.Stop();
+                    RunTiming?.Record(LogPrefix, _databaseName, "SequenceQuench", sequenceSw.ElapsedMilliseconds, 0);
+                }
+
                 // Step: Missing tables and columns
                 // Intentionally NOT wrapped in `_checkpointing.Track` — this step parses the
                 // table JSON into session-scoped temp tables (`#Tables` on SQL Server,
@@ -827,6 +877,16 @@ public class DatabaseQuench
                         _checkpointing.Track(DbScope, "MaterializedViewQuench", () => QuenchMaterializedViews(effectiveTableCmd));
                         materializedViewQuenchSw.Stop();
                         RunTiming?.Record(LogPrefix, _databaseName, "MaterializedViewQuench", materializedViewQuenchSw.ElapsedMilliseconds, 0);
+                    }
+
+                    // Step: Scheduled events (MySQL/MariaDB only). Runs after tables so an event whose
+                    // body references a table the same deploy creates does not fail on first run.
+                    if (_product.Platform.GetBasePlatform() == Platform.MySQL && _template.Events.Count > 0)
+                    {
+                        var eventQuenchSw = Stopwatch.StartNew();
+                        _checkpointing.Track(DbScope, "EventQuench", () => QuenchEvents(effectiveTableCmd));
+                        eventQuenchSw.Stop();
+                        RunTiming?.Record(LogPrefix, _databaseName, "EventQuench", eventQuenchSw.ElapsedMilliseconds, 0);
                     }
 
                     // Step: Indexed views (SQL Server only)
@@ -1054,6 +1114,9 @@ public class DatabaseQuench
         _iteration.TableSchema = (_template.TableSchema ?? "").Replace("{{SchemaName}}", _schemaName);
         _iteration.MaterializedViewSchema = (_template.MaterializedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
         _iteration.IndexedViewSchema = (_template.IndexedViewSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.EventSchema = (_template.EventSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.EnumTypeSchema = (_template.EnumTypeSchema ?? "").Replace("{{SchemaName}}", _schemaName);
+        _iteration.SequenceSchema = (_template.SequenceSchema ?? "").Replace("{{SchemaName}}", _schemaName);
     }
 
     private static List<SqlScript> CloneAndSubstitute(
@@ -1107,6 +1170,10 @@ public class DatabaseQuench
         _iteration.TableSchema = SubstituteVersionTokens(IterationTableSchema);
         _iteration.IndexedViewSchema = SubstituteVersionTokens(IterationIndexedViewSchema);
         _iteration.MaterializedViewSchema = SubstituteVersionTokens(IterationMaterializedViewSchema);
+        _iteration.EventSchema = SubstituteVersionTokens(IterationEventSchema);
+        _iteration.DomainTypeSchema = SubstituteVersionTokens(IterationDomainTypeSchema);
+        _iteration.EnumTypeSchema = SubstituteVersionTokens(IterationEnumTypeSchema);
+        _iteration.SequenceSchema = SubstituteVersionTokens(IterationSequenceSchema);
     }
 
     private List<SqlScript> SubstituteVersionTokens(List<SqlScript> scripts)
@@ -1604,10 +1671,12 @@ CALL ""SchemaSmith"".""ModifiedTableQuench""(p_DropUnknownIndexes := {_dropUnkno
                 tableCommand.CommandText = _template.IndexOnlyTableQuenches
                     ? $@"
 CALL ""SchemaSmith"".""IndexOnlyQuench""(p_TableDefinitions := '{EscapeSqlLiteral(IterationTableSchema)}', p_DropUnknownIndexes := {_dropUnknownIndexes}, p_DropIndexesRemovedFromProduct := {_dropRemovedIndexes}, p_WhatIf := {_whatIfOnly}, p_UpdateFillFactor := {_template.UpdateFillFactor.ToString().ToLower()}, p_CaptureWouldDrop := {FormatBooleanFlag(CaptureWouldDrop)});
+CALL ""SchemaSmith"".""ReplicaIdentityQuench""(p_WhatIf := {_whatIfOnly});
 CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 "
                     : $@"
 CALL ""SchemaSmith"".""MissingIndexesAndConstraintsQuench""(p_WhatIf := {_whatIfOnly});
+CALL ""SchemaSmith"".""ReplicaIdentityQuench""(p_WhatIf := {_whatIfOnly});
 CALL ""SchemaSmith"".""FixupTableOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral(_product.Name)}', p_WhatIf := {_whatIfOnly}, p_TemplateName := '{EscapeSqlLiteral(_template.Name)}', p_SchemaName := '{EscapeSqlLiteral(_schemaName)}');
 ";
@@ -1723,6 +1792,109 @@ CALL ""SchemaSmith"".""FixupIndexOwnership""(p_ProductName := '{EscapeSqlLiteral
             ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
             _debugFileLocation = "";
         }
+    }
+
+    /// <summary>
+    /// Converges DECLARED scheduled events (MySQL/MariaDB). Scripted events in the same Events/ folder
+    /// still run through the Objects slot untouched, so this is purely additive for existing packages.
+    /// <para><b>This is the only quench that executes DDL from C# rather than inside the procedure, and
+    /// it is not a style choice.</b> MySQL cannot PREPARE event DDL at all — both CREATE EVENT and DROP
+    /// EVENT fail with 1295, "This command is not supported in the prepared statement protocol yet" —
+    /// so a stored procedure physically cannot create an event there. MariaDB can, but writing to the
+    /// lower common denominator keeps ONE implementation for both engines.</para>
+    /// <para>All the decision-making still lives in SQL: the procedure compares, decides, and returns an
+    /// ORDERED list of statements. This method is a dumb executor. The ownership and audit writes are
+    /// part of that list, so if a CREATE fails execution stops and no ownership row is left claiming an
+    /// event that does not exist.</para>
+    /// </summary>
+    internal void QuenchEvents(IDbCommand tableCommand)
+    {
+        if (_product.Platform.GetBasePlatform() != Platform.MySQL) return;
+        var events = IterationEventSchema;
+        // An empty list is overwhelmingly the common case -- skip rather than pay a round trip per
+        // database for a feature most packages do not use.
+        if (string.IsNullOrWhiteSpace(events) || events.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching scheduled events");
+        var whatIf = _whatIfOnly == "1" ? 1 : 0;
+        var dropRemoved = DropRemovedEvents ? 1 : 0;
+        tableCommand.CommandText =
+            $"CALL SchemaSmith_EventQuench('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(_databaseName)}', "
+            + $"'{EscapeSqlLiteral(events)}', {whatIf}, {dropRemoved}, '{EscapeSqlLiteral(_template.Name)}')";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Events"), tableCommand.CommandText);
+
+        // Read the whole list BEFORE executing any of it: the reader holds the connection, and the
+        // statements below run on that same connection.
+        var statements = new List<string>();
+        using (var reader = tableCommand.ExecuteReader())
+        {
+            while (reader.Read())
+                if (!reader.IsDBNull(0)) statements.Add(reader.GetString(0));
+        }
+
+        foreach (var statement in statements)
+        {
+            tableCommand.CommandText = statement;
+            ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+        }
+        _debugFileLocation = "";
+    }
+
+    /// <summary>
+    /// Converges DECLARED enum types (PostgreSQL). Runs BEFORE tables: a column can be of an enum type,
+    /// so the type has to exist first, and a value the package adds has to be there before a column
+    /// default or check references it.
+    /// </summary>
+    /// <summary>
+    /// Converges DECLARED domain types (PostgreSQL). Runs before tables: a column can be OF a domain.
+    /// <para>Everything but the base type converges in place, without dropping the domain or touching a
+    /// dependent column. A base-type change is refused by name inside the procedure — there is no
+    /// <c>ALTER DOMAIN … TYPE</c>, so delivering it would mean dropping every column that uses it.</para>
+    /// </summary>
+    internal void QuenchDomainTypes(IDbCommand tableCommand)
+    {
+        if (_product.Platform != Platform.PostgreSQL) return;
+        var types = IterationDomainTypeSchema;
+        if (string.IsNullOrWhiteSpace(types) || types.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching domain types");
+        tableCommand.CommandText =
+            $@"CALL ""SchemaSmith"".""DomainTypeQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(types)}', {_whatIfOnly});";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Domain Types"), tableCommand.CommandText);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+        _debugFileLocation = "";
+    }
+
+    internal void QuenchEnumTypes(IDbCommand tableCommand)
+    {
+        if (_product.Platform != Platform.PostgreSQL) return;
+        var types = IterationEnumTypeSchema;
+        if (string.IsNullOrWhiteSpace(types) || types.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching enum types");
+        tableCommand.CommandText =
+            $@"CALL ""SchemaSmith"".""EnumTypeQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(types)}', {_whatIfOnly});";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Enum Types"), tableCommand.CommandText);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+        _debugFileLocation = "";
+    }
+
+    /// <summary>
+    /// Converges DECLARED sequences (PostgreSQL). Runs beside enum types, before tables: a column DEFAULT
+    /// can call nextval() on one, so the sequence has to exist before the table that references it.
+    /// </summary>
+    internal void QuenchSequences(IDbCommand tableCommand)
+    {
+        if (_product.Platform != Platform.PostgreSQL) return;
+        var sequences = IterationSequenceSchema;
+        if (string.IsNullOrWhiteSpace(sequences) || sequences.Trim() == "[]") return;
+
+        SafeProgressLog("  Quenching sequences");
+        tableCommand.CommandText =
+            $@"CALL ""SchemaSmith"".""SequenceQuench""('{EscapeSqlLiteral(_product.Name)}', '{EscapeSqlLiteral(sequences)}', {_whatIfOnly});";
+        _debugFileLocation = LogSqlScript(GetDebugFileName("Quench Sequences"), tableCommand.CommandText);
+        ExecuteNonQueryHandlingMessages(tableCommand, retryOnDeadlock: true);
+        _debugFileLocation = "";
     }
 
     internal void QuenchIndexedViews(IDbCommand tableCommand)

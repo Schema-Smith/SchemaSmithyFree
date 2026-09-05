@@ -1,4 +1,4 @@
-// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
+﻿// Copyright (c) SchemaSmith Contributors. Licensed under the SSCL v2.0.
 
 using System;
 using System.Data;
@@ -233,5 +233,51 @@ CREATE TABLE dbo.TemporalRebuildGuard (
         Assert.That(reason, Does.Contain("Change Tracking"),
             $"The refusal must name Change Tracking, and must not be confused with Change Data Capture -- they "
             + $"are disabled differently. Got: '{reason}'.");
+    }
+    // ---- partitioning -------------------------------------------------------
+
+    [Test]
+    public void PartitionedTable_IsBlocked_AndTheReasonNamesPartitioning()
+    {
+        Exec("CREATE PARTITION FUNCTION pfRebuildGuard (INT) AS RANGE RIGHT FOR VALUES (100, 200)");
+        Exec("CREATE PARTITION SCHEME psRebuildGuard AS PARTITION pfRebuildGuard ALL TO ([PRIMARY])");
+        Exec("CREATE TABLE dbo.PartRebuildGuard (Id INT NOT NULL, Val NVARCHAR(50) NULL) ON psRebuildGuard(Id)");
+
+        var reason = BlockedReason("PartRebuildGuard");
+
+        Assert.That(reason, Is.Not.Null,
+            "A partitioned table must be refused a rebuild. The shadow CREATE TABLE carries no placement "
+            + "clause at all, so the copy lands on the default filegroup: every row survives and the layout "
+            + "the table existed for -- the sliding window, the per-partition filegroups -- is gone, with no "
+            + "error anywhere and nothing in the package able to put it back. PostgreSQL's twin of this "
+            + "function already refuses; this engine must too.");
+        Assert.That(reason, Does.Contain("partition"),
+            $"The refusal must name partitioning, or the operator cannot tell which state to migrate around. "
+            + $"Got: '{reason}'.");
+    }
+
+    [Test]
+    public void PartitionAlignedIndexOnAnOtherwisePlainTable_IsBlocked()
+    {
+        // The table is a heap on the DEFAULT filegroup -- only its nonclustered index is partitioned. The
+        // rebuild drops the old table whole and the ordinary index passes re-add from the package, so the
+        // index alignment is lost the same way. A guard that reads only the table's own data space misses
+        // this, which is why the check looks at every index.
+        // Its own function and scheme: NUnit does not guarantee test order, so borrowing the pair the
+        // sibling test creates would make this pass or fail on execution order rather than on the guard.
+        Exec("CREATE PARTITION FUNCTION pfRebuildGuardIdx (INT) AS RANGE RIGHT FOR VALUES (100, 200)");
+        Exec("CREATE PARTITION SCHEME psRebuildGuardIdx AS PARTITION pfRebuildGuardIdx ALL TO ([PRIMARY])");
+        Exec("CREATE TABLE dbo.PartIdxRebuildGuard (Id INT NOT NULL, Val NVARCHAR(50) NULL)");
+        Exec("CREATE NONCLUSTERED INDEX ixPartRebuildGuard ON dbo.PartIdxRebuildGuard(Id) ON psRebuildGuardIdx(Id)");
+
+        var reason = BlockedReason("PartIdxRebuildGuard");
+
+        // Presence first: Does.Contain against a null reports "Expected: IEnumerable But was: null", which
+        // names neither the table nor the state and reads as a test bug rather than the defect.
+        Assert.That(reason, Is.Not.Null,
+            "An index aligned to a partition scheme is destroyed by the rebuild just as surely as a "
+            + "partitioned heap, and the package cannot restore it.");
+        Assert.That(reason, Does.Contain("partition"),
+            $"The refusal must name partitioning. Got: '{reason}'.");
     }
 }

@@ -52,6 +52,15 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                    FROM sys.partitions AS p WITH (NOLOCK)
                    WHERE p.[object_id] = st.[object_id]
                      AND p.index_id < 2), 'NONE') AS [CompressionType],
+       -- {{XmlCompressionRead}} resolves to p.xml_compression on SQL Server 2025+ and to a NULL literal
+       -- below it, because the COLUMN DOES NOT EXIST before 2025 and naming it would stop this procedure
+       -- being created at all. Resolved at kindle time by ForgeKindler, which knows the server version
+       -- before it creates anything; see the comment there. NULL means "this server cannot report it",
+       -- which SchemaTongs turns into "keep what the package already said" rather than a silent drop.
+       (SELECT CASE WHEN MAX(CONVERT(TINYINT, {{XmlCompressionRead}})) = 1 THEN CONVERT(BIT, 1) END
+          FROM sys.partitions AS p WITH (NOLOCK)
+          WHERE p.[object_id] = st.[object_id]
+            AND p.index_id < 2) AS [XmlCompression],
        -- Filegroup placement (#filegroups): emit only when the table's data (heap/clustered index,
        -- index_id 0/1) lives on a non-default filegroup, so an ordinary table on PRIMARY (or whatever
        -- the target's default filegroup is) stays exactly as minimal as before this change. Filegroups
@@ -62,6 +71,32 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
          WHERE tfg.[object_id] = st.[object_id]
            AND tfg.index_id IN (0, 1)
            AND fg.is_default = 0) AS [FileGroup],
+       -- Partition placement (#partitioning, K1): the scheme NAME and the column the function is applied
+       -- to, read from the table's own data space (heap/clustered index, index_id 0/1). Before this the
+       -- [FileGroup] read above joined sys.filegroups on that same data_space_id and simply found no row
+       -- when the data space was a partition SCHEME -- so a partitioned table extracted as an ordinary one,
+       -- cleanly and silently. Emitted only when the data space really is a scheme, so an unpartitioned
+       -- table gains no key and every committed package keeps extracting byte-identically.
+       --
+       -- sys.data_spaces.type = 'PS' and sys.index_columns.partition_ordinal both predate the supported
+       -- floor, so no version gate. partition_ordinal = 1 because SQL Server partitions on ONE column.
+       (SELECT '[' + ds.[name] + ']'
+          FROM sys.indexes tps WITH (NOLOCK)
+          JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = tps.data_space_id
+         WHERE tps.[object_id] = st.[object_id]
+           AND tps.index_id IN (0, 1)
+           AND ds.[type] = 'PS') AS [PartitionScheme],
+       (SELECT '[' + pc.[name] + ']'
+          FROM sys.indexes tps WITH (NOLOCK)
+          JOIN sys.data_spaces ds WITH (NOLOCK) ON ds.data_space_id = tps.data_space_id
+          JOIN sys.index_columns pic WITH (NOLOCK) ON pic.[object_id] = tps.[object_id]
+                                                  AND pic.index_id = tps.index_id
+                                                  AND pic.partition_ordinal = 1
+          JOIN sys.columns pc WITH (NOLOCK) ON pc.[object_id] = pic.[object_id]
+                                           AND pc.column_id = pic.column_id
+         WHERE tps.[object_id] = st.[object_id]
+           AND tps.index_id IN (0, 1)
+           AND ds.[type] = 'PS') AS [PartitionColumn],
        -- FILESTREAM_ON. Read from the table's filestream data space, which is NOT implied by having
        -- FILESTREAM columns: dropping the last one leaves the assignment behind.
        (SELECT ds.[name] FROM sys.data_spaces ds WITH (NOLOCK)
@@ -76,6 +111,12 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
        -- Graph tables (#graph). Emitted only when the table IS one, so no existing package gains a
        -- "GraphType": "None" on every table. is_node/is_edge are 2017+, which the JSON tier requires.
        CASE WHEN st.is_node = 1 THEN 'Node' WHEN st.is_edge = 1 THEN 'Edge' END AS [GraphType],
+       -- Memory-optimized (#J1). is_memory_optimized and durability_desc are SQL Server 2014 columns,
+       -- referenced statically here because the JSON extraction path only ever runs on 2016+ (OPENJSON) --
+       -- the XML path is the one that reaches 2008-2012 and gates them. Emitted only when the table IS
+       -- memory-optimized, so an ordinary table's package gains no key.
+       CASE WHEN st.is_memory_optimized = 1 THEN CONVERT(BIT, 1) END AS [MemoryOptimized],
+       CASE WHEN st.is_memory_optimized = 1 THEN st.durability_desc END AS [Durability],
        -- Ledger (#ledger, 2022+). Emitted only when the table IS one. ledger_type_desc is 2022, so
        -- it is read through a version-gated helper rather than referenced here -- see @v_Ledger.
        @v_Ledger AS [Ledger],
@@ -204,6 +245,11 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.partitions AS p WITH (NOLOCK)
                   WHERE p.[object_id] = si.[object_id]
                     AND p.index_id = si.index_id) AS [CompressionType],
+               -- Same kindle-time resolution as the table-level [XmlCompression] above.
+               (SELECT CASE WHEN MAX(CONVERT(TINYINT, {{XmlCompressionRead}})) = 1 THEN CONVERT(BIT, 1) END
+                  FROM sys.partitions AS p WITH (NOLOCK)
+                  WHERE p.[object_id] = si.[object_id]
+                    AND p.index_id = si.index_id) AS [XmlCompression],
                -- Same emit-only-when-non-default rule as the table-level [FileGroup] above -- a table and
                -- its indexes are commonly split across filegroups on purpose, so this reads si's own
                -- data_space_id independently of the table's.
@@ -211,6 +257,28 @@ SELECT '[' + TABLE_SCHEMA + ']' AS [Schema],
                   FROM sys.filegroups fg WITH (NOLOCK)
                  WHERE fg.data_space_id = si.data_space_id
                    AND fg.is_default = 0) AS [FileGroup],
+               -- Partition placement (#partitioning, K1): read from si's OWN data space, independently of
+               -- the table's. An index is not required to be aligned -- a nonclustered index on a
+               -- partitioned table may sit on one filegroup, and an index on an ordinary heap may itself be
+               -- partitioned -- so inferring either from the other would lose a real design.
+               (SELECT '[' + ds.[name] + ']'
+                  FROM sys.data_spaces ds WITH (NOLOCK)
+                 WHERE ds.data_space_id = si.data_space_id
+                   AND ds.[type] = 'PS') AS [PartitionScheme],
+               (SELECT '[' + pc.[name] + ']'
+                  FROM sys.data_spaces ds WITH (NOLOCK)
+                  JOIN sys.index_columns pic WITH (NOLOCK) ON pic.[object_id] = si.[object_id]
+                                                          AND pic.index_id = si.index_id
+                                                          AND pic.partition_ordinal = 1
+                  JOIN sys.columns pc WITH (NOLOCK) ON pc.[object_id] = pic.[object_id]
+                                                   AND pc.column_id = pic.column_id
+                 WHERE ds.data_space_id = si.data_space_id
+                   AND ds.[type] = 'PS') AS [PartitionColumn],
+               -- BUCKET_COUNT for a HASH index on a memory-optimized table (#J1). sys.hash_indexes is 2014;
+               -- safe statically here because the JSON path is 2016+. NULL for any non-hash index, so an
+               -- ordinary index gains no key.
+               (SELECT hi.bucket_count FROM sys.hash_indexes hi WITH (NOLOCK)
+                 WHERE hi.[object_id] = si.[object_id] AND hi.index_id = si.index_id) AS [BucketCount],
                is_primary_key AS [PrimaryKey],
                is_unique AS [Unique],
                is_unique_constraint AS [UniqueConstraint], 

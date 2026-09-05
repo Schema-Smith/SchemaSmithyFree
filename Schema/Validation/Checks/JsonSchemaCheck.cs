@@ -216,6 +216,10 @@ public sealed class JsonSchemaCheck : ISchemaCheck
         if (parent.Equals("Tables", StringComparison.OrdinalIgnoreCase)) return "tables";
         if (parent.Equals("Indexed Views", StringComparison.OrdinalIgnoreCase)) return "indexedviews";
         if (parent.Equals("Materialized Views", StringComparison.OrdinalIgnoreCase)) return "materializedviews";
+        if (parent.Equals("Events", StringComparison.OrdinalIgnoreCase)) return "events";
+        if (parent.Equals("Domain Types", StringComparison.OrdinalIgnoreCase)) return "domaintypes";
+        if (parent.Equals("Enum Types", StringComparison.OrdinalIgnoreCase)) return "enumtypes";
+        if (parent.Equals("Sequences", StringComparison.OrdinalIgnoreCase)) return "sequences";
 
         var fileName = Path.GetFileName(jsonFilePath);
         if (fileName.Equals("Product.json", StringComparison.OrdinalIgnoreCase)) return "products";
@@ -228,7 +232,10 @@ public sealed class JsonSchemaCheck : ISchemaCheck
     // and this check must not modify Schema/. Keep these in lockstep with RepositoryHelper if the
     // domain model's platform-subclass or schema-file-naming scheme ever changes. ----
 
-    private static Type GetTypeForSchemaFile(string fileName, Platform platform)
+    // internal, not private: SchemaFileMappingParityTests pins this in lockstep with RepositoryHelper's
+    // twin, because the two drifting silently is exactly how events/enumtypes/sequences shipped a broken
+    // --Validate on this branch -- the full gate was the only thing that caught it.
+    internal static Type GetTypeForSchemaFile(string fileName, Platform platform)
     {
         var objectPart = fileName.Split('.')[0];
         return (objectPart, platform.GetBasePlatform()) switch
@@ -242,6 +249,10 @@ public sealed class JsonSchemaCheck : ISchemaCheck
             ("tables", Platform.MySQL) => typeof(MySqlTable),
             ("indexedviews", Platform.SqlServer) => typeof(SqlServerIndexedView),
             ("materializedviews", Platform.PostgreSQL) => typeof(PostgreSqlMaterializedView),
+            ("events", Platform.MySQL) => typeof(MySqlEvent),
+            ("domaintypes", Platform.PostgreSQL) => typeof(PostgreSqlDomainType),
+            ("enumtypes", Platform.PostgreSQL) => typeof(PostgreSqlEnumType),
+            ("sequences", Platform.PostgreSQL) => typeof(PostgreSqlSequence),
             _ => throw new ArgumentException($"Unknown schema file mapping: {fileName} for platform {platform}")
         };
     }

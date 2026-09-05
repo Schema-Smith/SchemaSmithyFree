@@ -45,6 +45,19 @@ namespace Schema.Capabilities
             // from than creating one by accident.
             rows.Add(new("ledger-table", "Ledger tables", Platform.SqlServer,
                 16, "SQL Server 2022", null, DegradeKind.Reduced, "ledger table (SQL Server 2022)"));
+
+            // XML compression. Reduced, not Skipped: below 2022 the clause is composed out and the table
+            // or index still deploys -- only the storage saving is lost, which changes nothing an
+            // application can observe.
+            //
+            // WORTH KNOWING for anything driving UI or AI off this row, because the two thresholds are
+            // NOT the same one: the version that can DEPLOY this (2022) is not the version that can READ
+            // it back. sys.partitions.xml_compression arrives in 2025, so 2022-2024 honour the setting
+            // and cannot report it -- exactly the asymmetry application-time-period documents for
+            // MariaDB. The row encodes the DEPLOY threshold, because that is what the gate compares
+            // against; SchemaTongs covers the read gap by preserving the value from the package.
+            rows.Add(new("xml-compression", "XML compression", Platform.SqlServer,
+                16, "SQL Server 2022", null, DegradeKind.Reduced, "XML compression (SQL Server 2022)"));
             rows.Add(new("data-masking", "Dynamic data masking", Platform.SqlServer,
                 13, "SQL Server 2016", null, DegradeKind.Skip, "data masking (SQL Server 2016)"));
             rows.Add(new("always-encrypted", "Always Encrypted", Platform.SqlServer,
@@ -129,6 +142,21 @@ namespace Schema.Capabilities
             // gate compares against; the read gap is documented on MariaDbTable.Periods.
             rows.Add(new("application-time-period", "Application-time period", Platform.MariaDb,
                 1004, "MariaDB 10.4.3", null, DegradeKind.Reduced, "table without its PERIOD FOR clause"));
+
+            // Per-column history exclusion (MariaDB WITHOUT SYSTEM VERSIONING, #408). Same shape as the
+            // period row above: MySQL has no system versioning at any version, so
+            // SchemaSmith_SupportsSystemVersioning() is an unconditional 0 there and MySQL gets no row.
+            //
+            // Reduced, not Skipped: below the threshold the clause is suppressed and the column is still
+            // created -- what the user loses is the exclusion, not the column.
+            //
+            // Worth knowing for anything driving UI or AI off this row: the exclusion is only meaningful
+            // on a system-versioned table, and MariaDB ACCEPTS it on an ordinary one while silently
+            // discarding it -- so "applied without error" does not mean "in effect". --Validate reports
+            // SS-SV-001 for that case. Note also that the table-level IsSystemVersioned is read on
+            // extraction and NOT applied on deploy, so a versioned table reaches SchemaSmith by adoption.
+            rows.Add(new("column-history-exclusion", "Per-column history exclusion", Platform.MariaDb,
+                1003, "MariaDB 10.3.4", null, DegradeKind.Reduced, "column without its WITHOUT SYSTEM VERSIONING clause"));
 
             // Change Data Capture, gated by a DATABASE setting rather than an engine version -- the first
             // row of that kind, which is why Capability gained RequiredDatabaseSetting. IntroducedInComparable

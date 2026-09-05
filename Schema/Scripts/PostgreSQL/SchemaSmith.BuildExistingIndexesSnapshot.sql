@@ -53,6 +53,13 @@ BEGIN
                 ELSE (regexp_match(array_to_string(i.reloptions, ','), 'fillfactor=(\d+)') ) [1] ::int
                 END AS "FillFactor",
            %s AS "NullsNotDistinct",
+           -- Storage parameters (the WITH clause), canonicalised to match the declared side: reloptions is
+           -- already key=value strings, sorted so order does not matter, with fillfactor removed because
+           -- FillFactor above owns it. An index with only fillfactor yields '' here and compares equal to a
+           -- package that declares no StorageParameters.
+           COALESCE((SELECT STRING_AGG(opt, ',' ORDER BY opt)
+                       FROM UNNEST(i.reloptions) AS o(opt)
+                      WHERE opt NOT LIKE 'fillfactor=%%'), '') AS "StorageParameters",
            COALESCE(con.condeferrable, FALSE) AS "Deferrable",
            COALESCE(con.condeferred, FALSE) AS "InitiallyDeferred"
       FROM temp_tables t

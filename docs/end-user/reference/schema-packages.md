@@ -475,6 +475,7 @@ Each platform's table definition extends the shared properties with engine-speci
 |---|---|---|---|
 | `Schema` | string | `"dbo"` | Database schema. Use bracket notation in extracted files (e.g., `"[Production]"`). |
 | `CompressionType` | string | `"NONE"` | Data compression: `"NONE"`, `"ROW"`, `"PAGE"`. |
+| `XmlCompression` | bool | `false` | **SQL Server 2022+.** Compresses XML column data in place. Independent of `CompressionType` — a table can carry both. **Deployable from 2022 but only readable from 2025:** `sys.partitions.xml_compression` does not exist before then, so on 2022–2024 SchemaSmith applies the setting and cannot read it back. SchemaTongs carries the declared value forward from the package it is refreshing rather than dropping it, and drift is not re-evaluated there — the setting is applied at create. On 2025+ it round-trips and converges normally. Below 2022 the clause is suppressed and reported through `UnsupportedFeaturePolicy`. |
 | `IsTemporal` | bool | `false` | When `true`, SchemaQuench manages the table as system-versioned temporal: emits `ALTER TABLE ... SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = <Schema>.<Name>_Hist))` and protects the period columns (`ValidFrom` / `ValidTo`) from drop detection. When toggled back to `false`, SchemaQuench emits `SET (SYSTEM_VERSIONING = OFF)`. The history table itself (`<Name>_Hist` in the same schema) is not auto-created -- declare it as a sibling table JSON in your package or rely on a Before script that creates it before the `IsTemporal=true` table is quenched. |
 | `XmlIndexes` | array | `[]` | XML index definitions. See [XML Indexes (SQL Server)](#xml-indexes-sql-server). |
 | `Statistics` | array | `[]` | Custom statistics definitions. See [Statistics (SQL Server)](#statistics-sql-server). |
@@ -486,6 +487,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FileGroup` | string | `null` | Filegroup the table is stored on, as a **name only** -- never a file path, so the package stays portable across environments. **Leave it unset and SchemaSmith does not manage placement at all** — the table is created wherever SQL Server would put it, and an existing table is left exactly where it is, including on a filegroup someone placed it on by hand. SchemaSmith does not create filegroups: if the named one does not exist on the target the deploy fails. Moving an existing table to a different filegroup is a rebuild, so a declared name that differs from where the table already lives also fails -- migrate it manually. Removing the property again does not move anything back; it just stops SchemaSmith checking placement. Create filegroups in a migration script, supplying environment-specific paths through [script tokens](script-tokens.md). |
 | `FileStreamFileGroup` | string | `null` | The table's `FILESTREAM_ON` filegroup, as a **name only**. `null` means the database's default FILESTREAM filegroup. Effectively immutable -- SQL Server refuses to reassign a table that already has one, so a declared name differing from the deployed one fails rather than being ignored. See [FILESTREAM (SQL Server)](#filestream-sql-server). |
 | `TextImageFileGroup` | string | `null` | The table's `TEXTIMAGE_ON` filegroup -- where large-object data lands -- as a **name only**. `null` means the default. Large-object columns are `text`, `ntext`, `image`, `xml`, and the `(MAX)` types; **a FILESTREAM column does not count**. Declaring it on a table with no large-object column is refused by name, because SQL Server rejects `TEXTIMAGE_ON` outright there (error 1709). Create-time only, like the other two placement clauses: a declared name that differs from the deployed one fails rather than being ignored. |
+| `PartitionScheme` | string | `null` | Partition scheme the table is stored on, as a **name only** — SchemaSmith never creates a partition function or scheme, exactly as it never creates a filegroup. Declared together with `PartitionColumn`; one without the other is refused, because `ON <scheme>` needs the column the function is applied to. Cannot be combined with `FileGroup`: a table lives on one data space. A declared scheme that does not exist on the target fails by name before any DDL runs. **Applied when the table is created; a change on a deployed table is refused** — moving a table onto, off, or between schemes rewrites every row, and comparing two layouts cannot tell you whether a `SPLIT` or a `MERGE` was intended. Leave it unset and SchemaSmith does not manage partitioning at all, so a table someone partitioned by hand is left exactly as it is. |
+| `PartitionColumn` | string | `null` | The column the partition function is applied to. One column — SQL Server partitions on a single column. Declared with `PartitionScheme` or not at all. |
 | `GraphType` | string | `null` | `"Node"` or `"Edge"` creates the table `AS NODE` / `AS EDGE`. `null` or `"None"` is an ordinary table. **Create-time only** -- SQL Server has no `ALTER` that converts a table to or from a graph table, so changing this on a deployed table is refused rather than attempted. Requires SQL Server 2017; below that the table deploys as an ordinary one and the change is reported through `UnsupportedFeaturePolicy`. The graph pseudo-columns SQL Server adds are never extracted and never dropped. |
 | `Ledger` | string | `null` | `"AppendOnly"` or `"Updatable"` creates a tamper-evident ledger table. `null` or `"Off"` is an ordinary table. Cannot be combined with `IsTemporal` -- a ledger table manages its own history, and SQL Server reports it as non-temporal. Requires SQL Server 2022; below that the table deploys as an ordinary one and the change is reported through `UnsupportedFeaturePolicy`. **Close to permanent:** there is no `ALTER` to or from a ledger table, and `DROP` does not remove one -- SQL Server retains it under a generated name -- so changing this on a deployed table is refused. |
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
@@ -504,6 +507,9 @@ Each platform's table definition extends the shared properties with engine-speci
 | `ForceRowLevelSecurity` | bool | `false` | When `true`, row-level security is enforced even for the table owner. |
 | `AccessMethod` | string | `null` | Storage access method (e.g., `"heap"`). |
 | `PersistenceType` | string | `null` | Persistence override (e.g., `"UNLOGGED"`, `"TEMPORARY"`). |
+| `ReplicaIdentity` | string | `null` | `REPLICA IDENTITY` for logical replication: `"DEFAULT"`, `"FULL"`, `"NOTHING"` or `"INDEX"`. **On a table that belongs to a publication this decides whether `UPDATE` and `DELETE` are permitted at all** — PostgreSQL refuses both when there is no usable identity. Omit to leave the server's current setting alone; extraction emits it only for a table that is not at `DEFAULT`. |
+| `Tablespace` | string | `null` | The tablespace the table's data lives on. Omitting it means placement is **not managed** — it does **not** declare the database default, so a table a DBA placed by hand is left alone. Create-time only: moving an existing table rewrites it under an `ACCESS EXCLUSIVE` lock, so a declared tablespace that differs from where the table already lives is refused by name rather than performed. |
+| `ReplicaIdentityIndex` | string | `null` | Names the unique index backing `ReplicaIdentity: "INDEX"`. The index must be unique, non-partial and over `NOT NULL` columns. Applied after indexes are created, so it works on a table's first deploy. |
 | `UpdateFillFactor` | bool | `false` | Enables fill-factor reconciliation for this table. |
 | `FillFactor` | short (0--100) | `0` | Table fill factor. `0` means use the server default. |
 
@@ -518,10 +524,13 @@ Each platform's table definition extends the shared properties with engine-speci
 | `Comment` | string | `null` | Table comment. |
 | `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MySQL clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MySQL supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
+| `Compression` | string | `null` | **MySQL only.** InnoDB transparent page compression: `"zlib"`, `"lz4"` or `"none"`. Cannot be combined with `RowFormat: "COMPRESSED"` — MySQL refuses that with error 1031, and `--Validate` reports `SS-CO-001` first. MariaDB spells this `PageCompressed`. |
+| `KeyBlockSize` | int | `null` | InnoDB compressed-page size in KB (1, 2, 4, 8, 16). Only meaningful with `RowFormat: "COMPRESSED"`. |
+| `Partitioning` | object | `null` | How the table is partitioned. See [Partitioning (MySQL / MariaDB)](#partitioning-mysql--mariadb). Leave it unset and SchemaSmith does not manage partitioning at all, so a table someone partitioned by hand is left exactly as it is. |
 
-### MariaDB (`MySqlTable`)
+### MariaDB (`MariaDbTable`)
 
-MariaDB tables carry the same property set as MySQL and are deserialized through the same `MySqlTable` wrapper -- there is no separate MariaDB table type.
+MariaDB tables carry every MySQL property above, plus the ones below for features MySQL has no equivalent for.
 
 | Property | Type | Default | Description |
 |---|---|---|---|
@@ -532,6 +541,19 @@ MariaDB tables carry the same property set as MySQL and are deserialized through
 | `Comment` | string | `null` | Table comment. |
 | `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MariaDB clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MariaDB supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
+| `IsSystemVersioned` | bool | `false` | The table keeps its own row history (`WITH SYSTEM VERSIONING`, MariaDB 10.3+). **Read on extraction, not applied on deploy** — a package declaring it deploys an ordinary table, so system versioning has to be established on the server. Detected from `INFORMATION_SCHEMA.TABLES.TABLE_TYPE`, which answers for both authoring forms. |
+| `Periods` | array | `[]` | Application-time period definitions (`PERIOD FOR`). See the MariaDB period notes. |
+| `DropPeriodsRemovedFromProduct` | bool | `null` | Overrides the environment-level flag for this table. Defaults **off**, unlike the other drop-by-absence flags. |
+| `PageCompressed` | bool | `false` | **MariaDB only.** InnoDB page compression — MariaDB's equivalent of MySQL's `Compression`, which it does not support. Cannot be combined with `RowFormat: "COMPRESSED"` (errno 140); `--Validate` reports `SS-CO-001`. |
+| `PageCompressionLevel` | int | `null` | **MariaDB only.** Compression level 1–9. Ignored unless `PageCompressed` is set, which `--Validate` reports as `SS-CO-002`. |
+
+#### MariaDB columns (`MariaDbColumn`)
+
+MariaDB columns carry every MySQL column property, plus:
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `WithoutSystemVersioning` | bool | `false` | Excludes this column from the row history of a system-versioned table: an `UPDATE` touching only this column writes no history row. Typically used for a large or high-churn column whose history is not worth keeping. **Meaningless unless the table is system-versioned** — MariaDB accepts the clause on an ordinary table and silently discards it, so `--Validate` reports `SS-SV-001` rather than letting it look applied. Changing it on a deployed column is an `ALTER`, so it needs `SystemVersioningAlterHistory: "KEEP"`. Requires MariaDB 10.3.4+; below that the clause is suppressed and the column deploys ordinarily. |
 
 ### Minimal example (PostgreSQL)
 
@@ -730,9 +752,11 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 ### SQL Server index extras
 
 `CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`,
-`FileGroup`, `IgnoreDuplicateKey`, `PadIndex`.
+`FileGroup`, `PartitionScheme`, `PartitionColumn`, `IgnoreDuplicateKey`, `PadIndex`.
 
 `FileGroup` follows the same name-only, unset-means-unmanaged contract as the table property above. Worth knowing when declaring one on a table but not its indexes: an index created with no filegroup of its own follows **its table**, not the database default. An index is declared independently of its table's filegroup, which is what lets you keep a large table's data and its indexes on separate storage.
+
+`PartitionScheme` and `PartitionColumn` work the same way, and are read independently of the table's own placement — an index is **not** required to be aligned with its table. A nonclustered index on a partitioned table may sit on a single filegroup, and an index on an ordinary heap may itself be partitioned; both are real designs, so neither is inferred from the other. As on the table, a declared scheme that differs from where the index already lives is refused rather than rebuilt.
 
 | Property | Type | Default | Description |
 |---|---|---|---|
@@ -743,7 +767,9 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ### PostgreSQL index extras
 
-`AccessMethod` (e.g., `btree`, `gin`, `gist`), `Tablespace`, `IncludeColumns` (PostgreSQL 11+ covering indexes).
+`AccessMethod` (e.g., `btree`, `gin`, `gist`), `IncludeColumns` (PostgreSQL 11+ covering indexes), and `Tablespace`.
+
+`Tablespace` places the index. An index does **not** follow its table's tablespace — created with no clause it lands wherever `default_tablespace` points, which is usually but not always the same place. Omitting it means placement is **not managed**, which is not the same as declaring the database default: an index a DBA placed by hand is left exactly where it is. Create-time only — moving an existing index rebuilds it, so a declared tablespace that differs from where the index already lives is refused by name rather than performed.
 
 ### MySQL index extras
 
@@ -1325,6 +1351,183 @@ Indexed views are defined as JSON files in the `Indexed Views/` directory of eac
       "IndexColumns": "[ProductID]"
     }
   ]
+}
+```
+
+---
+
+## Sequence JSON Format (PostgreSQL)
+
+Sequences live in the `Sequences/` directory of each template, which accepts both `.json` (declared and converged) and `.sql` (scripted, exactly as before).
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Sequence name. Required. |
+| `Schema` | string | `"public"` | Schema name. |
+| `DataType` | string | `"bigint"` | `smallint`, `integer` or `bigint`. |
+| `Start` | long | `null` | The value the sequence starts from **when it is created**. This is not the current value — see below. |
+| `Increment` | long | `1` | Step between values. Negative for a descending sequence. |
+| `MinValue` | long | `null` | Omit for the type's natural minimum. |
+| `MaxValue` | long | `null` | Omit for the type's natural maximum. |
+| `Cache` | long | `1` | Values pre-allocated per session. Higher is faster but leaves larger gaps after a crash. |
+| `Cycle` | bool | `false` | Wrap to `MinValue` after `MaxValue` instead of erroring. |
+
+**The current value is never managed.** A sequence's position records which numbers have already been handed out, so it is data rather than schema. If a deploy reset it, the next insert would re-issue keys already in use. `Start` only applies when the sequence is created; SchemaSmith never issues `RESTART`, and extraction never captures the current value.
+
+**Sequences the engine owns are not managed here.** A `serial` or `IDENTITY` column generates its own sequence, which belongs to that column's declaration; those are excluded from extraction.
+
+```json
+{
+  "Name": "invoice_number_seq",
+  "Schema": "public",
+  "DataType": "bigint",
+  "Start": 1000,
+  "Increment": 1,
+  "Cache": 1,
+  "Cycle": false
+}
+```
+
+---
+
+## Domain Type JSON Format (PostgreSQL)
+
+Domain types live in the `Domain Types/` directory of each template, which accepts **both** forms — `.json` (declared and converged) and `.sql` (scripted, exactly as before).
+
+**Declaring a domain fixes a real trap.** There is no `CREATE OR REPLACE DOMAIN`, so a scripted domain is a guarded `CREATE DOMAIN` — and once the domain exists that guard skips. Editing the `CHECK` in the `.sql` file changes nothing at all, on every deploy, forever, and the run reports success. A declared domain is compared against the server and converged.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Domain name. Required. |
+| `Schema` | string | `"public"` | Schema name. |
+| `DataType` | string | | The underlying type, with its modifier where it has one — `integer`, `character varying(20)`, `numeric(10,2)`. Required. **Create-time only** — see below. |
+| `NotNull` | bool | `false` | Converges in place via `ALTER DOMAIN … SET/DROP NOT NULL`. |
+| `Default` | string | `null` | Default applied to a column of this domain that declares no default of its own. Converges in place. |
+| `CheckConstraints` | array | `[]` | Named `CHECK` constraints — `{ "Name": "...", "Expression": "VALUE > 0" }`. Write the predicate alone, without the surrounding `CHECK (…)`. |
+
+**Constraints converge as a set.** One the package declares and the server lacks is added; one the server has and the package no longer declares is dropped. Dropping is safe here in a way removing an enum value is not — it removes a validation rule, destroys no data, and cascades to nothing.
+
+**Adding a constraint validates the data already there** and fails if any existing row violates it, naming the offending column. That is PostgreSQL protecting you, and SchemaSmith does not work around it.
+
+**A base-type change is refused, not applied.** PostgreSQL has no `ALTER DOMAIN … TYPE` — it is a syntax error, not an unsupported operation — so the only way to deliver one is to drop the domain, which drops every column typed by it. SchemaSmith names both the declared and the deployed type and stops. Change it with a migration script.
+
+**Name your constraints.** PostgreSQL generates a name (`<domain>_check`, then `_check1`, …) when one is declared without it, and the name is the identity used for comparison. Extraction always emits a name.
+
+```json
+{
+  "Name": "positive_amount",
+  "Schema": "public",
+  "DataType": "numeric(10,2)",
+  "NotNull": true,
+  "Default": "0",
+  "CheckConstraints": [
+    { "Name": "positive_amount_nonneg", "Expression": "VALUE >= 0" }
+  ]
+}
+```
+
+---
+
+## Enum Type JSON Format (PostgreSQL)
+
+Enum types live in the `Enum Types/` directory of each template, which accepts **both** forms — `.json` (declared and converged) and `.sql` (scripted, exactly as before).
+
+**Declaring an enum fixes a real trap.** A scripted enum is created by a guarded `CREATE TYPE`; once the type exists that guard skips, so editing the value list in the `.sql` file does nothing at all — silently, and on every future deploy. A declared enum has its value list compared, and missing values are added.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Type name. Required. |
+| `Schema` | string | `"public"` | Schema name. |
+| `Values` | array of string | | The labels, **in order**. Required. |
+
+**Order matters.** PostgreSQL sorts and compares enum values by declared position, not alphabetically, so a value you add in the middle of the list is added in the middle of the type — not appended.
+
+**Removing a value is reported, not performed.** PostgreSQL cannot remove or reorder an enum value without recreating the type, which would mean dropping every column that uses it. A value the package no longer lists is left in place and named in the deploy log and the change manifest, so the divergence is visible rather than silent.
+
+```json
+{
+  "Name": "order_status",
+  "Schema": "public",
+  "Values": [ "draft", "submitted", "shipped", "cancelled" ]
+}
+```
+
+---
+
+## Partitioning (MySQL / MariaDB)
+
+MySQL and MariaDB carry a table's partition definition in the table DDL itself — there is no separate scheme object to point at, the way SQL Server has one — so the package carries the whole definition.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Method` | string | | `RANGE`, `LIST`, `HASH`, `KEY`, `RANGE COLUMNS` or `LIST COLUMNS`. Required. The `COLUMNS` forms take a column **list** rather than an expression and compare values column by column. |
+| `Expression` | string | | The partitioning expression (`Id`, `YEAR(created)`), or a comma-separated column list for the `COLUMNS` methods. Required. |
+| `PartitionCount` | int | `null` | `HASH` and `KEY` only: how many partitions to spread across. `RANGE` and `LIST` name each partition individually instead. |
+| `Partitions` | array | `[]` | `RANGE` and `LIST` only, **in declared order**. Each entry is `{ "Name": "...", "Values": "..." }` — `Values` is what follows `VALUES LESS THAN` for `RANGE` (a value, a tuple for `RANGE COLUMNS`, or `MAXVALUE`) or `VALUES IN` for `LIST`. |
+
+**Order is part of the definition.** `RANGE` boundaries must ascend, and the engine rejects a definition where they do not, so the list is written and read in declared order rather than sorted.
+
+**Applied when the table is created; a change on a deployed table is refused.** `ALTER TABLE … PARTITION BY` rewrites every row, and comparing two layouts cannot tell you whether a split or a merge was intended — so a declaration that disagrees with the deployed table names both and stops, rather than repartitioning your data on the strength of an edited file. Repartition manually, or correct the declaration to match.
+
+**The comparison ignores backticks, whitespace and case**, because the engines do not agree on how they report a partition expression back: MySQL 5.7 returns the text you wrote, while MySQL 8, MariaDB 10.2 and MariaDB 11.4 all return a rewritten form (`year(`dt`)`). Without normalising, the same package would deploy on one engine and be refused on another.
+
+**MySQL requires every `UNIQUE` and `PRIMARY KEY` to contain every partitioning column.** That is the engine's rule, not SchemaSmith's, and a definition breaking it fails with the engine's own error.
+
+```json
+{
+  "Name": "`order_history`",
+  "Columns": [
+    { "Name": "`Id`", "DataType": "int", "Nullable": false },
+    { "Name": "`Placed`", "DataType": "date", "Nullable": false }
+  ],
+  "Indexes": [
+    { "Name": "PRIMARY", "PrimaryKey": true, "Unique": true, "IndexColumns": "`Id`" }
+  ],
+  "Partitioning": {
+    "Method": "RANGE",
+    "Expression": "Id",
+    "Partitions": [
+      { "Name": "p_early", "Values": "1000000" },
+      { "Name": "p_rest",  "Values": "MAXVALUE" }
+    ]
+  }
+}
+```
+
+---
+
+## Scheduled Event JSON Format (MySQL / MariaDB)
+
+Scheduled events live in the `Events/` directory of each template. That folder accepts **both** forms:
+
+- **`.json`** — declared. The event is compared against the server, converges when it differs, and can be removed when it leaves the package.
+- **`.sql`** — scripted, exactly as before. Re-run on every deploy, never compared, never removed by absence.
+
+Existing packages need no change. Declaring the same event both ways is reported as `SS-EVT-001`.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `Name` | string | | Event name. Required. |
+| `Definition` | string | | The body after `DO`. A multi-statement body must be wrapped in `BEGIN … END` exactly as it would be in hand-written DDL. Required. |
+| `ScheduleType` | string | `"EVERY"` | `"EVERY"` for a recurring event or `"AT"` for a one-shot. |
+| `Interval` | string | `null` | For `EVERY`: the interval as a value and a unit, e.g. `"1 DAY"` or `"30 MINUTE"`. Compared case- and spacing-insensitively. |
+| `ExecuteAt` | string | `null` | For `AT`: when the event runs, once. |
+| `Starts` | string | `null` | Optional start of the recurrence window. **Omit it and the server's own start time is left alone.** MySQL fills in an unspecified `STARTS` with the moment the event was created, so treating that as declared would make every later deploy see a difference and recreate the event — resetting its schedule each time. Set this only if you want a fixed start. |
+| `Ends` | string | `null` | Optional end of the recurrence window. |
+| `Status` | string | `"ENABLE"` | `"ENABLE"`, `"DISABLE"` or `"DISABLE ON SLAVE"`. |
+| `Preserve` | bool | `false` | When true the event survives its last run instead of dropping itself. Matches the engine default (`NOT PRESERVE`). |
+| `Comment` | string | `null` | Event comment. |
+
+Removing an event from the package drops it only when `DropEventsRemovedFromProduct` is on, and only for events SchemaSmith created — one made by hand, or by a scripted `Events/` file, is never removed.
+
+```json
+{
+  "Name": "nightly_purge",
+  "ScheduleType": "EVERY",
+  "Interval": "1 DAY",
+  "Status": "ENABLE",
+  "Preserve": false,
+  "Definition": "DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL 90 DAY"
 }
 ```
 

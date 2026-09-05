@@ -23,6 +23,7 @@ namespace Schema.UnitTests.Domain.PostgreSQL
             Assert.That(index.Clustered, Is.False);
             Assert.That(index.IncludeColumns, Is.Null);
             Assert.That(index.AccessMethod, Is.Null);
+            Assert.That(index.Tablespace, Is.Null);
             Assert.That(index.FilterExpression, Is.Null);
             Assert.That(index.FillFactor, Is.EqualTo(0));
             Assert.That(index.NullsNotDistinct, Is.False);
@@ -42,6 +43,7 @@ namespace Schema.UnitTests.Domain.PostgreSQL
                 Clustered = false,
                 IncludeColumns = "name",
                 AccessMethod = "btree",
+                Tablespace = "fast_ssd",
                 FilterExpression = "is_active = true",
                 FillFactor = 90,
                 NullsNotDistinct = true,
@@ -55,6 +57,7 @@ namespace Schema.UnitTests.Domain.PostgreSQL
 
             Assert.That(deserialized.IncludeColumns, Is.EqualTo("name"));
             Assert.That(deserialized.AccessMethod, Is.EqualTo("btree"));
+            Assert.That(deserialized.Tablespace, Is.EqualTo("fast_ssd"));
             Assert.That(deserialized.FilterExpression, Is.EqualTo("is_active = true"));
             Assert.That(deserialized.FillFactor, Is.EqualTo(90));
             Assert.That(deserialized.NullsNotDistinct, Is.True);

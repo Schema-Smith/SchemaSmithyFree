@@ -115,6 +115,83 @@ public class TableQuench_Tier3Tests : BaseTableQuenchTests
         conn.Close();
     }
 
+    // Index storage parameters -- the WITH clause. gin's fastupdate and brin's pages_per_range are
+    // built-in stand-ins for pgvector's hnsw m / ef_construction and ivfflat lists: identical reloptions
+    // plumbing, no extension needed. Self-contained (own schema) so it doesn't lean on the shared setup.
+    [Test]
+    public void ShouldDeployConvergeAndRoundTripIndexStorageParameters()
+    {
+        using var conn = DbConnectionFactory.ForPlatform(Platform.PostgreSQL).GetDbConnection(_connectionString);
+        conn.Open();
+        conn.ChangeDatabase(_mainDb);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandTimeout = 300;
+
+        cmd.CommandText = @"DROP SCHEMA IF EXISTS ""StorageParams"" CASCADE; CREATE SCHEMA ""StorageParams"";
+                            CREATE TABLE ""StorageParams"".""T"" (""Tags"" JSONB NOT NULL, ""N"" INT NOT NULL);";
+        cmd.ExecuteNonQuery();
+
+        string Reloptions(string idx) =>
+            $@"SELECT COALESCE(ARRAY_TO_STRING(ARRAY(SELECT opt FROM pg_class c, UNNEST(c.reloptions) AS opt
+                        WHERE c.relname = '{idx}' AND opt NOT LIKE 'fillfactor=%' ORDER BY opt), ','), '')";
+
+        string Package(string ginParams, string brinParams) => $$"""
+            [{
+                "Schema": "StorageParams", "Name": "T",
+                "Columns": [ { "Name": "Tags", "DataType": "JSONB", "Nullable": false },
+                             { "Name": "N", "DataType": "INT", "Nullable": false } ],
+                "Indexes": [
+                    { "Name": "IX_gin", "IndexColumns": "Tags", "AccessMethod": "gin", "StorageParameters": { {{ginParams}} } },
+                    { "Name": "IX_brin", "IndexColumns": "N", "AccessMethod": "brin", "StorageParameters": { {{brinParams}} } }
+                ]
+            }]
+            """;
+
+        // 1. CREATE carries the declared params.
+        RunTableQuenchProc(cmd, Package("\"fastupdate\": \"off\"", "\"pages_per_range\": \"32\""));
+        cmd.CommandText = Reloptions("IX_gin");
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("fastupdate=off"),
+            "the gin index must carry its declared storage parameter -- this is the mechanism a vector "
+            + "index's m / ef_construction rides");
+        cmd.CommandText = Reloptions("IX_brin");
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("pages_per_range=32"));
+
+        // 2. Redeploying the same thing is a no-op -- the compare canonicalises, so reloptions' own
+        //    ordering does not cause phantom churn.
+        var beforeOid = ScalarLong(cmd, "SELECT '\"StorageParams\".\"IX_gin\"'::regclass::oid");
+        RunTableQuenchProc(cmd, Package("\"fastupdate\": \"off\"", "\"pages_per_range\": \"32\""));
+        Assert.That(ScalarLong(cmd, "SELECT '\"StorageParams\".\"IX_gin\"'::regclass::oid"), Is.EqualTo(beforeOid),
+            "an unchanged storage parameter must not drop and recreate the index");
+
+        // 3. Changing a parameter rebuilds the index (a new oid proves drop+recreate, which is required --
+        //    several of these cannot be ALTERed in place).
+        RunTableQuenchProc(cmd, Package("\"fastupdate\": \"on\"", "\"pages_per_range\": \"64\""));
+        cmd.CommandText = Reloptions("IX_gin");
+        Assert.That(cmd.ExecuteScalar()?.ToString(), Is.EqualTo("fastupdate=on"), "the changed parameter must be applied");
+        Assert.That(ScalarLong(cmd, "SELECT '\"StorageParams\".\"IX_gin\"'::regclass::oid"), Is.Not.EqualTo(beforeOid),
+            "a storage-parameter change must rebuild the index, not silently no-op");
+
+        // 4. Round-trips through extraction.
+        cmd.CommandText = "SELECT \"SchemaSmith\".\"GenerateTableJSON\"('StorageParams', 'T')";
+        var json = cmd.ExecuteScalar()?.ToString() ?? "";
+        Assert.Multiple(() =>
+        {
+            Assert.That(json, Does.Contain("StorageParameters"), json);
+            Assert.That(json, Does.Contain("fastupdate"), json);
+            Assert.That(json, Does.Contain("pages_per_range"), json);
+        });
+
+        cmd.CommandText = @"DROP SCHEMA IF EXISTS ""StorageParams"" CASCADE;";
+        cmd.ExecuteNonQuery();
+        conn.Close();
+    }
+
+    private static long ScalarLong(System.Data.IDbCommand cmd, string sql)
+    {
+        cmd.CommandText = sql;
+        return System.Convert.ToInt64(cmd.ExecuteScalar());
+    }
+
     [OneTimeSetUp]
     public void Setup()
     {

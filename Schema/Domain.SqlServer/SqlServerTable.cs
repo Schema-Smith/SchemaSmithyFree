@@ -57,6 +57,22 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 101)]
         public string CompressionType { get; set; } = "NONE";
 
+        // XML_COMPRESSION, the sibling of DATA_COMPRESSION above and independent of it -- a table can be
+        // PAGE compressed and XML compressed at once.
+        //
+        // THE VERSION STORY IS ASYMMETRIC, and verified live rather than read. The clause deploys from
+        // SQL Server 2022, but sys.partitions.xml_compression does NOT exist there: on 2022 CU25 the
+        // column is only on sys.internal_partitions, which reports NULL for an ordinary table. It appears
+        // on sys.partitions in 2025. So 2022-2024 can deploy this and can never read it back, the same
+        // shape as MariaDB application-time periods (declarable 10.4.3, readable 11.4). Extraction on
+        // those versions therefore PRESERVES whatever the package already declared instead of emitting
+        // nothing, which would silently drop it -- see ImportTableHelper.
+        //
+        // Unlike TextImageFileGroup this is not create-time only: ALTER TABLE ... REBUILD WITH changes it.
+        [SchemaProperty(Description = "SQL Server 2022+. Compresses XML column data in place. Sibling of CompressionType (DATA_COMPRESSION), and independent of it. **Deployable from 2022, but only EXTRACTABLE from 2025** — sys.partitions.xml_compression does not exist before then, so on 2022-2024 SchemaTongs carries the value forward from the package it is refreshing rather than dropping it.")]
+        [JsonProperty(Order = 118)]
+        public bool XmlCompression { get; set; }
+
         [JsonProperty(Order = 102)]
         public bool IsTemporal { get; set; }
 
@@ -170,5 +186,54 @@ namespace Schema.Domain.SqlServer
         [JsonProperty(Order = 116, NullValueHandling = NullValueHandling.Ignore)]
         public string Ledger { get; set; }
 
+        // Partition placement (#partitioning): the NAME of an existing partition scheme, plus the column
+        // the table is partitioned on. Both or neither -- a scheme with no column is not a placement.
+        //
+        // A NAME ONLY, exactly like FileGroup, and for the same reason: SchemaSmith places tables on
+        // partitioning, it does not author or migrate the partitioning itself. It never creates a partition
+        // function or scheme (it errors by name if the declared scheme is missing on the target), and it
+        // never moves an existing table onto or off one -- a declared scheme that differs from where the
+        // table already lives is refused rather than attempted, because that statement rewrites every row
+        // and a state-based diff cannot derive the SPLIT/MERGE intent behind a boundary change.
+        //
+        // That restraint has a second payoff: partition schemes required Enterprise Edition before
+        // SQL Server 2016 SP1, and since nothing here ever creates one, no edition or version gate is
+        // needed. If the scheme exists on the target, the target can already do this.
+        [JsonProperty(Order = 119, NullValueHandling = NullValueHandling.Ignore)]
+        public string PartitionScheme { get; set; }
+
+        // The column fed to the partition function. Names one column: SQL Server partitions on a single
+        // column, unlike MySQL's RANGE COLUMNS.
+        [JsonProperty(Order = 120, NullValueHandling = NullValueHandling.Ignore)]
+        public string PartitionColumn { get; set; }
+
+        // Memory-optimized (Hekaton) tables (#J1, SQL Server 2014+). "true" creates the table
+        // WITH (MEMORY_OPTIMIZED = ON) -- a distinct in-memory storage engine, not a variation of the
+        // disk-based one.
+        //
+        // Create-time only, and a hard constraint rather than a choice: there is no
+        // ALTER TABLE ... SET (MEMORY_OPTIMIZED = ON) at all (error 102, not even syntax), so a table
+        // cannot be converted in either direction. A change on a deployed table is refused by name, exactly
+        // like GraphType and Ledger.
+        //
+        // Its indexes must be declared INLINE in the CREATE TABLE: CREATE INDEX is rejected on a
+        // memory-optimized table ("The operation 'CREATE INDEX' is not supported with memory optimized
+        // tables"). SchemaSmith emits them inline and the ordinary index passes skip the table.
+        //
+        // Requires a MEMORY_OPTIMIZED_DATA filegroup on the database and an edition/version that supports
+        // the engine (SERVERPROPERTY('IsXTPSupported') = 1). SchemaSmith creates neither; a table asking
+        // for this without them is reported through UnsupportedFeaturePolicy rather than failing the raw
+        // CREATE -- the same detect-don't-create posture FileGroup and the temporal history table take.
+        [JsonProperty(Order = 121, NullValueHandling = NullValueHandling.Ignore)]
+        public bool MemoryOptimized { get; set; }
+
+        // DURABILITY for a memory-optimized table: "SCHEMA_AND_DATA" (default -- data survives a restart)
+        // or "SCHEMA_ONLY" (only the schema survives; rows are transient). Meaningless unless
+        // MemoryOptimized is true. Create-time only like MemoryOptimized -- no ALTER exists (error 102) --
+        // so a change on a deployed table is refused rather than attempted.
+        [SchemaProperty(Pattern = "SCHEMA_AND_DATA|SCHEMA_ONLY",
+            Description = "Memory-optimized durability: SCHEMA_AND_DATA (default, data persists) or SCHEMA_ONLY (rows are transient). Only meaningful with MemoryOptimized. Create-time only.")]
+        [JsonProperty(Order = 122, NullValueHandling = NullValueHandling.Ignore)]
+        public string Durability { get; set; }
     }
 }

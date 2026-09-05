@@ -872,7 +872,10 @@ BEGIN
                             OR COALESCE(i."PrimaryKey", FALSE) != ei."PrimaryKey"
                             OR COALESCE(i."FilterExpression", '') != COALESCE(ei."FilterExpression", '')
                             OR COALESCE(i."AccessMethod", 'btree') != COALESCE(ei."AccessMethod", 'btree')
-                            OR COALESCE(i."NullsNotDistinct", false) != COALESCE(ei."NullsNotDistinct", false)))
+                            OR COALESCE(i."NullsNotDistinct", false) != COALESCE(ei."NullsNotDistinct", false)
+                            -- A storage-parameter change rebuilds the index (hnsw m and ivfflat lists cannot
+                            -- be ALTERed in place), so it drops here and the missing-index pass recreates it.
+                            OR COALESCE(i."StorageParameters", '') != COALESCE(ei."StorageParameters", '')))
            OR (p_DropIndexesRemovedFromProduct -- Index Removed from Product Definition (gated)
                AND COALESCE((SELECT tt."DropIndexesRemovedFromProduct" FROM temp_tables tt WHERE tt."Schema" = ei."TableSchema" AND tt."Name" = ei."TableName"), TRUE)
                AND EXISTS (SELECT 1
@@ -1348,6 +1351,45 @@ BEGIN
             FROM temp_tables WHERE COALESCE("AccessMethod", '') NOT IN ('', 'heap');
       END IF;
     END IF;
+
+    -- Placement drift. Same posture as SQL Server's FileGroup, and for the same reasons:
+    --   * An UNSET Tablespace means "SchemaSmith does not manage placement here", NOT a declaration of
+    --     the database default. Reading unset as "the default" would fail every object a DBA placed
+    --     elsewhere on its SECOND deploy, in packages that never mentioned placement at all.
+    --   * A DECLARED tablespace that differs from where the object already lives is a MOVE.
+    --     ALTER TABLE ... SET TABLESPACE rewrites the whole table under an ACCESS EXCLUSIVE lock, and
+    --     ALTER INDEX ... SET TABLESPACE rebuilds the index, so this errors naming both rather than
+    --     silently moving data. Clearing a declared value back to unset is a no-op, which is the right
+    --     side to err on: SchemaSmith never moves objects between tablespaces either way.
+    DECLARE
+      v_move RECORD;
+    BEGIN
+      FOR v_move IN
+        SELECT t."Schema" AS sch, t."Name" AS obj, 'table' AS kind,
+               t."Tablespace" AS declared, COALESCE(ts.spcname, '') AS live
+          FROM temp_tables t
+          JOIN pg_class c ON c.relname = t."Name"
+                         AND c.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = t."Schema")
+                         AND c.relkind = 'r'
+          LEFT JOIN pg_tablespace ts ON ts.oid = c.reltablespace
+         WHERE COALESCE(t."Tablespace", '') <> ''
+           AND t."Tablespace" IS DISTINCT FROM COALESCE(ts.spcname, '')
+        UNION ALL
+        SELECT ti."TableSchema", ti."Name", 'index',
+               ti."Tablespace", COALESCE(ts.spcname, '')
+          FROM temp_indexes ti
+          JOIN pg_class c ON c.relname = ti."Name"
+                         AND c.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = ti."TableSchema")
+                         AND c.relkind = 'i'
+          LEFT JOIN pg_tablespace ts ON ts.oid = c.reltablespace
+         WHERE COALESCE(ti."Tablespace", '') <> ''
+           AND ti."Tablespace" IS DISTINCT FROM COALESCE(ts.spcname, '')
+      LOOP
+        RAISE EXCEPTION '% %.% declares tablespace %, but is currently deployed on %. SchemaSmith does not move an existing object to a different tablespace (that is a rewrite) -- migrate it manually, or correct the declared tablespace to match.',
+          v_move.kind, v_move.sch, v_move.obj, v_move.declared,
+          CASE WHEN v_move.live = '' THEN 'the database default' ELSE v_move.live END;
+      END LOOP;
+    END;
 
     RAISE NOTICE 'Fixup Table Attributes';
     SELECT STRING_AGG('RAISE NOTICE ''  Fixing up attributes for ' || t."Schema" || '.' || t."Name" || ''';' || CHR(10) ||

@@ -28,6 +28,7 @@ BEGIN
   CALL "SchemaSmith"."ModifiedTableQuench"(p_WhatIf := p_WhatIf, p_DropUnknownIndexes := p_DropUnknownIndexes, p_DropTablesRemovedFromProduct := p_DropTablesRemovedFromProduct,
                                            p_RebuildPolicyMode := p_RebuildPolicyMode, p_RebuildPolicyThreshold := p_RebuildPolicyThreshold, p_RebuildPolicyOnOrderMismatch := p_RebuildPolicyOnOrderMismatch);
   CALL "SchemaSmith"."MissingIndexesAndConstraintsQuench"(p_WhatIf);
+  CALL "SchemaSmith"."ReplicaIdentityQuench"(p_WhatIf);
   CALL "SchemaSmith"."ForeignKeyQuench"(p_WhatIf);
   CALL "SchemaSmith"."FixupTableOwnership"(p_ProductName, p_WhatIf);
   CALL "SchemaSmith"."FixupIndexOwnership"(p_ProductName, p_WhatIf);

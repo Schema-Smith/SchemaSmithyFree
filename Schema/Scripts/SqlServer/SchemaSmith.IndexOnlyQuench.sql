@@ -59,10 +59,11 @@ BEGIN TRY
   RAISERROR('Parse Indexes from Json', 10, 100) WITH NOWAIT
   DROP TABLE IF EXISTS #Indexes
   SELECT [_RowId] = ROW_NUMBER() OVER (ORDER BY (SELECT NULL)),
-         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
+         t.[Schema], t.[Name] AS [TableName], [IndexName] = SchemaSmith.fn_SafeBracketWrap(i.[IndexName]), [CompressionType] = ISNULL(i.[CompressionType], 'NONE'), [XmlCompression] = ISNULL(i.[XmlCompression], 0), [PrimaryKey] = ISNULL(i.[PrimaryKey], 0),
          [Unique] = COALESCE(NULLIF(i.[Unique], 0), NULLIF(i.[PrimaryKey], 0), i.[UniqueConstraint], 0),
          [UniqueConstraint] = ISNULL(i.[UniqueConstraint], 0), [Clustered] = ISNULL(i.[Clustered], 0), [ColumnStore] = ISNULL(i.[ColumnStore], 0), [FillFactor] = ISNULL(NULLIF(i.[FillFactor], 0), 100),
-         i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
+         i.[FilterExpression], [FileGroup] = SchemaSmith.fn_SafeBracketWrap(i.[FileGroup]),
+         [PartitionScheme] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionScheme]), [PartitionColumn] = SchemaSmith.fn_SafeBracketWrap(i.[PartitionColumn]), [UpdateFillFactor] = CONVERT(BIT, CASE WHEN @UpdateFillFactor = 1 OR t.[UpdateFillFactor] = 1 OR i.[UpdateFillFactor] = 1 THEN 1 ELSE 0 END),
          [IndexColumns] = (SELECT STRING_AGG(CAST(CASE WHEN RTRIM([value]) LIKE '% DESC'
                                                        THEN SchemaSmith.fn_SafeBracketWrap(SUBSTRING(RTRIM([value]), 1, LEN(RTRIM([value])) - 5)) + ' DESC'
                                                        ELSE SchemaSmith.fn_SafeBracketWrap([value])
@@ -79,6 +80,7 @@ BEGIN TRY
     CROSS APPLY OPENJSON(Indexes) WITH (
       [IndexName] NVARCHAR(500) '$.Name',
       [CompressionType] NVARCHAR(100) '$.CompressionType',
+      [XmlCompression] BIT '$.XmlCompression',
       [PrimaryKey] BIT '$.PrimaryKey',
       [Unique] BIT '$.Unique',
 	  [UniqueConstraint] BIT '$.UniqueConstraint',
@@ -91,6 +93,8 @@ BEGIN TRY
       [IndexColumns] NVARCHAR(MAX) '$.IndexColumns',
       [IncludeColumns] NVARCHAR(MAX) '$.IncludeColumns',
       [FileGroup] NVARCHAR(500) '$.FileGroup',
+      [PartitionScheme] NVARCHAR(500) '$.PartitionScheme',
+      [PartitionColumn] NVARCHAR(500) '$.PartitionColumn',
       [UpdateFillFactor] BIT '$.UpdateFillFactor',
       [ShouldApplyExpression] NVARCHAR(MAX) '$.ShouldApplyExpression',
       [VariantName] NVARCHAR(128) '$.VariantName'
@@ -226,10 +230,19 @@ BEGIN TRY
          IsConstraint = CAST(CASE WHEN si.is_primary_key = 1 OR si.is_unique_constraint = 1 THEN 1 ELSE 0 END AS BIT),
          IsUnique = si.is_unique, IsClustered = CAST(CASE WHEN si.[type_desc] = 'CLUSTERED' THEN 1 ELSE 0 END AS BIT), [FillFactor] = ISNULL(NULLIF(si.fill_factor, 0), 100),
          -- Filegroup placement (#filegroups): the index's LIVE filegroup name, for the declared-vs-deployed
-         -- move check below. Deliberately NOT folded into [IndexScript] -- a filegroup difference must
+         -- move check below. Deliberately NOT folded into [IndexScript] -- a placement difference must
          -- ERROR, never trigger a silent rebuild via the ordinary "index definition changed" path. Mirrors
          -- ModifiedTableQuench.sql's #ExistingIndexes build.
          [xFileGroup] = fg.[name],
+         -- Partition placement (#partitioning, K1): mutually exclusive with the filegroup above, since an
+         -- index lives on ONE data space. Read with its column, because the same scheme on a different
+         -- column is a different physical layout.
+         [xPartitionScheme] = pds.[name],
+         [xPartitionColumn] = (SELECT pc.[name]
+                                 FROM sys.index_columns pic WITH (NOLOCK)
+                                 JOIN sys.columns pc WITH (NOLOCK) ON pc.[object_id] = pic.[object_id] AND pc.column_id = pic.column_id
+                                WHERE pic.[object_id] = si.[object_id] AND pic.index_id = si.index_id
+                                  AND pic.partition_ordinal = 1),
          IndexScript = 'CREATE ' +
                        CASE WHEN si.is_unique = 1 THEN 'UNIQUE ' ELSE '' END + 
                        CASE WHEN si.[type] IN (1, 5) THEN '' ELSE 'NON' END + 'CLUSTERED ' +
@@ -267,6 +280,7 @@ BEGIN TRY
                    CASE WHEN si.ignore_dup_key = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
                    CASE WHEN si.is_padded = 1 THEN ', PAD_INDEX=ON' ELSE '' END) o
     LEFT JOIN sys.filegroups fg WITH (NOLOCK) ON fg.data_space_id = si.data_space_id
+    LEFT JOIN sys.data_spaces pds WITH (NOLOCK) ON pds.data_space_id = si.data_space_id AND pds.[type] = 'PS'
     WHERE t.MissingTable = 0
       AND NOT EXISTS (SELECT * FROM sys.xml_indexes xi WHERE xi.[object_id] = si.[object_id] AND xi.index_id = si.index_id)
 
@@ -297,6 +311,41 @@ BEGIN TRY
     DECLARE @v_IdxMoveMsg NVARCHAR(2000) = 'Index ' + @v_IdxMoveIndex + ' declares filegroup ' + @v_IdxMoveDeclared +
       ', but is currently deployed on filegroup ' + @v_IdxMoveLive + '. SchemaSmith does not move an existing index to a different filegroup (that is a rebuild) -- migrate it manually, or correct the declared filegroup to match.';
     THROW 51000, @v_IdxMoveMsg, 1;
+  END
+
+  -- Partition placement (#partitioning, K1): the index-level twin of the table check in
+  -- ModifiedTableQuench, refused for the same reason -- rebuilding an index onto a different scheme
+  -- rewrites the whole index. Placement is deliberately absent from [IndexScript], so without this an index
+  -- whose declared scheme changed would be SILENTLY left where it is: the ordinary drop-and-recreate path
+  -- cannot see a difference it never compares.
+  RAISERROR('Validate declared index partition scheme matches deployed', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #ExistingIndexes ei WITH (NOLOCK)
+               JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                            AND ei.[xTableName] = i.[TableName]
+                                            AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+               WHERE i.[PartitionScheme] IS NOT NULL
+                 AND (ei.[xPartitionScheme] IS NULL
+                      OR SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]) <> ei.[xPartitionScheme]
+                      OR (ei.[xPartitionColumn] IS NOT NULL
+                          AND SchemaSmith.fn_StripBracketWrapping(i.[PartitionColumn]) <> ei.[xPartitionColumn])))
+  BEGIN
+    DECLARE @v_IdxPsIndex NVARCHAR(1510), @v_IdxPsDeclared NVARCHAR(1010), @v_IdxPsLive NVARCHAR(1010)
+    SELECT TOP 1 @v_IdxPsIndex = ei.[xSchema] + '.' + ei.[xTableName] + '.' + ei.[xIndexName],
+                 @v_IdxPsDeclared = SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]) + '(' + SchemaSmith.fn_StripBracketWrapping(i.[PartitionColumn]) + ')',
+                 @v_IdxPsLive = ISNULL(ei.[xPartitionScheme] + '(' + ISNULL(ei.[xPartitionColumn], '?') + ')', 'filegroup ' + ISNULL(ei.[xFileGroup], 'the database default'))
+      FROM #ExistingIndexes ei WITH (NOLOCK)
+      JOIN #Indexes i WITH (NOLOCK) ON ei.[xSchema] = i.[Schema]
+                                   AND ei.[xTableName] = i.[TableName]
+                                   AND ei.[xIndexName] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])
+      WHERE i.[PartitionScheme] IS NOT NULL
+        AND (ei.[xPartitionScheme] IS NULL
+             OR SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]) <> ei.[xPartitionScheme]
+             OR (ei.[xPartitionColumn] IS NOT NULL
+                 AND SchemaSmith.fn_StripBracketWrapping(i.[PartitionColumn]) <> ei.[xPartitionColumn]))
+    DECLARE @v_IdxPsMsg NVARCHAR(2000) = 'Index ' + @v_IdxPsIndex + ' declares partition placement ' + @v_IdxPsDeclared +
+      ', but is currently deployed on ' + @v_IdxPsLive + '. SchemaSmith does not move an existing index onto or between partition schemes -- that rebuilds the whole index. Migrate it manually, or correct the declaration to match.';
+    THROW 51000, @v_IdxPsMsg, 1;
   END
 
   RAISERROR('Collect Existing XML Index Definitions', 10, 100) WITH NOWAIT
@@ -714,6 +763,26 @@ BEGIN TRY
     THROW 51000, @v_IdxFGMsg, 1;
   END
 
+  -- Partition placement (#partitioning, K1): the scheme must exist, same contract as the filegroup check
+  -- above -- SchemaSmith creates neither.
+  RAISERROR('Validate declared index partition schemes exist', 10, 100) WITH NOWAIT
+  IF EXISTS (SELECT 1
+               FROM #Indexes i WITH (NOLOCK)
+               WHERE i.[PartitionScheme] IS NOT NULL
+                 AND NOT EXISTS (SELECT * FROM sys.partition_schemes ps WITH (NOLOCK) WHERE ps.[name] = SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]))
+                 AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName])))
+  BEGIN
+    DECLARE @v_IdxPsMissing NVARCHAR(1510), @v_IdxPsMissingName NVARCHAR(500)
+    SELECT TOP 1 @v_IdxPsMissing = i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName], @v_IdxPsMissingName = i.[PartitionScheme]
+      FROM #Indexes i WITH (NOLOCK)
+      WHERE i.[PartitionScheme] IS NOT NULL
+        AND NOT EXISTS (SELECT * FROM sys.partition_schemes ps WITH (NOLOCK) WHERE ps.[name] = SchemaSmith.fn_StripBracketWrapping(i.[PartitionScheme]))
+        AND NOT EXISTS (SELECT * FROM sys.indexes si WITH (NOLOCK) WHERE si.[object_id] = OBJECT_ID(i.[Schema] + '.' + i.[TableName]) AND si.[name] = SchemaSmith.fn_StripBracketWrapping(i.[IndexName]))
+    DECLARE @v_IdxPsMissingMsg NVARCHAR(2000) = 'Index ' + @v_IdxPsMissing + ' declares partition scheme ' + @v_IdxPsMissingName +
+      ', which does not exist on this database. SchemaSmith does not create partition functions or schemes -- create them on the target first, or correct the declared name.';
+    THROW 51000, @v_IdxPsMissingMsg, 1;
+  END
+
   RAISERROR('Add Missing Indexes', 10, 100) WITH NOWAIT
   SELECT @v_SQL = STRING_AGG(CAST('RAISERROR(''  Creating ' + CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1 THEN 'constraint' ELSE 'index' END + ' ' + i.[Schema] + '.' + i.[TableName] + '.' + i.[IndexName] + CASE WHEN RTRIM(ISNULL(i.[VariantName], '')) <> '' THEN ' (variant: ' + REPLACE(RTRIM(i.[VariantName]), '''', '''''') + ')' ELSE '' END + ''', 10, 100) WITH NOWAIT;' + CHAR(13) + CHAR(10) +
                                   CASE WHEN i.PrimaryKey = 1 OR i.UniqueConstraint = 1
@@ -730,12 +799,19 @@ BEGIN TRY
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
                                                       CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+
+                                                      -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
+                                                      -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
+                                                      -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the
+                                                      -- catalog READ needs kindle-time composition, because that names a column.
+                                                      CASE WHEN i.[XmlCompression] = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16 THEN ', XML_COMPRESSION=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH
                                             -- clause for ADD CONSTRAINT, per its own grammar (unlike CREATE
                                             -- TABLE, where ON precedes WITH). Existence validated above.
-                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
+                                            CASE WHEN i.[PartitionScheme] IS NOT NULL THEN ' ON ' + i.[PartitionScheme] + '(' + i.[PartitionColumn] + ')'
+                                                 WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
                                        ELSE 'CREATE ' +
                                             CASE WHEN i.[Unique] = 1 THEN 'UNIQUE ' ELSE '' END +
                                             CASE WHEN i.[Clustered] =  1 THEN '' ELSE 'NON' END + 'CLUSTERED ' +
@@ -761,11 +837,18 @@ BEGIN TRY
                                                            ELSE '' END +
                                                       CASE WHEN i.[IgnoreDuplicateKey] = 1 THEN ', IGNORE_DUP_KEY=ON' ELSE '' END +
                                                       CASE WHEN i.[PadIndex] = 1 THEN ', PAD_INDEX=ON' ELSE '' END +
+
+                                                      -- XML_COMPRESSION rides the same WITH list. Leading comma is safe for the
+                                                      -- same reason PAD_INDEX's is: CompressionType is ISNULL'd to 'NONE' in the
+                                                      -- parse, so DATA_COMPRESSION always leads. Gated on 2022 by VALUE; only the
+                                                      -- catalog READ needs kindle-time composition, because that names a column.
+                                                      CASE WHEN i.[XmlCompression] = 1 AND SchemaSmith.fn_ServerMajorVersion() >= 16 THEN ', XML_COMPRESSION=ON' ELSE '' END +
 							                          ')'
                                                  ELSE '' END +
                                             -- Filegroup placement (#filegroups): ON comes AFTER the WITH
                                             -- clause for CREATE INDEX too. Existence validated above.
-                                            CASE WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
+                                            CASE WHEN i.[PartitionScheme] IS NOT NULL THEN ' ON ' + i.[PartitionScheme] + '(' + i.[PartitionColumn] + ')'
+                                                 WHEN i.[FileGroup] IS NOT NULL THEN ' ON ' + i.[FileGroup] ELSE '' END
                                        END + ';' AS NVARCHAR(MAX)), CHAR(13) + CHAR(10)) WITHIN GROUP (ORDER BY i.[Schema], i.[TableName], CASE WHEN i.[Clustered] =  1 THEN 0 ELSE 1 END, i.[IndexName])
     FROM #Indexes i WITH (NOLOCK)
     WHERE NOT EXISTS (SELECT * 

@@ -82,6 +82,16 @@ The JSON schema can enforce shape, but it can't confirm that a foreign key actua
 | `SS-TBL-001` | Error | A table's `RebuildPolicy` uses `Mode: "THRESHOLD"` without a `Threshold` of 1 or more, so the policy cannot be evaluated. |
 | `SS-RLS-001` | Warning | PostgreSQL — a table sets `RowLevelSecurity` but declares no `Policies`. PostgreSQL returns no rows to anyone except the table owner until a permissive policy exists, so this locks the table rather than restricting it. |
 | `SS-RLS-002` | Warning | PostgreSQL — a table declares `Policies` but does not set `RowLevelSecurity`, so the policies are created and enforced against nothing. |
+| `SS-RI-001` | Error | PostgreSQL — a table sets `ReplicaIdentity` to `INDEX` but declares no `ReplicaIdentityIndex`, so there is no index to carry the identity. |
+| `SS-RI-002` | Error | PostgreSQL — a table's `ReplicaIdentityIndex` names an index the table does not declare, so the deploy would point the replica identity at an index that is never created. |
+| `SS-RI-003` | Error | PostgreSQL — a table's `ReplicaIdentityIndex` names an index that is not unique. PostgreSQL requires a unique, non-partial index over `NOT NULL` columns. |
+| `SS-RI-004` | Warning | PostgreSQL — a table names a `ReplicaIdentityIndex` while its `ReplicaIdentity` is not `INDEX`, so the index name is ignored. |
+| `SS-SV-001` | Warning | MariaDB — a column sets `WithoutSystemVersioning` on a table that does not set `IsSystemVersioned`. MariaDB accepts the clause there and silently discards it, so the exclusion does nothing and nothing at deploy time reports it. |
+| `SS-CO-001` | Error | MySQL/MariaDB — a table sets `Compression` (MySQL) or `PageCompressed` (MariaDB) together with `RowFormat: "COMPRESSED"`. Both engines refuse that combination (MySQL error 1031, MariaDB errno 140) and neither error names the option. |
+| `SS-CO-002` | Warning | MariaDB — a table sets `PageCompressionLevel` without `PageCompressed`, so the level is ignored. |
+| `SS-EVT-001` | Error | MySQL/MariaDB — a scheduled event is declared as JSON *and* scripted as a `.sql` file in the same `Events` folder. The scripted form drops and recreates the event on every deploy, undoing what the declared form converged. |
+| `SS-PART-001` | Error | SQL Server — a table or index declares `PartitionScheme` without `PartitionColumn`, or the reverse. The `ON` clause needs both: the scheme, and the column its partition function is applied to. |
+| `SS-PART-002` | Error | SQL Server — a table or index declares both `FileGroup` and `PartitionScheme`. It lives on one data space; declare one or the other. |
 
 Related-table resolution honors the same schema defaulting a real deployment uses -- an explicit `RelatedTableSchema`, a `schema.table` prefix on `RelatedTable`, or (falling back) the owning table's own schema. Because every foreign key target resolves to a concrete schema one way or another, there's no such thing as an "ambiguous target" here -- a `RelatedTable` either resolves to a real table or it doesn't.
 

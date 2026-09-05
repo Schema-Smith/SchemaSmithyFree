@@ -158,4 +158,36 @@ public class RebuildBlockedReasonTests
             + $"different features with different remediation, and the SYSTEM_TIME period is deliberately "
             + $"excluded from this check so the two cannot be confused. Got: '{reason}'.");
     }
+    // ---- partitioning: a state MariaDB shares with every other engine ---------
+
+    private const string PartTableName = "part_rebuild_guard_mariadb";
+
+    [Test]
+    public void PartitionedTable_IsBlocked_AndTheReasonNamesPartitioning()
+    {
+        // MariaDB carries the whole partition definition INSIDE the table DDL, so a shadow copy built from
+        // the package's column list is unpartitioned by construction. Every row survives the swap and the
+        // layout does not -- and until partitioning is declarable the package has nothing to put back.
+        Exec($"DROP TABLE IF EXISTS `{_testDb}`.`{PartTableName}`");
+        Exec($"CREATE TABLE `{_testDb}`.`{PartTableName}` (id INT NOT NULL, val VARCHAR(50) NULL, PRIMARY KEY(id)) "
+             + "ENGINE=InnoDB PARTITION BY RANGE (id) "
+             + "(PARTITION p0 VALUES LESS THAN (100), PARTITION pmax VALUES LESS THAN MAXVALUE)");
+
+        try
+        {
+            var reason = BlockedReason(PartTableName);
+
+            Assert.That(reason, Is.Not.Null,
+                "A partitioned table must be refused a rebuild, alongside the system-versioning and "
+                + "application-time states this function already names. PostgreSQL's twin already refuses "
+                + "for exactly this reason.");
+            Assert.That(reason, Does.Contain("partition"),
+                $"The refusal must name partitioning rather than any of the sibling states, or the operator "
+                + $"cannot tell what to migrate around. Got: '{reason}'.");
+        }
+        finally
+        {
+            Exec($"DROP TABLE IF EXISTS `{_testDb}`.`{PartTableName}`");
+        }
+    }
 }
