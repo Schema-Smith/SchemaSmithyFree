@@ -24,6 +24,7 @@ Run the linter against the broken SQL Server package (swap `sqlserver` for `post
 schemaquench --Validate --SchemaPackagePath:./sqlserver/Package
 ```
 
+<!-- TRAINING-RELEASE-PIN: --Validate doubled-location board (SS-FK-002 / SS-TOK-001 print their location twice). The 2.6.0 fix prints it once; when that fix reaches the released CLI, re-transcribe this board AND the "wart" note below to single-prefix output on all four engines, then remove this sentinel. -->
 It exits `2` and prints exactly three errors, one from each check engine:
 
 ```
