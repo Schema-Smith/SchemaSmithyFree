@@ -459,6 +459,7 @@
     },
     "Tablespace": {
       "type": "string",
+      "pattern": "^[A-Za-z0-9_$]+$",
       "description": "MySQL only. The InnoDB general tablespace this table is placed in; applied at create, a move is refused. MySQL only."
     },
     "DataDirectory": {
