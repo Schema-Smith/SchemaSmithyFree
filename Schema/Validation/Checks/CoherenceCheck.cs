@@ -44,6 +44,7 @@ public sealed class CoherenceCheck : ISchemaCheck
     private const string PartitionAndFileGroupCode = "SS-PART-002";
     private const string MyPartitionRangeListNoPartitionsCode = "SS-PART-003";
     private const string MyPartitionHashBoundaryCode = "SS-PART-004";
+    private const string MemoryOptimizedPlacementCode = "SS-XTP-001";
     private const string Category = "Coherence";
 
     public IEnumerable<Finding> Run(ValidationContext ctx)
@@ -78,6 +79,7 @@ public sealed class CoherenceCheck : ISchemaCheck
             findings.AddRange(CheckCompressionOptions(table, location));
             findings.AddRange(CheckPartitionPlacement(table, location));
             findings.AddRange(CheckMyPartitioning(table, location));
+            findings.AddRange(CheckMemoryOptimizedPlacement(table, location));
         }
 
         return findings;
@@ -472,6 +474,31 @@ public sealed class CoherenceCheck : ISchemaCheck
             yield return new Finding(Severity.Warning, CompressionLevelInertCode, Category, tableLocation,
                 $"Table '{table.Name}' sets PageCompressionLevel but not PageCompressed, so the level is " +
                 "ignored — set PageCompressed, or drop the level.");
+    }
+
+    /// <summary>
+    /// A memory-optimized (Hekaton) table cannot also declare disk placement (J1). A memory-optimized table
+    /// lives in the MEMORY_OPTIMIZED_DATA filegroup, not a regular/FILESTREAM filegroup, and cannot be
+    /// partitioned — so FileGroup / TextImageFileGroup / FileStreamFileGroup / PartitionScheme alongside
+    /// MemoryOptimized is a contradiction the engine rejects with its own error. Caught here by name so the
+    /// author sees which two settings conflict rather than a raw CREATE failure.
+    /// </summary>
+    private static IEnumerable<Finding> CheckMemoryOptimizedPlacement(Table table, string tableLocation)
+    {
+        if (table is not SqlServerTable sqlTable || !sqlTable.MemoryOptimized) yield break;
+
+        foreach (var (prop, value) in new[]
+                 {
+                     ("FileGroup", sqlTable.FileGroup),
+                     ("TextImageFileGroup", sqlTable.TextImageFileGroup),
+                     ("FileStreamFileGroup", sqlTable.FileStreamFileGroup),
+                     ("PartitionScheme", sqlTable.PartitionScheme),
+                 })
+            if (!string.IsNullOrWhiteSpace(value))
+                yield return new Finding(Severity.Error, MemoryOptimizedPlacementCode, Category, tableLocation,
+                    $"Table '{table.Name}' is MemoryOptimized but also declares {prop} '{value}'. A " +
+                    "memory-optimized table lives in the MEMORY_OPTIMIZED_DATA filegroup and cannot be placed " +
+                    "on a regular/FILESTREAM filegroup or partitioned — drop the placement, or drop MemoryOptimized.");
     }
 
     /// <summary>

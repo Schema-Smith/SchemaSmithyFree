@@ -154,11 +154,6 @@ public class WithoutSystemVersioningTests
         Exec($"CALL SchemaSmith_TableQuench('WithoutSvProductMdb', '{_testDb}', '{json}', 0, 0, 0)");
     }
 
-    private bool ColumnIsExcluded(string column) =>
-        (ScalarStr($@"SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS
-           WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{TableName}' AND COLUMN_NAME = '{column}'") ?? "")
-        .Contains("WITHOUT SYSTEM VERSIONING", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>
     /// Creates the versioned table directly, because SchemaSmith cannot: IsSystemVersioned is
     /// extract-only today -- nothing in any deploy script emits WITH SYSTEM VERSIONING, so a package
@@ -184,9 +179,11 @@ public class WithoutSystemVersioningTests
                 ) ENGINE=InnoDB WITH SYSTEM VERSIONING");
     }
 
-    private bool ColumnIsExcluded() =>
+    private bool ColumnIsExcluded() => ColumnIsExcluded("payload");
+
+    private bool ColumnIsExcluded(string column) =>
         (ScalarStr($@"SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS
-           WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{TableName}' AND COLUMN_NAME = 'payload'") ?? "")
+           WHERE TABLE_SCHEMA = '{_testDb}' AND TABLE_NAME = '{TableName}' AND COLUMN_NAME = '{column}'") ?? "")
         .Contains("WITHOUT SYSTEM VERSIONING", StringComparison.OrdinalIgnoreCase);
 
     private long DowngradedAuditCount() => Scalar(
