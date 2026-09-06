@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Schema.Delivery;
+using System.ComponentModel;
 
 namespace Schema.Domain.SqlServer
 {
@@ -55,6 +56,7 @@ namespace Schema.Domain.SqlServer
         public string Schema { get; set; }
 
         [JsonProperty(Order = 101)]
+        [DefaultValue("NONE")]
         public string CompressionType { get; set; } = "NONE";
 
         // XML_COMPRESSION, the sibling of DATA_COMPRESSION above and independent of it -- a table can be

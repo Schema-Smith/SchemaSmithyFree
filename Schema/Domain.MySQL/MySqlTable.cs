@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Schema.Delivery;
+using System.ComponentModel;
 
 namespace Schema.Domain.MySQL
 {
@@ -29,6 +30,7 @@ namespace Schema.Domain.MySQL
         }
 
         [JsonProperty(Order = 100)]
+        [DefaultValue("InnoDB")]
         public string Engine { get; set; } = "InnoDB";
 
         [SchemaProperty(Pattern = "Dynamic|Compact|Compressed|Redundant|Fixed")]
