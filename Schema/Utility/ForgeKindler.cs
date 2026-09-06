@@ -55,6 +55,20 @@ public static class ForgeKindler
         AcquireKindleLock(command, platform); // throws ArgumentException for unsupported platforms (before the try)
         try
         {
+            // Footgun kill: a caller that does not supply the server version must NOT silently get the
+            // serverMajorVersion == 0 ("assume OLD") branch on a modern server. That branch composes the
+            // pre-2025 xml_compression reference (CONVERT(BIT, NULL)) into GenerateTableJSON and disables
+            // the drift guard -- so on a real SQL Server 2025 box a version-less kindle stripped
+            // XmlCompression from every extraction and never converged TurningItOff. "Not supplied" must
+            // mean "detect it", never "guess old". SQL Server only: it is the sole platform whose kindle
+            // tokens are version-sensitive, and TargetVersionDetector reads ProductVersion, which is safe
+            // on every supported floor (2008R2+). Best-effort: an undetectable version falls back to 0,
+            // i.e. the prior behaviour, so this can only ever improve correctness, never regress it. The
+            // detected value flows into ComputeKindleStamp below and KindleScripts, keeping the stamp and
+            // the resolved helpers consistent (a disagreement between them was the original 2025 defect).
+            if (platform == Platform.SqlServer && serverMajorVersion == 0)
+                serverMajorVersion = TargetVersionDetector.TryDetect(command, Platform.SqlServer)?.ServerComparable ?? 0;
+
             var expected = ComputeKindleStamp(platform, encoding, serverMajorVersion, policy);
             var current = ReadStamp(command, platform);
             if (!forceReKindle && string.Equals(current, expected, StringComparison.Ordinal))
