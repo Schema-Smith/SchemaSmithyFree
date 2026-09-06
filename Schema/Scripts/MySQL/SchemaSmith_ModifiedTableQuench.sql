@@ -2156,16 +2156,29 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
             ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
             AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
         WHERE t.NewTable = 0
+          -- BINARY on BOTH sides of every option comparison, deliberately. COALESCE(fn(), '<literal>')
+          -- combines the function's return collation (the database default, fixed when the function was
+          -- created) with the literal's (the routine's stored collation_connection). When those two
+          -- differ, MariaDB/MySQL resolve the COALESCE to the charset's BINARY collation with
+          -- coercibility NONE -- which can then be compared against nothing at all, and the whole
+          -- ModifiedTableQuench dies with "Illegal mix of collations (utf8mb4_bin,NONE) and
+          -- (<db collation>,IMPLICIT) for operation '<>'".
+          --
+          -- Not hypothetical, and not rare: it fails EVERY deploy into a database whose collation differs
+          -- from the connection default. The shipped demos (utf8mb4_unicode_ci) hit it on both the 10.2
+          -- floor and 11.4; the integration suite missed it only because its TestMain happens to match.
+          -- Both operands are already UPPER-ed (or plain digits), so an exact binary compare is the
+          -- intended semantic regardless -- this is the same idiom the column comparisons above use.
           AND (
               (VERSION() NOT LIKE '%MariaDB%'
                AND t.Encryption IS NOT NULL AND t.Encryption != ''
-               AND UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION'), 'N')) != UPPER(t.Encryption))
+               AND BINARY UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION'), 'N')) != BINARY UPPER(t.Encryption))
               OR
               (VERSION() LIKE '%MariaDB%'
                AND (
-                   (CASE WHEN UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTED'), 'NO')) = 'YES' THEN 1 ELSE 0 END) != t.Encrypted
+                   (CASE WHEN BINARY UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTED'), 'NO')) = BINARY 'YES' THEN 1 ELSE 0 END) != t.Encrypted
                    OR (t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL
-                       AND COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'), '') != CAST(t.EncryptionKeyId AS CHAR))
+                       AND BINARY COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'), '') != BINARY CAST(t.EncryptionKeyId AS CHAR))
                ))
           );
     ELSE
@@ -2185,16 +2198,19 @@ INNER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
                     ON BINARY ist.TABLE_SCHEMA = BINARY p_DatabaseName
                     AND BINARY ist.TABLE_NAME = BINARY SchemaSmith_StripBacktickWrapping(t.TableName)
                 WHERE t.NewTable = 0
+                  -- BINARY on both sides -- see the identical predicate in the p_WhatIf branch above for
+                  -- why (COALESCE across two collations resolves to utf8mb4_bin/NONE and then compares
+                  -- against nothing, killing every deploy into a differently-collated database).
                   AND (
                       (VERSION() NOT LIKE '%MariaDB%'
                        AND t.Encryption IS NOT NULL AND t.Encryption != ''
-                       AND UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION'), 'N')) != UPPER(t.Encryption))
+                       AND BINARY UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION'), 'N')) != BINARY UPPER(t.Encryption))
                       OR
                       (VERSION() LIKE '%MariaDB%'
                        AND (
-                           (CASE WHEN UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTED'), 'NO')) = 'YES' THEN 1 ELSE 0 END) != t.Encrypted
+                           (CASE WHEN BINARY UPPER(COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTED'), 'NO')) = BINARY 'YES' THEN 1 ELSE 0 END) != t.Encrypted
                            OR (t.Encrypted = 1 AND t.EncryptionKeyId IS NOT NULL
-                               AND COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'), '') != CAST(t.EncryptionKeyId AS CHAR))
+                               AND BINARY COALESCE(SchemaSmith_CreateOption(ist.CREATE_OPTIONS, 'ENCRYPTION_KEY_ID'), '') != BINARY CAST(t.EncryptionKeyId AS CHAR))
                        ))
                   );
 
