@@ -2,7 +2,7 @@
 
 *Terraform for SQL Server, Postgres, MySQL, and MariaDB databases*
 
-> **SchemaSmith v2.6.0 released.** Memory-optimized, ledger and graph tables on SQL Server; PostgreSQL enum types, sequences and domain types plus MySQL and MariaDB scheduled events become declarable instead of scripted — closing a silent no-op; MariaDB temporal tables round-trip; and tables can now be rebuilt instead of altered column by column. 37 additions and 19 fixes. [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.6.0) · [CHANGELOG](https://github.com/Schema-Smith/SchemaSmith/blob/main/CHANGELOG.md)
+> **SchemaSmith v2.6.0 released.** Memory-optimized, ledger and graph tables on SQL Server; PostgreSQL enum types, sequences and domain types plus MySQL and MariaDB scheduled events become declarable instead of scripted — closing a silent no-op; MariaDB temporal tables round-trip; and tables can now be rebuilt instead of altered column by column. 37 additions and 19 fixes. [Read the v2.6.0 announcement](https://github.com/Schema-Smith/SchemaSmith/discussions/414) · [Release notes](https://github.com/Schema-Smith/SchemaSmith/releases/tag/v2.6.0)
 
 ![Build](https://github.com/Schema-Smith/SchemaSmith/actions/workflows/continuous-integration.yml/badge.svg)
 [![Latest Release](https://img.shields.io/github/v/release/Schema-Smith/SchemaSmith)](https://github.com/Schema-Smith/SchemaSmith/releases/latest)
