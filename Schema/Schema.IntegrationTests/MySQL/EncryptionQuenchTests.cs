@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using MySqlConnector;
 using NUnit.Framework;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -53,8 +54,12 @@ public class EncryptionQuenchTests
         {
             Exec($"CREATE TABLE `{_testDb}`.`{TableName}` (id INT PRIMARY KEY) ENGINE=InnoDB ENCRYPTION='Y'");
         }
-        catch (Exception ex)
+        catch (MySqlException ex)
         {
+            // Narrow deliberately: a keyring-less server rejects this DDL with a MySqlException, and that
+            // is the only case worth turning into an Ignore. Catching Exception here would also swallow a
+            // broken connection or a bad fixture and report it as "encryption unavailable" -- a green run
+            // hiding a real failure, which is the whole reason to avoid a bare catch.
             Assert.Ignore("MySQL encryption is unavailable on this target (no working keyring): " + ex.Message);
         }
     }
