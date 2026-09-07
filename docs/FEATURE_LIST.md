@@ -203,6 +203,7 @@ The deployment engine. Templates run in 9 ordered execution slots, with state-ba
 | ForeignKeyQuench | ✓ | ✓ | ✓ | ✓ | |
 | ParseTableJsonIntoTempTables | ✓ | ✓ | ✓ | ✓ | |
 | IndexOnlyQuench mode | ✓ | ✓ | ✓ | ✓ | Template `IndexOnlyTableQuenches` |
+| `RebuildPolicy` (rebuild instead of per-column ALTER) | ✓ | ✓ | ✓ | ✓ | `Mode` NEVER / ALWAYS / THRESHOLD, plus `Threshold` and `OnOrderMismatch`; declarable on a table, template, product or the environment (`RebuildPolicyMode`, `RebuildPolicyThreshold`, `RebuildPolicyOnOrderMismatch`) and the nearest level that declares one wins WHOLE. Refused when the live state cannot be reconstructed from the declared definition — system versioning, CDC, replication, Change Tracking, partitioning |
 | IndexedViewQuench (diff-based) | ✓ | n/a | n/a | n/a | |
 | MaterializedViewQuench + MissingMaterializedViewIndexesQuench | n/a | ✓ | n/a | n/a | |
 | ShouldApplyExpression evaluation | ✓ | ✓ | ✓ | ✓ | |
