@@ -11,7 +11,7 @@ Structural validation (Module 3) catches the typo — a missing `DataType`, a mi
 ## Before you start
 
 - **No sandbox, no database, no credentials.** `--Validate` (and `schematongs --WriteSchemasOnly`, used later) never connect to an engine. This lab is entirely database-free.
-- **The CLI is on your PATH** — `schemaquench --version` answers **2.5.0** or later. This lab quotes `--Validate` output verbatim so you can diff your own against it, and 2.5.0 changed one line: SS-FK-002 reports the resolved schema unquoted (`'dbo'`, not `'[dbo]'`). On 2.4.0 the checks all still fire, but that line won't match.
+- **The CLI is on your PATH** — `schemaquench --version` answers **2.6.0** or later. This lab quotes `--Validate` output verbatim so you can diff your own against it, and 2.6.0 tidied the output: a finding's location is printed once, as the line's prefix, instead of twice. On 2.5.0 every check still fires and every fix still works, but `SS-FK-002`, `SS-TOK-001` and `SS-STALE-001` will each read slightly differently from the boards below.
 - Each engine package under `sqlserver/`, `postgres/`, `mysql/`, and `mariadb/` ships **deliberately broken** — that's the starting point. You'll fix it.
 
 > **Path binding note:** if `--SchemaPackagePath:./sqlserver/Package` doesn't bind in your shell, pass the absolute path via the environment instead: `SmithySettings_SchemaPackagePath="$(pwd)/sqlserver/Package" schemaquench --Validate`. Run `schematongs --WriteSchemasOnly` from *inside* a `Package` directory (it defaults to `.`).
@@ -28,23 +28,16 @@ It exits `2` and prints exactly three errors, one from each check engine:
 
 ```
 ERROR [SS-DUP-001] Template 'Main' / Table '[OrderItem]': Duplicate column name '[Quantity]' at Template 'Main' / Table '[OrderItem]' - 2 entries share this name and at least one is not gated by ShouldApplyExpression.
-ERROR [SS-FK-002] Template 'Main' / Table '[OrderItem]' / FK '[FK_OrderItem_Supplier]': Template 'Main' / Table '[OrderItem]' / FK '[FK_OrderItem_Supplier]': RelatedTable '[Supplier]' does not resolve to any known table (resolved schema 'dbo').
-ERROR [SS-TOK-001] .../dbo.Customer.json: .../dbo.Customer.json: references undefined token '{{IncludePiiColumns}}'.
+ERROR [SS-FK-002] Template 'Main' / Table '[OrderItem]' / FK '[FK_OrderItem_Supplier]': RelatedTable '[Supplier]' does not resolve to any known table (resolved schema 'dbo').
+ERROR [SS-TOK-001] .../dbo.Customer.json: References undefined token '{{IncludePiiColumns}}'.
 3 error(s), 0 warning(s)
 ```
 
-> **Yes, two of those repeat themselves.** `SS-FK-002` and `SS-TOK-001` print their location twice — once as the
-> line's prefix and once at the front of the message. `SS-DUP-001` doesn't. That's a wart in the output, not
-> something you did wrong, and it's transcribed here exactly so your own output matches. Your `SS-TOK-001` will
-> show the real path where you cloned the repo, twice, in place of the `...` above.
-
-<!-- TRAINING-RELEASE-PIN: --Validate duplicate location prefix.
-     The boards in this README transcribe the DOUBLED location that every released CLI emits, because the lab
-     asks the learner to diff their own output against them -- a hand-cleaned board would be wrong today. A
-     later CLI prints the location once, at which point these boards become wrong the other way. When the
-     installed `schemaquench --version` no longer doubles it: re-run --Validate on the fixture for EACH of the
-     four engines, replace the boards with the single-prefix output, drop the "repeat themselves" note above,
-     and delete this comment. Re-run all four while you are in here, not just SQL Server. -->
+> **Your `SS-TOK-001` will show the real path where you cloned the repo** in place of the `...` above. Every
+> finding is prefixed with where it lives — a file path for file-scoped checks, the object's position in the
+> package for the rest. `SS-DUP-001` then names that position a second time inside its sentence ("…`at`
+> Template 'Main' / Table '[OrderItem]'"), because *which* table holds the duplicate is the finding, not just
+> where it was found.
 
 
 Three real errors, no database touched:
@@ -108,7 +101,7 @@ The editor `.json-schemas` that give you red-squiggle validation in your IDE are
 1. Hand-edit `sqlserver/Package/.json-schemas/tables.sqlserver.schema` — narrow any `"maxLength": 128` to `"maxLength": 1`, so it no longer matches fresh generation.
 2. Re-run `--Validate`:
    ```
-   ERROR [SS-STALE-001] .../tables.sqlserver.schema: committed .json-schemas are stale - regenerate via --WriteSchemasOnly.
+   ERROR [SS-STALE-001] .../tables.sqlserver.schema: Committed .json-schemas are stale - regenerate via --WriteSchemasOnly.
    ```
    Exit `2`.
 3. Regenerate (database-free), from inside the `Package` directory:
