@@ -2,6 +2,7 @@
 
 using System;
 using System.Data;
+using MySqlConnector;
 using NUnit.Framework;
 using Schema.DataAccess;
 using Schema.Domain;
@@ -90,9 +91,11 @@ public class TablespaceQuenchTests
         {
             Exec($"DROP TABLESPACE {name}");
         }
-        catch
+        catch (MySqlException)
         {
-            // Did not exist -- fine, this is a defensive cleanup, not an assertion.
+            // Did not exist -- fine, this is a defensive cleanup, not an assertion. Narrowed to the
+            // engine's own error: a connection or fixture failure here should surface, not be swallowed
+            // by a cleanup helper and reported as a passing test.
         }
     }
 

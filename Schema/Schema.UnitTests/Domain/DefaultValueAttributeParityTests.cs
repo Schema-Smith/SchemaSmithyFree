@@ -46,9 +46,13 @@ public class DefaultValueAttributeParityTests
             {
                 instance = Activator.CreateInstance(type);
             }
-            catch
+            catch (MissingMethodException)
             {
-                continue; // no usable parameterless ctor — nothing to observe
+                continue; // no parameterless ctor — nothing to observe
+            }
+            catch (TargetInvocationException)
+            {
+                continue; // its ctor refuses to run standalone — likewise nothing to observe
             }
 
             if (instance == null) continue;
@@ -60,7 +64,11 @@ public class DefaultValueAttributeParityTests
                 {
                     value = prop.GetValue(instance);
                 }
-                catch
+                catch (TargetInvocationException)
+                {
+                    continue; // the getter itself threw — it declares no readable default to check
+                }
+                catch (NotSupportedException)
                 {
                     continue;
                 }
