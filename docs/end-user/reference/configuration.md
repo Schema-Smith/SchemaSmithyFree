@@ -295,7 +295,9 @@ Your credentials stay out of the logs. When a tool logs its active configuration
 
 The default sensitive-name patterns (case-insensitive, substring match) are `Password`, `Pwd`, `Secret`, `ApiKey`, `Token`, `ConnectionString`, and `Credential`. A matched value renders as `***` while its name still prints, so you can confirm the setting exists without exposing it. An embedded `Password=` / `Pwd=` inside a connection-string value is stripped even when the surrounding setting or token is not sensitively named -- one leaked connection string is one too many.
 
-All other values are logged as-is, so you can still audit the active configuration from the log.
+**A credential inside a URL is masked too.** A value shaped like `scheme://user:secret@host/path` has its password replaced with `***`, again regardless of what the setting is called. This matters because a URL rarely lives under a sensitively-named setting -- it is a webhook, a custom endpoint, or a URL inside a map-typed token -- and the password sits in the middle of the value rather than after a `Password=` key, so the connection-string rule above never saw it. The username, host, port, and path are all preserved, so a scrubbed line is still diagnosable.
+
+Everything else is logged as-is, so you can still audit the active configuration from the log. The two exceptions above are matched on the *shape* of the value rather than the name of the setting, so they apply even where you have not told SchemaSmith the value is sensitive.
 
 Example log output:
 
