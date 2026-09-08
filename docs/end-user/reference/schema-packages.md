@@ -1765,6 +1765,11 @@ Each file carries a platform infix matching the package's platform -- `<platform
 | `tables.<platform>.schema` | Table JSON files (`Tables/*.json`) |
 | `indexedviews.sqlserver.schema` | Indexed view JSON files (SQL Server packages) |
 | `materializedviews.postgresql.schema` | Materialized view JSON files (PostgreSQL packages) |
+| `sequences.postgresql.schema` | Sequence JSON files (PostgreSQL packages) |
+| `enumtypes.postgresql.schema` | Enum type JSON files (PostgreSQL packages) |
+| `domaintypes.postgresql.schema` | Domain type JSON files (PostgreSQL packages) |
+| `events.mysql.schema` | Scheduled event JSON files (MySQL packages) |
+| `events.mariadb.schema` | Scheduled event JSON files (MariaDB packages) |
 
 ### Settings are scoped to the engines they apply to
 
@@ -1779,7 +1784,7 @@ Not every setting means something on every engine, and a generated schema reflec
 | `DropStatisticsRemovedFromProduct` | SQL Server and PostgreSQL |
 | `UpdateFillFactor` (template level) | SQL Server and PostgreSQL |
 
-**In `products.*` and `templates.*`, a setting kept for more than one engine names them.** `DropStatisticsRemovedFromProduct` and template-level `UpdateFillFactor` both carry `"SQL Server and PostgreSQL only."`, in both files they appear in. Annotation is complete in these two shapes: no setting offered on every engine carries an engine note, so within `Product.json` and `Template.json` the presence of a note does mean the setting is restricted.
+**In `products.*` and `templates.*`, a setting kept for more than one engine names them.** `DropStatisticsRemovedFromProduct` and template-level `UpdateFillFactor` both carry `"SQL Server and PostgreSQL only."`, in both files they appear in. Within these two shapes a note is reliable in one direction: no setting offered on every engine carries one, so a note does mean the setting is restricted. The reverse does not follow -- a restricted setting may simply have no description at all, as `ServerToQuench` does.
 
 **The table-level drop-control overrides are the exception to absence -- and their annotation is incomplete.** The `Drop<Thing>RemovedFromProduct` family is present in *every* engine's `tables.<platform>.schema` rather than filtered, because each one overrides a value inherited from the template or product. Of the 18 properties shared by all four table schemas, exactly **one** -- `DropExcludeConstraintsRemovedFromProduct` -- says `PostgreSQL only.` `DropStatisticsRemovedFromProduct` sits in `tables.mysql.schema` and `tables.mariadb.schema` with no engine note at all, though MySQL and MariaDB have no separate statistics objects for it to act on.
 
