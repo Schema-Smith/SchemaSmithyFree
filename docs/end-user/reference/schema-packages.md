@@ -667,7 +667,16 @@ default" authorable. It requires `Default`; without one there is no value to app
 
 ### User-defined types
 
-When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `DataType` value is the type name. The type must be created in the appropriate types script folder (`DataTypes/` on SQL Server, `Domain Types/`/`Enum Types/`/`Composite Types/` on PostgreSQL) before the table quench runs.
+When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `DataType` value is the type name, and the type must exist before the table quench runs. How you get it there depends on the folder:
+
+| Folder | How the type is defined |
+|---|---|
+| `Domain Types/` (PostgreSQL) | **Declared** — a `.json` file SchemaSmith compares and converges |
+| `Enum Types/` (PostgreSQL) | **Declared** — same, with value ordering preserved |
+| `Composite Types/` (PostgreSQL) | Scripted — a `.sql` file in the folder |
+| `DataTypes/` (SQL Server) | Scripted — a `.sql` file in the folder |
+
+> **Prefer the declared form where one exists.** A scripted type is a guarded `CREATE` — `CREATE TYPE … IF NOT EXISTS` or its equivalent — which runs once and then silently does nothing on every later deploy. Editing the value list or the domain's `CHECK` in the `.sql` changes nothing while the run still reports success. A declared type is compared against the database each deploy, so an edit actually converges.
 
 ### Computed/generated columns
 
