@@ -1779,9 +1779,11 @@ Not every setting means something on every engine, and a generated schema reflec
 | `DropStatisticsRemovedFromProduct` | SQL Server and PostgreSQL |
 | `UpdateFillFactor` (template level) | SQL Server and PostgreSQL |
 
-**Where a setting is kept, its description says which engines it affects.** `DropStatisticsRemovedFromProduct` carries `"SQL Server and PostgreSQL only."` in both the SQL Server and the PostgreSQL file. A setting that applies everywhere carries no such note, so the presence of a note is itself the signal.
+**In `products.*` and `templates.*`, a setting kept for more than one engine names them.** `DropStatisticsRemovedFromProduct` and template-level `UpdateFillFactor` both carry `"SQL Server and PostgreSQL only."`, in both files they appear in. Annotation is complete in these two shapes: no setting offered on every engine carries an engine note, so within `Product.json` and `Template.json` the presence of a note does mean the setting is restricted.
 
-**The table-level drop-control overrides are the exception to absence.** A table's `DropExcludeConstraintsRemovedFromProduct` is present in *every* engine's `tables.<platform>.schema`, annotated `PostgreSQL only.` rather than omitted -- it exists to override a value inherited from the template or product, so it is described rather than removed. Do not read its presence in a MySQL table schema as support for exclude constraints.
+**The table-level drop-control overrides are the exception to absence -- and their annotation is incomplete.** The `Drop<Thing>RemovedFromProduct` family is present in *every* engine's `tables.<platform>.schema` rather than filtered, because each one overrides a value inherited from the template or product. Of the 18 properties shared by all four table schemas, exactly **one** -- `DropExcludeConstraintsRemovedFromProduct` -- says `PostgreSQL only.` `DropStatisticsRemovedFromProduct` sits in `tables.mysql.schema` and `tables.mariadb.schema` with no engine note at all, though MySQL and MariaDB have no separate statistics objects for it to act on.
+
+⚠ **So do not read a table schema the way you can read the other two.** At table level, neither the presence of a property nor the absence of a note tells you the setting applies to your engine -- check the setting's own reference page. The `products.*` / `templates.*` filtering above is reliable; the table-level override family is not yet consistent.
 
 Setting one where it does not belong is no longer silently accepted. `--Validate` reports it as `SS-JSON-001` (`unexpected property`) -- an **Error**-severity finding, so the run exits `2` and fails a CI gate. The package still loads and every other check still runs: it is a lint, not a load failure.
 
