@@ -1766,6 +1766,21 @@ Each file carries a platform infix matching the package's platform -- `<platform
 | `indexedviews.sqlserver.schema` | Indexed view JSON files (SQL Server packages) |
 | `materializedviews.postgresql.schema` | Materialized view JSON files (PostgreSQL packages) |
 
+### Settings are scoped to the engines they apply to
+
+`Product.json` and `Template.json` are shared shapes, but not every setting in them means something on every engine. A generated schema offers only the settings that apply to its own platform, so your editor stops suggesting ones that would do nothing:
+
+| Setting | Appears in |
+|---|---|
+| `DropSchemaBoundDependents` | SQL Server schemas only |
+| `DropExcludeConstraintsRemovedFromProduct` | PostgreSQL schemas only |
+| `DropStatisticsRemovedFromProduct` | SQL Server and PostgreSQL schemas |
+| `UpdateFillFactor` (template level) | SQL Server and PostgreSQL schemas |
+
+Where a setting applies to more than one engine, the schema **says which** rather than leaving you to infer it from whichever file you happen to have open: `DropStatisticsRemovedFromProduct` carries the description `"SQL Server and PostgreSQL only."` in both the SQL Server and the PostgreSQL file. A setting that applies everywhere carries no such note, so the presence of a note is itself the signal.
+
+Setting one on an engine that ignores it is not silently accepted any more. `--Validate` reports it as `SS-JSON-001` (`unexpected property`), because the property genuinely is not part of that platform's schema. This is a lint, not a load failure -- the package still loads, and every other check still runs.
+
 Because the schemas are regenerated every time SchemaTongs writes a package, they always match the current engine. If you've hand-edited any of them to add a custom validation fragment under `Extensions`, that fragment is preserved through regeneration -- see [Custom Properties: JSON Schema Validation](custom-properties.md#json-schema-validation).
 
 ---
