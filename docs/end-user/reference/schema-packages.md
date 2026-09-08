@@ -1472,6 +1472,44 @@ Indexed views are defined as JSON files in the `Indexed Views/` directory of eac
 
 ---
 
+## Declared and Scripted Objects
+
+Four object types accept two authoring forms, and choosing between them is the same decision every time. A
+**declared** object is a `.json` file: SchemaSmith compares it against the database on each deploy, converges
+it when it differs, and can remove it when it leaves the package. A **scripted** object is a `.sql` file in
+the same folder: it runs on every deploy, is never compared, and is never removed by absence. Both forms are
+supported, both can live in one package, and existing scripted packages need no change.
+
+| Object type | Folder | Engine |
+|---|---|---|
+| Sequences | `Sequences/` | PostgreSQL |
+| Domain types | `Domain Types/` | PostgreSQL |
+| Enum types | `Enum Types/` | PostgreSQL |
+| Scheduled events | `Events/` | MySQL / MariaDB |
+
+> **Why the declared form exists.** None of these objects has a `CREATE OR REPLACE`, so the scripted form is
+> always a *guarded* `CREATE` — and a guard only helps the first time. Once the object exists the guard
+> skips, so editing the value list, the `CHECK`, or the event body in the `.sql` changes nothing on every
+> later deploy, while the run still reports success. That is the failure the declared form removes: it is not
+> a matter of taste, it is the difference between an edit that lands and one that silently does not.
+
+**Declaring the same object both ways is a conflict**, because the scripted form re-runs and undoes what the
+declared form just converged. Where SchemaSmith can detect it, [`--Validate`](validate.md) reports it — for
+scheduled events, as `SS-EVT-001`.
+
+### Where convergence stops
+
+Every declared type draws a boundary, and it is drawn in the same place for the same reason: SchemaSmith
+converges the object's *definition*, and refuses where converging would destroy data or is impossible in the
+engine. Each is documented in full in its own section below.
+
+| Object | Converged | Where it stops, and why |
+|---|---|---|
+| Sequence | type, increment, bounds, cache | **The current position is never managed** — it records which numbers were handed out, so it is data, not schema |
+| Domain type | `CHECK`, default, nullability | **A base-type change is refused** — PostgreSQL has no `ALTER DOMAIN … TYPE`; it is a syntax error, not an unsupported operation |
+| Enum type | added values, ordering | **Removing a value is reported, never performed** — PostgreSQL cannot remove one without recreating the type, which would drop every column using it |
+| Scheduled event | schedule, body, status | **Removal reaches only events SchemaSmith created**, and only with `DropEventsRemovedFromProduct` on — one made by hand is never touched |
+
 ## Sequence JSON Format (PostgreSQL)
 
 Sequences live in the `Sequences/` directory of each template, which accepts both `.json` (declared and converged) and `.sql` (scripted, exactly as before).
