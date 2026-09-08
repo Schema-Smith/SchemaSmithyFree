@@ -494,6 +494,8 @@ Each platform's table definition extends the shared properties with engine-speci
 | `HistoryTableSchema` | string | `null` | Schema of the temporal history table when `IsTemporal` is `true`. `null` means the same schema as the versioned table. |
 | `HistoryTableName` | string | `null` | Name of the temporal history table when `IsTemporal` is `true`. `null` means `<Name>_Hist`. Pointing an existing temporal table at a *different* history table is not something SchemaQuench performs. |
 | `HistoryRetentionPeriod` | string | `null` | Retention for the temporal history table, as the SQL Server token (e.g. `"5 YEARS"`, `"90 DAYS"`, `"INFINITE"`). `null` leaves retention unmanaged. |
+| `MemoryOptimized` | bool | `false` | Creates the table in the In-Memory OLTP engine (`MEMORY_OPTIMIZED = ON`) instead of on disk. The database must already have a `MEMORY_OPTIMIZED_DATA` filegroup and the server must support In-Memory OLTP; SchemaSmith creates neither and **fails by name rather than degrading** — see [Memory-Optimized Tables](#memory-optimized-tables-sql-server). **Create-time only:** SQL Server has no `ALTER` that moves a table into or out of the memory-optimized engine, so changing this on a deployed table is refused rather than attempted. |
+| `Durability` | string | `"SCHEMA_AND_DATA"` | `"SCHEMA_AND_DATA"` keeps both the schema and the rows across a restart; `"SCHEMA_ONLY"` keeps the schema and discards every row — genuinely useful for staging and session tables, and genuine data loss if you reach for it by accident. Only meaningful with `MemoryOptimized`. Omitted or blank becomes `SCHEMA_AND_DATA`, and the value is upper-cased before use. **Create-time only** — there is no `ALTER` for a memory-optimized table's durability, so a change is refused. |
 
 ### PostgreSQL (`PostgreSqlTable`)
 
@@ -526,6 +528,9 @@ Each platform's table definition extends the shared properties with engine-speci
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MySQL supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
 | `Compression` | string | `null` | **MySQL only.** InnoDB transparent page compression: `"zlib"`, `"lz4"` or `"none"`. Cannot be combined with `RowFormat: "COMPRESSED"` — MySQL refuses that with error 1031, and `--Validate` reports `SS-CO-001` first. MariaDB spells this `PageCompressed`. |
 | `KeyBlockSize` | int | `null` | InnoDB compressed-page size in KB (1, 2, 4, 8, 16). Only meaningful with `RowFormat: "COMPRESSED"`. |
+| `Encryption` | string | `null` | **MySQL only.** InnoDB at-rest tablespace encryption: `"Y"` or `"N"`. Unset means SchemaSmith does not manage encryption, so a tablespace someone encrypted by hand is left as it is. **Converges both ways** — unlike the placement properties below, turning encryption on or off rebuilds the tablespace in place without discarding anything, so there is no data-loss direction to refuse. There is no version gate: a server with no keyring plugin rejects the statement with its own error, which is server configuration rather than a version floor. MariaDB uses `Encrypted` instead. |
+| `DataDirectory` | string | `null` | The filesystem directory the table's data file is placed in (InnoDB `DATA DIRECTORY`). MySQL additionally requires the directory to be listed in the server's `innodb_directories`. **Applied at create; a move is refused by name** — MySQL and MariaDB cannot relocate a table's data file in place, so a declared directory that differs from the deployed one stops the run rather than being silently ignored. **The refusal fires under `--WhatIf` too**, because there is no safe preview of a change that cannot be made. Unset means placement is unmanaged, not "has none". |
+| `Tablespace` | string | `null` | **MySQL only.** The general tablespace the table is placed in. Same posture as `DataDirectory` — applied at create, a move refused by name, unset means unmanaged. MariaDB has no general tablespaces. |
 | `Partitioning` | object | `null` | How the table is partitioned. See [Partitioning (MySQL / MariaDB)](#partitioning-mysql--mariadb). Leave it unset and SchemaSmith does not manage partitioning at all, so a table someone partitioned by hand is left exactly as it is. |
 
 ### MariaDB (`MariaDbTable`)
@@ -541,7 +546,9 @@ MariaDB tables carry every MySQL property above, plus the ones below for feature
 | `Comment` | string | `null` | Table comment. |
 | `AutoIncrementValue` | ulong | `null` | Initial auto-increment seed value. Applied at quench time using set-if-higher semantics: the seed is only raised, never lowered (MariaDB clamps a below-current value to max+1, so skipping the statement avoids phantom DDL on every quench). |
 | `FullTextIndexes` | array | `[]` | Full-text index definitions (MariaDB supports multiple per table). See [Full-Text Indexes (MySQL)](#full-text-indexes-mysql). |
-| `IsSystemVersioned` | bool | `false` | The table keeps its own row history (`WITH SYSTEM VERSIONING`, MariaDB 10.3+). **Read on extraction, not applied on deploy** — a package declaring it deploys an ordinary table, so system versioning has to be established on the server. Detected from `INFORMATION_SCHEMA.TABLES.TABLE_TYPE`, which answers for both authoring forms. |
+| `IsSystemVersioned` | bool | `false` | The table keeps its own row history (`WITH SYSTEM VERSIONING`, MariaDB 10.3+). **Deployed, not just extracted:** a new table is created `WITH SYSTEM VERSIONING`, and an existing ordinary table that starts declaring it converges through `ALTER TABLE … ADD SYSTEM VERSIONING`. Detected from `INFORMATION_SCHEMA.TABLES.TABLE_TYPE`, which answers for both authoring forms. **Removing it is refused by name** — MariaDB's `DROP SYSTEM VERSIONING` purges the accumulated row history rather than switching the attribute off, so SchemaSmith stops instead, and **the refusal fires under `--WhatIf` too**. Extraction only writes the property when it is true, so that refusal reaches you only after a deliberate hand-edit. Requires MariaDB 10.3; below that, and on MySQL at any version, the clause is dropped and the degrade is reported through [`Target:UnsupportedFeaturePolicy`](configuration.md). |
+| `Encrypted` | bool | `false` | **MariaDB only.** InnoDB at-rest tablespace encryption (`ENCRYPTED=YES`). MySQL uses the `Encryption` string instead. **Converges both ways** — toggling it rebuilds the tablespace in place and discards nothing, so neither direction is refused. A server with no encryption plugin configured rejects the statement with its own error. |
+| `EncryptionKeyId` | int | `null` | **MariaDB only.** The encryption key to use (`ENCRYPTION_KEY_ID`). Only meaningful alongside `Encrypted`. |
 | `Periods` | array | `[]` | Application-time period definitions (`PERIOD FOR`). See the MariaDB period notes. |
 | `DropPeriodsRemovedFromProduct` | bool | `null` | Overrides the environment-level flag for this table. Defaults **off**, unlike the other drop-by-absence flags. |
 | `PageCompressed` | bool | `false` | **MariaDB only.** InnoDB page compression — MariaDB's equivalent of MySQL's `Compression`, which it does not support. Cannot be combined with `RowFormat: "COMPRESSED"` (errno 140); `--Validate` reports `SS-CO-001`. |
@@ -672,6 +679,85 @@ When a database uses user-defined types (`CREATE TYPE` / `CREATE DOMAIN`), the `
 
 ---
 
+## Memory-Optimized Tables (SQL Server)
+
+A memory-optimized (In-Memory OLTP, "Hekaton") table lives in memory rather than on disk pages, with a
+lock-free concurrency model that removes the latch and lock contention a hot table hits under load. SQL Server
+asks a lot in return: the table is built differently, its indexes are declared differently, and almost nothing
+about it can be altered afterwards. SchemaSmith declares the whole shape in one table file — the engine
+choice, the durability, and the inline indexes — and **refuses by name** the changes SQL Server cannot make,
+rather than emitting DDL that would fail halfway.
+
+> **SQL Server only:** In-Memory OLTP has no equivalent on PostgreSQL, MySQL, or MariaDB. No parity gap —
+> there is no cross-platform analogue to implement.
+
+Set `MemoryOptimized: true` on the table, and `Durability` if you want `SCHEMA_ONLY`. Indexes are declared
+exactly as they are on any other table; SchemaSmith emits them inline because that is what SQL Server requires.
+
+```json
+{
+  "Schema": "[dbo]",
+  "Name": "[SessionCache]",
+  "MemoryOptimized": true,
+  "Durability": "SCHEMA_ONLY",
+  "Columns": [
+    { "Name": "[SessionId]", "DataType": "BIGINT", "Nullable": false },
+    { "Name": "[Payload]", "DataType": "NVARCHAR(4000)", "Nullable": true }
+  ],
+  "Indexes": [
+    { "Name": "[PK_SessionCache]", "IndexColumns": "[SessionId]", "PrimaryKey": true, "Unique": true, "BucketCount": 1000000 }
+  ]
+}
+```
+
+### Prerequisites
+
+The database needs a `MEMORY_OPTIMIZED_DATA` filegroup and the server needs In-Memory OLTP support. **SchemaSmith
+creates neither, and does not degrade the table to a disk table when they are missing** — it stops before any
+DDL runs, naming the table:
+
+> Table `X` is memory-optimized, but this database cannot host one: it needs In-Memory OLTP support
+> (`SERVERPROPERTY('IsXTPSupported') = 1`) and a `MEMORY_OPTIMIZED_DATA` filegroup.
+
+> **Why it fails instead of degrading.** Quietly deploying a disk table would change the table's durability
+> and concurrency semantics while reporting success — the application would run against something that is not
+> what the package asked for. Add the filegroup in a migration script, supplying the environment-specific path
+> through [script tokens](script-tokens.md), or drop `MemoryOptimized`.
+
+### Indexes are inline
+
+SQL Server rejects `CREATE INDEX` against a memory-optimized table, so every index is emitted inside the
+`CREATE TABLE` statement. Declare them in the ordinary `Indexes` array and SchemaSmith places them correctly —
+a primary key becomes `PRIMARY KEY NONCLUSTERED`, and an index with a `BucketCount` becomes a `HASH` index.
+`CompressionType` and `XmlCompression` are ignored here; neither applies to a memory-optimized table.
+
+### What is refused
+
+Because SQL Server has no `ALTER` for any of it, SchemaSmith reports these by name and stops rather than
+attempting them. Each is a table recreate — do it in a migration script.
+
+| Change | Why it cannot be applied |
+|---|---|
+| `MemoryOptimized` on or off | No `ALTER` converts a table to or from the In-Memory engine. |
+| `Durability` | No `ALTER` for a memory-optimized table's durability. |
+| Adding, removing, or altering an inline index | Memory-optimized indexes are immutable through ordinary `CREATE`/`DROP INDEX` — including a uniqueness change or a change of key columns. |
+| `BucketCount` | Same immutability. Comparison allows for SQL Server rounding the count up to the next power of two, so only a genuine change is reported. |
+
+### Ownership
+
+Every other SQL Server table carries its SchemaSmith ownership in a `ProductName` extended property.
+**Memory-optimized tables reject extended properties outright**, so ownership for them is recorded in a
+`SchemaSmith.ProductOwnership` table in the target database instead. This is a storage change, not a
+behaviour change: drop-by-absence, cross-product protection and `PreventDrop` all work exactly as they do
+elsewhere, because the ownership rows are folded into the same comparison the extended-property scan feeds.
+Rows for tables that no longer exist are pruned on each deploy.
+
+### Placement cannot be combined
+
+A memory-optimized table lives in the `MEMORY_OPTIMIZED_DATA` filegroup, so it cannot also declare
+`FileGroup`, `TextImageFileGroup`, `FileStreamFileGroup`, or `PartitionScheme`. [`--Validate`](validate.md)
+reports that combination as `SS-XTP-001` before you deploy.
+
 ## Always Encrypted (SQL Server)
 
 Always Encrypted lets SQL Server store sensitive column data in encrypted form that the server itself cannot read — only authorized clients holding the Column Master Key can decrypt. SchemaTongs extracts encrypted columns and captures all three encryption properties; SchemaQuench declares them with the exact `ENCRYPTED WITH (…)` syntax SQL Server requires. Extract once, deploy everywhere the CMK is distributed — no hand-written DDL.
@@ -752,7 +838,11 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 ### SQL Server index extras
 
 `CompressionType` (NONE/ROW/PAGE), `Clustered`, `ColumnStore`, `FillFactor`, `UpdateFillFactor`,
-`FileGroup`, `PartitionScheme`, `PartitionColumn`, `IgnoreDuplicateKey`, `PadIndex`.
+`FileGroup`, `PartitionScheme`, `PartitionColumn`, `IgnoreDuplicateKey`, `PadIndex`, `BucketCount`.
+
+| Property | Type | Default | Notes |
+|---|---|---|---|
+| `BucketCount` | int | `null` | Only for an index on a [memory-optimized table](#memory-optimized-tables-sql-server). Setting it makes the index a **hash** index (`HASH … WITH (BUCKET_COUNT = n)`); leaving it unset makes it a range index. Size it at roughly one to two times the number of distinct key values — too few buckets lengthens the collision chains, too many wastes memory. SQL Server rounds the count **up to the next power of two**, so a declared `1000` deploys as `1024` and SchemaSmith compares the two as equal rather than churning. **Changing it on a deployed table is refused**, along with any other inline-index change. |
 
 `FileGroup` follows the same name-only, unset-means-unmanaged contract as the table property above. Worth knowing when declaring one on a table but not its indexes: an index created with no filegroup of its own follows **its table**, not the database default. An index is declared independently of its table's filegroup, which is what lets you keep a large table's data and its indexes on separate storage.
 
@@ -767,7 +857,24 @@ Every entry in the `Indexes` array defines an index or key constraint on the tab
 
 ### PostgreSQL index extras
 
-`AccessMethod` (e.g., `btree`, `gin`, `gist`), `IncludeColumns` (PostgreSQL 11+ covering indexes), and `Tablespace`.
+`AccessMethod` (e.g., `btree`, `gin`, `gist`), `IncludeColumns` (PostgreSQL 11+ covering indexes), `Tablespace`, and `StorageParameters`.
+
+`StorageParameters` is an open `{ "key": "value" }` map carrying the index's `WITH (...)` storage options, so
+each access method's own options are expressible without SchemaSmith maintaining a list of them — PostgreSQL
+validates each key against the access method at create time and reports a bad one itself. Leave it unset and
+storage options are unmanaged.
+
+```json
+{ "Name": "[IX_Doc_Tags]", "IndexColumns": "[Tags]", "AccessMethod": "gin", "StorageParameters": { "fastupdate": "off" } }
+```
+
+> **Not the place for `fillfactor`.** It has its own `FillFactor` property, which converges in place through
+> `ALTER INDEX … SET`. SchemaSmith keeps it out of this map so the two cannot disagree.
+
+**A change here rebuilds the index rather than altering it.** Some options genuinely cannot be altered in
+place — `hnsw`'s `m` and `ivfflat`'s `lists` among them — so rather than converging the ones that can and
+silently ignoring the ones that cannot, any difference in the set drops and recreates the index. The
+comparison is order-insensitive, because PostgreSQL returns `reloptions` in its own order.
 
 `Tablespace` places the index. An index does **not** follow its table's tablespace — created with no clause it lands wherever `default_tablespace` points, which is usually but not always the same place. Omitting it means placement is **not managed**, which is not the same as declaring the database default: an index a DBA placed by hand is left exactly where it is. Create-time only — moving an existing index rebuilds it, so a declared tablespace that differs from where the index already lives is refused by name rather than performed.
 
