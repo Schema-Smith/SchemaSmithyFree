@@ -1768,18 +1768,22 @@ Each file carries a platform infix matching the package's platform -- `<platform
 
 ### Settings are scoped to the engines they apply to
 
-`Product.json` and `Template.json` are shared shapes, but not every setting in them means something on every engine. A generated schema offers only the settings that apply to its own platform, so your editor stops suggesting ones that would do nothing:
+Not every setting means something on every engine, and a generated schema reflects that in one of two ways.
 
-| Setting | Appears in |
+**Most inapplicable settings are simply absent.** `MemoryOptimized` is a SQL Server table property, so it appears in `tables.sqlserver.schema` and in no other engine's table schema; `RowLevelSecurity` and `ExcludeConstraints` appear only in the PostgreSQL one, `Partitioning` only in the MySQL and the MariaDB ones. Of the ~70 table properties, more than 50 differ by engine. The shared `Product.json` and `Template.json` shapes are filtered the same way:
+
+| Setting | Offered in `products.*` / `templates.*` |
 |---|---|
-| `DropSchemaBoundDependents` | SQL Server schemas only |
-| `DropExcludeConstraintsRemovedFromProduct` | PostgreSQL schemas only |
-| `DropStatisticsRemovedFromProduct` | SQL Server and PostgreSQL schemas |
-| `UpdateFillFactor` (template level) | SQL Server and PostgreSQL schemas |
+| `DropSchemaBoundDependents` | SQL Server |
+| `DropExcludeConstraintsRemovedFromProduct` | PostgreSQL |
+| `DropStatisticsRemovedFromProduct` | SQL Server and PostgreSQL |
+| `UpdateFillFactor` (template level) | SQL Server and PostgreSQL |
 
-Where a setting applies to more than one engine, the schema **says which** rather than leaving you to infer it from whichever file you happen to have open: `DropStatisticsRemovedFromProduct` carries the description `"SQL Server and PostgreSQL only."` in both the SQL Server and the PostgreSQL file. A setting that applies everywhere carries no such note, so the presence of a note is itself the signal.
+**Where a setting is kept, its description says which engines it affects.** `DropStatisticsRemovedFromProduct` carries `"SQL Server and PostgreSQL only."` in both the SQL Server and the PostgreSQL file. A setting that applies everywhere carries no such note, so the presence of a note is itself the signal.
 
-Setting one on an engine that ignores it is not silently accepted any more. `--Validate` reports it as `SS-JSON-001` (`unexpected property`), because the property genuinely is not part of that platform's schema. This is a lint, not a load failure -- the package still loads, and every other check still runs.
+**The table-level drop-control overrides are the exception to absence.** A table's `DropExcludeConstraintsRemovedFromProduct` is present in *every* engine's `tables.<platform>.schema`, annotated `PostgreSQL only.` rather than omitted -- it exists to override a value inherited from the template or product, so it is described rather than removed. Do not read its presence in a MySQL table schema as support for exclude constraints.
+
+Setting one where it does not belong is no longer silently accepted. `--Validate` reports it as `SS-JSON-001` (`unexpected property`) -- an **Error**-severity finding, so the run exits `2` and fails a CI gate. The package still loads and every other check still runs: it is a lint, not a load failure.
 
 Because the schemas are regenerated every time SchemaTongs writes a package, they always match the current engine. If you've hand-edited any of them to add a custom validation fragment under `Extensions`, that fragment is preserved through regeneration -- see [Custom Properties: JSON Schema Validation](custom-properties.md#json-schema-validation).
 
